@@ -809,6 +809,74 @@ Example:
 chiplab chip-report --json '{"design_id": "cdaea5efb328"}'
 ```
 
+### `submit-verilog`
+
+Submit hand- or agent-written Verilog safely. It is screened (no system tasks or includes), linted and synthesised inside a locked-down container, then checked bit for bit against a reference: a chipir/1 model (reference_ir) or the scientist's vectors + expected outputs. Ports must follow the lab convention (port_spec: inputs/outputs with lanes, bits, signed). Accepted designs get a design_id like any other.
+
+- Python: `lab.submit_verilog(verilog: str, top: str, port_spec: dict, reference_ir: dict | None = None, vectors: dict | None = None, expected: dict | None = None, n: int = 20000) -> dict`
+- Lane: cpu; cached: False
+  - `verilog`: str — the source
+  - `top`: str — top module name
+  - `port_spec`: dict — {inputs:[{name,lanes,bits,signed}], outputs:[...]}
+  - `reference_ir`: dict — chipir/1 model the circuit must equal (optional)
+  - `vectors`: dict — port -> [[ints]] (optional)
+  - `expected`: dict — output -> [[ints]] (optional)
+  - `n`: int — random vectors when checking against reference_ir (20000)
+
+<details><summary>JSON schema</summary>
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "verilog": {
+   "type": "string"
+  },
+  "top": {
+   "type": "string"
+  },
+  "port_spec": {
+   "type": "object"
+  },
+  "reference_ir": {
+   "type": "object",
+   "default": null
+  },
+  "vectors": {
+   "type": "object",
+   "default": null
+  },
+  "expected": {
+   "type": "object",
+   "default": null
+  },
+  "n": {
+   "type": "integer",
+   "default": 20000
+  },
+  "run_id": {
+   "type": "string"
+  },
+  "session_id": {
+   "type": "string"
+  },
+  "round": {
+   "type": "integer"
+  },
+  "force": {
+   "type": "boolean",
+   "default": false
+  }
+ },
+ "required": [
+  "verilog",
+  "top",
+  "port_spec"
+ ]
+}
+```
+</details>
+
 ### `submit-job`
 
 Run any tool asynchronously on its resource lane (cpu, gpu, docker). Returns a job_id immediately; poll job_status / job_result. Identical work from any agent is served from the cache.

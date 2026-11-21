@@ -274,3 +274,53 @@ def chip_report(design_id: str, name: str | None = None) -> dict:
             "files": [str(d / "report.md")], "verilog_url": f"/files/{design_id}/design.v",
             "netlist_json_url": f"/files/{design_id}/synth/net.json",
             "layout_png_url": next((f"/files/{design_id}/{p.relative_to(d)}" for p in d.rglob("*.png")), None)}
+
+
+# ------------------------------------------------------------------------------------------------ agent-written RTL
+
+@tool("Submit hand- or agent-written Verilog safely. It is screened (no system tasks or includes), linted and "
+      "synthesised inside a locked-down container, then checked bit for bit against a reference: a chipir/1 model "
+      "(reference_ir) or the scientist's vectors + expected outputs. Ports must follow the lab convention "
+      "(port_spec: inputs/outputs with lanes, bits, signed). Accepted designs get a design_id like any other.",
+      {"verilog": "str — the source", "top": "str — top module name", "port_spec": "dict — {inputs:[{name,lanes,bits,signed}], outputs:[...]}",
+       "reference_ir": "dict — chipir/1 model the circuit must equal (optional)", "vectors": "dict — port -> [[ints]] (optional)",
+       "expected": "dict — output -> [[ints]] (optional)", "n": "int — random vectors when checking against reference_ir (20000)"},
+      lane="cpu")
+def submit_verilog(verilog: str, top: str, port_spec: dict, reference_ir: dict | None = None, vectors: dict | None = None,
+                   expected: dict | None = None, n: int = 20000) -> dict:
+    import hashlib
+    import numpy as np
+    from chiplab import config
+    from chiplab.verify.bitexact import circuit_outputs
+    from chiplab.verify.sandbox import check_verilog
+    if reference_ir is None and not (vectors and expected):
+        raise ValueError("a reference is required: reference_ir, or vectors + expected")
+    sid = "v" + hashlib.sha256((verilog + top + json.dumps(port_spec, sort_keys=True)).encode()).hexdigest()[:11]
+    d = config.home("designs", sid)
+    r = check_verilog(verilog, top, d / "sandbox")
+    if not r["accepted"]:
+        return {"design_id": None, "accepted": False, **r}
+    info = {"top": top, "inputs": port_spec["inputs"], "outputs": port_spec["outputs"]}
+    if vectors:
+        X = {k: np.asarray(v, dtype=np.int64) for k, v in vectors.items()}
+    else:
+        rng = np.random.default_rng(0); X = {}
+        for p in info["inputs"]:
+            lo, hi = (-(1 << (p["bits"] - 1)), 1 << (p["bits"] - 1)) if p["signed"] else (0, 1 << p["bits"])
+            X[p["name"]] = rng.integers(lo, hi, size=(n, p["lanes"]))
+    circ = circuit_outputs(r["netlist_json"], info, X)
+    if reference_ir is not None:
+        from chiplab.ir.interp import run as interp
+        ref = interp(reference_ir, X)
+    else:
+        ref = {k: np.asarray(v, dtype=np.int64) for k, v in expected.items()}
+    mism = {o["name"]: int((circ[o["name"]] != ref[o["name"]].reshape(circ[o["name"]].shape)).any(axis=1).sum()) for o in info["outputs"]}
+    ok = all(v == 0 for v in mism.values())
+    (d / "design.v").write_text(verilog)
+    (d / "port.json").write_text(json.dumps(info))
+    (d / "meta.json").write_text(json.dumps({"source": "agent_verilog", "sandbox": r["sandbox"]}))
+    if reference_ir is not None:
+        (d / "ir.json").write_text(json.dumps(reference_ir))
+    (d / "simulate_vectors.json").write_text(json.dumps({"bit_exact": ok, "n": len(next(iter(X.values()))), "mismatches": mism}))
+    return {"design_id": sid, "accepted": True, "bit_exact": ok, "mismatches": mism, "vectors": len(next(iter(X.values()))),
+            "gates": r["gates"], "lint": r["lint"], "sandbox": r["sandbox"], "verification_level": 1 if ok else 0}
