@@ -1,0 +1,2058 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chipmonk</title>
+<style>
+:root{
+  --wash:#fafaf9;--card:#fff;--glass:rgb(255 253 250 / .7);--glass-s:rgb(255 253 250 / .95);
+  --i900:#1a1a2e;--i800:#33334a;--i700:#40404f;--i600:#4d4d5d;--i550:#575767;--i500:#5c5c70;--i400:#626274;--i300:#a3a3b3;--i200:#d4d4dc;--i150:#e8e8ec;--i100:#f3f3f6;
+  --blue:#3b82f6;--blue6:#2563eb;--blue7:#1d4ed8;--teal:#0f766e;
+  --ok:#10b981;--okt:#047857;--okbg:#ecfdf5;--okr:#a7f3d0;
+  --bad:#ef4444;--badt:#b91c1c;--badbg:#fef2f2;--badr:#fecaca;
+  --warnt:#92400e;--warnbg:#fffbeb;--warnr:#fde68a;
+  --cand:#c2410c;
+  --hair:rgb(0 0 0 / .06);--hair4:rgb(0 0 0 / .05);--hair8:rgb(0 0 0 / .09);
+  --sh-hair:0 1px 3px rgb(0 0 0 / .04);--sh-menu:0 4px 20px rgb(0 0 0 / .1);
+  --sans:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --serif:"Source Serif 4","Source Serif Pro","New York",ui-serif,Georgia,"Times New Roman",serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --ease:cubic-bezier(.4,0,.2,1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--wash);color:var(--i900);font-family:var(--sans);font-size:14px;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+button:disabled{cursor:default}
+input,textarea,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--blue6);outline-offset:2px;border-radius:6px}
+svg.ic{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+#app{display:flex;height:100vh;height:100dvh;overflow:hidden}
+#sb{width:252px;flex:none;display:flex;flex-direction:column;background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-right:1px solid var(--hair4);transition:width .15s var(--ease);z-index:30;position:relative}
+.sb-head{height:52px;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--hair4);flex:none}
+.logo{width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#2563eb,#7c3aed);display:grid;place-items:center;color:#fff;flex:none}
+.logo svg.ic{width:16px;height:16px;stroke-width:2}
+.wordmark{font-size:14px;font-weight:800;letter-spacing:-.02em;flex:1;white-space:nowrap;overflow:hidden}
+.sq{width:28px;height:28px;border-radius:7px;display:grid;place-items:center;color:var(--i550);flex:none;transition:background .1s}
+.sq:hover{background:rgb(0 0 0 / .05)}
+.nav{padding:8px;display:flex;flex-direction:column;gap:1px;flex:none}
+.nav button{height:36px;border-radius:7px;display:flex;align-items:center;gap:10px;padding:0 10px;color:var(--i600);font-size:12.5px;font-weight:500;text-align:left;transition:background .1s;white-space:nowrap}
+.nav button svg.ic{width:18px;height:18px}
+.nav button:hover{background:rgb(0 0 0 / .03)}
+.nav button.on{background:rgb(59 130 246 / .07);color:var(--i900)}
+.nav .count{margin-left:auto;font-size:10.5px;font-weight:600;color:var(--blue7);background:rgb(37 99 235 / .08);border-radius:99px;padding:1px 7px;font-style:normal}
+.divider{height:1px;background:var(--hair4);margin:0 12px;flex:none}
+.runs{flex:1;overflow:auto;padding:8px 8px 12px;min-height:0}
+.cap{font-size:11px;font-weight:600;color:var(--i550);padding:10px 10px 6px}
+.row{position:relative;display:flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;font-size:12.5px;font-weight:500;color:var(--i700);cursor:pointer;transition:background .1s}
+.row:hover{background:rgb(0 0 0 / .03)}
+.row.on{background:rgb(59 130 246 / .07);color:var(--i900)}
+.row .t{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .g{width:12px;height:12px;flex:none;display:grid;place-items:center}
+.row .g svg{width:12px;height:12px}
+.row .more{width:20px;height:20px;border-radius:5px;display:none;place-items:center;color:var(--i550);flex:none}
+.row:hover .more,.row .more[aria-expanded=true]{display:grid}
+.row .more:hover{background:rgb(0 0 0 / .06)}
+.row input{flex:1;min-width:0;font-size:12.5px;border:0;outline:0;box-shadow:0 0 0 2px var(--blue);border-radius:4px;padding:2px 4px;background:#fff}
+.pending-bar{flex:1;height:8px;border-radius:4px;background:var(--i150);animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.45}}
+.spin{animation:spin .9s linear infinite;transform-origin:50% 50%}
+@keyframes spin{to{transform:rotate(360deg)}}
+.acct{border-top:1px solid var(--hair4);padding:8px;flex:none}
+.acct button{width:100%;display:flex;align-items:center;gap:10px;padding:6px;border-radius:8px;text-align:left}
+.acct button:hover{background:rgb(0 0 0 / .03)}
+.av{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;font-size:10px;font-weight:600;display:grid;place-items:center;flex:none}
+.acct .nm{font-size:12.5px;font-weight:500;color:var(--i800);line-height:1.2}
+.acct .em{font-size:11px;color:var(--i550)}
+#sb.col{width:52px}
+#sb.col .wordmark,#sb.col .logo,#sb.col .nav span,#sb.col .nav .count,#sb.col .runs,#sb.col .acct .who,#sb.col .divider{display:none}
+#sb.col .sb-head{justify-content:center;padding:0}
+#sb.col .nav button{justify-content:center;padding:0}
+#sb.col .acct button{justify-content:center;padding:6px 0}
+.runs-spacer{display:none}
+#sb.col .runs-spacer{display:block;flex:1}
+#mh{display:none;position:fixed;top:0;left:0;right:0;height:48px;align-items:center;gap:8px;padding:0 10px;background:var(--glass-s);border-bottom:1px solid var(--hair4);z-index:25;backdrop-filter:blur(12px)}
+#scrim{display:none;position:fixed;inset:0;background:rgb(0 0 0 / .2);z-index:29}
+
+#main{flex:1;min-width:0;display:flex;flex-direction:column;position:relative}
+#view{flex:1;min-height:0;display:flex;flex-direction:column}
+#demo{position:absolute;right:12px;bottom:8px;font-size:11px;color:var(--i600);pointer-events:none;z-index:5;background:rgb(250 250 249 / .92);padding:2px 8px;border-radius:6px}
+
+/* Start page */
+.start{flex:1;overflow:auto;display:flex;padding:24px 20px 64px}
+.start-col{width:100%;max-width:672px;margin:auto}
+.greet{font-family:var(--serif);font-size:38px;line-height:1.1;font-weight:400;text-align:center;margin:0;letter-spacing:-.01em}
+.sub{font-size:16px;color:var(--i550);text-align:center;margin:12px 0 32px}
+.box{background:var(--glass-s);border:1px solid var(--hair);border-radius:24px;box-shadow:var(--sh-hair);padding:20px 20px 12px}
+.box textarea{width:100%;border:0;outline:0;resize:none;background:transparent;font-size:14px;line-height:1.5;min-height:21px;max-height:280px;padding:0;display:block}
+.box textarea::placeholder{color:var(--i500)}
+.box textarea:focus-visible{outline:0}
+.box.locked textarea{color:var(--i700)}
+.ctl{display:flex;align-items:center;gap:8px;margin-top:12px;min-height:36px;flex-wrap:wrap}
+.ctl .grow{flex:1}
+.pill{height:24px;display:inline-flex;align-items:center;gap:5px;padding:0 9px;border-radius:99px;border:1px solid var(--hair8);background:#fff;font-size:11.5px;font-weight:500;color:var(--i800);white-space:nowrap;transition:background .1s}
+.pill:hover{background:var(--i100)}
+.pill svg.ic{width:13px;height:13px}
+.pill .chev{width:12px;height:12px;opacity:.6}
+.send{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--i150);color:var(--i500);flex:none;transition:all .12s}
+.send.ready{background:#fff;color:var(--i900);box-shadow:0 1px 4px rgb(0 0 0 / .16),0 0 0 1px var(--hair)}
+.send svg.ic{width:18px;height:18px;stroke-width:2}
+.textbtn{font-size:12.5px;font-weight:500;color:var(--blue7);padding:6px 8px;border-radius:7px}
+.textbtn:hover{background:rgb(37 99 235 / .07)}
+
+/* Intake: three steps unfolding under the box */
+.intake.still{animation:none}
+.intake{margin-top:14px;background:#fff;border:1px solid var(--hair8);border-radius:20px;box-shadow:0 10px 30px rgb(26 26 46 / .07);padding:18px 22px 16px;animation:unfold .32s var(--ease);transform-origin:top center}
+@keyframes unfold{from{opacity:0;transform:translateY(-8px) scaleY(.97)}}
+.stepper{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+.stepper .st{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:500;color:var(--i550);white-space:nowrap}
+.stepper .st i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:11.5px;font-weight:700;background:#fff;color:var(--i600);box-shadow:inset 0 0 0 1.5px var(--i200)}
+.stepper .st i svg.ic{width:12px;height:12px;stroke-width:2.6}
+.stepper .st.cur{color:var(--i900);font-weight:600}
+.stepper .st.cur i{background:var(--blue6);color:#fff;box-shadow:none}
+.stepper .st.done{color:var(--i700)}
+.stepper .st.done i{background:var(--okbg);color:var(--okt);box-shadow:inset 0 0 0 1.5px var(--okr)}
+.stepper .ln{flex:1;height:1.5px;background:var(--i150);min-width:12px;border-radius:1px}
+.stepper .ln.done{background:var(--okr)}
+.iq{font-family:var(--serif);font-size:23px;line-height:1.28;margin:0 0 6px;font-weight:400;letter-spacing:-.005em}
+.ih{font-size:13.5px;color:var(--i600);margin:0 0 14px;line-height:1.55}
+.answers{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ans{min-height:68px;border:1.5px solid var(--i200);border-radius:14px;padding:13px 14px;text-align:left;display:flex;gap:12px;align-items:flex-start;background:#fff;transition:border-color .12s,background .12s}
+.ans:hover{border-color:#93b4f5;background:#f8fbff}
+.ans.sel{border-color:var(--blue6);background:#eff6ff}
+.ans b{display:block;font-size:15px;font-weight:600;color:var(--i900)}
+.ans span{display:block;font-size:12.5px;color:var(--i600);margin-top:3px;line-height:1.4}
+.ans svg.ic{width:20px;height:20px;color:var(--blue7);margin-top:1px}
+.ifoot{display:flex;align-items:center;gap:10px;margin-top:16px;flex-wrap:wrap}
+.ifoot .grow{flex:1}
+.btn{height:34px;padding:0 14px;border-radius:9px;border:1px solid var(--hair8);background:#fff;font-size:13px;font-weight:500;color:var(--i900)}
+.btn:hover{background:var(--i100)}
+.btn.blue{background:var(--blue6);border-color:var(--blue6);color:#fff}
+.btn.blue:hover{background:var(--blue7)}
+.btn.blue:disabled{background:#c9d6f2;border-color:#c9d6f2;color:#3b4a6b}
+.btn.red{background:#dc2626;border-color:#dc2626;color:#fff}
+.btn.big{height:40px;padding:0 20px;font-size:14px;font-weight:600;border-radius:11px}
+.drop{border:1.5px dashed #a9b3c6;border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px;margin-top:12px;background:#fbfcfe;flex-wrap:wrap}
+.drop .dt{flex:1;min-width:180px;font-size:13px;color:var(--i700);line-height:1.45}
+.fname{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--okt);font-weight:500}
+.dsrc{border:1px solid var(--hair8);border-radius:14px;padding:13px 16px;margin-top:10px;background:#fff}
+.dsrc.top{border-color:#9db8f2;background:#f7faff;box-shadow:inset 3px 0 0 var(--blue6)}
+.dsrc .dn{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14.5px;font-weight:600}
+.tag{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:99px;font-size:11.5px;font-weight:600;background:var(--i100);color:var(--i700);white-space:nowrap}
+.tag.blue{background:#dbeafe;color:#1e40af}.tag.green{background:var(--okbg);color:var(--okt);box-shadow:inset 0 0 0 1px var(--okr)}.tag.amber{background:var(--warnbg);color:var(--warnt);box-shadow:inset 0 0 0 1px var(--warnr)}
+.kv{display:grid;grid-template-columns:76px 1fr;gap:3px 12px;margin:8px 0 0;font-size:12.5px;line-height:1.45}
+.kv dt{color:var(--i550)}.kv dd{margin:0;color:var(--i800)}
+.why{margin:8px 0 0;font-size:12.5px;color:var(--i700);line-height:1.5}
+.also{margin-top:10px;font-size:12.5px;color:var(--i700)}
+.also summary{cursor:pointer;color:var(--i600);font-weight:500;padding:4px 0}
+.also ul{margin:6px 0 0;padding-left:18px;line-height:1.6}
+.iq2{font-size:15px;font-weight:600;margin:16px 0 10px}
+.asm{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.asm li{border:1px solid var(--hair8);border-radius:12px;padding:11px 14px;display:grid;grid-template-columns:1fr auto;gap:4px 14px;align-items:start}
+.asm li.changed{border-color:#9db8f2;background:#f7faff}
+.asm .ak{font-size:11.5px;font-weight:600;color:var(--i550)}
+.asm .aval{font-size:14px;font-weight:600;color:var(--i900);line-height:1.4}
+.asm .aw{font-size:12.5px;color:var(--i600);line-height:1.45;grid-column:1}
+.asm .ac{grid-row:1 / span 3;grid-column:2;align-self:center}
+.asm input{width:100%;height:32px;border:1px solid #9db8f2;border-radius:8px;padding:0 10px;font-size:13.5px;outline:0;box-shadow:0 0 0 3px rgb(37 99 235 / .12)}
+.seg{display:inline-flex;background:var(--i100);border-radius:9px;padding:2px;gap:2px}
+.seg button{height:28px;padding:0 10px;border-radius:7px;font-size:12px;font-weight:500;color:var(--i700);white-space:nowrap}
+.seg button:hover{background:rgb(255 255 255 / .7)}
+.seg button.on{background:#fff;color:var(--i900);box-shadow:0 1px 3px rgb(0 0 0 / .12)}
+.seg button.on.okk{color:var(--okt)}
+.seg button.on.chg{color:#1e40af}
+.note{font-size:12px;color:var(--i600);line-height:1.5;margin:12px 0 0}
+
+/* Popovers, menus, modals */
+#layer{position:fixed;inset:0;pointer-events:none;z-index:50}
+#layer>*{pointer-events:auto}
+.pop{position:fixed;background:#fff;border:1px solid var(--hair8);border-radius:12px;box-shadow:var(--sh-menu);padding:6px;min-width:176px;animation:popin .12s var(--ease)}
+@keyframes popin{from{opacity:0;transform:translateY(3px)}}
+.pop .pcap{font-size:11px;font-weight:600;color:var(--i550);padding:6px 8px 4px}
+.opt{width:100%;display:flex;align-items:flex-start;gap:8px;padding:7px 8px;border-radius:7px;font-size:12.5px;text-align:left;color:var(--i800)}
+.opt:hover{background:var(--i100)}
+.opt.sel{background:rgb(37 99 235 / .1)}
+.opt:disabled{opacity:.55}
+.opt .oh{font-size:11.5px;color:var(--i550);margin-top:1px;line-height:1.35}
+.opt .ck{margin-left:auto;color:var(--blue6)}
+.opt svg.ic{margin-top:1px;color:var(--i550)}
+.opt.danger{color:var(--badt)}.opt.danger svg.ic{color:var(--badt)}
+.sep{height:1px;background:var(--hair);margin:4px 2px}
+.modal-bg{position:fixed;inset:0;background:rgb(15 15 30 / .28);display:grid;place-items:start center;padding-top:14vh;animation:fade .12s}
+@keyframes fade{from{opacity:0}}
+.modal{width:min(520px,92vw);background:#fff;border-radius:14px;box-shadow:0 20px 60px rgb(0 0 0 / .2);overflow:hidden}
+.modal .mh{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--hair)}
+.modal .mh input{flex:1;border:0;outline:0;font-size:14px}
+.modal .mb{padding:8px;max-height:50vh;overflow:auto}
+.modal .mp{padding:18px 18px 8px;font-size:14px;line-height:1.55;color:var(--i800)}
+.modal .mp h3{margin:0 0 6px;font-size:16px;color:var(--i900)}
+.modal .mf{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px 16px}
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--i900);color:#fff;font-size:12.5px;padding:9px 14px;border-radius:9px;box-shadow:var(--sh-menu);animation:popin .15s}
+.dr-bg{position:fixed;inset:0;background:rgb(15 15 30 / .18);animation:fade .15s}
+.drawer{position:absolute;top:0;right:0;bottom:0;width:min(460px,100vw);background:#fff;box-shadow:-12px 0 40px rgb(0 0 0 / .14);display:flex;flex-direction:column;animation:slidein .22s var(--ease)}
+@keyframes slidein{from{transform:translateX(28px);opacity:0}}
+.drawer .dh{display:flex;align-items:center;gap:10px;padding:16px 18px 12px;border-bottom:1px solid var(--hair)}
+.drawer .dh h2{flex:1;margin:0;font-size:17px;font-weight:600}
+.drawer .db{flex:1;overflow:auto;padding:6px 18px 28px}
+.drawer h3{font-size:13px;font-weight:600;color:var(--i800);margin:20px 0 4px}
+.drawer .lead{font-size:13px;color:var(--i600);margin:0 0 4px;line-height:1.5}
+.papers{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:10px}
+.papers li{font-size:13px;line-height:1.45;padding:10px 12px;border-radius:10px;background:#f8f8fa}
+.papers b{display:block;color:var(--i900);font-weight:600}
+.papers .src{font-family:var(--mono);font-size:11.5px;color:var(--i600)}
+.papers .use{color:var(--i700);margin-top:3px}
+.asm-mini{list-style:none;margin:8px 0 0;padding:0;font-size:12.5px;line-height:1.5}
+.asm-mini li{display:flex;gap:8px;padding:6px 0;border-top:1px solid var(--hair4)}
+.asm-mini li span{flex:1;color:var(--i800)}
+
+/* Run page */
+.topbar{height:40px;flex:none;display:flex;align-items:center;gap:12px;padding:0 12px 0 16px;background:rgb(255 255 255 / .75);border-bottom:1px solid var(--hair4)}
+.tabs{display:flex;gap:16px;height:100%;flex:none}
+.tabs button{height:100%;font-size:12px;font-weight:500;color:var(--i550);border-bottom:2px solid transparent;padding-top:2px}
+.tabs button.on{color:var(--blue7);font-weight:600;border-bottom-color:var(--blue6)}
+.tabs button:hover:not(.on){color:var(--i900)}
+.state{height:20px;display:inline-flex;align-items:center;padding:0 8px;border-radius:99px;font-size:11.5px;font-weight:500;flex:none}
+.state.done{background:var(--okbg);color:var(--okt);box-shadow:inset 0 0 0 1px var(--okr)}
+.state.paused{background:var(--i100);color:var(--i600);box-shadow:inset 0 0 0 1px var(--i150)}
+.rtitle{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:60px;flex:0 1 260px;color:var(--i800)}
+.play{flex:1 1 auto;max-width:520px;display:flex;align-items:center;gap:8px;min-width:0;margin-left:auto}
+.pbtn{width:24px;height:24px;border-radius:6px;display:grid;place-items:center;color:var(--i700);flex:none}
+.pbtn:hover{background:var(--i100)}
+.pbtn svg.ic{width:14px;height:14px}
+.clock{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:6px;background:var(--i100);color:var(--i700);flex:none}
+.clock.live{background:var(--badbg);color:var(--badt)}
+.track{flex:1;height:4px;border-radius:2px;background:var(--i150);position:relative;min-width:40px}
+.track i{position:absolute;left:0;top:0;bottom:0;border-radius:2px;background:linear-gradient(90deg,#fca5a5,#ef4444)}
+.track b{position:absolute;top:50%;width:10px;height:10px;border-radius:50%;background:#ef4444;transform:translate(-50%,-50%);box-shadow:0 0 0 2px #fff}
+.track.end i{background:linear-gradient(90deg,#a5b4fc,#7c3aed)}.track.end b{background:#7c3aed}
+.livep{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border-radius:5px;background:rgb(239 68 68 / .1);color:var(--badt);font-size:10px;font-weight:700;flex:none}
+.livep i{width:5px;height:5px;border-radius:50%;background:var(--bad);animation:blink 1.3s infinite}
+@keyframes blink{50%{opacity:.2}}
+.body{flex:1;min-height:0;overflow:auto;position:relative}
+
+/* Overview */
+.ov{max-width:720px;margin:0 auto;padding:10vh 28px 80px}
+.now{font-family:var(--serif);font-size:27px;line-height:1.38;letter-spacing:-.005em;color:var(--i900);margin:0;min-height:3em;transition:opacity .35s}
+.now .then{color:var(--i600)}
+.now.fadeout{opacity:0}
+.srcline{margin-top:26px;display:flex;align-items:flex-start;gap:12px;font-size:14px;line-height:1.55;color:var(--i800);text-align:left;width:100%;padding:13px 16px;border-radius:14px;border:1px solid var(--hair8);background:#fff;transition:border-color .12s}
+.srcline:hover{border-color:#9db8f2}
+.srcline>svg.ic{width:18px;height:18px;color:var(--blue7);margin-top:2px}
+.srcline .sx{flex:1}
+.srcline .sx b{font-weight:600;color:var(--i900)}
+.srcline .open{font-weight:600;color:var(--blue7);white-space:nowrap;font-size:13px;margin-top:1px}
+.prog{margin-top:30px}
+.prog-top{display:flex;justify-content:space-between;font-size:12.5px;color:var(--i600);margin-bottom:8px}
+.prog-top b{font-weight:600;color:var(--i900)}
+.bar{height:6px;border-radius:3px;background:var(--i150);overflow:hidden;position:relative}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:linear-gradient(90deg,#60a5fa,#2563eb);transition:width .5s var(--ease)}
+.bar i::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgb(255 255 255 / .55),transparent);animation:sweep 2.4s ease-in-out infinite;transform:translateX(-100%)}
+.bar.still i::after{display:none}
+.bar.done i{background:linear-gradient(90deg,#34d399,#059669)}
+@keyframes sweep{to{transform:translateX(100%)}}
+.bar s{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:#fff;z-index:1}
+.steps{display:grid;margin-top:8px;font-size:11.5px;color:var(--i550)}
+.steps span{text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:4px}
+.steps span.past{color:var(--i700)}
+.steps span.cur{color:var(--blue7);font-weight:600}
+.best{margin-top:30px;display:flex;align-items:baseline;gap:10px;font-size:15px;line-height:1.5;color:var(--i800)}
+.best .dot{width:8px;height:8px;border-radius:50%;flex:none;transform:translateY(-1px)}
+.best .txt{flex:1}
+.det{font-size:12.5px;color:var(--i600);text-decoration:underline;text-decoration-color:var(--i300);text-underline-offset:3px;flex:none}
+.det:hover{color:var(--i900)}
+.details{margin-top:14px;background:#fff;border:1px solid var(--hair);border-radius:10px;padding:6px 16px;display:grid;grid-template-columns:1fr 1fr;column-gap:28px;animation:popin .15s}
+.details div{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--hair4);font-size:12.5px}
+.details div:nth-last-child(-n+2){border-bottom:0}
+.details dt{color:var(--i550)}
+.details dd{margin:0;font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+
+/* Chat */
+.chat{flex:1;min-height:0;display:flex;flex-direction:column}
+.feed{flex:1;overflow:auto;padding:24px 20px 12px}
+.feed-in{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.msg{display:flex;gap:10px;animation:popin .25s var(--ease)}
+.msg .who{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;flex:none;margin-top:1px}
+.msg .who svg.ic{width:13px;height:13px}
+.msg .mm{flex:1;min-width:0}
+.msg .mn{font-size:12px;font-weight:600;color:var(--i800);display:flex;gap:8px;align-items:baseline}
+.msg .mn time{font-family:var(--mono);font-size:10.5px;color:var(--i550);font-weight:400}
+.msg .mt{font-size:13.5px;line-height:1.55;color:var(--i800);margin-top:2px}
+.tool{margin-left:34px;border:1px solid var(--hair8);border-radius:9px;background:#fff;animation:popin .25s var(--ease);margin-top:-8px}
+.tool>button{width:100%;display:flex;align-items:center;gap:8px;padding:7px 10px;font-size:12.5px;color:var(--i700);text-align:left}
+.tool>button svg.ic{width:13px;height:13px;color:var(--i550)}
+.tool.data>button svg.ic{color:var(--blue7)}
+.tool.paper>button svg.ic{color:#6d28d9}
+.tool>button .chev{margin-left:auto;transition:transform .12s}
+.tool.open>button .chev{transform:rotate(90deg)}
+.tool pre{margin:0;padding:8px 12px 10px;border-top:1px solid var(--hair4);font-family:var(--mono);font-size:11.5px;line-height:1.6;color:var(--i700);white-space:pre-wrap;display:none}
+.tool.open pre{display:block}
+.you{align-self:flex-end;max-width:78%;background:var(--teal);color:#fff;padding:9px 13px;border-radius:14px 14px 4px 14px;font-size:13.5px;line-height:1.5;animation:popin .2s}
+.typing{display:flex;gap:4px;padding:6px 0 0}
+.typing i{width:6px;height:6px;border-radius:50%;background:var(--i300);animation:blink 1s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+.composer{flex:none;padding:8px 20px 28px}
+.composer .box{max-width:720px;margin:0 auto;display:flex;align-items:flex-end;gap:10px;padding:12px 12px 12px 20px}
+.composer textarea{flex:1;padding:8px 0}
+.composer .box.off{opacity:.75}
+
+/* Visual */
+.vis{max-width:1200px;margin:0 auto;padding:14px 24px 40px}
+.vtop{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;margin-bottom:12px}
+.vh{flex:1;min-width:260px}
+.vh h2{font-size:19px;font-weight:600;margin:0;letter-spacing:-.01em}
+.vh p{margin:3px 0 0;font-size:13.5px;color:var(--i600);line-height:1.5;max-width:70ch}
+.picker{display:flex;gap:4px;flex-wrap:wrap;background:var(--i100);padding:3px;border-radius:11px}
+.picker button{height:30px;padding:0 12px;border-radius:8px;font-size:12.5px;font-weight:500;color:var(--i700);display:inline-flex;align-items:center;gap:4px}
+.picker button:hover{color:var(--i900)}
+.picker button.on{background:#fff;color:var(--i900);box-shadow:0 1px 3px rgb(0 0 0 / .1)}
+.picker .chev{width:12px;height:12px;opacity:.6}
+.stage{position:relative;height:clamp(440px,calc(100dvh - 200px),780px);border-radius:18px;overflow:hidden;background:radial-gradient(120% 95% at 50% 28%,#ffffff 0%,#eef1f5 52%,#dde2ea 100%);border:1px solid var(--hair8);touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.stage.grab{cursor:grab}.stage.grabbing{cursor:grabbing}
+.stage>canvas{position:absolute;inset:0;display:block}
+.stage.flat{height:auto;background:#fff;padding:16px;cursor:default}
+.stage .ld{position:absolute;inset:0;display:grid;place-items:center;font-size:13px;color:var(--i600)}
+.ov3{position:absolute;inset:0;pointer-events:none}
+svg.leads{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+svg.leads path{stroke:#1a1a2e;stroke-opacity:.55;stroke-width:1.2;fill:none}
+svg.leads circle{fill:#1a1a2e}
+.lbl{position:absolute;left:0;top:0;background:rgb(255 255 255 / .96);border:1px solid var(--hair8);border-radius:10px;padding:7px 10px;font-size:12.5px;line-height:1.35;color:var(--i900);box-shadow:0 2px 10px rgb(20 20 40 / .08);max-width:250px;visibility:hidden;white-space:normal}
+.lbl b{display:block;font-size:13px;font-weight:600}
+.lbl span{display:block;color:var(--i600);font-size:12px}
+.lbl.hot{border-color:#fdba74;box-shadow:0 0 0 3px rgb(234 88 12 / .12)}
+.lbl.alarm{background:#fef2f2;border-color:#fca5a5}
+.lbl.alarm b{color:#991b1b}
+.lbl.calm b{color:var(--okt)}
+.lbl.s1 b,.lbl.s2 b{color:#1e40af}
+.hud{position:absolute;left:16px;top:16px;background:rgb(255 255 255 / .94);border:1px solid var(--hair8);border-radius:12px;padding:10px 14px;max-width:min(360px,calc(100% - 32px));box-shadow:0 2px 10px rgb(20 20 40 / .06)}
+.hud.bl{top:auto;bottom:16px}
+.hud b{display:block;font-size:14px;font-weight:600}
+.hud span{display:block;font-size:12.5px;color:var(--i600);margin-top:2px;line-height:1.4}
+.flow3{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+.flow3 em{font-style:normal;font-size:13px;font-weight:600;color:var(--i600);padding:3px 9px;border-radius:99px;background:var(--i100);white-space:nowrap}
+.flow3 em.on{background:#1a1a2e;color:#fff}
+.flow3 i{width:14px;height:1.5px;background:var(--i300)}
+.est{position:absolute;right:16px;top:16px;display:flex;flex-direction:column;gap:8px;width:184px}
+.est div{background:rgb(255 255 255 / .94);border:1px solid var(--hair8);border-radius:12px;padding:9px 12px}
+.est dt{font-size:12px;color:var(--i600)}
+.est dd{margin:2px 0 0;font-size:17px;font-weight:600;letter-spacing:-.01em;color:var(--i900)}
+.est dd small{font-size:11px;font-weight:600;color:var(--warnt);background:var(--warnbg);border-radius:99px;padding:1px 6px;margin-left:6px;vertical-align:2px;letter-spacing:0}
+.stops{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);display:flex;gap:2px;background:rgb(255 255 255 / .96);border:1px solid var(--hair8);border-radius:99px;padding:3px;box-shadow:0 4px 16px rgb(20 20 40 / .08)}
+.stops button{height:32px;padding:0 15px;border-radius:99px;font-size:13px;font-weight:500;color:var(--i700);white-space:nowrap}
+.stops button:hover{color:var(--i900);background:var(--i100)}
+.stops button.on{background:#1a1a2e;color:#fff}
+.corner{position:absolute;right:16px;bottom:16px;display:flex;gap:8px;align-items:center}
+.ghostbtn{height:34px;padding:0 13px;border-radius:10px;background:rgb(255 255 255 / .96);border:1px solid var(--hair8);font-size:12.5px;font-weight:500;color:var(--i800);display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgb(20 20 40 / .06)}
+.ghostbtn:hover{border-color:#9db8f2;color:var(--i900)}
+.ghostbtn svg.ic{width:14px;height:14px}
+.strip{position:absolute;left:16px;bottom:16px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:calc(100% - 180px)}
+.strip .sl{font-size:12px;color:var(--i600);background:rgb(255 255 255 / .94);padding:5px 9px;border-radius:99px;border:1px solid var(--hair8)}
+.strip .w{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:500;background:rgb(255 255 255 / .96);border:1px solid var(--hair8);padding:4px 10px 4px 6px;border-radius:99px;color:var(--i800)}
+.strip .w i{background:#22252b;border-radius:2px;display:inline-block}
+.strip .w.fin{border-color:#fdba74;color:#9a3412}
+canvas.sig{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:default}
+.pts{display:grid;grid-template-columns:repeat(7,1fr);gap:10px}
+.pt{border:1px solid var(--hair8);border-radius:10px;padding:12px;background:#fff;position:relative}
+.pt .pn{font-size:12px;color:var(--i600)}
+.pt .pv{font-size:24px;font-weight:600;letter-spacing:-.02em;margin:4px 0 6px;font-variant-numeric:tabular-nums}
+.pt .pm{height:4px;border-radius:2px;background:var(--i150);position:relative}
+.pt .pm i{position:absolute;left:0;top:0;bottom:0;border-radius:2px}
+.pt .pm u{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--i800);border-radius:1px}
+.pt .ps{font-size:12px;margin-top:8px;font-weight:500}
+.pt.pass .ps{color:var(--okt)}.pt.pass .pm i{background:var(--ok)}
+.pt.fail{background:var(--badbg);border-color:var(--badr)}.pt.fail .ps{color:var(--badt)}.pt.fail .pm i{background:var(--bad)}
+.pt.worst{box-shadow:0 0 0 2px #f59e0b}
+.pt .wtag{position:absolute;top:10px;right:10px;font-size:11px;font-weight:600;color:var(--warnt);background:var(--warnbg);border-radius:99px;padding:1px 7px}
+.pt.wait{background:var(--wash);border-style:dashed}.pt.wait .pv{color:var(--i550)}
+.vpanel{background:#fff;border:1px solid var(--hair8);border-radius:16px;padding:16px}
+.vpanel svg.v{width:100%;height:auto;display:block;font-family:var(--sans)}
+@keyframes ring{0%{r:12;opacity:.9}100%{r:30;opacity:0}}
+.candring{animation:ring 1.6s ease-out infinite}
+.flow{stroke-dasharray:6 6;animation:dash 1s linear infinite}
+@keyframes dash{to{stroke-dashoffset:-12}}
+
+/* Settings */
+.cfg{display:flex;flex:1;min-height:0}
+.cfg-rail{width:220px;flex:none;border-right:1px solid var(--hair4);padding:20px 10px}
+.cfg-rail h1{font-size:20px;font-weight:600;margin:0 10px 14px;letter-spacing:-.01em}
+.cfg-rail button{width:100%;height:34px;border-radius:7px;padding:0 10px;text-align:left;font-size:12.5px;font-weight:500;color:var(--i600)}
+.cfg-rail button:hover{background:rgb(0 0 0 / .03)}
+.cfg-rail button.on{background:rgb(59 130 246 / .07);color:var(--i900)}
+.cfg-main{flex:1;overflow:auto;padding:28px 36px 60px}
+.cfg-main h2{font-size:20px;font-weight:600;margin:0 0 4px;letter-spacing:-.01em}
+.cfg-main>p{color:var(--i550);margin:0 0 22px;font-size:13.5px}
+.cfg-card{max-width:620px;background:#fff;border:1px solid var(--hair);border-radius:12px;padding:4px 20px}
+.crow{display:flex;align-items:center;gap:20px;padding:16px 0;border-bottom:1px solid var(--hair4)}
+.crow:last-child{border-bottom:0}
+.crow .cl{flex:1}
+.crow .cl b{display:block;font-size:13.5px;font-weight:600}
+.crow .cl span{display:block;font-size:12px;color:var(--i550);margin-top:2px;line-height:1.4}
+select.sel{height:30px;border:1px solid var(--i200);border-radius:7px;background:#fff;padding:0 8px;font-size:12.5px;color:var(--i900)}
+.sw{width:34px;height:20px;border-radius:99px;background:var(--i300);position:relative;flex:none;transition:background .12s}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgb(0 0 0 / .2);transition:transform .12s}
+.sw[aria-checked=true]{background:var(--blue6)}
+.sw[aria-checked=true]::after{transform:translateX(14px)}
+
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
+@media (max-width:1279px){.rtitle{flex-basis:180px}.pts{grid-template-columns:repeat(5,1fr)}}
+@media (max-width:1023px){.est{width:160px}.pts{grid-template-columns:repeat(4,1fr)}}
+@media (max-width:767px){
+  #mh{display:flex}
+  #main{padding-top:48px}
+  #sb{position:fixed;left:0;top:0;bottom:0;transform:translateX(-100%);transition:transform .15s var(--ease);background:var(--glass-s);box-shadow:var(--sh-menu)}
+  #sb.open{transform:none}
+  #sb.open~#scrim{display:block}
+  .topbar{padding:0 10px;gap:10px}
+  .rtitle,.track,#live{display:none}
+  .play{flex:0 0 auto;margin-left:auto}
+  .ov{padding:32px 18px 60px}
+  .now{font-size:22px}
+  .srcline{font-size:13.5px;padding:12px 13px}
+  .steps{font-size:10.5px}
+  .details{grid-template-columns:1fr}
+  .details div:nth-last-child(2){border-bottom:1px solid var(--hair4)}
+  .best{flex-wrap:wrap}
+  .vis{padding:12px 12px 48px}
+  .vtop{gap:10px}
+  .stage{height:460px}
+  .est{left:10px;right:auto;top:auto;bottom:62px;flex-direction:row;width:auto;gap:6px}
+  .est div{padding:6px 8px}.est dd{font-size:14px}.est dd small{display:none}
+  .hud{left:10px;top:10px;padding:8px 10px}
+  .stops{bottom:10px}.stops button{padding:0 10px;font-size:12px}
+  .strip{display:none}
+  .lbl{max-width:170px;font-size:11.5px;padding:5px 8px}.lbl span{font-size:11px}
+  .pts{grid-template-columns:repeat(2,1fr)}
+  .greet{font-size:30px}
+  .answers{grid-template-columns:1fr}
+  .intake{padding:16px 14px}
+  .stepper .st span{display:none}.stepper .st.cur span{display:inline}
+  .asm li{grid-template-columns:1fr}.asm .ac{grid-row:auto;grid-column:1}
+  .cfg{flex-direction:column}
+  .cfg-rail{width:auto;border-right:0;border-bottom:1px solid var(--hair4);padding:14px 10px;display:flex;gap:4px;overflow:auto}
+  .cfg-rail h1{display:none}
+  .cfg-rail button{width:auto;white-space:nowrap}
+  .cfg-main{padding:20px 16px 60px}
+  #demo{bottom:4px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="sb" aria-label="Sidebar"></aside>
+  <div id="scrim"></div>
+  <header id="mh"></header>
+  <main id="main"><div id="view"></div><div id="demo">Simulated run, demo data</div></main>
+</div>
+<div id="layer"></div>
+<script>
+(() => {
+"use strict";
+/* ================= Product name: the one place it is set ================= */
+const APP = { name: "Chipmonk", short: "Chipmonk" };
+document.title = APP.name;
+
+/* ================= Verified public sources =================
+   Names, sizes, licences and access come from the team's checked evidence note
+   (21 Nov 2026). Nothing here is invented; where a fact was not checked, the
+   text stays generic. */
+const DS = {
+  chbmit: { name: "CHB-MIT Scalp EEG", from: "PhysioNet, open without an account", size: "42.6 GB; 22 people, 198 seizures", licence: "ODC-By 1.0", fact: "198 seizures recorded in 22 people", where: "CHB-MIT, an open archive on PhysioNet" },
+  siena: { name: "Siena Scalp EEG", from: "PhysioNet, open", size: "20.3 GB; 14 patients, 47 seizures, about 128 h", licence: "CC BY 4.0", fact: "14 patients, 47 seizures", where: "the Siena archive on PhysioNet" },
+  helsinki: { name: "Helsinki neonatal EEG", from: "Zenodo, open", size: "4.3 GB; 79 term newborns, 39 with seizures", licence: "CC BY 4.0" },
+  tusz: { name: "TUH EEG Seizure Corpus", from: "Signed form, then access by SSH key", size: "315 subjects, 822 sessions (v1.2.0)", licence: "None stated on its page" },
+  sleepedf: { name: "Sleep-EDF Expanded", from: "PhysioNet, open", size: "8.1 GB; 197 whole-night recordings", licence: "ODC-By 1.0" },
+  vitaldb: { name: "VitalDB", from: "Provider site, under its terms of use", size: "6,388 surgical cases", licence: "CC BY 4.0" },
+};
+const PAPERS = {
+  lgn: { name: "Logic gate network for ECG arrhythmia", src: "arXiv 2609.32854", use: "The closest gate-level classifier: how small a network of gates can be. Its 0.46 nJ covers the classifier part only." },
+  soul: { name: "SOUL, an online-learning seizure classifier chip", src: "arXiv 2110.02169", use: "A size and accuracy bar: 0.1 mm² in 28 nm, 97.5% sensitivity on CHB-MIT." },
+  neuraltree: { name: "NeuralTree system-on-chip", src: "arXiv 2205.06090", use: "Energy per decision to compare against: 0.227 µJ." },
+  gbt: { name: "Gradient-boosted-tree seizure chip (Shoaran et al., 2018)", src: "authors.library.caltech.edu/92186", use: "Shows a small per-patient model can work: 41.2 nJ per decision." },
+  lstm: { name: "Edge deep-learning seizure detector on CHB-MIT", src: "arXiv 2012.00307", use: "The false-alarm bar on the same data: 0.071 per hour, on a processor rather than gates." },
+  epfl: { name: "EPFL two-stage iEEG seizure detector", src: "infoscience.epfl.ch, record 293538", use: "Wake-up idea: a small always-on stage switches on a larger one." },
+  muxnet: { name: "MUXnet, a multiplier-free sleep-staging chip", src: "arXiv 2401.03396", use: "A table-lookup network without multipliers, close to wiring weights into gates." },
+};
+
+/* ================= Devices ================= */
+const LINE = 0.90;
+const SCALE = 20;
+const UC = {
+  eeg: {
+    label: "Brainwave sensing", device: "Seizure alarm band", devShort: "band", events: "seizures", event: "seizure", person: "patient", Person: "Patient", people: "patients", People: "Patients", rec: "brainwave recordings",
+    window: "2-second windows", predict: "Seizure or no seizure", faUnit: "a day",
+    sensors: [
+      { n: "Sensor 1", what: "Left temple electrodes", where: "F7 to T3, on the band above the left ear" },
+      { n: "Sensor 2", what: "Right temple electrodes", where: "F8 to T4, on the band above the right ear" }],
+    pairs: [["F7", "T3"], ["F8", "T4"], ["Fp1", "F3"], ["Fp2", "F4"]],
+    gates: [4180, 1720, 960], fa: [3.1, 1.4, 1.2], used: [4, 3, 2],
+    scores: [
+      [.92, .90, .86, .94, .83, .89, .91, .88, .78, .90, .87, .93, .91, .85],
+      [.96, .94, .92, .97, .90, .93, .95, .91, .84, .94, .92, .95, .94, .91],
+      [.97, .95, .93, .98, .91, .94, .96, .92, .86, .95, .93, .97, .95, .92]],
+    weakWhy: "most of their seizures last under ten seconds",
+    frontMw: 0.9, battMwh: 660, battName: "coin cell",
+  },
+  nirs: {
+    label: "Newborn sensing", device: "Brain-oxygen forehead sensor", devShort: "sensor", events: "oxygen drops", event: "oxygen drop", person: "newborn", Person: "Newborn", people: "newborns", People: "Newborns", rec: "brain-oxygen recordings",
+    window: "10-second windows", predict: "Alarm or no alarm", faUnit: "an hour",
+    sensors: [
+      { n: "Sensor 1", what: "Near light detector", where: "10 mm from the light; reads mostly scalp" },
+      { n: "Sensor 2", what: "Far light detector", where: "30 mm from the light; light reaches the brain" }],
+    gates: [2950, 1140, 720], fa: [2.6, 1.3, 1.0], used: [4, 3, 2],
+    scores: [
+      [.90, .86, .93, .87, .79, .90, .88, .94, .84, .89, .92, .86],
+      [.95, .92, .96, .91, .85, .93, .92, .97, .89, .93, .95, .91],
+      [.96, .94, .97, .92, .87, .95, .93, .98, .91, .94, .96, .92]],
+    weakWhy: "their oxygen drops are shallow and slow",
+    frontMw: 2.4, battMwh: 555, battName: "small battery",
+  },
+};
+const PRESETS = {
+  lite: { name: "Lite", rounds: 3, icon: "zap", hint: "3 rounds. A quick first chip." },
+  pro: { name: "Pro", rounds: 4, icon: "flask", hint: "4 rounds. Smaller chips." },
+  max: { name: "Max", rounds: 5, icon: "rocket", hint: "5 rounds, more designs per round." },
+  ultra: { name: "Ultra", rounds: 6, icon: "atom", hint: "6 rounds. The smallest chip we can find." },
+};
+const MACH = {
+  cpu: { name: "CPU Basic", hint: "The small machine. About 500 models a round.", n: 512, rate: 0.6 },
+  gpu: { name: "GPU Basic", hint: "One GPU. About 2,000 models a round.", n: 2048, rate: 1.9 },
+  gpuplus: { name: "GPU Plus", hint: "A bigger GPU. About 8,000 models a round.", n: 8192, rate: 7.6 },
+  cluster: { name: "GPU Cluster", hint: "Several GPUs. Above your plan.", n: 32768, rate: 30, off: true },
+};
+const SCIENTISTS = {
+  lead: { name: "Lead scientist", color: "#6d28d9", bg: "#f5f3ff", icon: "spark", role: "Plans each round and talks to you." },
+  train: { name: "Training scientist", color: "#1d4ed8", bg: "#eff6ff", icon: "wave", role: "Fine-tunes the candidate models." },
+  build: { name: "Chip builder", color: "#c2410c", bg: "#fff7ed", icon: "cpu", role: "Turns models into logic gates." },
+  check: { name: "Checker", color: "#047857", bg: "#ecfdf5", icon: "check", role: "Checks the chip bit for bit and on unseen people." },
+};
+const defaults = { preset: "lite", mach: "gpu", line: "90", maxGates: "5000", fa: "2", bits: "4", spendCap: "25",
+  scientists: { lead: true, train: true, build: true, check: true }, models: { lead: "Large reasoning model", train: "Fast model", build: "Fast model", check: "Large reasoning model" } };
+
+/* ---- Assumption sets, one per device and data path ---- */
+const ASM = {
+  "eeg-public": [
+    { k: "Channels", v: "Only the channels nearest your band: F7 to T3 and F8 to T4", why: "The archive was recorded with a full cap; your band reaches the temples only." },
+    { k: "What counts as a seizure", v: "The seizure start and end times in the archive", why: "The chip is scored against them. Tell us if your clinicians mark seizures differently." },
+    { k: "The check", v: "Siena's 14 patients are never used for training", why: "Testing on a second archive shows how the chip does on people recorded elsewhere." }],
+  "eeg-sim": [
+    { k: "Who", v: "Adults with epilepsy, recorded at home", why: "Your description says adults at home. Tell us if your clinic sees children too." },
+    { k: "Sensors", v: "Two electrode pairs at the temples: F7 to T3 and F8 to T4", why: "A forehead band can only reach the forehead and the temples." },
+    { k: "Seizures", v: "Focal seizures lasting 10 seconds to 2 minutes", why: "This sets what simulated seizures look like. Tell us the types and lengths you see." },
+    { k: "Disturbances", v: "Chewing, blinking, walking and a loose electrode", why: "Home recordings are noisy; the chip must not raise an alarm on them." },
+    { k: "How much", v: "60 people, 3 days each; 12 kept aside for the check", why: "Enough variety to train on and still test on people the chip never saw." }],
+  "nirs-sim": [
+    { k: "Who", v: "Newborns in intensive care, term and preterm", why: "Your description says intensive care. Tell us if your unit sees only one group." },
+    { k: "Sensor", v: "One light source, detectors 10 mm and 30 mm away on the forehead", why: "Two distances let the chip tell scalp from brain. Change this if your probe differs." },
+    { k: "What counts as a drop", v: "Brain oxygen below 55% for at least 60 seconds", why: "Simulated data needs a fixed line to mark events. Set it to your unit's alarm policy." },
+    { k: "Disturbances", v: "Movement, handling and the sensor lifting off, several times an hour", why: "A chip trained without them would raise false alarms on the ward." },
+    { k: "How much", v: "80 newborns, 24 hours each; 12 kept aside for the check", why: "Enough variety to train on and still test on babies the chip never saw." }],
+  own: [
+    { k: "Labels", v: "Events in your files were marked by a clinician", why: "The chip learns what you marked. Unmarked files can only be used for checking false alarms." },
+    { k: "Sensor positions", v: "Your recordings use the same sensor positions as the device", why: "A chip trained on other positions may not carry over." },
+    { k: "The check", v: "12 people from your files are kept aside, never trained on", why: "The chip is judged only on people it never saw." }],
+};
+
+function mkData(uc, mode, o = {}) {
+  const U = UC[uc];
+  if (mode === "public") return { mode, heldN: 14, train: [Object.assign({ use: "Fine-tuning" }, DS.chbmit)], test: [Object.assign({ use: "Held out for the check" }, DS.siena)],
+    words: `Learning from ${DS.chbmit.fact}, from ${DS.chbmit.where}.`, words2: `Checked on 14 other patients from the Siena archive on PhysioNet, never used for training.`,
+    short: "CHB-MIT and Siena, PhysioNet", papers: ["lgn", "soul", "neuraltree", "gbt", "lstm", "epfl"], asm: (o.asm || ASM["eeg-public"]).map(a => Object.assign({ s: "ok" }, a)) };
+  if (mode === "own") { const f = o.file || "my-recordings.zip";
+    return { mode, heldN: 12, file: f, train: [{ name: "Your recordings", from: `Attached by you: ${f}`, size: o.size || "Read when the run starts", licence: "Yours; stays in your workspace", use: "Fine-tuning and the check" }], test: [],
+      words: `Learning from your own ${U.rec} in ${f}.`, words2: `12 ${U.people} from your files are kept aside for the check.`,
+      short: "your recordings", papers: uc === "eeg" ? ["lgn", "soul", "neuraltree", "gbt"] : ["lgn", "muxnet", "epfl"], asm: (o.asm || ASM.own).map(a => Object.assign({ s: "ok" }, a)) }; }
+  const n = uc === "eeg" ? 60 : 80;
+  return { mode: "sim", heldN: 12, train: [{ name: `Simulated ${U.rec}`, from: "Made by Chipmonk from the assumptions you confirmed", size: `${n} ${U.people}; 12 kept aside for the check`, licence: "Yours", use: "Fine-tuning and the check" }], test: [],
+    words: `Learning from simulated ${U.rec} of ${n} ${U.people}, built from the assumptions you confirmed${uc === "nirs" ? ", because no public near-infrared set fits" : ""}.`,
+    words2: `12 of them are kept aside for the check. Check the chip on real recordings before any clinical use.`,
+    short: "simulated recordings", papers: uc === "eeg" ? ["lgn", "soul", "neuraltree", "epfl"] : ["lgn", "muxnet", "epfl"],
+    asm: (o.asm || ASM[uc + "-sim"]).map(a => Object.assign({ s: "ok" }, a)) };
+}
+
+/* ================= Runs ================= */
+const now = () => performance.now();
+function mkRun(o) {
+  return Object.assign({ rounds: 3, preset: "lite", mach: "gpu", acc: 0, since: now(), paused: false, starred: false, redirect: null, extra: [], typing: false, titleAt: 0 }, o);
+}
+const nicuAsm = ASM["nirs-sim"].map(a => Object.assign({}, a));
+nicuAsm[2] = Object.assign({}, nicuAsm[2], { v: "Brain oxygen below 50% for at least 2 minutes", s: "changed" });
+const runs = [
+  mkRun({ id: "seizure-band", title: "Seizure alarm band for adults at home", uc: "eeg", acc: 30, data: mkData("eeg", "public"),
+    prompt: "A forehead EEG band for adults with epilepsy at home. The chip should flag a seizure as it starts, use as few electrodes as possible, and run for weeks on a coin cell." }),
+  mkRun({ id: "nicu-oxygen", title: "Brain-oxygen alarm chip for a NICU sensor", uc: "nirs", acc: 999, data: mkData("nirs", "sim", { asm: nicuAsm }),
+    prompt: "A soft forehead sensor for newborns in intensive care that reads brain oxygen with near-infrared light. The chip should raise an alarm when brain oxygen drops, with few false alarms." }),
+  mkRun({ id: "home-eeg", title: "Two-sensor seizure detector for home use", uc: "eeg", acc: 999, mach: "gpuplus", data: mkData("eeg", "public"),
+    redirect: { at: 74, mode: "smaller", from: 2, text: "It has to fit behind the ear. Smaller chip please, the line still has to hold." } }),
+  mkRun({ id: "incubator-nirs", title: "Low-power oxygen-drop alarm for an incubator probe", uc: "nirs", acc: 999, mach: "cpu", data: mkData("nirs", "own", { file: "incubator-probe-recordings.zip", size: "3.1 GB, 40 newborns" }) }),
+];
+runs.forEach(r => { r.acc = Math.min(r.acc, total(r)); if (r.id === "home-eeg") { r.extra.push({ t: 74, who: "you", text: r.redirect.text }); r.extra.push({ t: 75, who: "lead", text: replyFor(r, "smaller", 2) }); } });
+
+/* ================= Simulation ================= */
+function total(r) { return 36 + 48 * r.rounds; }
+function segs(r) {
+  const s = [{ k: "spec", s: 0, e: 8 }, { k: "ref", s: 8, e: 20 }];
+  for (let k = 0; k < r.rounds; k++) { const b = 20 + 48 * k; s.push({ k: "propose", r: k, s: b, e: b + 6 }, { k: "tune", r: k, s: b + 6, e: b + 28 }, { k: "compile", r: k, s: b + 28, e: b + 38 }, { k: "verify", r: k, s: b + 38, e: b + 48 }); }
+  s.push({ k: "report", s: 20 + 48 * r.rounds, e: total(r) });
+  return s;
+}
+function elapsed(r) { const e = r.acc + (r.paused ? 0 : (now() - r.since) / 1000); return Math.min(total(r), Math.max(0, e)); }
+function isDone(r) { return elapsed(r) >= total(r) - 1e-6; }
+function stageAt(r, t) { for (const g of segs(r)) if (t >= g.s && t < g.e) return Object.assign({ f: (t - g.s) / (g.e - g.s) }, g); return { k: "done", f: 1, s: total(r), e: total(r) }; }
+const round2 = x => Math.round(x * 100) / 100;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const ease = x => x < .5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;
+function modeFor(r, k) { return r.redirect && k >= r.redirect.from ? r.redirect.mode : null; }
+function heldN(r) { return r.data.heldN; }
+function result(r, k) {
+  const U = UC[r.uc], b = Math.min(k, 2), m = modeFor(r, k);
+  let gates = U.gates[b], scores = U.scores[b].slice(0, heldN(r)), fa = U.fa[b], used = U.used[b], q = String(b);
+  if (k > 2) { gates = Math.round(gates * Math.pow(0.9, k - 2)); scores = scores.map(v => Math.min(.99, round2(v + .005 * (k - 2)))); q = "2"; }
+  if (r.mach === "gpuplus") gates = Math.round(gates * 0.94);
+  if (r.mach === "cpu") gates = Math.round(gates * 1.12);
+  if (m === "smaller") { gates = Math.round(gates * 0.62); scores = scores.map(v => round2(v - 0.01)); fa = round2(fa * 1.2); used = Math.min(used, 2); q = "s"; }
+  if (m === "accuracy") { gates = Math.round(gates * 1.3); scores = scores.map(v => Math.min(.99, round2(v + 0.02))); fa = round2(fa * 0.85); q = "a"; }
+  const pass = scores.filter(v => v >= LINE).length;
+  let worst = 0; scores.forEach((v, i) => { if (v < scores[worst]) worst = i; });
+  const mean = scores.reduce((a, v) => a + v, 0) / scores.length;
+  return { k, gates, scores, fa, used, pass, worst, mean, q, n: scores.length };
+}
+function bestAt(r, t) { let best = null; for (let k = 0; k < r.rounds; k++) if (t >= 68 + 48 * k) best = result(r, k); return best; }
+function prevBest(r, t) { let p = null, b = null; for (let k = 0; k < r.rounds; k++) if (t >= 68 + 48 * k) { p = b; b = result(r, k); } return p; }
+function trainedAt(r, t) { const N = MACH[r.mach].n; let n = 0; for (let k = 0; k < r.rounds; k++) n += Math.round(N * clamp((t - (26 + 48 * k)) / 22, 0, 1)); return n; }
+function cost(r, t) { return (t * SCALE / 3600) * MACH[r.mach].rate + t * 0.004; }
+function fmtClock(sec) { sec = Math.floor(sec); const h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, s = sec % 60; return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`; }
+const nf = n => Math.round(n).toLocaleString("en-GB");
+const pct = v => Math.round(v * 100) + "%";
+const word = n => ["no", "one", "two", "three", "four", "five", "six"][n] || String(n);
+function chipEst(r, b) { const U = UC[r.uc]; if (!b) return null; const area = 0.2 + b.gates * 0.00007, uW = b.gates * 0.006, days = U.battMwh / (U.frontMw + uW / 1000) / 24; return { area, uW, days }; }
+
+/* Display clock signals, shared by the Device and Signal visuals */
+const dclock = () => performance.now() / 1000;
+const PER = { eeg: 40, nirs: 50 };
+const EVW = { eeg: [22, 34], nirs: [30, 36] };
+function mod(a, n) { return ((a % n) + n) % n; }
+function truthAt(uc, s) { const m = mod(s, PER[uc]); return m >= EVW[uc][0] && m < EVW[uc][1]; }
+function chipFlag(uc, b, s) {
+  if (!b) return false; const w = Math.floor(s / 2) * 2, P = PER[uc], m = mod(w, P), lat = b.q === "0" ? 4 : 2;
+  if (m >= EVW[uc][0] + lat - 2 && m < EVW[uc][1]) return true;
+  return b.q === "0" && mod(Math.floor(w / P), 3) === 1 && m >= 8 && m < 10;
+}
+
+function replyFor(r, mode, from) {
+  const U = UC[r.uc], rn = from + 1;
+  if (mode === "smaller") return `Understood. From round ${rn} we rank candidates by size first and accept ${U.events} caught down to the clinical line of 90%. Expect a chip about a third smaller, likely on two sensors, with every ${U.person} checked the same way.`;
+  if (mode === "accuracy") return `Understood. From round ${rn} we favour catching more ${U.events}, even if the chip grows by about a third. We'll look hardest at the weakest ${U.person}.`;
+  return `Noted. We'll keep that in mind from round ${rn}; nothing about the target changes yet.`;
+}
+function parseMode(text) {
+  const s = text.toLowerCase();
+  if (/(fewer|less|smaller|tiny|shrink|reduce|cut).*(gate|size|chip|area|power)|(gate|size|area).*(fewer|smaller|less|down)|lower sensitivity|smaller/.test(s)) return "smaller";
+  if (/(more|higher|better|raise|improve).*(sensitiv|accura|catch|recall)|miss fewer|fewer miss|worst patient|worst newborn/.test(s)) return "accuracy";
+  return "note";
+}
+function answersLine(r) {
+  const D = r.data, ch = D.asm.filter(a => a.s === "changed");
+  const chTxt = ch.length ? ` You changed ${ch.length === 1 ? "one" : ch.length}: ${ch.map(a => a.k.toLowerCase() + " is now “" + a.v + "”").join("; ")}.` : "";
+  if (D.mode === "public") return `You have no recordings of your own and agreed to use CHB-MIT from PhysioNet, with Siena held out for the check.${chTxt}`;
+  if (D.mode === "own") return `You attached ${D.file}.${chTxt}`;
+  return `You have no recordings of your own${r.uc === "nirs" ? ", no public set fits," : ""} and you agreed that we simulate them. You went through ${D.asm.length} assumptions.${chTxt}`;
+}
+
+/* Chat events */
+function events(r) {
+  const U = UC[r.uc], N = MACH[r.mach].n, E = [], D = r.data, H = heldN(r);
+  const red = r.redirect;
+  const add = (t, who, text, tool, kind) => E.push({ id: `${who}-${t}`, t, who, text, tool, kind });
+  add(1, "lead", `We read your brief as: a chip inside the ${U.devShort} that decides "${U.predict.toLowerCase()}" for each of the ${U.window}, judged only on ${U.people} it has never seen. Clinical line: catch at least 90% of ${U.events} with fewer than 2 false alarms ${U.faUnit}. ${answersLine(r)}`);
+  add(4, "tool", "Wrote the goal and the clinical line", ["goal: smallest chip that meets the line", "line: 90% of " + U.events + " caught, per " + U.person, "false alarms: fewer than 2 " + U.faUnit, `unseen ${U.people} held back: ${H}`]);
+  if (D.mode === "public") {
+    add(8, "lead", `Loading ${DS.chbmit.name} from PhysioNet to fine-tune on (${DS.chbmit.size}, licence ${DS.chbmit.licence}), and ${DS.siena.name} to check on (${DS.siena.size}, licence ${DS.siena.licence}). Siena's 14 patients go in a locked set that no model trains on.`);
+    add(11, "tool", `Loaded ${DS.chbmit.name} from PhysioNet`, ["source: physionet.org, CHB-MIT Scalp EEG 1.0.0", "22 people, 198 seizures, 42.6 GB", "licence: ODC-By 1.0", "kept channels: F7-T3, F8-T4, Fp1-F3, Fp2-F4", "cut into " + U.window, "used for: fine-tuning"], "data");
+    add(13, "tool", `Loaded ${DS.siena.name} from PhysioNet, held out`, ["source: physionet.org, Siena Scalp EEG 1.0.0", "14 patients, 47 seizures, about 128 h", "licence: CC BY 4.0", "used for: the final check only"], "data");
+  } else if (D.mode === "own") {
+    add(8, "lead", `Reading your file ${D.file}. Twelve ${U.people} from it go in a locked set that no model trains on.`);
+    add(12, "tool", `Loaded your recordings: ${D.file}`, [`source: attached by you`, D.train[0].size, `held back: 12 ${U.people}`, "cut into " + U.window, "used for: fine-tuning and the check"], "data");
+  } else {
+    add(8, "lead", `No public set fits${r.uc === "nirs" ? " a near-infrared newborn sensor" : " your choice"}, so we are simulating ${U.rec} from the assumptions you went through. Twelve simulated ${U.people} go in a locked set.`);
+    add(12, "tool", `Simulated ${D.train[0].size.split(";")[0]}`, D.asm.map(a => `${a.k.toLowerCase()}: ${a.v}${a.s === "changed" ? " (changed by you)" : ""}`).concat(["used for: fine-tuning and the check"]), "data");
+  }
+  add(15, "lead", `Reading ${D.papers.length} papers on small seizure and sensor chips, to set size and energy targets.`);
+  add(16, "tool", `Read ${D.papers.length} papers`, D.papers.map(k => `${PAPERS[k].name} (${PAPERS[k].src}): ${PAPERS[k].use}`), "paper");
+  add(18, "train", r.uc === "eeg" ? "Most onsets show first on the temple channels. We'll start from four channel pairs and see how few we need." : "The far detector sees the brain, the near one mostly sees scalp. We'll try all four detectors first and see how few we need.");
+  for (let k = 0; k < r.rounds; k++) {
+    const b = 20 + 48 * k, res = result(r, k), prev = k > 0 ? result(r, k - 1) : null, m = modeFor(r, k);
+    const after = red && b + 1 > red.at && m;
+    let p;
+    if (after && m === "smaller") p = `Round ${k + 1}: following your note, we rank by size first. Narrower models, ${word(Math.min(res.used, 2))} sensors, fewer bits per weight.`;
+    else if (after && m === "accuracy") p = `Round ${k + 1}: following your note, we let the chip grow and train harder on short, faint ${U.events}.`;
+    else if (k === 0) p = `Round 1: six chip families, from four sensors down to two, each reading ${U.window}.`;
+    else if (k === 1) p = `Round 2: round 1's best needs ${nf(prev.gates)} gates. We'll try narrower models and drop ${r.uc === "eeg" ? "the frontal pair" : "the farthest detector"}.`;
+    else p = `Round ${k + 1}: pushing smaller. Two sensors, fewer bits per weight, and more training on the hardest ${U.people}.`;
+    add(b + 1, "lead", p);
+    add(b + 7, "train", `Fine-tuning ${nf(N)} candidates at once on ${D.mode === "public" ? "the CHB-MIT recordings" : D.mode === "own" ? "your recordings" : "the simulated recordings"}.`);
+    add(b + 27, "tool", `Fine-tune batch finished: ${nf(N)} candidates`, [`candidates: ${nf(N)}`, `best training catch rate: ${pct(Math.min(.99, res.mean + .01))}`, `kept for building: 40`, `${U.window}, ${res.used} sensors`]);
+    add(b + 29, "build", "Turning the 40 best into logic gates with the weights wired in. No memory and no processor on the chip.");
+    add(b + 37, "tool", "Built 40 circuits", [`smallest that meets the line in training: ${nf(res.gates)} gates`, `largest: ${nf(Math.round(res.gates * 3.4))} gates`]);
+    add(b + 39, "check", `Checking each circuit bit for bit against its model, then on the ${H} unseen ${U.people}${D.mode === "public" ? " from Siena" : ""}.`);
+    add(b + 44, "tool", "Bit-for-bit check passed", ["circuits checked: 40", "mismatches: 0"]);
+    add(b + 47, "check", `Round ${k + 1} best: ${nf(res.gates)} gates, ${res.used} sensors, catches ${pct(res.mean)} of ${U.events}. Meets the clinical line on ${res.pass} of ${H} unseen ${U.people}. Weakest is ${U.person} ${res.worst + 1} at ${pct(res.scores[res.worst])}; ${U.weakWhy}.`);
+  }
+  const R0 = 20 + 48 * r.rounds;
+  add(R0 + 2, "lead", `Writing the report: the chip, the sensors it needs, every ${U.person}'s result, and the data and papers behind it.`);
+  const fin = result(r, r.rounds - 1);
+  add(total(r) - 0.5, "lead", `Done. The smallest chip that does the job has ${nf(fin.gates)} gates and uses ${word(fin.used)} sensors. It meets the clinical line on ${fin.pass} of ${H} unseen ${U.people}. ${U.Person} ${fin.worst + 1} stays below it; the report says why.${D.mode === "sim" ? " It was designed on simulated data, so check it on real recordings next." : ""}`);
+  return E.concat(r.extra.map((x, i) => ({ id: `x${i}`, t: x.t, who: x.who, text: x.text }))).sort((a, b) => a.t - b.t || (a.id < b.id ? -1 : 1));
+}
+
+/* ================= Icons ================= */
+const P = {
+  plus: '<path d="M5 12h14M12 5v14"/>',
+  sliders: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+  search: '<circle cx="11" cy="11" r="7.5"/><path d="m21 21-4.3-4.3"/>',
+  panel: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  chev: '<path d="m6 9 6 6 6-6"/>',
+  chevr: '<path d="m9 18 6-6-6-6"/>',
+  up: '<path d="m5 12 7-7 7 7M12 19V5"/>',
+  play: '<path d="M7 4v16l13-8z"/>',
+  pause: '<path d="M8 5v14M16 5v14"/>',
+  star: '<path d="m12 2.5 2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5-4.8-4.6 6.6-.9z"/>',
+  pencil: '<path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
+  trash: '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  cpu: '<rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/>',
+  gpu: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="9" cy="12" r="3"/><path d="M15 10h4M15 14h4"/>',
+  tool: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z"/>',
+  spark: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 3v4M17 5h4"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  wave: '<path d="M2 12h4l3-8 4 16 3-8h6"/>',
+  drop: '<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5S12.5 5.5 12 3c-.5 2.5-2 4.9-4 6.5S5 13 5 15a7 7 0 0 0 7 7z"/>',
+  restart: '<path d="M3 12a9 9 0 1 0 9-9 9.7 9.7 0 0 0-6.7 2.7L3 8"/><path d="M3 3v5h5"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="1.5"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/>',
+  out: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+  clip: '<path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/>',
+  db: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>',
+  book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/>',
+  zap: '<path d="M13 2 3 14h9l-1 8 10-12h-9z"/>',
+  flask: '<path d="M9 3h6M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2h12.4a1.5 1.5 0 0 0 1.3-2L14 9V3"/><path d="M7 15h10"/>',
+  rocket: '<path d="M5 15c-1.5 1.5-2 5-2 5s3.5-.5 5-2M9 15l-3-3c1-4 4.5-9 12-9 0 7.5-5 11-9 12z"/><circle cx="15" cy="9" r="1.5"/>',
+  atom: '<circle cx="12" cy="12" r="1.5"/><ellipse cx="12" cy="12" rx="10" ry="4"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(120 12 12)"/>',
+  upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>',
+  replay: '<path d="M1 4v6h6"/><path d="M3.5 15a9 9 0 1 0 2.1-9.4L1 10"/>',
+};
+const ic = (n, cls = "") => `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true">${P[n]}</svg>`;
+const spinner = (c = "#2563eb") => `<svg viewBox="0 0 12 12" aria-label="Running"><circle cx="6" cy="6" r="4.5" fill="none" stroke="${c}" stroke-opacity=".2" stroke-width="1.6"/><path class="spin" d="M6 1.5a4.5 4.5 0 0 1 4.5 4.5" fill="none" stroke="${c}" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+const doneGlyph = `<svg viewBox="0 0 12 12" aria-label="Finished"><circle cx="6" cy="6" r="5" fill="none" stroke="#059669" stroke-width="1.3"/><path d="M3.8 6.1l1.5 1.5 2.9-3" fill="none" stroke="#059669" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const $ = (s, el = document) => el.querySelector(s);
+
+/* ================= Layer: popovers, modals, toasts ================= */
+const layer = $("#layer");
+let pop = null;
+function closePop() { if (pop) { pop.el.remove(); if (pop.anchor) pop.anchor.setAttribute("aria-expanded", "false"); pop = null; } }
+function openPop(anchor, html, { up = false, align = "start", width, onMount } = {}) {
+  const same = pop && pop.anchor === anchor; closePop(); if (same) return null;
+  const el = document.createElement("div"); el.className = "pop"; el.setAttribute("role", "menu"); el.innerHTML = html;
+  if (width) el.style.width = width + "px";
+  layer.appendChild(el);
+  const r = anchor.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
+  let left = align === "end" ? r.right - w : r.left; left = Math.max(8, Math.min(left, innerWidth - w - 8));
+  let top = up ? r.top - h - 6 : r.bottom + 6;
+  if (!up && top + h > innerHeight - 8) top = Math.max(8, r.top - h - 6);
+  if (up && top < 8) top = r.bottom + 6;
+  el.style.left = left + "px"; el.style.top = top + "px";
+  anchor.setAttribute("aria-expanded", "true");
+  pop = { el, anchor }; if (onMount) onMount(el);
+  return el;
+}
+document.addEventListener("mousedown", e => { if (pop && !pop.el.contains(e.target) && !pop.anchor.contains(e.target)) closePop(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") { if (pop) closePop(); else closeModal(); } });
+let modalEl = null;
+function closeModal() { if (modalEl) { modalEl.remove(); modalEl = null; } }
+function openModal(html, onMount) { closeModal(); closePop(); const bg = document.createElement("div"); bg.className = "modal-bg"; bg.innerHTML = `<div class="modal" role="dialog" aria-modal="true">${html}</div>`; bg.addEventListener("mousedown", e => { if (e.target === bg) closeModal(); }); layer.appendChild(bg); modalEl = bg; if (onMount) onMount(bg); }
+let toastT;
+function toast(msg) { const old = $(".toast", layer); if (old) old.remove(); const t = document.createElement("div"); t.className = "toast"; t.setAttribute("role", "status"); t.textContent = msg; layer.appendChild(t); clearTimeout(toastT); toastT = setTimeout(() => t.remove(), 2600); }
+function confirmBox(title, text, okLabel, onOk) {
+  openModal(`<div class="mp"><h3>${esc(title)}</h3>${esc(text)}</div><div class="mf"><button class="btn" data-a="no">Cancel</button><button class="btn red" data-a="ok">${esc(okLabel)}</button></div>`, bg => {
+    bg.querySelector("[data-a=no]").onclick = closeModal; const ok = bg.querySelector("[data-a=ok]"); ok.onclick = () => { closeModal(); onOk(); }; ok.focus();
+  });
+}
+
+/* ================= Router ================= */
+const VIS = [
+  { k: "device", l: "Device" }, { k: "chip", l: "Chip" }, { k: "finetune", l: "Fine-tuning" }, { k: "signal", l: "Signal" }, { k: "sensors", l: "Sensors" },
+  { k: "tradeoff", l: "Trade-off", more: true }, { k: "patients", l: "Patients", more: true },
+];
+let route = {};
+function parse() {
+  const h = location.hash.replace(/^#\/?/, "").split("/");
+  if (h[0] === "run" && runs.find(r => r.id === h[1])) return { page: "run", id: h[1], view: ["overview", "chat", "visual"].includes(h[2]) ? h[2] : "overview", vis: VIS.find(v => v.k === h[3]) ? h[3] : "device" };
+  if (h[0] === "settings") return { page: "settings", tab: h[1] || "line" };
+  return { page: "new" };
+}
+function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
+addEventListener("hashchange", render);
+
+/* ================= Sidebar ================= */
+const sb = $("#sb");
+let sbCollapsed = innerWidth < 1024, renaming = null;
+function glyph(r) { if (r.titleAt && now() < r.titleAt) return spinner(); if (isDone(r)) return doneGlyph; if (r.paused) return ""; return spinner(); }
+function rowHTML(r) {
+  const on = route.page === "run" && route.id === r.id, pending = r.titleAt && now() < r.titleAt;
+  const t = renaming === r.id ? `<input value="${esc(r.title)}" aria-label="Rename run">` : pending ? `<span class="pending-bar"></span>` : `<span class="t">${esc(r.title)}</span>`;
+  return `<div class="row ${on ? "on" : ""}" data-id="${r.id}" title="${esc(r.title)}" role="link" tabindex="0"><span class="g">${glyph(r)}</span>${t}<button class="more" aria-label="Run options" aria-expanded="false">${ic("more")}</button></div>`;
+}
+function renderSidebar() {
+  sb.classList.toggle("col", sbCollapsed && innerWidth >= 768);
+  const starred = runs.filter(r => r.starred), rest = runs.filter(r => !r.starred);
+  sb.innerHTML = `
+    <div class="sb-head"><div class="logo">${ic("cpu")}</div><div class="wordmark">${esc(APP.short)}</div><button class="sq" data-a="toggle" aria-label="Toggle sidebar">${ic("panel")}</button></div>
+    <nav class="nav">
+      <button data-a="new" class="${route.page === "new" ? "on" : ""}" title="New design">${ic("plus")}<span>New design</span></button>
+      <button data-a="settings" class="${route.page === "settings" ? "on" : ""}" title="Settings">${ic("sliders")}<span>Settings</span></button>
+      <button data-a="search" title="Search">${ic("search")}<span>Search</span><em class="count">${runs.length}</em></button>
+    </nav>
+    <div class="divider"></div>
+    <div class="runs" id="runlist">
+      ${starred.length ? `<div class="cap">Starred</div>${starred.map(rowHTML).join("")}` : ""}
+      <div class="cap">Recents</div>
+      ${rest.length ? rest.map(rowHTML).join("") : `<div style="font-size:12.5px;color:var(--i550);padding:4px 10px">No runs yet. Describe a device to start one.</div>`}
+    </div>
+    <div class="runs-spacer"></div>
+    <div class="acct"><button data-a="acct" aria-label="Account menu" aria-expanded="false"><span class="av">DW</span><span class="who"><div class="nm">Demo workspace</div><div class="em">Team plan</div></span></button></div>`;
+  const inp = sb.querySelector(".row input");
+  if (inp) { inp.focus(); inp.select(); const fin = ok => { const r = runs.find(x => x.id === renaming); if (ok && inp.value.trim()) r.title = inp.value.trim(); renaming = null; renderSidebar(); renderTopbarOnly(); }; inp.onkeydown = e => { if (e.key === "Enter") fin(true); if (e.key === "Escape") { e.stopPropagation(); fin(false); } }; inp.onblur = () => fin(true); }
+}
+let sbSig = "";
+function sidebarSig() { return runs.map(r => r.id + r.title + r.starred + (isDone(r) ? "d" : r.paused ? "p" : "r") + (r.titleAt && now() < r.titleAt ? "w" : "")).join("|") + route.page + route.id + sbCollapsed + renaming + innerWidth; }
+function refreshSidebar() { const s = sidebarSig(); if (s !== sbSig) { sbSig = s; renderSidebar(); } }
+sb.addEventListener("click", e => {
+  const a = e.target.closest("[data-a]"), row = e.target.closest(".row");
+  if (a) {
+    const k = a.dataset.a;
+    if (k === "toggle") { if (innerWidth < 768) sb.classList.remove("open"); else { sbCollapsed = !sbCollapsed; refreshSidebar(); } return; }
+    if (k === "new") { go("#/new"); return closeDrawer(); }
+    if (k === "settings") { go("#/settings"); return closeDrawer(); }
+    if (k === "search") { closeDrawer(); return openSearch(); }
+    if (k === "acct") return openPop(a, `<div style="padding:8px 8px 6px"><div style="font-size:12.5px;font-weight:600">Demo workspace</div><div style="font-size:11.5px;color:var(--i550)">Team plan</div></div><div class="sep"></div>
+      <button class="opt" data-m="settings">${ic("sliders")}Settings</button><button class="opt" data-m="help">${ic("help")}Help</button><div class="sep"></div><button class="opt" data-m="out">${ic("out")}Sign out</button>`, { up: true, width: 220, onMount: el => el.onclick = ev => { const m = ev.target.closest("[data-m]"); if (!m) return; closePop(); if (m.dataset.m === "settings") go("#/settings"); else toast(m.dataset.m === "help" ? "The manual opens here in the full product." : "Signing out is switched off in this demo."); } });
+  }
+  if (row && e.target.closest(".more")) {
+    const r = runs.find(x => x.id === row.dataset.id), btn = e.target.closest(".more");
+    return openPop(btn, `<button class="opt" data-m="star">${ic("star")}${r.starred ? "Unstar" : "Star"}</button><button class="opt" data-m="rename">${ic("pencil")}Rename</button><button class="opt danger" data-m="delete">${ic("trash")}Delete</button>`, { width: 160, onMount: el => el.onclick = ev => {
+      const m = ev.target.closest("[data-m]"); if (!m) return; closePop();
+      if (m.dataset.m === "star") { r.starred = !r.starred; refreshSidebar(); }
+      if (m.dataset.m === "rename") { renaming = r.id; refreshSidebar(); }
+      if (m.dataset.m === "delete") confirmBox("Delete this run?", `"${r.title}" and everything it produced will be removed. This cannot be undone.`, "Delete", () => { runs.splice(runs.indexOf(r), 1); if (route.id === r.id) go("#/new"); else refreshSidebar(); });
+    } });
+  }
+  if (row && !e.target.closest("input")) { go(`#/run/${row.dataset.id}/${route.page === "run" ? route.view : "overview"}${route.page === "run" && route.view === "visual" ? "/" + route.vis : ""}`); closeDrawer(); }
+});
+sb.addEventListener("keydown", e => { const row = e.target.closest(".row"); if (row && e.key === "Enter" && e.target === row) row.click(); });
+function closeDrawer() { sb.classList.remove("open"); }
+$("#scrim").onclick = closeDrawer;
+$("#mh").innerHTML = `<button class="sq" aria-label="Open menu" id="hamb">${ic("menu")}</button><div class="logo">${ic("cpu")}</div><div class="wordmark">${esc(APP.short)}</div>`;
+$("#hamb").onclick = () => sb.classList.add("open");
+let lastW = innerWidth;
+addEventListener("resize", () => { if ((lastW < 1024) !== (innerWidth < 1024)) sbCollapsed = innerWidth < 1024; lastW = innerWidth; closePop(); refreshSidebar(); });
+function openSearch() {
+  openModal(`<div class="mh">${ic("search")}<input placeholder="Search runs by name" aria-label="Search runs"></div><div class="mb"></div>`, bg => {
+    const inp = bg.querySelector("input"), list = bg.querySelector(".mb");
+    const draw = () => { const q = inp.value.toLowerCase(); const hits = runs.filter(r => r.title.toLowerCase().includes(q)); list.innerHTML = hits.length ? hits.map(r => `<button class="opt" data-id="${r.id}"><span class="g" style="width:12px;height:12px;display:grid;margin-top:3px">${glyph(r)}</span><span>${esc(r.title)}<div class="oh">${UC[r.uc].label}, ${isDone(r) ? "finished" : "running"}</div></span></button>`).join("") : `<div style="padding:12px;color:var(--i550);font-size:12.5px">No run matches "${esc(inp.value)}".</div>`; };
+    inp.oninput = draw; draw(); inp.focus();
+    list.onclick = e => { const b = e.target.closest("[data-id]"); if (b) { closeModal(); go(`#/run/${b.dataset.id}/overview`); } };
+  });
+}
+
+/* ================= Start page and the three-step intake ================= */
+let draft = "";
+const IN = { open: false, step: 1, own: null, file: null, size: "", pub: null, simAsk: false, uc: "eeg", asm: [], editing: -1 };
+function resetIntake() { Object.assign(IN, { open: false, step: 1, own: null, file: null, size: "", pub: null, simAsk: false, asm: [], editing: -1 }); }
+function greeting() { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; }
+function ucFromText(s) { s = s.toLowerCase(); return /newborn|neonat|infant|nicu|oxygen|near-infrared|nirs/.test(s) ? "nirs" : "eeg"; }
+function renderStart(V) {
+  const pre = PRESETS[defaults.preset], M = MACH[defaults.mach];
+  V.innerHTML = `<div class="start"><div class="start-col">
+    <h1 class="greet">${greeting()}</h1>
+    <p class="sub">Describe the device and the job its chip must do.</p>
+    <div class="box ${IN.open ? "locked" : ""}">
+      <textarea id="prompt" rows="1" aria-label="Describe the device" placeholder="For example: a forehead EEG band that flags seizures at home" ${IN.open ? "readonly" : ""}></textarea>
+      <div class="ctl">
+        <button class="pill" id="p-pre" aria-expanded="false" aria-label="Preset: ${pre.name}">${ic(pre.icon)}<span>${pre.name}</span>${ic("chev", "chev")}</button>
+        <button class="pill" id="p-mach" aria-expanded="false" aria-label="Machine: ${M.name}">${ic(defaults.mach === "cpu" ? "cpu" : "gpu")}<span>${M.name}</span>${ic("chev", "chev")}</button>
+        <span class="grow"></span>
+        ${IN.open ? `<button class="textbtn" id="edit">Edit description</button>` : `<button class="send" id="go" aria-label="Continue">${ic("up")}</button>`}
+      </div>
+    </div>
+    <div id="intake"></div>
+  </div></div>`;
+  const ta = $("#prompt", V);
+  ta.value = draft;
+  const fit = () => { ta.style.height = "auto"; ta.style.height = Math.min(280, ta.scrollHeight) + "px"; const s = $("#go", V); if (s) s.classList.toggle("ready", !!ta.value.trim()); };
+  ta.oninput = () => { draft = ta.value; fit(); }; fit();
+  ta.onkeydown = e => { if (e.key === "Enter" && !e.shiftKey && !IN.open) { e.preventDefault(); openIntake(); } };
+  if ($("#go", V)) $("#go", V).onclick = openIntake;
+  if ($("#edit", V)) $("#edit", V).onclick = () => { resetIntake(); renderStart(V); $("#prompt", V).focus(); };
+  $("#p-pre", V).onclick = e => openPop(e.currentTarget, `<div class="pcap">Preset</div>${Object.entries(PRESETS).map(([k, p]) => `<button class="opt ${k === defaults.preset ? "sel" : ""}" data-k="${k}">${ic(p.icon)}<span>${p.name}<div class="oh">${p.hint}</div></span>${k === defaults.preset ? `<span class="ck">${ic("check")}</span>` : ""}</button>`).join("")}`, { up: true, width: 250, onMount: el => el.onclick = ev => { const b = ev.target.closest("[data-k]"); if (!b) return; defaults.preset = b.dataset.k; closePop(); renderStart(V); } });
+  $("#p-mach", V).onclick = e => openPop(e.currentTarget, `<div class="pcap">Machine</div>${Object.entries(MACH).map(([k, c]) => `<button class="opt ${k === defaults.mach ? "sel" : ""}" data-k="${k}" ${c.off ? "disabled" : ""}>${ic(k === "cpu" ? "cpu" : "gpu")}<span>${c.name}<div class="oh">${c.hint}</div></span>${k === defaults.mach ? `<span class="ck">${ic("check")}</span>` : ""}</button>`).join("")}`, { up: true, width: 270, onMount: el => el.onclick = ev => { const b = ev.target.closest("[data-k]"); if (!b || b.disabled) return; defaults.mach = b.dataset.k; closePop(); renderStart(V); } });
+  if (IN.open) renderIntake();
+}
+function openIntake() {
+  const ta = $("#prompt"); const text = ta ? ta.value : "";
+  if (!text.trim()) { if (ta) ta.focus(); return; }
+  draft = text; resetIntake(); IN.open = true; IN.uc = ucFromText(text);
+  renderStart($("#view"));
+  const el = $("#intake"); if (el) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+function setAsm() { const key = IN.own ? "own" : IN.pub ? "eeg-public" : IN.uc + "-sim"; IN.asm = ASM[key].map(a => Object.assign({ s: null }, a)); }
+function renderIntake() {
+  const el = $("#intake"); if (!el) return;
+  const U = UC[IN.uc], names = ["Data", "Sources found", "Assumptions"];
+  const stepper = names.map((s, i) => { const n = i + 1, cls = n === IN.step ? "cur" : n < IN.step ? "done" : ""; return `<div class="st ${cls}" ${n === IN.step ? 'aria-current="step"' : ""}><i>${n < IN.step ? ic("check") : n}</i><span>${s}</span></div>`; }).join(`<span class="ln"></span>`);
+  let body = "";
+  if (IN.step === 1) {
+    body = `<h2 class="iq">Do you have your own ${U.rec} for this device?</h2>
+      <p class="ih">Recordings with the ${U.events} marked by a clinician work best. If you have none, ${APP.short} looks for public data first.</p>
+      <div class="answers">
+        <button class="ans ${IN.own === true ? "sel" : ""}" data-i="own-yes">${ic("upload")}<div><b>Yes, I have recordings</b><span>Attach them here. They stay in your workspace.</span></div></button>
+        <button class="ans ${IN.own === false ? "sel" : ""}" data-i="own-no">${ic("search")}<div><b>No</b><span>Look for public datasets that fit.</span></div></button>
+      </div>
+      ${IN.own === true ? `<div class="drop"><div class="dt">Drop files here, or choose them. EDF, CSV and zip folders work.</div><input type="file" id="ifile" multiple hidden><button class="btn" data-i="pick">Choose files</button><button class="textbtn" data-i="demo">Use an example file</button></div>
+        ${IN.file ? `<div class="fname">${ic("check")}${esc(IN.file)}${IN.size ? `, ${esc(IN.size)}` : ""}</div>` : ""}` : ""}
+      <div class="ifoot"><button class="textbtn" data-i="cancel">Cancel</button><span class="grow"></span>${IN.own === true ? `<button class="btn blue" data-i="next" ${IN.file ? "" : "disabled"}>Continue</button>` : ""}</div>`;
+  } else if (IN.step === 2) {
+    if (IN.own) {
+      body = `<h2 class="iq">The chip will learn from your recordings</h2>
+        <p class="ih">Nothing public is needed. This is what the scientists will use.</p>
+        ${dsCard({ name: "Your recordings", from: `Attached by you: ${IN.file}`, size: IN.size || "Read when the run starts", licence: "Yours; stays in your workspace", use: "Fine-tuning and the check" }, true)}
+        <div class="ifoot"><button class="textbtn" data-i="back">Back</button><span class="grow"></span><button class="btn blue" data-i="to3">Continue</button></div>`;
+    } else if (IN.uc === "eeg" && !IN.simAsk) {
+      body = `<h2 class="iq">We found a public dataset that fits</h2>
+        <p class="ih">We searched open brainwave archives for scalp recordings with seizures. The best fit, and a second set to check the chip on:</p>
+        ${dsCard(Object.assign({ use: "Fine-tuning", tagc: "blue", whyTxt: "Scalp brainwave recordings with 198 seizures, open without an account, and a licence that allows this use with credit to its authors." }, DS.chbmit), true, "Best fit")}
+        ${dsCard(Object.assign({ use: "Held out for the check", tagc: "green" }, DS.siena))}
+        <details class="also"><summary>Also checked, not used (3)</summary><ul>
+          <li>${DS.tusz.name}: needs a signed form before access.</li>
+          <li>${DS.sleepedf.name}: recorded for sleep studies.</li>
+          <li>${DS.helsinki.name}: newborns, not adults.</li></ul></details>
+        <h3 class="iq2">Use these two datasets?</h3>
+        <div class="answers">
+          <button class="ans ${IN.pub === true ? "sel" : ""}" data-i="pub-yes">${ic("check")}<div><b>Yes, use them</b><span>Fine-tune on CHB-MIT, check on Siena.</span></div></button>
+          <button class="ans" data-i="pub-no">${ic("spark")}<div><b>No, simulate data instead</b><span>You confirm the assumptions first.</span></div></button>
+        </div>
+        <div class="ifoot"><button class="textbtn" data-i="back">Back</button></div>`;
+    } else {
+      body = `<h2 class="iq">No public dataset fits. May ${APP.short} simulate one?</h2>
+        ${IN.uc === "nirs" ? `<p class="ih">We looked for open near-infrared brain-oxygen recordings of newborns. None of the sets we checked fits:</p>
+        <ul class="ih" style="margin-top:-6px;padding-left:20px;line-height:1.7"><li><b>${DS.helsinki.name}</b> (Zenodo): newborns, but it records brainwaves, not brain oxygen.</li><li><b>${DS.vitaldb.name}</b>: surgical cases with a brainwave index monitor, not near-infrared light.</li></ul>`
+        : `<p class="ih">You chose not to use the public sets.</p>`}
+        <p class="ih">Simulated recordings let the scientists design the chip now. You will see every assumption next and can correct it. A chip designed this way must be checked on real recordings before any clinical use.</p>
+        <div class="answers">
+          <button class="ans" data-i="sim-yes">${ic("check")}<div><b>Yes, simulate the data</b><span>Show me the assumptions first.</span></div></button>
+          <button class="ans" data-i="sim-no">${ic("upload")}<div><b>No, I'll attach my own</b><span>Go back and add recordings.</span></div></button>
+        </div>
+        <div class="ifoot"><button class="textbtn" data-i="back">Back</button></div>`;
+    }
+  } else {
+    const sim = !IN.own && !IN.pub;
+    body = `<h2 class="iq">Do these assumptions fit your ${IN.uc === "nirs" ? "unit and your sensor" : "patients and your device"}?</h2>
+      <p class="ih">${sim ? `${APP.short} builds the simulated recordings from these. Mark each one, or change it to match your hospital.` : IN.own ? "How your recordings will be used. Mark each one, or change it." : "How the public data is used for your device. Mark each one, or change it."}</p>
+      <ul class="asm">${IN.asm.map((a, j) => `<li class="${a.s === "changed" ? "changed" : ""}">
+        <div class="ak">${esc(a.k)}</div>
+        ${IN.editing === j ? `<div><input id="aedit" value="${esc(a.v)}" aria-label="${esc(a.k)}"></div>` : `<div class="aval">${esc(a.v)}</div>`}
+        <div class="aw">${esc(a.why)}</div>
+        <div class="ac">${IN.editing === j ? `<button class="btn blue" data-i="save-${j}">Save</button>` : `<div class="seg" role="group" aria-label="${esc(a.k)}"><button class="${a.s === "ok" ? "on okk" : ""}" data-i="ok-${j}" aria-pressed="${a.s === "ok"}">Applies to us</button><button class="${a.s === "changed" ? "on chg" : ""}" data-i="ch-${j}" aria-pressed="${a.s === "changed"}">${a.s === "changed" ? "Changed" : "Change"}</button></div>`}</div></li>`).join("")}</ul>
+      <div class="ifoot"><button class="textbtn" data-i="back">Back</button><span class="grow"></span><span style="font-size:12.5px;color:var(--i600)">${IN.asm.filter(a => a.s).length} of ${IN.asm.length} checked</span><button class="btn blue big" data-i="start">Start design</button></div>`;
+  }
+  const sameStep = el.dataset.step === String(IN.step) + IN.simAsk; el.dataset.step = String(IN.step) + IN.simAsk;
+  el.innerHTML = `<section class="intake ${sameStep ? "still" : ""}" aria-label="Questions before the run starts"><div class="stepper">${stepper}</div>${body}</section>`;
+  if (!sameStep) { const sc = el.closest(".start"); if (sc) sc.scrollTo({ top: Math.max(0, el.offsetTop - 16), behavior: "smooth" }); }
+  const inp = $("#aedit", el); if (inp) { inp.focus(); inp.onkeydown = e => { if (e.key === "Enter") el.querySelector(`[data-i=save-${IN.editing}]`).click(); }; }
+  const fi = $("#ifile", el); if (fi) fi.onchange = () => { const f = fi.files; if (f && f.length) { IN.file = f.length === 1 ? f[0].name : `${f[0].name} and ${f.length - 1} more`; let sz = 0; for (const x of f) sz += x.size; IN.size = sz > 1e9 ? (sz / 1e9).toFixed(1) + " GB" : sz > 1e6 ? (sz / 1e6).toFixed(1) + " MB" : Math.max(1, Math.round(sz / 1e3)) + " kB"; renderIntake(); } };
+  el.onclick = e => {
+    const b = e.target.closest("[data-i]"); if (!b) return; const a = b.dataset.i;
+    if (a === "own-yes") { IN.own = true; renderIntake(); }
+    else if (a === "own-no") { IN.own = false; IN.file = null; IN.step = 2; IN.simAsk = IN.uc === "nirs"; renderIntake(); }
+    else if (a === "pick") $("#ifile", el).click();
+    else if (a === "demo") { IN.file = IN.uc === "eeg" ? "clinic-band-recordings.zip" : "unit-probe-recordings.zip"; IN.size = "example file"; renderIntake(); }
+    else if (a === "next") { IN.step = 2; renderIntake(); }
+    else if (a === "cancel") { resetIntake(); renderStart($("#view")); }
+    else if (a === "back") { if (IN.step === 3) { IN.step = 2; } else if (IN.simAsk && IN.uc === "eeg") { IN.simAsk = false; } else { IN.step = 1; IN.simAsk = false; } IN.editing = -1; renderIntake(); }
+    else if (a === "to3") { setAsm(); IN.step = 3; renderIntake(); }
+    else if (a === "pub-yes") { IN.pub = true; setAsm(); IN.step = 3; renderIntake(); }
+    else if (a === "pub-no") { IN.pub = false; IN.simAsk = true; renderIntake(); }
+    else if (a === "sim-yes") { IN.pub = false; setAsm(); IN.step = 3; renderIntake(); }
+    else if (a === "sim-no") { IN.step = 1; IN.own = true; IN.simAsk = false; renderIntake(); }
+    else if (a.startsWith("ok-")) { const j = +a.slice(3); IN.asm[j].s = "ok"; renderIntake(); }
+    else if (a.startsWith("ch-")) { IN.editing = +a.slice(3); renderIntake(); }
+    else if (a.startsWith("save-")) { const j = +a.slice(5), v = $("#aedit", el).value.trim(); if (v && v !== IN.asm[j].v) { IN.asm[j].v = v; IN.asm[j].s = "changed"; } else if (!IN.asm[j].s) IN.asm[j].s = "ok"; IN.editing = -1; renderIntake(); }
+    else if (a === "start") startRun();
+  };
+}
+function dsCard(d, best, tagTxt) {
+  return `<div class="dsrc ${best ? "top" : ""}"><div class="dn">${esc(d.name)}${tagTxt ? `<span class="tag blue">${tagTxt}</span>` : ""}<span class="tag ${d.tagc || (best ? "blue" : "")}">${esc(d.use)}</span></div>
+    <dl class="kv"><dt>From</dt><dd>${esc(d.from)}</dd><dt>Size</dt><dd>${esc(d.size)}</dd><dt>Licence</dt><dd>${esc(d.licence)}</dd></dl>${d.whyTxt ? `<p class="why"><b>Why it fits:</b> ${esc(d.whyTxt)}</p>` : ""}</div>`;
+}
+function startRun() {
+  const text = draft.trim(); if (!text) return;
+  const uc = IN.uc, mode = IN.own ? "own" : IN.pub ? "public" : "sim";
+  const data = mkData(uc, mode, { file: IN.file, size: IN.size, asm: IN.asm.map(a => ({ k: a.k, v: a.v, why: a.why, s: a.s || "ok" })) });
+  data.asm.forEach((a, j) => { a.s = IN.asm[j].s || "proposed"; });
+  let title = text.split(/[.\n]/)[0].replace(/^(a|an|the)\s+/i, "");
+  title = title.charAt(0).toUpperCase() + title.slice(1); if (title.length > 52) title = title.slice(0, 52).replace(/\s+\S*$/, "");
+  const id = "run-" + Math.random().toString(36).slice(2, 7);
+  runs.unshift(mkRun({ id, title, uc, prompt: text, data, mach: defaults.mach, preset: defaults.preset, rounds: PRESETS[defaults.preset].rounds, acc: 0, since: now(), titleAt: now() + 3500 }));
+  draft = ""; resetIntake(); go(`#/run/${id}/overview`);
+}
+
+/* ================= Run page ================= */
+let curRun = null, ovDetails = false, lastNow = "";
+function renderRun(V) {
+  const r = runs.find(x => x.id === route.id); curRun = r;
+  V.innerHTML = `<div class="topbar" id="tb"></div><div class="body" id="rb"></div>`;
+  renderTopbarOnly();
+  const B = $("#rb", V);
+  if (route.view === "overview") { lastNow = ""; B.innerHTML = `<div class="ov" id="ov"></div>`; updOverview(true); }
+  if (route.view === "chat") { B.style.overflow = "hidden"; B.style.display = "flex"; renderChat(B); }
+  if (route.view === "visual") renderVisual(B);
+}
+function renderTopbarOnly() {
+  const tb = $("#tb"); if (!tb || !curRun) return; const r = curRun, v = route.view;
+  tb.innerHTML = `<div class="tabs" role="tablist">${["overview", "chat", "visual"].map(k => `<button role="tab" aria-selected="${v === k}" class="${v === k ? "on" : ""}" data-v="${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join("")}</div>
+    <span id="st"></span>
+    <div class="rtitle" title="${esc(r.title)}">${r.titleAt && now() < r.titleAt ? "Naming this run..." : esc(r.title)}</div>
+    <div class="play"><button class="pbtn" id="pp" aria-label="Pause"></button><span class="clock" id="clk"></span><div class="track" id="trk"><i></i><b></b></div><span id="live"></span></div>
+    <button class="sq" id="rmore" aria-label="Run menu" aria-expanded="false">${ic("more")}</button>`;
+  tb.querySelectorAll("[data-v]").forEach(b => b.onclick = () => go(`#/run/${r.id}/${b.dataset.v}${b.dataset.v === "visual" ? "/" + route.vis : ""}`));
+  $("#pp").onclick = () => togglePause(r);
+  $("#rmore").onclick = e => openPop(e.currentTarget, `
+      <button class="opt" data-m="sources">${ic("db")}<span>Sources<div class="oh">Datasets, papers and assumptions</div></span></button>
+      <button class="opt" data-m="settings">${ic("sliders")}<span>Run settings<div class="oh">Preset, machine, clinical line</div></span></button>
+      <button class="opt" data-m="restart">${ic("restart")}Restart run</button>
+      ${isDone(r) ? "" : `<button class="opt danger" data-m="stop">${ic("stop")}Stop run</button>`}`, { align: "end", width: 240, onMount: el => el.onclick = ev => {
+    const m = ev.target.closest("[data-m]"); if (!m) return; closePop();
+    if (m.dataset.m === "restart") { Object.assign(r, { acc: 0, since: now(), paused: false, redirect: null, extra: [], typing: false }); render(); }
+    if (m.dataset.m === "stop") confirmBox("Stop this run?", "The scientists finish the step they are on and stop. The best chip so far is kept.", "Stop run", () => { r.acc = total(r); render(); });
+    if (m.dataset.m === "settings") runSettings(r);
+    if (m.dataset.m === "sources") openSources(r);
+  } });
+  updTopbar();
+}
+function updTopbar() {
+  const r = curRun; if (!r || !$("#clk")) return;
+  const t = elapsed(r), done = isDone(r);
+  $("#st").innerHTML = done ? `<span class="state done">Done</span>` : r.paused ? `<span class="state paused">Paused</span>` : "";
+  $("#pp").innerHTML = ic(done || r.paused ? "play" : "pause"); $("#pp").setAttribute("aria-label", done ? "Replay finished" : r.paused ? "Resume" : "Pause");
+  const c = $("#clk"); c.textContent = fmtClock(t * SCALE); c.classList.toggle("live", !done && !r.paused);
+  const f = t / total(r) * 100, trk = $("#trk"); trk.classList.toggle("end", done || r.paused); trk.querySelector("i").style.width = f + "%"; trk.querySelector("b").style.left = f + "%";
+  $("#live").innerHTML = !done && !r.paused ? `<span class="livep"><i></i>Live</span>` : "";
+}
+function togglePause(r) {
+  if (isDone(r)) { toast("This run has finished. Restart it from the run menu."); return; }
+  if (r.paused) { r.since = now(); r.paused = false; } else { r.acc = elapsed(r); r.paused = true; }
+  updTopbar(); tick();
+}
+function runSettings(r) {
+  const rows = [["Device", UC[r.uc].label + ", understood from your description"], ["Preset", PRESETS[r.preset].name + ", " + r.rounds + " rounds"], ["Machine", MACH[r.mach].name + ". " + MACH[r.mach].hint], ["Data", r.data.short], ["Clinical line", "Catch 90% of " + UC[r.uc].events + " on every unseen " + UC[r.uc].person], ["False alarms", "Fewer than 2 " + UC[r.uc].faUnit]];
+  openModal(`<div class="mp"><h3>Run settings</h3><div style="color:var(--i600);font-size:12.5px;margin-bottom:10px">Fixed when the run started. Change defaults for new runs in Settings.</div>${rows.map(([k, v]) => `<div style="display:flex;gap:16px;padding:8px 0;border-top:1px solid var(--hair4);font-size:12.5px"><span style="width:96px;color:var(--i600);flex:none">${k}</span><span>${esc(v)}</span></div>`).join("")}</div><div class="mf"><button class="btn" data-a="s">Open Settings</button><button class="btn blue" data-a="c">Close</button></div>`, bg => { bg.querySelector("[data-a=c]").onclick = closeModal; bg.querySelector("[data-a=s]").onclick = () => { closeModal(); go("#/settings"); }; });
+}
+
+/* ---------- Sources drawer ---------- */
+function openSources(r) {
+  closeModal(); closePop();
+  const D = r.data, U = UC[r.uc];
+  const sets = D.train.concat(D.test);
+  const asmLabel = { ok: "Applies", changed: "Changed by you", proposed: "As proposed" };
+  const bg = document.createElement("div"); bg.className = "dr-bg";
+  bg.innerHTML = `<aside class="drawer" role="dialog" aria-modal="true" aria-label="Sources">
+    <div class="dh"><h2>Sources</h2><button class="sq" data-a="x" aria-label="Close sources">${ic("x")}</button></div>
+    <div class="db">
+      <h3>Where the data comes from</h3>
+      <p class="lead">${esc(D.words)} ${esc(D.words2)}</p>
+      ${sets.map(d => dsCard(Object.assign({}, d, { tagc: /check/.test(d.use) && !/Fine/.test(d.use) ? "green" : "blue" }), false)).join("")}
+      ${D.mode !== "public" || D.asm.length ? `<h3>${D.mode === "sim" ? "Assumptions the simulation is built on" : "Assumptions you went through"}</h3>
+      <ul class="asm-mini">${D.asm.map(a => `<li><span><b>${esc(a.k)}:</b> ${esc(a.v)}</span><span class="tag ${a.s === "changed" ? "blue" : a.s === "ok" ? "green" : ""}" style="flex:none">${asmLabel[a.s] || "Applies"}</span></li>`).join("")}</ul>` : ""}
+      <h3>Papers the scientists draw on (${D.papers.length})</h3>
+      <ul class="papers">${D.papers.map(k => `<li><b>${esc(PAPERS[k].name)}</b><span class="src">${esc(PAPERS[k].src)}</span><div class="use">${esc(PAPERS[k].use)}</div></li>`).join("")}</ul>
+      <p class="note">Sizes and licences are as listed on each dataset's own page. ${D.mode === "sim" ? `The ${U.rec} are simulated: check the chip on real recordings before any clinical use.` : ""}</p>
+    </div></aside>`;
+  bg.addEventListener("mousedown", e => { if (e.target === bg) closeModal(); });
+  bg.querySelector("[data-a=x]").onclick = closeModal;
+  layer.appendChild(bg); modalEl = bg; bg.querySelector("[data-a=x]").focus();
+}
+
+/* ---------- Overview: plain words ---------- */
+function nowSentence(r, t) {
+  const U = UC[r.uc], g = stageAt(r, t), N = MACH[r.mach].n, D = r.data, H = heldN(r);
+  const red = r.redirect && g.r != null && g.r >= r.redirect.from && t > r.redirect.at ? (r.redirect.mode === "smaller" ? " As you asked, they now favour smaller chips." : r.redirect.mode === "accuracy" ? " As you asked, they now favour catching more " + U.events + "." : "") : "";
+  const on = D.mode === "public" ? "the CHB-MIT recordings" : D.mode === "own" ? "your recordings" : "the simulated recordings";
+  if (g.k === "done") { const b = bestAt(r, t); return [`Finished. The scientists found the smallest chip that does the job, and it needs only ${word(b.used)} sensors.`, `It meets the clinical line on ${b.pass} of ${H} ${U.people} it never saw.`]; }
+  const pre = r.paused ? "Paused. " : "";
+  switch (g.k) {
+    case "spec": return [pre + "The scientists are turning your description and your answers into a clear goal for the chip.", `A good chip has to catch at least 9 in 10 ${U.events} for every ${U.person}.`];
+    case "ref": return D.mode === "public" ? [pre + `The scientists are learning what a seizure looks like from ${DS.chbmit.fact}, from ${DS.chbmit.where}.`, `14 more patients from the Siena archive are locked away for the final check.`]
+      : D.mode === "own" ? [pre + `The scientists are reading your recordings and learning what ${r.uc === "eeg" ? "a seizure" : "a dangerous oxygen drop"} looks like in them.`, `12 ${U.people} from your files are locked away for the final check.`]
+      : [pre + `The scientists are simulating ${U.rec} for ${r.uc === "eeg" ? 60 : 80} ${U.people} from the assumptions you went through.`, `12 of them are locked away for the final check.`];
+    case "propose": return [pre + `The scientists are sketching new chip designs, each a different guess at how small the chip can be and still catch ${U.events}.`, red.trim()];
+    case "tune": return [pre + `The scientists are training ${nf(N)} small candidate models at once on ${on}, keeping the ones that are both accurate and small.`, `${nf(Math.round(N * g.f))} of ${nf(N)} are trained.${red}`];
+    case "compile": return [pre + "The scientists are turning the best 40 candidates into real chip wiring, with what each model learned built straight into the circuit.", red.trim()];
+    case "verify": return [pre + `The scientists are checking that each chip gives exactly the same answers as its model, then testing it on ${H} ${U.people} it has never seen.`, red.trim()];
+    case "report": return [pre + `The scientists are writing up the result: the chip, the sensors it needs, how it did for every ${U.person}, and the data and papers behind it.`, ""];
+  }
+  return ["", ""];
+}
+function updOverview(force) {
+  const r = curRun, el = $("#ov"); if (!el) return;
+  const t = elapsed(r), U = UC[r.uc], g = stageAt(r, t), b = bestAt(r, t), done = g.k === "done", D = r.data, H = heldN(r);
+  const [s1, s2] = nowSentence(r, t), f = t / total(r);
+  const line = b ? `${done ? "The final chip" : "The best chip so far"} meets the clinical line on <b>${b.pass} of ${H}</b> unseen ${U.people}.` : `No chip yet. The first one is ready when round 1 has been checked.`;
+  const dotc = !b ? "var(--i300)" : b.pass >= H - 1 ? "var(--ok)" : "#f59e0b";
+  if (force || !el.firstChild) {
+    el.innerHTML = `<p class="now" id="now" aria-live="polite"></p>
+      <button class="srcline" id="srcb" aria-haspopup="dialog">${ic("db")}<span class="sx"><b>Data.</b> ${esc(D.words)} ${esc(D.words2)} <b>Papers.</b> ${D.papers.length} on small seizure and sensor chips.</span><span class="open">Sources</span></button>
+      <div class="prog"><div class="prog-top"><span id="pl"></span><span id="pr"></span></div><div class="bar" id="bar"><i></i></div><div class="steps" id="steps"></div></div>
+      <div class="best"><span class="dot" id="bdot"></span><span class="txt" id="btxt"></span><button class="det" id="dtg" aria-expanded="false">Details</button></div>
+      <div id="dpanel"></div>`;
+    $("#dtg").onclick = () => { ovDetails = !ovDetails; updOverview(); };
+    $("#srcb").onclick = () => openSources(r);
+  }
+  const key = s1 + "|" + s2.replace(/\d[\d,]* of/, "#"), nowEl = $("#now");
+  const html = esc(s1) + (s2 ? ` <span class="then">${esc(s2)}</span>` : "");
+  if (lastNow && lastNow !== key && !force) { nowEl.classList.add("fadeout"); setTimeout(() => { nowEl.innerHTML = html; nowEl.classList.remove("fadeout"); }, 300); }
+  else if (!nowEl.classList.contains("fadeout")) nowEl.innerHTML = html;
+  lastNow = key;
+  const doing = { spec: "writing the goal", ref: D.mode === "sim" ? "simulating recordings" : "loading recordings", propose: "designing", tune: "fine-tuning", compile: "building", verify: "checking", report: "writing the report" }[g.k];
+  $("#pl").innerHTML = done ? `<b>Finished</b>` : g.r != null ? `<b>Round ${g.r + 1} of ${r.rounds}</b>, ${doing}` : g.k === "report" ? `<b>Report</b>, ${doing}` : `<b>Getting ready</b>, ${doing}`;
+  $("#pr").textContent = done ? "100% done" : `${Math.floor(f * 100)}% done`;
+  const bar = $("#bar"); bar.querySelector("i").style.width = (f * 100) + "%"; bar.classList.toggle("still", done || r.paused); bar.classList.toggle("done", done);
+  const parts = [{ l: "Setup", s: 0, e: 20 }];
+  for (let k = 0; k < r.rounds; k++) parts.push({ l: r.rounds > 4 ? `R${k + 1}` : `Round ${k + 1}`, s: 20 + 48 * k, e: 68 + 48 * k });
+  parts.push({ l: "Report", s: 20 + 48 * r.rounds, e: total(r) });
+  const st = $("#steps"); st.style.gridTemplateColumns = parts.map(p => (p.e - p.s) + "fr").join(" ");
+  const stHTML = parts.map(p => `<span class="${t >= p.e ? "past" : t >= p.s ? "cur" : ""}">${p.l}</span>`).join("");
+  if (st.innerHTML !== stHTML) st.innerHTML = stHTML;
+  const ticks = parts.slice(1).map(p => `<s style="left:${p.s / total(r) * 100}%"></s>`).join("");
+  if (bar.dataset.ticks !== ticks) { bar.querySelectorAll("s").forEach(x => x.remove()); bar.insertAdjacentHTML("beforeend", ticks); bar.dataset.ticks = ticks; }
+  $("#bdot").style.background = dotc; $("#btxt").innerHTML = line;
+  $("#dtg").textContent = ovDetails ? "Hide details" : "Details"; $("#dtg").setAttribute("aria-expanded", ovDetails);
+  const dp = $("#dpanel");
+  if (ovDetails) {
+    const rows = [["Chip size", b ? nf(b.gates) + " logic gates" : "Not built yet"], [`${U.events[0].toUpperCase() + U.events.slice(1)} caught`, b ? pct(b.mean) + " on average" : "Not measured yet"],
+      ["False alarms", b ? `${b.fa} ${U.faUnit}` : "Not measured yet"], ["Sensors used", b ? `${b.used} of 4` : "4 being tried"],
+      ["Candidates trained", nf(trainedAt(r, t))], ["Running time", fmtClock(t * SCALE)],
+      ["Compute cost", "$" + cost(r, t).toFixed(2)], ["Machine", MACH[r.mach].name]];
+    const h = `<dl class="details">${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>`;
+    if (dp.innerHTML !== h) dp.innerHTML = h;
+  } else dp.innerHTML = "";
+}
+
+/* ---------- Chat ---------- */
+let chatKeys = [];
+function renderChat(B) {
+  const r = curRun, done = isDone(r);
+  B.innerHTML = `<div class="chat"><div class="feed" id="feed"><div class="feed-in" id="feedin"></div></div>
+    <div class="composer"><div class="box ${done ? "off" : ""}"><textarea id="cbox" rows="1" aria-label="Message the scientists" placeholder="${done ? "This run has finished" : "Message the scientists"}" ${done ? "disabled" : ""}></textarea><button class="send" id="csend" aria-label="Send">${ic("up")}</button></div></div></div>`;
+  chatKeys = []; updChat(true);
+  const ta = $("#cbox"), s = $("#csend");
+  const fit = () => { ta.style.height = "auto"; ta.style.height = Math.min(160, ta.scrollHeight) + "px"; s.classList.toggle("ready", !!ta.value.trim() && !isDone(r)); };
+  ta.oninput = fit;
+  const sendIt = () => { const v = ta.value.trim(); if (!v || isDone(r)) return; ta.value = ""; fit(); redirect(r, v); };
+  ta.onkeydown = e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendIt(); } };
+  s.onclick = sendIt;
+  $("#feedin").onclick = e => { const b = e.target.closest(".tool>button"); if (b) { const t = b.parentElement; t.classList.toggle("open"); b.setAttribute("aria-expanded", t.classList.contains("open")); } };
+}
+function msgHTML(e) {
+  if (e.who === "you") return `<div class="you" data-k="${e.id}">${esc(e.text)}</div>`;
+  if (e.who === "tool") return `<div class="tool ${e.kind || ""}" data-k="${e.id}"><button aria-expanded="false">${ic(e.kind === "data" ? "db" : e.kind === "paper" ? "book" : "tool")}<span>${esc(e.text)}</span>${ic("chevr", "chev")}</button><pre>${esc(e.tool.join("\n"))}</pre></div>`;
+  const S = SCIENTISTS[e.who];
+  return `<div class="msg" data-k="${e.id}"><span class="who" style="background:${S.bg};color:${S.color}">${ic(S.icon)}</span><div class="mm"><div class="mn">${S.name}<time>${fmtClock(e.t * SCALE).slice(0, -3)}</time></div><div class="mt">${esc(e.text)}</div></div></div>`;
+}
+function updChat(force) {
+  const r = curRun, fi = $("#feedin"), feed = $("#feed"); if (!fi) return;
+  const t = elapsed(r), E = events(r).filter(e => e.t <= t + 1e-6), keys = E.map(e => e.id);
+  const atBottom = force || feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
+  if (!chatKeys.every((k, i) => keys[i] === k)) { fi.innerHTML = ""; chatKeys = []; }
+  const ty = $(".typing-row", fi); if (ty) ty.remove();
+  E.slice(chatKeys.length).forEach(e => fi.insertAdjacentHTML("beforeend", msgHTML(e)));
+  chatKeys = keys;
+  if (r.typing) fi.insertAdjacentHTML("beforeend", `<div class="msg typing-row"><span class="who" style="background:${SCIENTISTS.lead.bg};color:${SCIENTISTS.lead.color}">${ic("spark")}</span><div class="mm"><div class="mn">Lead scientist</div><div class="typing"><i></i><i></i><i></i></div></div></div>`);
+  if (!E.length && !r.typing && !fi.firstChild) fi.innerHTML = `<div style="color:var(--i600);font-size:13px;text-align:center;padding:40px 0" class="empty">The scientists are starting. Their messages appear here.</div>`;
+  else { const em = $(".empty", fi); if (em && E.length) em.remove(); }
+  if (atBottom) feed.scrollTop = feed.scrollHeight;
+  const cb = $("#cbox"); if (cb && isDone(r) && !cb.disabled) renderChat($("#rb"));
+}
+function redirect(r, text) {
+  const t = elapsed(r), g = stageAt(r, t), mode = parseMode(text);
+  const tNow = Math.max(t, ...events(r).filter(e => e.t <= t + 1e-6).map(e => e.t)) + 1e-3;
+  r.extra.push({ t: tNow, who: "you", text });
+  const from = g.r == null ? (g.k === "report" ? r.rounds : 0) : (g.k === "propose" || g.k === "tune") ? g.r : g.r + 1;
+  if (mode !== "note") { if (from >= r.rounds) r.rounds = from + 1; r.redirect = { at: t, mode, from }; }
+  r.typing = true; updChat(true);
+  setTimeout(() => { r.typing = false; r.extra.push({ t: Math.max(elapsed(r), tNow + 1e-3), who: "lead", text: replyFor(r, mode, from) }); if (curRun === r && route.view === "chat") updChat(true); }, 1700);
+}
+
+/* ================= Visual ================= */
+let visSig = "", visKey = "";
+function curVis() { return VIS.find(v => v.k === route.vis) ? route.vis : "device"; }
+function renderVisual(B) {
+  const r = curRun, U = UC[r.uc], cur = curVis(), more = VIS.filter(v => v.more), inMore = more.some(v => v.k === cur);
+  const label = v => v.k === "patients" ? U.People : v.l;
+  B.innerHTML = `<div class="vis"><div class="vtop"><div class="vh"><h2 id="vt"></h2><p id="vs"></p></div>
+    <div class="picker" role="tablist" aria-label="Visuals">${VIS.filter(v => !v.more).map(v => `<button role="tab" aria-selected="${v.k === cur}" class="${v.k === cur ? "on" : ""}" data-k="${v.k}">${label(v)}</button>`).join("")}<button id="vmore" class="${inMore ? "on" : ""}" aria-expanded="false">${inMore ? label(VIS.find(v => v.k === cur)) : "More"}${ic("chev", "chev")}</button></div></div>
+    <div id="vp"></div></div>`;
+  B.querySelectorAll(".picker [data-k]").forEach(b => b.onclick = () => go(`#/run/${r.id}/visual/${b.dataset.k}`));
+  $("#vmore").onclick = e => openPop(e.currentTarget, more.map(v => `<button class="opt ${v.k === cur ? "sel" : ""}" data-k="${v.k}"><span>${label(v)}<div class="oh">${v.k === "tradeoff" ? "Size against accuracy, every candidate" : "Each unseen " + U.person + ", one tile"}</div></span></button>`).join(""), { align: "end", width: 250, onMount: el => el.onclick = ev => { const b = ev.target.closest("[data-k]"); if (b) { closePop(); go(`#/run/${r.id}/visual/${b.dataset.k}`); } } });
+  visSig = ""; visKey = "";
+  updVisual();
+}
+function headFor(cur, r, b, g) {
+  const U = UC[r.uc], s = U.sensors;
+  switch (cur) {
+    case "device": return ["Device", `A prototype of the ${U.device.toLowerCase()} on a ${r.uc === "eeg" ? "mannequin" : "newborn-sized mannequin"}. Drag to turn it; scroll or use the buttons to go from the wearer to the device to the chip inside.`];
+    case "chip": return ["Chip", `${s[0].n} (${s[0].what.toLowerCase()}) and ${s[1].n} (${s[1].what.toLowerCase()}) feed the chip; the AI model inside decides; out comes a prediction. Drag to turn it.`];
+    case "finetune": return ["Fine-tuning", `Each square is a candidate model. A wave fine-tunes the batch, most fade out, the best 40 become gates, and only chips that pass the clinical line check go on. Every round the winner gets smaller.`];
+    case "signal": return ["Signal", r.uc === "eeg" ? `Brainwaves streaming from a ${U.person} the chip never saw${r.data.mode === "public" ? " (Siena)" : ""}, with the doctor's seizure marks and the chip's answer as it reads.` : `Light at both detectors and the brain oxygen worked out from them, streaming from a ${U.person} the chip never saw, with the doctor's marks and the chip's alarms.`];
+    case "sensors": return ["Sensors", r.uc === "eeg" ? `Where ${s[0].n} and ${s[1].n} sit on the head. Pulsing electrodes are the ones the chip reads.` : `How the forehead sensor reads brain oxygen: light goes in, bends through scalp and brain, and comes back to the detectors. Pulsing detectors are the ones the chip reads.`];
+    case "tradeoff": return ["Trade-off", "Each dot is one candidate chip: further left is smaller, higher catches more. The orange dot is the chip being built."];
+    case "patients": return [U.People, b ? `Each tile is a ${U.person} the chip never saw, showing the share of ${U.events} caught. ${b.pass} of ${b.n} meet the line; the worst one, at ${pct(b.scores[b.worst])}, is what counts.` : `One tile per unseen ${U.person}. The tiles fill in once the first chip has been checked.`];
+  }
+  return ["", ""];
+}
+function updVisual() {
+  const r = curRun, vp = $("#vp"); if (!vp) return;
+  const cur = curVis(), t = elapsed(r), b = bestAt(r, t), g = stageAt(r, t);
+  const [ti, se] = headFor(cur, r, b, g);
+  if ($("#vt").textContent !== ti) $("#vt").textContent = ti;
+  if ($("#vs").textContent !== se) $("#vs").textContent = se;
+  const live = ["device", "chip", "finetune", "sensors", "signal"].includes(cur);
+  if (live) {
+    const key = cur + r.id;
+    if (visKey !== key) {
+      visKey = key; vp.innerHTML = `<div class="stage ${cur === "signal" ? "" : "grab"}" id="stage"></div>`;
+      const host = $("#stage");
+      if (cur === "signal") mountSignal(host);
+      else mount3D(host, BUILD[cur], () => FALLBACK(cur));
+    }
+    if (E3.cur && E3.cur.st.sync) E3.cur.st.sync();
+    return;
+  }
+  stop3D(); visKey = "";
+  let sig = cur + "|" + (b ? b.k + b.q + b.gates : "none") + "|" + r.uc + g.k + (g.r != null ? g.r : "");
+  if (cur === "tradeoff") sig += Math.floor((g.k === "tune" ? g.f : 0) * 25) + (r.redirect ? r.redirect.from + r.redirect.mode : "");
+  if (sig === visSig) return; visSig = sig;
+  vp.innerHTML = `<div class="vpanel">${cur === "tradeoff" ? tradeoffSVG(r, t, b, g) : patientsHTML(r, b)}</div>`;
+}
+
+/* ---------- Trade-off and Patients (flat, readable) ---------- */
+function rng(seed) { let a = seed >>> 0; return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function hashStr(s) { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+function tradeoffSVG(r, t, b, g) {
+  const U = UC[r.uc], X0 = 96, X1 = 1060, Y0 = 420, Y1 = 46;
+  const lx = v => X0 + (Math.log10(v) - Math.log10(200)) / (Math.log10(20000) - Math.log10(200)) * (X1 - X0), ly = v => Y0 - (v - .6) / .4 * (Y0 - Y1);
+  let s = "";
+  [200, 500, 1000, 2000, 5000, 10000, 20000].forEach(v => { s += `<path d="M${lx(v)} ${Y0}V${Y1}" stroke="#eceef2"/><text x="${lx(v)}" y="${Y0 + 22}" text-anchor="middle" font-size="12.5" fill="#4d4d5d">${nf(v)}</text>`; });
+  [.6, .7, .8, .9, 1].forEach(v => { s += `<path d="M${X0} ${ly(v)}H${X1}" stroke="#eceef2"/><text x="${X0 - 12}" y="${ly(v) + 4}" text-anchor="end" font-size="12.5" fill="#4d4d5d">${Math.round(v * 100)}%</text>`; });
+  s += `<text x="${(X0 + X1) / 2}" y="${Y0 + 48}" text-anchor="middle" font-size="13.5" fill="#33334a">Chip size, in logic gates (smaller is better)</text><text transform="translate(26 ${(Y0 + Y1) / 2}) rotate(-90)" text-anchor="middle" font-size="13.5" fill="#33334a">${U.events[0].toUpperCase() + U.events.slice(1)} caught</text>`;
+  s += `<rect x="${X0}" y="${Y1}" width="${X1 - X0}" height="${ly(.9) - Y1}" fill="#ecfdf5" opacity=".6"/><path d="M${X0} ${ly(.9)}H${X1}" stroke="#059669" stroke-width="1.6" stroke-dasharray="7 5"/><path d="M${X1 - 330} ${Y1 - 14}h28" stroke="#059669" stroke-width="1.6" stroke-dasharray="7 5"/><text x="${X1}" y="${Y1 - 10}" text-anchor="end" font-size="13" font-weight="600" fill="#047857">Clinical line, 90%: above it is good enough</text>`;
+  let dots = "", count = 0;
+  const building = (g.k === "compile" || g.k === "verify") ? result(r, g.r) : null;
+  const cand = building || b, candK = building ? g.r : b ? b.k : -1;
+  for (let k = 0; k < r.rounds; k++) {
+    const frac = clamp((t - (26 + 48 * k)) / 22, 0, 1); if (frac <= 0) continue;
+    const res = result(r, k), R = rng(hashStr(r.uc + k + res.q)), n = Math.round(70 * frac), m = modeFor(r, k);
+    const gb = res.gates, lo = Math.log(gb * 0.3), hi = Math.log(Math.min(19000, gb * (m === "smaller" ? 5 : 9)));
+    const front = gg => gg >= gb ? Math.min(.985, res.mean + .03 * (1 - gb / gg)) : Math.min(LINE - .006, res.mean) - .17 * Math.log(gb / gg);
+    const curR = k === candK;
+    for (let i = 0; i < n; i++) { const gg = Math.exp(lo + R() * (hi - lo)); let v = front(gg) - .004 - (-Math.log(1 - R() * .97)) * .035; if (v < .62) v = .62 + R() * .05; v = Math.min(.99, v);
+      dots += `<circle cx="${lx(gg).toFixed(1)}" cy="${ly(v).toFixed(1)}" r="4" fill="${curR ? "#9db8f2" : "#c9ccd4"}" opacity="${curR ? .85 : .7}"/>`; count++; }
+    if (k < candK && t >= 68 + 48 * k) { const pr = result(r, k); dots += `<circle cx="${lx(pr.gates)}" cy="${ly(pr.mean)}" r="6" fill="#fff" stroke="#40404f" stroke-width="2"/><text x="${lx(pr.gates)}" y="${ly(pr.mean) + 22}" text-anchor="middle" font-size="12" fill="#40404f" paint-order="stroke" stroke="#fff" stroke-width="4">Round ${k + 1}</text>`; }
+  }
+  if (cand) {
+    const cx = lx(cand.gates), cy = ly(cand.mean), lbl = building ? "Candidate chip, being built" : g.k === "done" ? "Final chip" : "Candidate chip, best so far";
+    const tx = cx > 760 ? cx - 268 : cx + 24;
+    dots += `<circle class="candring" cx="${cx}" cy="${cy}" r="12" fill="none" stroke="#ea580c" stroke-width="2.5"/><circle cx="${cx}" cy="${cy}" r="10" fill="#ea580c" stroke="#fff" stroke-width="3"/>
+      <g transform="translate(${tx} ${cy - 58})"><rect width="244" height="50" rx="10" fill="#fff" stroke="#fdba74" stroke-width="1.5"/><text x="12" y="21" font-size="13.5" font-weight="700" fill="#9a3412">${lbl}</text><text x="12" y="39" font-size="12.5" fill="#33334a">${nf(cand.gates)} gates, catches ${pct(cand.mean)}</text></g>`;
+  }
+  if (!count) dots += `<text x="${(X0 + X1) / 2}" y="${(Y0 + Y1) / 2 + 30}" text-anchor="middle" font-size="14" fill="#4d4d5d">Dots appear here as the first candidates finish fine-tuning.</text>`;
+  return `<svg class="v" viewBox="0 0 1100 490" role="img" aria-label="Accuracy against chip size">${s}${dots}</svg>`;
+}
+function patientsHTML(r, b) {
+  const U = UC[r.uc], H = heldN(r);
+  if (!b) return `<div class="pts">${Array.from({ length: H }, (_, i) => `<div class="pt wait"><div class="pn">${U.Person} ${i + 1}</div><div class="pv">--</div><div class="pm"></div><div class="ps" style="color:var(--i600)">Waiting for a chip</div></div>`).join("")}</div>`;
+  return `<div class="pts">${b.scores.map((v, i) => { const pass = v >= LINE, w = i === b.worst; return `<div class="pt ${pass ? "pass" : "fail"} ${w ? "worst" : ""}">${w ? `<span class="wtag">Worst</span>` : ""}<div class="pn">${U.Person} ${i + 1}</div><div class="pv">${pct(v)}</div><div class="pm"><i style="width:${(v - .6) / .4 * 100}%"></i><u style="left:${(LINE - .6) / .4 * 100}%"></u></div><div class="ps">${pass ? "Meets the line" : "Below the line"}</div></div>`; }).join("")}</div>`;
+}
+
+/* ---------- Static fallbacks when WebGL is missing ---------- */
+function FALLBACK(cur) {
+  const r = curRun, U = UC[r.uc], b = bestAt(r, elapsed(r));
+  const note = `<p style="margin:0 0 10px;font-size:13px;color:var(--i600)">This browser cannot show the 3D view, so here is a flat drawing.</p>`;
+  if (cur === "finetune") { const N = MACH[r.mach].n; return note + `<svg class="v" viewBox="0 0 900 300" role="img" aria-label="Candidates narrowing to one chip" style="width:100%;height:auto"><rect x="60" y="30" width="780" height="50" rx="10" fill="#dbe4f5"/><text x="450" y="61" text-anchor="middle" font-size="15" fill="#1a1a2e">${nf(N)} candidate models fine-tuned</text><rect x="300" y="120" width="300" height="50" rx="10" fill="#fde7c7"/><text x="450" y="151" text-anchor="middle" font-size="15" fill="#1a1a2e">40 kept and built as gates</text><rect x="400" y="210" width="100" height="50" rx="10" fill="#1a1a2e"/><text x="450" y="241" text-anchor="middle" font-size="15" fill="#fff">1 best</text></svg>`; }
+  const s = U.sensors;
+  return note + `<svg viewBox="0 0 900 300" role="img" aria-label="Sensors feed the chip, which outputs a prediction" style="width:100%;height:auto;font-family:var(--sans)">
+    ${s.map((x, i) => `<rect x="20" y="${40 + i * 130}" width="250" height="84" rx="12" fill="#fff" stroke="#a3a3b3"/><text x="38" y="${72 + i * 130}" font-size="15" font-weight="600" fill="#1a1a2e">${x.n}: ${x.what}</text><text x="38" y="${96 + i * 130}" font-size="12.5" fill="#4d4d5d">${x.where}</text><path d="M272 ${82 + i * 130}L350 150" stroke="#40404f" stroke-width="1.6"/>`).join("")}
+    <rect x="350" y="50" width="200" height="200" rx="16" fill="#22252b"/><text x="450" y="140" text-anchor="middle" font-size="15" font-weight="600" fill="#fff">AI model</text><text x="450" y="164" text-anchor="middle" font-size="12.5" fill="#e2e4ea">${b ? nf(b.gates) + " logic gates" : "not built yet"}</text>
+    <path d="M552 150H640" stroke="#40404f" stroke-width="1.6"/><rect x="640" y="110" width="240" height="80" rx="12" fill="#fff" stroke="#a3a3b3"/><text x="760" y="146" text-anchor="middle" font-size="15" font-weight="600" fill="#1a1a2e">Prediction</text><text x="760" y="170" text-anchor="middle" font-size="12.5" fill="#4d4d5d">${U.predict}</text></svg>`;
+}
+
+/* ================= 3D engine (three.js, vendored, loaded on first use) ================= */
+let T3 = null, RoomEnv = null, RBox = null, threeP = null;
+function loadThree() {
+  if (!threeP) threeP = Promise.all([
+    import("../../vendor/three.module.min.js"),
+    import("../../vendor/addons/environments/RoomEnvironment.js"),
+    import("../../vendor/addons/geometries/RoundedBoxGeometry.js"),
+  ]).then(([a, b, c]) => { T3 = a; RoomEnv = b.RoomEnvironment; RBox = c.RoundedBoxGeometry; });
+  return threeP;
+}
+const E3 = { ok: null, R: null, env: null, cur: null, raf: 0, last: 0, token: 0 };
+function glOK() { if (E3.ok === null) { try { const c = document.createElement("canvas"); E3.ok = !!(window.WebGLRenderingContext && (c.getContext("webgl2") || c.getContext("webgl"))); } catch (e) { E3.ok = false; } } return E3.ok; }
+function disposeScene(s) {
+  if (!s) return;
+  s.traverse(o => { if (o.geometry) o.geometry.dispose(); const m = o.material; if (m) (Array.isArray(m) ? m : [m]).forEach(x => { for (const k in x) { const v = x[k]; if (v && v.isTexture && v !== E3.env) v.dispose(); } x.dispose(); }); });
+}
+function stop3D() {
+  E3.token++;
+  const c = E3.cur; if (!c) return;
+  cancelAnimationFrame(E3.raf); E3.raf = 0;
+  if (c.ro) c.ro.disconnect();
+  try { if (c.st.dispose) c.st.dispose(); } catch (e) { /* already gone */ }
+  disposeScene(c.st.scene);
+  if (E3.R && E3.R.domElement.parentNode) E3.R.domElement.remove();
+  E3.cur = null;
+}
+function startLoop(host, st, ro) {
+  E3.cur = { host, st, ro }; E3.last = performance.now();
+  const loop = ts => {
+    E3.raf = requestAnimationFrame(loop);
+    if (document.hidden || !host.isConnected) return;
+    const dt = Math.min(.05, Math.max(0, (ts - E3.last) / 1000)); E3.last = ts;
+    try { st.update(ts / 1000, dt); if (st.scene) E3.R.render(st.scene, st.camera); if (st.after) st.after(); }
+    catch (e) { cancelAnimationFrame(E3.raf); console.error(e); }
+  };
+  E3.raf = requestAnimationFrame(loop);
+}
+async function mount3D(host, build, fallback) {
+  stop3D(); const tok = E3.token;
+  const flat = () => { host.className = "stage flat"; host.innerHTML = fallback(); };
+  if (!glOK()) return flat();
+  host.insertAdjacentHTML("beforeend", `<div class="ld">Loading the 3D view</div>`);
+  try { await loadThree(); } catch (e) { return flat(); }
+  if (tok !== E3.token || !host.isConnected) return;
+  const T = T3;
+  if (!E3.R) {
+    let R;
+    try { R = new T.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" }); } catch (e) { E3.ok = false; return flat(); }
+    R.setPixelRatio(Math.min(2, devicePixelRatio || 1));
+    R.shadowMap.enabled = true; R.shadowMap.type = T.PCFShadowMap;
+    R.toneMapping = T.ACESFilmicToneMapping; R.toneMappingExposure = 0.92; R.setClearColor(0x000000, 0);
+    const pm = new T.PMREMGenerator(R); E3.env = pm.fromScene(new RoomEnv(), 0.04).texture; pm.dispose();
+    R.domElement.addEventListener("webglcontextlost", e => e.preventDefault());
+    E3.R = R;
+  }
+  const ld = host.querySelector(".ld"); if (ld) ld.remove();
+  const R = E3.R; host.prepend(R.domElement); R.domElement.setAttribute("aria-hidden", "true");
+  const st = build(T, host);
+  st.scene.environment = E3.env; st.scene.environmentIntensity = st.envI || .85;
+  const size = () => { const w = host.clientWidth, h = host.clientHeight; if (!w || !h) return; R.setSize(w, h, true); st.camera.aspect = w / h; st.camera.updateProjectionMatrix(); st.W = w; st.H = h; if (st.onSize) st.onSize(w, h); };
+  size(); const ro = new ResizeObserver(size); ro.observe(host);
+  if (st.sync) st.sync();
+  startLoop(host, st, ro);
+}
+
+/* Studio: soft key light with shadows, cool rim, invisible shadow-catching floor */
+function studio(T, scene, o = {}) {
+  scene.add(new T.HemisphereLight(0xffffff, 0xc9ced8, .35));
+  const d = new T.DirectionalLight(0xfff8f0, 2.6); const k = o.key || [4, 9, 6]; d.position.set(k[0], k[1], k[2]);
+  d.castShadow = true; d.shadow.mapSize.set(2048, 2048); d.shadow.radius = 5; d.shadow.bias = -0.0005; d.shadow.normalBias = .02;
+  const c = d.shadow.camera, S = o.size || 6; c.left = -S; c.right = S; c.top = S; c.bottom = -S; c.near = .5; c.far = 40;
+  scene.add(d);
+  const rim = new T.DirectionalLight(0xdbe6ff, .9); rim.position.set(-6, 4, -7); scene.add(rim);
+  const floor = new T.Mesh(new T.PlaneGeometry(60, 60), new T.ShadowMaterial({ opacity: o.shadow || .17 }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = o.floorY || 0; floor.receiveShadow = true; scene.add(floor);
+  return d;
+}
+/* Drag to turn */
+function dragTurn(host, o = {}) {
+  const s = { yaw: o.yaw || 0, pitch: 0, tyaw: o.yaw || 0, tpitch: 0, down: false, last: -1e9 }; let d = null;
+  const pd = e => { if (e.target.closest("button") || e.button > 0) return; d = { x: e.clientX, y: e.clientY, yaw: s.tyaw, pitch: s.tpitch }; host.setPointerCapture(e.pointerId); host.classList.add("grabbing"); s.down = true; };
+  const pm = e => { if (!d) return; s.tyaw = d.yaw + (e.clientX - d.x) * .009; s.tpitch = clamp(d.pitch + (e.clientY - d.y) * .005, o.pmin ?? -.35, o.pmax ?? .35); s.last = performance.now(); };
+  const pu = () => { d = null; s.down = false; host.classList.remove("grabbing"); s.last = performance.now(); };
+  host.addEventListener("pointerdown", pd); host.addEventListener("pointermove", pm); host.addEventListener("pointerup", pu); host.addEventListener("pointercancel", pu);
+  s.step = dt => { const k = 1 - Math.exp(-dt * 9); s.yaw += (s.tyaw - s.yaw) * k; s.pitch += (s.tpitch - s.pitch) * k; };
+  s.idle = () => performance.now() - s.last > 2500 && !s.down;
+  s.off = () => { host.removeEventListener("pointerdown", pd); host.removeEventListener("pointermove", pm); host.removeEventListener("pointerup", pu); host.removeEventListener("pointercancel", pu); };
+  return s;
+}
+/* Labels pinned to 3D points, with leader lines */
+function labeler(host) {
+  const NS = "http://www.w3.org/2000/svg", box = document.createElement("div"); box.className = "ov3";
+  const svg = document.createElementNS(NS, "svg"); svg.setAttribute("class", "leads"); box.appendChild(svg); host.appendChild(box);
+  const L = [], v = new T3.Vector3();
+  return {
+    box,
+    add(html, at, o = {}) { const el = document.createElement("div"); el.className = "lbl " + (o.cls || ""); el.innerHTML = html; box.appendChild(el); const ln = document.createElementNS(NS, "path"), dot = document.createElementNS(NS, "circle"); dot.setAttribute("r", "3.5"); svg.appendChild(ln); svg.appendChild(dot); const it = { el, ln, dot, at, dx: o.dx ?? 70, dy: o.dy ?? -30, on: true, w: 0, h: 0, html, cls: o.cls || "" }; L.push(it); return it; },
+    set(it, html, cls) { if (it.html !== html) { it.html = html; it.el.innerHTML = html; it.w = 0; } if (cls != null && cls !== it.cls) { it.cls = cls; it.el.className = "lbl " + cls; } },
+    place(cam, W, H) {
+      const narrow = W < 560;
+      for (const it of L) {
+        const hide = () => { it.el.style.visibility = "hidden"; it.ln.setAttribute("d", ""); it.dot.setAttribute("cx", -99); };
+        if (!it.on) { hide(); continue; }
+        it.at(v); v.project(cam); if (v.z > 1 || v.z < -1) { hide(); continue; }
+        const x = (v.x + 1) / 2 * W, y = (1 - v.y) / 2 * H;
+        if (!it.w) { it.w = it.el.offsetWidth; it.h = it.el.offsetHeight; }
+        const dx = narrow ? it.dx * .45 : it.dx, dy = narrow ? it.dy * .6 : it.dy;
+        let lx = dx < 0 ? x + dx - it.w : x + dx, ly = y + dy - it.h / 2;
+        lx = clamp(lx, 8, W - it.w - 8); ly = clamp(ly, 8, H - it.h - 8);
+        it.el.style.transform = `translate(${Math.round(lx)}px,${Math.round(ly)}px)`; it.el.style.visibility = "visible";
+        const ex = x < lx ? lx : x > lx + it.w ? lx + it.w : (x < lx + it.w / 2 ? lx : lx + it.w), ey = clamp(y, ly + 8, ly + it.h - 8);
+        it.ln.setAttribute("d", `M${x.toFixed(1)} ${y.toFixed(1)}L${ex.toFixed(1)} ${ey.toFixed(1)}`);
+        it.dot.setAttribute("cx", x.toFixed(1)); it.dot.setAttribute("cy", y.toFixed(1));
+      }
+    },
+  };
+}
+function spline(T, pts, n) { return new T.SplineCurve(pts.map(([a, b]) => new T.Vector2(a, b))).getPoints(n); }
+/* Neutral featureless mannequin: lathe-turned head and bust, clay finish */
+const PROF = {
+  ad: { head: [[0.30, -1.42], [0.29, -1.2], [0.31, -0.98], [0.39, -0.87], [0.51, -0.75], [0.63, -0.55], [0.73, -0.3], [0.79, -0.04], [0.83, 0.22], [0.84, 0.48], [0.8, 0.74], [0.7, 0.95], [0.52, 1.1], [0.28, 1.18], [0.001, 1.2]],
+    torso: [[0.001, -3.4], [1.55, -3.4], [1.66, -2.9], [1.64, -2.35], [1.5, -2.0], [1.15, -1.78], [0.62, -1.6], [0.34, -1.43], [0.29, -1.25]], tz: .56, cy: .3, floor: -3.4, sx: .9, sz: 1.08 },
+  nb: { head: [[0.27, -1.0], [0.27, -0.84], [0.33, -0.75], [0.46, -0.65], [0.62, -0.47], [0.77, -0.2], [0.88, 0.1], [0.94, 0.42], [0.92, 0.74], [0.82, 1.0], [0.62, 1.18], [0.34, 1.27], [0.001, 1.29]],
+    torso: [[0.001, -2.3], [0.95, -2.3], [1.02, -1.95], [0.98, -1.5], [0.8, -1.22], [0.5, -1.06], [0.3, -0.95], [0.27, -0.85]], tz: .74, cy: .35, floor: -2.3, sx: .95, sz: 1.05 },
+};
+function mannequin(T, kind, matOpts) {
+  const pr = PROF[kind], g = new T.Group();
+  const clay = new T.MeshPhysicalMaterial(Object.assign({ color: 0xc9c1b6, roughness: .55, metalness: 0, clearcoat: .25, clearcoatRoughness: .5, sheen: .25, sheenColor: new T.Color(0xfff6ea), sheenRoughness: .6 }, matOpts || {}));
+  const head = new T.Mesh(new T.LatheGeometry(spline(T, pr.head, 90), 128), clay); head.scale.set(pr.sx, 1, pr.sz);
+  const torso = new T.Mesh(new T.LatheGeometry(spline(T, pr.torso, 70), 112), clay); torso.scale.set(1, 1, pr.tz);
+  [head, torso].forEach(m => { m.castShadow = true; m.receiveShadow = true; g.add(m); });
+  g.updateMatrixWorld(true);
+  const ray = new T.Raycaster(), C = new T.Vector3(0, pr.cy, 0);
+  const surf = (dir, cy) => { const c = cy == null ? C : new T.Vector3(0, cy, 0); const dd = dir.clone().normalize(); ray.set(c.clone().addScaledVector(dd, 6), dd.clone().negate()); const h = ray.intersectObject(head, false)[0]; if (!h) return { p: c.clone().addScaledVector(dd, .8), n: dd }; const n = h.face.normal.clone().transformDirection(head.matrixWorld).normalize(); if (n.dot(dd) < 0) n.negate(); return { p: h.point.clone(), n }; };
+  const fr = surf(new T.Vector3(0, 0, 1), kind === "nb" ? -.1 : 0);
+  const nose = new T.Mesh(new T.SphereGeometry(1, 32, 24), clay); nose.scale.set(kind === "nb" ? .07 : .085, kind === "nb" ? .07 : .16, kind === "nb" ? .07 : .11); nose.position.copy(fr.p).add(new T.Vector3(0, kind === "nb" ? 0 : .02, kind === "nb" ? .02 : .03)); nose.castShadow = true; g.add(nose);
+  [1, -1].forEach(sx => { const e = surf(new T.Vector3(sx, 0, 0), .02); const ear = new T.Mesh(new T.SphereGeometry(1, 28, 20), clay); ear.scale.set(.05, kind === "nb" ? .13 : .17, kind === "nb" ? .1 : .11); ear.position.copy(e.p).add(new T.Vector3(sx * .01, 0, -.03)); ear.castShadow = true; g.add(ear); });
+  return { g, head, torso, clay, surf, pr };
+}
+function bandGeo(T, rIn, rOut, span, h) {
+  const s = new T.Shape(), a0 = -Math.PI / 2 - span, a1 = -Math.PI / 2 + span;
+  s.absarc(0, 0, rOut, a0, a1, false); s.absarc(0, 0, rIn, a1, a0, true);
+  const geo = new T.ExtrudeGeometry(s, { depth: h, bevelEnabled: true, bevelThickness: .012, bevelSize: .01, bevelSegments: 3, curveSegments: 120 });
+  geo.rotateX(-Math.PI / 2); return geo;
+}
+function miniChip(T, opts = {}) {
+  const g = new T.Group();
+  const body = new T.Mesh(new RBox(1, .2, 1, 3, .03), new T.MeshPhysicalMaterial({ color: 0x1d1f24, roughness: .45, clearcoat: .5, clearcoatRoughness: .35 }));
+  body.castShadow = true; g.add(body);
+  const pinG = new T.BoxGeometry(.07, .05, .16), pins = new T.InstancedMesh(pinG, new T.MeshStandardMaterial({ color: 0xd6d9de, metalness: 1, roughness: .28 }), 32), m = new T.Matrix4(), q = new T.Quaternion(), Y = new T.Vector3(0, 1, 0);
+  let i = 0; for (let s = 0; s < 4; s++) for (let j = 0; j < 8; j++) { const a = s * Math.PI / 2, off = (j - 3.5) * .11; const x = Math.cos(a) * .56 - Math.sin(a) * off, z = -Math.sin(a) * .56 - Math.cos(a) * off; q.setFromAxisAngle(Y, a + Math.PI / 2); m.compose(new T.Vector3(x, -.07, z), q, new T.Vector3(1, 1, 1)); pins.setMatrixAt(i++, m); }
+  pins.castShadow = true; g.add(pins);
+  const die = new T.Mesh(new T.BoxGeometry(.46, .02, .46), new T.MeshPhysicalMaterial({ color: opts.die || 0x3a4f8f, roughness: .2, metalness: .7, iridescence: .8, iridescenceIOR: 1.7 }));
+  die.position.y = .105; g.add(die);
+  return g;
+}
+
+/* ---------- Device: mannequin wearing the prototype; fly to the chip ---------- */
+function buildDevice(T, host) {
+  const r = curRun, U = UC[r.uc], nb = r.uc === "nirs", kind = nb ? "nb" : "ad";
+  const scene = new T.Scene(), cam = new T.PerspectiveCamera(30, 1, .02, 80);
+  const M = mannequin(T, kind), pr = M.pr;
+  studio(T, scene, { floorY: pr.floor, size: 5, key: [4, 8, 7] });
+  const root = new T.Group(); root.add(M.g); scene.add(root);
+  const y = nb ? .5 : .52;
+  const zf = M.surf(new T.Vector3(0, 0, 1), y).p.z, xs = M.surf(new T.Vector3(1, 0, 0), y).p.x;
+  const ell = (phi, k = 1) => new T.Vector3(Math.sin(phi) * xs * k, y, Math.cos(phi) * zf * k);
+  const nrm = phi => new T.Vector3(Math.sin(phi) / xs, 0, Math.cos(phi) / zf).normalize();
+  const silicone = new T.MeshPhysicalMaterial({ color: nb ? 0xf3f6f8 : 0xf6f7f9, roughness: .42, clearcoat: .6, clearcoatRoughness: .3, sheen: .5, sheenColor: new T.Color(0xdfe8ff) });
+  const span = nb ? .7 : 1.36, bh = nb ? .34 : .26;
+  const band = new T.Mesh(bandGeo(T, 1.0, 1.045, span, bh), silicone); band.scale.set(xs * 1.012, 1, zf * 1.012); band.position.y = y - bh / 2; band.castShadow = true; band.receiveShadow = true; M.g.add(band);
+  const accent = new T.Mesh(bandGeo(T, 1.046, 1.05, span * .98, .02), new T.MeshStandardMaterial({ color: 0x2563eb, roughness: .4 })); accent.scale.copy(band.scale); accent.position.y = y + bh / 2 - .045; M.g.add(accent);
+  const Yv = new T.Vector3(0, 1, 0), reading = [];
+  const metal = new T.MeshStandardMaterial({ color: 0xc8ccd2, metalness: 1, roughness: .25 });
+  const sensorAt = (phi, kindS) => {
+    const n = nrm(phi), p = ell(phi, 1.06), g = new T.Group(); g.position.copy(p); g.quaternion.setFromUnitVectors(Yv, n);
+    const ringM = new T.MeshStandardMaterial({ color: kindS === "src" ? 0xef4444 : 0x2563eb, emissive: kindS === "src" ? 0xff3b30 : 0x3b82f6, emissiveIntensity: 0, roughness: .3 });
+    if (kindS === "det") { const d = new T.Mesh(new RBox(.07, .03, .07, 2, .01), new T.MeshPhysicalMaterial({ color: 0x15171c, roughness: .15, clearcoat: 1 })); g.add(d); const rr = new T.Mesh(new T.TorusGeometry(.05, .008, 10, 32), ringM); rr.rotation.x = Math.PI / 2; rr.position.y = .012; g.add(rr); }
+    else if (kindS === "src") { const d = new T.Mesh(new T.CylinderGeometry(.03, .03, .03, 24), ringM); g.add(d); }
+    else { const d = new T.Mesh(new T.CylinderGeometry(.07, .075, .03, 32), metal); g.add(d); const rr = new T.Mesh(new T.TorusGeometry(.078, .011, 10, 40), ringM); rr.rotation.x = Math.PI / 2; rr.position.y = .008; g.add(rr); }
+    g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    M.g.add(g); return { g, ringM, p, n };
+  };
+  let s1, s2, extra = [];
+  if (!nb) { s1 = [sensorAt(.98), sensorAt(1.24)]; s2 = [sensorAt(-.98), sensorAt(-1.24)]; }
+  else { const src = sensorAt(-.44, "src"); reading.push(src); const det = [1, 2, 3, 4].map(k => sensorAt(-.44 + k * .105, "det")); s1 = [det[0]]; s2 = [det[2]]; extra = [det[1], det[3]]; src.ringM.emissiveIntensity = 2.2; }
+  // electronics pod with the chip inside
+  const podPhi = nb ? .34 : 0, podN = nrm(podPhi), podP = ell(podPhi, 1.05).addScaledVector(podN, .05);
+  const pod = new T.Group(); pod.position.copy(podP); pod.lookAt(podP.clone().add(podN)); M.g.add(pod);
+  const pw = nb ? .34 : .5, ph = nb ? .22 : .25;
+  const shellM = new T.MeshPhysicalMaterial({ color: 0xfbfbfa, roughness: .22, clearcoat: 1, clearcoatRoughness: .15, transparent: true, opacity: 1 });
+  const shell = new T.Mesh(new RBox(pw, ph, .1, 5, .045), shellM); shell.castShadow = true; pod.add(shell);
+  const led = new T.Mesh(new T.SphereGeometry(.016, 16, 12), new T.MeshStandardMaterial({ color: 0x10b981, emissive: 0x10b981, emissiveIntensity: 2 })); led.position.set(pw / 2 - .06, ph / 2 - .055, .052); pod.add(led);
+  const pcb = new T.Mesh(new T.BoxGeometry(pw - .07, ph - .07, .012), new T.MeshStandardMaterial({ color: 0x0f3b2e, roughness: .55 })); pcb.position.z = -.012; pod.add(pcb);
+  const chip = miniChip(T); chip.scale.setScalar(.075); chip.rotation.x = Math.PI / 2; chip.position.set(-pw * .16, 0, -.0); pod.add(chip);
+  const coin = new T.Mesh(new T.CylinderGeometry(.06, .06, .022, 40), new T.MeshStandardMaterial({ color: 0xd9dce1, metalness: 1, roughness: .22 })); coin.rotation.x = Math.PI / 2; coin.position.set(pw * .25, 0, 0); pod.add(coin);
+  const traceM = new T.MeshStandardMaterial({ color: 0xc99a4a, metalness: 1, roughness: .35 });
+  { const x0 = -(pw - .07) / 2 + .01, x1 = -pw * .16 - .045; [.035, -.035, 0].forEach(dy => { const tr = new T.Mesh(new T.BoxGeometry(x1 - x0, .006, .003), traceM); tr.position.set((x0 + x1) / 2, dy, -.0045); pod.add(tr); }); }
+  // camera stops
+  const W3 = new T.Vector3(), stops = [
+    { name: "Wearer", look: () => W3.set(0, nb ? -.3 : -.55, 0), off: nb ? new T.Vector3(2.6, 1.15, 5.6) : new T.Vector3(3.1, 1.3, 6.9) },
+    { name: "Device", look: () => W3.set(nb ? -.1 : 0, y - .05, .35), off: nb ? new T.Vector3(-.9, .55, 2.9) : new T.Vector3(.35, .6, 3.2) },
+    { name: "Chip inside", look: () => chip.getWorldPosition(W3), off: new T.Vector3(.14, .12, .62) },
+  ];
+  let stop = 0, lastWheel = 0;
+  const camPos = new T.Vector3().copy(stops[0].look()).add(stops[0].off), camLook = stops[0].look().clone();
+  cam.position.copy(camPos); cam.lookAt(camLook);
+  const dr = dragTurn(host, { yaw: -.25, pmin: -.25, pmax: .3 });
+  host.insertAdjacentHTML("beforeend", `<div class="stops" role="group" aria-label="Move the camera">${stops.map((s, i) => `<button data-stop="${i}" class="${i === 0 ? "on" : ""}">${s.name}</button>`).join("")}</div>`);
+  const setStop = i => { stop = clamp(i, 0, 2); host.querySelectorAll("[data-stop]").forEach(b => b.classList.toggle("on", +b.dataset.stop === stop)); dr.tyaw = stop === 0 ? -.25 : 0; dr.tpitch = 0; sync(); };
+  host.querySelector(".stops").onclick = e => { const b = e.target.closest("[data-stop]"); if (b) setStop(+b.dataset.stop); };
+  const onWheel = e => { e.preventDefault(); const tN = performance.now(); if (tN - lastWheel < 650 || Math.abs(e.deltaY) < 4) return; lastWheel = tN; setStop(stop + (e.deltaY > 0 ? 1 : -1)); };
+  host.addEventListener("wheel", onWheel, { passive: false });
+  const est = document.createElement("dl"); est.className = "est"; host.appendChild(est);
+  const LB = labeler(host), P3 = new T.Vector3();
+  const mid = arr => v => { v.set(0, 0, 0); arr.forEach(s => v.add(s.g.getWorldPosition(P3))); v.divideScalar(arr.length); };
+  const L = {
+    band: LB.add("", v => (nb ? s1[0] : s1[0]).g.getWorldPosition(v).add(new T.Vector3(0, .12, 0)), { dx: 80, dy: -70 }),
+    status: LB.add("", v => led.getWorldPosition(v), { dx: -90, dy: -60 }),
+    s1: LB.add("", mid(s1), { dx: nb ? -90 : 70, dy: nb ? -80 : -10, cls: "s1" }),
+    s2: LB.add("", mid(s2), { dx: -70, dy: nb ? 70 : -10, cls: "s2" }),
+    chip: LB.add("", v => chip.getWorldPosition(v), { dx: -80, dy: -50, cls: "hot" }),
+    coin: LB.add("", v => coin.getWorldPosition(v), { dx: 80, dy: 40 }),
+  };
+  let lastStat = "";
+  function sync() {
+    const t = elapsed(r), b = bestAt(r, t), e = chipEst(r, b), s = U.sensors;
+    const eh = b ? `<div><dt>Chip area</dt><dd>${e.area.toFixed(2)} mm²<small>estimate</small></dd></div><div><dt>Chip power</dt><dd>${e.uW.toFixed(1)} µW<small>estimate</small></dd></div><div><dt>Battery life</dt><dd>about ${Math.round(e.days)} days<small>estimate</small></dd></div>`
+      : `<div><dt>Size, power, battery</dt><dd style="font-size:13px;font-weight:500;line-height:1.4">Estimates appear when round 1's chip is checked.</dd></div>`;
+    if (est.innerHTML !== eh) est.innerHTML = eh;
+    LB.set(L.band, `<b>${U.device}, prototype</b><span>${nb ? "Soft pad across the newborn's forehead" : "Worn across the forehead at home"}</span>`);
+    LB.set(L.s1, `<b>${s[0].n}: ${s[0].what}</b><span>${s[0].where}</span>`);
+    LB.set(L.s2, `<b>${s[1].n}: ${s[1].what}</b><span>${s[1].where}</span>`);
+    LB.set(L.chip, `<b>The chip${b ? `, ${nf(b.gates)} gates` : ""}</b><span>${b ? `About ${e.area.toFixed(2)} mm². The AI model is wired into its gates.` : "Not built yet: it appears after round 1."}</span>`);
+    LB.set(L.coin, `<b>${U.battName[0].toUpperCase() + U.battName.slice(1)}</b><span>${b ? `Lasts about ${Math.round(e.days)} days` : "Powers the sensors and the chip"}</span>`);
+    L.band.on = stop === 0; L.s1.on = L.s2.on = stop === 1; L.status.on = stop === 0; L.chip.on = L.coin.on = stop === 2;
+  }
+  let flash = 0;
+  return {
+    scene, camera: cam, envI: .9, sync,
+    update(time, dt) {
+      dr.step(dt);
+      const sway = dr.idle() && stop === 0 ? Math.sin(time * .35) * .25 : 0;
+      root.rotation.y = dr.yaw + sway; root.rotation.x = dr.pitch * .3;
+      const S = stops[stop], target = S.look().clone(), want = target.clone().add(S.off);
+      const k = 1 - Math.exp(-dt * 3.2); camPos.lerp(want, k); camLook.lerp(target, k); cam.position.copy(camPos); cam.lookAt(camLook);
+      const open = stop === 2 ? 1 : 0; shellM.opacity += ((open ? .14 : 1) - shellM.opacity) * k; shell.position.z += ((open ? .11 : 0) - shell.position.z) * k; shellM.depthWrite = shellM.opacity > .9;
+      const t = elapsed(r), b = bestAt(r, t), s = dclock(), alarm = chipFlag(r.uc, b, s);
+      const pulse = .5 + .5 * Math.sin(time * 6);
+      s1.concat(s2).forEach(x => x.ringM.emissiveIntensity = 1.2 + 2.2 * pulse);
+      extra.forEach(x => { const on = b && b.used > 2; x.ringM.emissiveIntensity = on ? 1 + pulse : 0; x.ringM.color.setHex(on ? 0x2563eb : 0x9aa0ab); });
+      flash = alarm ? (Math.sin(time * 10) > 0 ? 1 : .2) : 1;
+      led.material.color.setHex(alarm ? 0xef4444 : 0x10b981); led.material.emissive.setHex(alarm ? 0xef4444 : 0x10b981); led.material.emissiveIntensity = 2.4 * flash;
+      const st = !b ? "none" : alarm ? "alarm" : "calm";
+      if (st !== lastStat) { lastStat = st; LB.set(L.status, st === "none" ? `<b>Recording only</b><span>No chip yet: the first is checked after round 1.</span>` : st === "alarm" ? `<b>${nb ? "Oxygen drop: alarm at the cot" : "Seizure flagged: alarm sent"}</b><span>${nb ? "The chip saw brain oxygen fall" : "The chip saw a seizure start in both temples"}</span>` : `<b>${nb ? "Brain oxygen fine" : "No seizure"}</b><span>The chip decides every ${nb ? "10" : "2"} seconds</span>`, st === "alarm" ? "alarm" : st === "calm" ? "calm" : ""); }
+    },
+    after() { if (this.W) LB.place(cam, this.W, this.H); },
+    dispose() { dr.off(); host.removeEventListener("wheel", onWheel); },
+  };
+}
+
+/* ---------- Chip: package, gull-wing pins, die with a gate layout, board ---------- */
+function dieCanvas(gates, seed) {
+  const S = 1024, c = document.createElement("canvas"); c.width = c.height = S; const x = c.getContext("2d"), R = rng(seed);
+  const g = x.createLinearGradient(0, 0, S, S); g.addColorStop(0, "#2b3560"); g.addColorStop(.5, "#1c2446"); g.addColorStop(1, "#2d2856"); x.fillStyle = g; x.fillRect(0, 0, S, S);
+  x.strokeStyle = "#a9b7d6"; x.lineWidth = 8; x.strokeRect(14, 14, S - 28, S - 28);
+  for (let i = 0; i < 12; i++) { const p = 130 + i * (S - 260) / 11; x.fillStyle = "#e0bd72"; [[p - 20, 34], [p - 20, S - 74], [34, p - 20], [S - 74, p - 20]].forEach(([a, b]) => x.fillRect(a, b, 40, 40)); x.fillStyle = "#43507f"; [[p - 14, 84], [p - 14, S - 112], [84, p - 14], [S - 112, p - 14]].forEach(([a, b]) => x.fillRect(a, b, 28, 28)); }
+  const c0 = 136, c1 = S - 136, rowH = 12, fill = clamp(.22 + gates / 5200, .25, .96);
+  const PAL = ["#5876c2", "#3f95a6", "#7a62b8", "#9a8146", "#3f8a71", "#6a7fb0", "#b06a5a"];
+  for (let y = c0; y < c1; y += rowH) {
+    x.fillStyle = "rgba(190,205,240,.35)"; x.fillRect(c0, y, c1 - c0, 1.2);
+    let px = c0 + R() * 6;
+    while (px < c1) { const w = 4 + Math.floor(R() * 6) * 3; if (R() < fill) { x.fillStyle = PAL[Math.floor(R() * PAL.length)]; x.fillRect(px, y + 2, Math.min(w, c1 - px), rowH - 3); } px += w + 1; }
+  }
+  x.globalAlpha = .55; x.strokeStyle = "#d2dcf2"; x.lineWidth = 1.6;
+  for (let i = 0; i < 220 * fill; i++) { const vx = c0 + R() * (c1 - c0), y0 = c0 + R() * (c1 - c0); x.beginPath(); x.moveTo(vx, y0); x.lineTo(vx, Math.min(c1, y0 + 30 + R() * 260)); x.stroke(); }
+  x.strokeStyle = "#e7b874"; x.lineWidth = 2.4;
+  for (let i = 0; i < 120 * fill; i++) { const hy = c0 + R() * (c1 - c0), x0 = c0 + R() * (c1 - c0); x.beginPath(); x.moveTo(x0, hy); x.lineTo(Math.min(c1, x0 + 30 + R() * 280), hy); x.stroke(); }
+  x.globalAlpha = 1; x.fillStyle = "rgba(225,205,150,.5)";
+  for (let i = 0; i < 5; i++) { const vx = c0 + (i + .5) * (c1 - c0) / 5; x.fillRect(vx - 5, c0, 10, c1 - c0); }
+  return c;
+}
+function pcbCanvas() {
+  const Wc = 1520, Hc = 1240, c = document.createElement("canvas"); c.width = Wc; c.height = Hc; const x = c.getContext("2d");
+  const X = v => (v + 3.8) / 7.6 * Wc, Z = v => (v + 3.1) / 6.2 * Hc;
+  x.fillStyle = "#0e2c23"; x.fillRect(0, 0, Wc, Hc);
+  x.strokeStyle = "rgba(255,255,255,.05)"; for (let i = 0; i < Wc; i += 40) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i, Hc); x.stroke(); }
+  x.lineCap = "round"; x.lineJoin = "round";
+  const tr = (pts, w = 9) => { x.strokeStyle = "#c79a4c"; x.lineWidth = w; x.beginPath(); pts.forEach(([a, b], i) => i ? x.lineTo(X(a), Z(b)) : x.moveTo(X(a), Z(b))); x.stroke(); };
+  for (let s = 0; s < 4; s++) for (let i = 0; i < 12; i++) { const off = (i - 5.5) * .22; const a = s * Math.PI / 2, px = Math.cos(a) * 2.0 - Math.sin(a) * off, pz = -Math.sin(a) * 2.0 - Math.cos(a) * off; x.fillStyle = "#d9b36a"; x.fillRect(X(px) - 14, Z(pz) - 14, 28, 28); }
+  TRACES.forEach(t => tr(t.pts, t.w));
+  for (let i = 0; i < 26; i++) { const a = i / 26 * Math.PI * 2; tr([[Math.cos(a) * 2.6, Math.sin(a) * 2.4], [Math.cos(a) * 3.3, Math.sin(a) * 2.8]], 5); }
+  x.fillStyle = "#f2f2ee"; x.font = "600 34px Inter, Arial, sans-serif"; x.fillText("S1", X(-3.55), Z(-2.15)); x.fillText("S2", X(-3.55), Z(2.45)); x.fillText("OUT", X(2.95), Z(-.55));
+  x.strokeStyle = "#f2f2ee"; x.lineWidth = 3; x.strokeRect(X(-2.35), Z(-2.35), X(2.35) - X(-2.35), Z(2.35) - Z(-2.35));
+  return c;
+}
+const TRACES = [
+  { id: "s1", w: 9, pts: [[-3.25, -1.6], [-2.75, -1.6], [-2.35, -.88], [-2.0, -.88]] },
+  { id: "s1", w: 9, pts: [[-3.25, -1.48], [-2.8, -1.48], [-2.42, -.66], [-2.0, -.66]] },
+  { id: "s2", w: 9, pts: [[-3.25, 1.6], [-2.75, 1.6], [-2.35, .88], [-2.0, .88]] },
+  { id: "s2", w: 9, pts: [[-3.25, 1.48], [-2.8, 1.48], [-2.42, .66], [-2.0, .66]] },
+  { id: "out", w: 9, pts: [[2.0, -.11], [2.6, -.11], [3.05, -.11]] },
+];
+function buildChip(T, host) {
+  const r = curRun, U = UC[r.uc];
+  const scene = new T.Scene(), cam = new T.PerspectiveCamera(28, 1, .1, 80);
+  cam.position.set(6.2, 7.4, 8.8); cam.lookAt(0, -.3, 0);
+  studio(T, scene, { floorY: -.36, size: 6, key: [3, 10, 5], shadow: .2 });
+  const root = new T.Group(); scene.add(root);
+  const board = new T.Mesh(new RBox(7.6, .1, 6.2, 3, .04), new T.MeshStandardMaterial({ color: 0x0c271f, roughness: .6 })); board.position.y = -.31; board.receiveShadow = true; board.castShadow = true; root.add(board);
+  const pcbTex = new T.CanvasTexture(pcbCanvas()); pcbTex.colorSpace = T.SRGBColorSpace; pcbTex.anisotropy = 8;
+  const top = new T.Mesh(new T.PlaneGeometry(7.6, 6.2), new T.MeshStandardMaterial({ map: pcbTex, roughness: .5, metalness: .15 })); top.rotation.x = -Math.PI / 2; top.position.y = -.258; top.receiveShadow = true; root.add(top);
+  const epoxy = new T.MeshPhysicalMaterial({ color: 0x1c1e23, roughness: .5, clearcoat: .4, clearcoatRoughness: .4 });
+  const body = new T.Mesh(new RBox(3.2, .42, 3.2, 5, .06), epoxy); body.castShadow = true; body.receiveShadow = true; root.add(body);
+  const dot = new T.Mesh(new T.CylinderGeometry(.09, .09, .01, 24), new T.MeshStandardMaterial({ color: 0x2c2f36, roughness: .8 })); dot.position.set(-1.3, .212, -1.3); root.add(dot);
+  const gold = new T.MeshStandardMaterial({ color: 0xd9ad5c, metalness: 1, roughness: .26 });
+  const ring = new T.Mesh(new RBox(2.3, .03, 2.3, 2, .05), gold); ring.position.y = .2; root.add(ring);
+  const cavity = new T.Mesh(new T.BoxGeometry(2.08, .032, 2.08), new T.MeshStandardMaterial({ color: 0x9c8a63, metalness: .9, roughness: .4 })); cavity.position.y = .205; root.add(cavity);
+  // leads: gull-wing, 12 a side
+  const lm = new T.MeshStandardMaterial({ color: 0xdfe2e6, metalness: 1, roughness: .22 }), mtx = new T.Matrix4(), q = new T.Quaternion(), Yax = new T.Vector3(0, 1, 0), Zax = new T.Vector3(0, 0, 1), one = new T.Vector3(1, 1, 1);
+  const segs = [{ g: new T.BoxGeometry(.2, .04, .11), p: [1.69, -.04], rz: 0 }, { g: new T.BoxGeometry(.2, .04, .11), p: [1.84, -.13], rz: -1.0 }, { g: new T.BoxGeometry(.22, .04, .11), p: [2.0, -.22], rz: 0 }];
+  segs.forEach(sg => { const im = new T.InstancedMesh(sg.g, lm, 48); let i = 0; for (let s = 0; s < 4; s++) for (let j = 0; j < 12; j++) { const a = s * Math.PI / 2, off = (j - 5.5) * .22; const qa = new T.Quaternion().setFromAxisAngle(Yax, a), qz = new T.Quaternion().setFromAxisAngle(Zax, sg.rz); q.copy(qa).multiply(qz); const pos = new T.Vector3(sg.p[0], sg.p[1], off).applyQuaternion(qa); mtx.compose(pos, q, one); im.setMatrixAt(i++, mtx); } im.castShadow = true; root.add(im); });
+  // die and bond wires
+  const dieM = new T.MeshPhysicalMaterial({ roughness: .26, metalness: .55, iridescence: .55, iridescenceIOR: 1.6, clearcoat: .7, clearcoatRoughness: .1 });
+  const dieSide = new T.MeshStandardMaterial({ color: 0x8a90a0, metalness: .6, roughness: .4 });
+  const die = new T.Mesh(new T.BoxGeometry(1, .06, 1), [dieSide, dieSide, dieM, dieSide, dieSide, dieSide]); die.position.y = .25; die.castShadow = true; root.add(die);
+  const wires = new T.Group(); root.add(wires);
+  const wireM = new T.MeshStandardMaterial({ color: 0xe8c071, metalness: 1, roughness: .2 });
+  const fingers = new T.InstancedMesh(new T.BoxGeometry(.12, .012, .07), gold, 48); root.add(fingers);
+  let lastG = -1, ds = 1;
+  function setDie(gates) {
+    if (gates === lastG) return; lastG = gates;
+    ds = .95 + .75 * Math.sqrt(Math.min(1, (gates || 3000) / 4500));
+    die.scale.set(ds, 1, ds);
+    if (dieM.map) dieM.map.dispose();
+    const tx = new T.CanvasTexture(dieCanvas(gates || 2400, hashStr(r.id + gates))); tx.colorSpace = T.SRGBColorSpace; tx.anisotropy = 8; dieM.map = tx; dieM.needsUpdate = true;
+    while (wires.children.length) { const w = wires.children.pop(); w.geometry.dispose(); }
+    let i = 0;
+    for (let s = 0; s < 4; s++) for (let j = 0; j < 12; j++) {
+      const a = s * Math.PI / 2, off = (j - 5.5), qa = new T.Quaternion().setFromAxisAngle(Yax, a);
+      const p0 = new T.Vector3(ds / 2 - .05, .282, off * (ds - .2) / 11).applyQuaternion(qa), p2 = new T.Vector3(.97, .225, off * .16).applyQuaternion(qa);
+      const p1 = p0.clone().lerp(p2, .4); p1.y += .2;
+      wires.add(new T.Mesh(new T.TubeGeometry(new T.QuadraticBezierCurve3(p0, p1, p2), 14, .007, 5), wireM));
+      mtx.compose(p2.clone().setY(.222), qa, one); fingers.setMatrixAt(i++, mtx);
+    }
+    fingers.instanceMatrix.needsUpdate = true;
+  }
+  // connectors and the output LED
+  const plastic = new T.MeshPhysicalMaterial({ color: 0xf2f0ea, roughness: .45, clearcoat: .3 });
+  [-1.54, 1.54].forEach(z => { const c = new T.Mesh(new RBox(.46, .34, .7, 3, .04), plastic); c.position.set(-3.38, -.09, z); c.castShadow = true; root.add(c); const h = new T.Mesh(new T.BoxGeometry(.05, .16, .5), new T.MeshStandardMaterial({ color: 0x2a2a2a, roughness: .8 })); h.position.set(-3.62, -.08, z); root.add(h); });
+  const ledM = new T.MeshStandardMaterial({ color: 0x10b981, emissive: 0x10b981, emissiveIntensity: 1.6, roughness: .2 });
+  const led = new T.Mesh(new T.SphereGeometry(.12, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2), ledM); led.position.set(3.18, -.26, -.11); root.add(led);
+  // signal pulses along the traces
+  const pulseM = new T.MeshStandardMaterial({ color: 0x93c5fd, emissive: 0x3b82f6, emissiveIntensity: 3 });
+  const pulses = TRACES.map((t, i) => { const m = new T.Mesh(new T.SphereGeometry(.055, 16, 12), t.id === "out" ? new T.MeshStandardMaterial({ color: 0xfecaca, emissive: 0xef4444, emissiveIntensity: 3 }) : pulseM); root.add(m); const P = t.pts.map(([a, b]) => new T.Vector3(a, -.2, b)); let L = 0; const seg = []; for (let k = 1; k < P.length; k++) { const d = P[k].distanceTo(P[k - 1]); seg.push(d); L += d; } return { m, P, seg, L, off: i * .23, out: t.id === "out" }; });
+  const dr = dragTurn(host, { yaw: 0, pmin: -.2, pmax: .3 });
+  const LB = labeler(host), V3 = new T.Vector3(), s = U.sensors;
+  const W = (x, y, z) => v => root.localToWorld(v.set(x, y, z));
+  const L = {
+    s1: LB.add(`<b>${s[0].n}: ${s[0].what}</b><span>${s[0].where}</span>`, W(-3.4, .1, -1.54), { dx: -30, dy: -80, cls: "s1" }),
+    s2: LB.add(`<b>${s[1].n}: ${s[1].what}</b><span>${s[1].where}</span>`, W(-3.4, .1, 1.54), { dx: -40, dy: 60, cls: "s2" }),
+    model: LB.add("", v => die.getWorldPosition(v).add(V3.set(0, .05, 0)), { dx: 120, dy: -150, cls: "hot" }),
+    out: LB.add(`<b>Prediction</b><span>${U.predict}</span>`, W(3.18, -.1, -.11), { dx: 40, dy: 70 }),
+  };
+  host.insertAdjacentHTML("beforeend", `<div class="hud bl" id="chud"></div><div class="corner"><button class="ghostbtn" id="ftmine">${ic("upload")}Fine-tune on my data</button></div>`);
+  host.querySelector("#ftmine").onclick = () => fineTuneDialog(r);
+  function sync() {
+    const t = elapsed(r), b = bestAt(r, t), g = stageAt(r, t), N = MACH[r.mach].n;
+    setDie(b ? b.gates : 0);
+    epoxy.opacity = 1;
+    LB.set(L.model, b ? `<b>AI model, ${nf(b.gates)} logic gates</b><span>What it learned is wired into the gates. No memory, no processor.</span>` : `<b>AI model, not built yet</b><span>The first chip is built after round 1.</span>`);
+    const hud = host.querySelector("#chud");
+    const h = g.k === "tune" ? `<b>Fine-tuning, round ${g.r + 1}</b><span>${nf(Math.round(N * g.f))} of ${nf(N)} candidate models trained. The chip on screen is the best so far.</span>`
+      : g.k === "compile" ? `<b>Building round ${g.r + 1}'s chips</b><span>The 40 best models are being turned into gates.</span>`
+      : g.k === "verify" ? `<b>Checking round ${g.r + 1}'s chips</b><span>Bit for bit, then on unseen ${U.people}.</span>`
+      : b ? `<b>${nf(b.gates)} logic gates</b><span>${g.k === "done" ? "The final chip" : `Best chip after round ${b.k + 1}`}. Uses ${word(b.used)} sensors.</span>` : `<b>No chip yet</b><span>The first chip appears after round 1 is checked.</span>`;
+    if (hud.innerHTML !== h) hud.innerHTML = h;
+  }
+  return {
+    scene, camera: cam, envI: .95, sync,
+    update(time, dt) {
+      dr.step(dt);
+      root.rotation.y = dr.yaw + (dr.idle() ? Math.sin(time * .22) * .32 : 0) - .15; root.rotation.x = dr.pitch * .5;
+      const b = bestAt(r, elapsed(r)), alarm = chipFlag(r.uc, b, dclock());
+      pulses.forEach(p => { const f = ((time * .45 + p.off) % 1); let d = f * p.L, k = 0; while (k < p.seg.length - 1 && d > p.seg[k]) { d -= p.seg[k]; k++; } p.m.position.copy(p.P[k]).lerp(p.P[k + 1], clamp(d / p.seg[k], 0, 1)); p.m.visible = !!b || !p.out; if (p.out) p.m.visible = !!b && alarm; });
+      ledM.color.setHex(alarm ? 0xef4444 : 0x10b981); ledM.emissive.setHex(alarm ? 0xef4444 : 0x10b981); ledM.emissiveIntensity = b ? (alarm ? 2.6 : 1.4) : .2;
+      LB.set(L.out, `<b>Prediction${b ? (alarm ? `: ${r.uc === "eeg" ? "seizure" : "alarm"}` : `: ${r.uc === "eeg" ? "no seizure" : "no alarm"}`) : ""}</b><span>${U.predict}, every ${r.uc === "eeg" ? "2" : "10"} seconds</span>`, b && alarm ? "alarm" : "");
+    },
+    after() { if (this.W) LB.place(cam, this.W, this.H); },
+    dispose() { dr.off(); },
+  };
+}
+function fineTuneDialog(r) {
+  const U = UC[r.uc];
+  openModal(`<div class="mp"><h3>Fine-tune this chip on your own recordings</h3>
+    <p style="margin:0 0 10px">The scientists fine-tune the final model on your ${U.rec}, rebuild the gates and check the chip again on ${U.people} you keep aside. Your recordings stay in your workspace.</p>
+    <div class="drop" style="margin:0"><div class="dt">Choose ${U.rec} with the ${U.events} marked by a clinician.</div><input type="file" id="ftf" hidden multiple><button class="btn" id="ftpick">Choose files</button></div><div id="ftname"></div></div>
+    <div class="mf"><button class="btn" data-a="c">Cancel</button><button class="btn blue" data-a="go" disabled>Start fine-tune</button></div>`, bg => {
+    const go_ = bg.querySelector("[data-a=go]"), f = bg.querySelector("#ftf");
+    bg.querySelector("#ftpick").onclick = () => f.click();
+    f.onchange = () => { if (f.files.length) { bg.querySelector("#ftname").innerHTML = `<div class="fname">${ic("check")}${esc(f.files[0].name)}${f.files.length > 1 ? ` and ${f.files.length - 1} more` : ""}</div>`; go_.disabled = false; } };
+    bg.querySelector("[data-a=c]").onclick = closeModal;
+    go_.onclick = () => { closeModal(); toast("Fine-tune queued. In this demo nothing is uploaded."); };
+  });
+}
+
+/* ---------- Fine-tuning: the funnel from thousands of candidates to one chip ---------- */
+function buildFunnel(T, host) {
+  const r = curRun, U = UC[r.uc], N = MACH[r.mach].n, VN = Math.min(N, 2048), RMAX = 3.3;
+  const scene = new T.Scene(), cam = new T.PerspectiveCamera(33, 1, .1, 100);
+  cam.position.set(0, 7.0, 11.4); cam.lookAt(0, -.15, 0);
+  studio(T, scene, { floorY: -2.62, size: 7, key: [3, 11, 6], shadow: .14 });
+  const root = new T.Group(); scene.add(root);
+  const glass = new T.Mesh(new T.LatheGeometry(spline(T, [[0.62, -1.95], [0.68, -1.4], [0.96, -0.72], [1.55, 0.0], [2.55, 0.92], [3.7, 1.86]], 70), 128),
+    new T.MeshPhysicalMaterial({ color: 0xdce6f7, roughness: .06, transparent: true, opacity: .2, side: T.DoubleSide, depthWrite: false, clearcoat: 1 }));
+  root.add(glass);
+  const steel = new T.MeshStandardMaterial({ color: 0xc9ced6, metalness: 1, roughness: .25 });
+  [[3.7, 1.86, .035], [1.55, 0, .03], [0.62, -1.95, .03]].forEach(([rr, yy, tt]) => { const t = new T.Mesh(new T.TorusGeometry(rr, tt, 12, 160), steel); t.rotation.x = Math.PI / 2; t.position.y = yy; root.add(t); });
+  const deck = new T.Mesh(new T.CylinderGeometry(3.62, 3.62, .06, 128), new T.MeshPhysicalMaterial({ color: 0x252a35, roughness: .45, clearcoat: .8, clearcoatRoughness: .25 })); deck.position.y = 1.86; deck.receiveShadow = true; root.add(deck);
+  const plat = new T.Mesh(new T.CylinderGeometry(1.5, 1.5, .05, 96), new T.MeshPhysicalMaterial({ color: 0x252a35, roughness: .45, clearcoat: .8, clearcoatRoughness: .25 })); plat.receiveShadow = true; root.add(plat);
+  const gateM = new T.MeshStandardMaterial({ color: 0x059669, emissive: 0x10b981, emissiveIntensity: .5, metalness: .4, roughness: .3 });
+  const gate = new T.Mesh(new T.TorusGeometry(.82, .07, 20, 96), gateM); gate.rotation.x = Math.PI / 2; gate.position.y = -.95; root.add(gate);
+  const ped = new T.Mesh(new T.CylinderGeometry(.62, .72, .3, 64), new T.MeshPhysicalMaterial({ color: 0xffffff, roughness: .25, clearcoat: 1 })); ped.position.y = -2.47; ped.castShadow = true; ped.receiveShadow = true; root.add(ped);
+  const glow = new T.Mesh(new T.TorusGeometry(.64, .02, 8, 96), new T.MeshStandardMaterial({ color: 0xfdba74, emissive: 0xf97316, emissiveIntensity: 1.6 })); glow.rotation.x = Math.PI / 2; glow.position.y = -2.31; root.add(glow);
+  // candidate field
+  const field = new T.InstancedMesh(new T.BoxGeometry(1, 1, 1), new T.MeshStandardMaterial({ color: 0xffffff, roughness: .45, metalness: .05 }), VN);
+  field.instanceMatrix.setUsage(T.DynamicDrawUsage); field.castShadow = true; root.add(field);
+  const FX = new Float32Array(VN), FZ = new Float32Array(VN), FR = new Float32Array(VN), NX = new Float32Array(VN);
+  for (let i = 0; i < VN; i++) { const rad = RMAX * Math.sqrt((i + .5) / VN), a = i * 2.39996323; FX[i] = Math.cos(a) * rad; FZ[i] = Math.sin(a) * rad; FR[i] = rad / RMAX; NX[i] = (FX[i] + RMAX) / (2 * RMAX); }
+  const surv = new T.InstancedMesh(new T.BoxGeometry(1, 1, 1), new T.MeshPhysicalMaterial({ color: 0xffffff, roughness: .35, metalness: .15, clearcoat: .6 }), 40);
+  surv.instanceMatrix.setUsage(T.DynamicDrawUsage); surv.castShadow = true; root.add(surv);
+  const C = { idle: new T.Color(0x6b7385), lo: new T.Color(0x3f63b8), hi: new T.Color(0x9cc6ff), crest: new T.Color(0xeaf2ff), kept: new T.Color(0xf59e0b), chip: new T.Color(0x2a2e37), ok: new T.Color(0x10b981), bad: new T.Color(0xef4444) };
+  const tmpC = new T.Color(), mtx = new T.Matrix4(), q = new T.Quaternion(), pos = new T.Vector3(), scl = new T.Vector3();
+  for (let i = 0; i < VN; i++) field.setColorAt(i, C.idle); for (let j = 0; j < 40; j++) surv.setColorAt(j, C.kept);
+  const RD = [];
+  const rd = k => { if (RD[k]) return RD[k]; const R = rng(hashStr(r.id + "f" + k)), sc = new Float32Array(VN); for (let i = 0; i < VN; i++) sc[i] = R(); const idx = Array.from({ length: VN }, (_, i) => i).sort((a, b) => sc[b] - sc[a]).slice(0, 40); const isS = new Int16Array(VN).fill(-1); idx.forEach((i, j) => isS[i] = j); const res = result(r, k); const a = idx.map((_, j) => j).sort(() => R() - .5); const fail = a.map(v => v < 2 || (v > 2 && R() < .18)); RD[k] = { sc, idx, isS, gates: res.gates, a, fail }; return RD[k]; };
+  const sizeF = g => .45 + .55 * Math.sqrt(Math.min(1, g / 4600));
+  const slotB = j => { const rad = 1.25 * Math.sqrt((j + .5) / 40), an = j * 2.39996323; return [Math.cos(an) * rad, Math.sin(an) * rad]; };
+  // winners: one mini chip per round
+  const winners = []; for (let k = 0; k < r.rounds; k++) { const m = miniChip(T); m.visible = false; m.traverse(o => { if (o.isMesh) o.castShadow = true; }); root.add(m); winners.push(m); }
+  // replay
+  const RP = { on: false, t0: 0, from: 20, to: 0 };
+  const startReplay = () => { RP.on = true; RP.t0 = performance.now(); RP.from = 20; RP.to = elapsed(r); if (RP.to <= 20) RP.on = false; };
+  if (isDone(r)) startReplay();
+  const playhead = () => { if (!RP.on) return elapsed(r); const p = RP.from + (performance.now() - RP.t0) / 1000 * 5; if (p >= RP.to) { RP.on = false; return elapsed(r); } return p; };
+  host.insertAdjacentHTML("beforeend", `<div class="hud" id="fhud"></div><div class="strip" id="fstrip"></div><div class="corner"><button class="ghostbtn" id="replay">${ic("replay")}Replay</button></div>`);
+  host.querySelector("#replay").onclick = startReplay;
+  const dr = dragTurn(host, { yaw: 0, pmin: -.15, pmax: .2 });
+  const LB = labeler(host), W = (x, y, z) => v => root.localToWorld(v.set(x, y, z));
+  const L = {
+    a: LB.add("", W(2.7, 1.95, -1.2), { dx: 60, dy: -60 }),
+    b: LB.add("", W(1.45, .05, .3), { dx: 130, dy: -10 }),
+    g: LB.add(`<b>Clinical line check</b><span>On unseen ${U.people}. Green passes, red is out.</span>`, W(.85, -.95, 0), { dx: 160, dy: 20 }),
+    w: LB.add("", W(0, -2.2, .4), { dx: 150, dy: 30, cls: "hot" }),
+  };
+  let lastHud = "";
+  function hudFor(p) {
+    const k = p < 20 ? -1 : Math.min(r.rounds - 1, Math.floor((p - 20) / 48)), u = k < 0 ? 0 : p - (20 + 48 * k), done = p >= 20 + 48 * r.rounds;
+    const ph = k < 0 ? 0 : done || u >= 47 ? 3 : u >= 28 ? 2 : 1;
+    const title = k < 0 ? "Getting ready" : done ? `Finished: ${r.rounds} rounds` : `Round ${k + 1} of ${r.rounds}`;
+    const sub = k < 0 ? "Candidates appear when round 1 starts." : done ? "The last round's winner is the chip." : u < 6 ? "Designing this round's candidates" : u < 28 ? `Fine-tuning: ${nf(N * clamp((u - 6) / 22, 0, 1))} of ${nf(N)} trained` : u < 38 ? "Building the 40 best as logic gates" : u < 47 ? "Clinical line check" : "This round's winner";
+    const h = `<b>${title}${RP.on ? ", replay" : ""}</b><span>${sub}</span><div class="flow3"><em class="${ph === 1 ? "on" : ""}">${nf(N)} tried</em><i></i><em class="${ph === 2 ? "on" : ""}">40 kept</em><i></i><em class="${ph === 3 ? "on" : ""}">1 best</em></div>`;
+    if (h !== lastHud) { lastHud = h; host.querySelector("#fhud").innerHTML = h; }
+    const ws = []; for (let j = 0; j < r.rounds; j++) if (p >= 67 + 48 * j) ws.push(j);
+    const sh = ws.length ? `<span class="sl">Winner of each round</span>` + ws.map((j, i) => { const g = result(r, j).gates, px = Math.round(8 + 10 * sizeF(g)); return `<span class="w ${i === ws.length - 1 ? "fin" : ""}"><i style="width:${px}px;height:${px}px"></i>Round ${j + 1}: ${nf(g)} gates</span>`; }).join("") : "";
+    const fs = host.querySelector("#fstrip"); if (fs.dataset.h !== sh) { fs.dataset.h = sh; fs.innerHTML = sh; }
+    const cur = k >= 0 ? rd(k) : null;
+    LB.set(L.a, `<b>${nf(N)} candidate models</b><span>${VN < N ? `Each square stands for ${Math.round(N / VN)} models. ` : ""}The blue wave is the fine-tuning batch.</span>`);
+    LB.set(L.b, `<b>40 kept, built as logic gates</b><span>${cur ? `Smallest ${nf(cur.gates * .88)} gates` : "Waiting for round 1"}</span>`);
+    const best = ws.length ? result(r, ws[ws.length - 1]) : null;
+    LB.set(L.w, best ? `<b>Best chip: ${nf(best.gates)} gates</b><span>Smallest chip that passes the check</span>` : `<b>Best chip</b><span>Lands here after round 1's check</span>`);
+  }
+  function draw(p, time) {
+    const done = p >= 20 + 48 * r.rounds;
+    let k = p < 20 ? -1 : Math.min(r.rounds - 1, Math.floor((p - 20) / 48)), u = k < 0 ? 0 : p - (20 + 48 * k);
+    if (done) { k = r.rounds - 1; u = 48; }
+    const D = k >= 0 ? rd(k) : null, sf = D ? sizeF(D.gates) : 1, ts = .125 * (.62 + .38 * sf) * Math.min(1.6, Math.sqrt(2048 / VN)), th = .05;
+    const tf = clamp((u - 6) / 22, 0, 1), front = -.08 + tf * 1.3;
+    for (let i = 0; i < VN; i++) {
+      let s = 0, yy = 1.9 + th / 2, col = C.idle;
+      if (D && u < 28) {
+        const appear = u >= 7.2 ? 1 : clamp((u - 6 * FR[i]) / 1.2, 0, 1);
+        s = ease(appear);
+        const d = front - NX[i];
+        if (d > 0) {
+          const scv = D.sc[i]; tmpC.copy(C.lo).lerp(C.hi, Math.pow(scv, 1.6)); col = tmpC;
+          if (d < .09) { yy += Math.sin(d / .09 * Math.PI) * .28; tmpC.lerp(C.crest, Math.sin(d / .09 * Math.PI)); }
+          if (D.isS[i] >= 0) { if (d > .1) col = C.kept; }
+          else { const fade = clamp((d - .12) / .1, 0, 1); s *= 1 - fade; yy -= fade * .2; }
+        }
+      }
+      pos.set(FX[i], yy, FZ[i]); scl.set(ts * s + 1e-4, th * s + 1e-4, ts * s + 1e-4); q.identity(); mtx.compose(pos, q, scl); field.setMatrixAt(i, mtx); field.setColorAt(i, col);
+    }
+    field.instanceMatrix.needsUpdate = true; field.instanceColor.needsUpdate = true;
+    for (let j = 0; j < 40; j++) {
+      let s = 0, col = C.kept; pos.set(0, -10, 0);
+      if (D && u >= 28 && u < 48) {
+        const i = D.idx[j], a = D.a[j], gj = D.gates * (1 + (a - 2) * .07), cs = .1 + .2 * Math.sqrt(Math.min(1, gj / 6000));
+        const [bx, bz] = slotB(j), A = new T.Vector3(FX[i], 1.93, FZ[i]), B = new T.Vector3(bx, .06 + cs * .25, bz);
+        const t1 = ease(clamp((u - 28 - j * .05) / 3, 0, 1));
+        if (t1 < 1) { const mid = A.clone().lerp(B, .5); mid.y += .8; pos.copy(A).lerp(mid, t1).lerp(mid.clone().lerp(B, t1), t1); s = ts + (cs - ts) * t1; tmpC.copy(C.kept).lerp(C.chip, t1); col = tmpC; }
+        else {
+          pos.copy(B); s = cs; col = C.chip;
+          const order = 39 - a, vs = 38 + order * (8 / 40), tt = (u - vs) / .9;
+          if (u >= 38 && tt > 0) {
+            const G = new T.Vector3(0, -.95, 0);
+            if (tt < .5) { pos.copy(B).lerp(G, ease(tt / .5)); }
+            else if (a === 2) { const t2 = ease(clamp((tt - .5) / .6, 0, 1)); pos.copy(G).lerp(new T.Vector3(0, -2.2, 0), t2); col = C.ok; s = cs; if (t2 >= 1) s = 0; }
+            else if (D.fail[j]) { const t2 = clamp((tt - .5) / .6, 0, 1), dir = new T.Vector3(bx, 0, bz).normalize().multiplyScalar(1.4); pos.copy(G).addScaledVector(dir, t2); pos.y -= t2 * .5; col = C.bad; s = cs * (1 - t2); }
+            else { const t2 = clamp((tt - .5) / .6, 0, 1); pos.copy(G); pos.y -= t2 * .9; col = C.ok; s = cs * (1 - t2); }
+          }
+        }
+      }
+      scl.set(s + 1e-4, s * .32 + 1e-4, s + 1e-4); q.identity(); mtx.compose(pos, q, scl); surv.setMatrixAt(j, mtx); surv.setColorAt(j, col);
+    }
+    surv.instanceMatrix.needsUpdate = true; surv.instanceColor.needsUpdate = true;
+    // winners: last finished round on the pedestal, earlier ones on the shelf to the left
+    const fin = []; for (let j = 0; j < r.rounds; j++) if (p >= 20 + 48 * j + 47.2) fin.push(j);
+    const sp = Math.min(.95, 3.0 / Math.max(1, r.rounds - 1));
+    winners.forEach((m, j) => {
+      const i = fin.indexOf(j); if (i < 0) { m.visible = false; return; }
+      m.visible = true; const g = result(r, j).gates, sc = .8 * sizeF(g);
+      if (i === fin.length - 1) { m.position.set(0, -2.32 + .1 * sc + Math.sin(time * 1.6) * .03, 0); m.scale.setScalar(sc * 1.15); m.rotation.y = time * .5; }
+      else { const n = fin.length - 1 - i; m.position.set(-1.35 - (n - 1) * sp - .1, -2.62 + .1 * sc * .75, .9); m.scale.setScalar(sc * .75); m.rotation.y = .4; }
+    });
+    glow.material.emissiveIntensity = fin.length ? 1.2 + .6 * Math.sin(time * 3) : .2;
+    gateM.emissiveIntensity = k >= 0 && u >= 38 && u < 48 ? .9 + .5 * Math.sin(time * 8) : .35;
+  }
+  let lastP = -1;
+  return {
+    scene, camera: cam, envI: .9,
+    sync() { hudFor(playhead()); },
+    update(time, dt) {
+      dr.step(dt); root.rotation.y = dr.yaw + (dr.idle() ? Math.sin(time * .15) * .12 : 0); root.rotation.x = dr.pitch * .4;
+      const p = playhead(); draw(p, time); if (Math.abs(p - lastP) > .2) { lastP = p; hudFor(p); }
+    },
+    after() { if (this.W) LB.place(cam, this.W, this.H); },
+    dispose() { dr.off(); },
+  };
+}
+
+/* ---------- Sensors: on the head, the reading ones pulse ---------- */
+const E10 = { Fp1: [-.31, -.95], Fp2: [.31, -.95], F7: [-.81, -.59], F3: [-.4, -.52], Fz: [0, -.47], F4: [.4, -.52], F8: [.81, -.59], T3: [-.98, 0], C3: [-.5, 0], Cz: [0, 0], C4: [.5, 0], T4: [.98, 0], T5: [-.81, .59], P3: [-.4, .52], Pz: [0, .47], P4: [.4, .52], T6: [.81, .59], O1: [-.31, .95], O2: [.31, .95] };
+function buildSensors(T, host) {
+  const r = curRun, U = UC[r.uc], nb = r.uc === "nirs";
+  const scene = new T.Scene(), cam = new T.PerspectiveCamera(30, 1, .05, 80);
+  const M = mannequin(T, nb ? "nb" : "ad", nb ? { transparent: true, opacity: .34, depthWrite: false, roughness: .4 } : null);
+  studio(T, scene, { floorY: M.pr.floor, size: 5, key: [3, 9, 7] });
+  const root = new T.Group(); root.add(M.g); scene.add(root);
+  const LB = labeler(host), P3 = new T.Vector3(), Yv = new T.Vector3(0, 1, 0), lit = [];
+  const dr = dragTurn(host, { yaw: nb ? .25 : 0, pmin: -.2, pmax: .25 });
+  let L = {}, dim = [], upd;
+  if (!nb) {
+    cam.position.set(0, 3.7, 5.0); cam.lookAt(0, .2, 0);
+    const pos = {}, nrm = {};
+    Object.entries(E10).forEach(([k, [ex, ey]]) => { const rr = Math.hypot(ex, ey), th = rr * Math.PI / 2 * .93, ph = Math.atan2(-ex, -ey); const d = new T.Vector3(Math.sin(th) * Math.sin(ph), Math.cos(th), Math.sin(th) * Math.cos(ph)); const h = M.surf(d, .3); pos[k] = h.p; nrm[k] = h.n; });
+    const elM = (on) => new T.MeshStandardMaterial({ color: on ? 0x2563eb : 0x8a909c, emissive: on ? 0x3b82f6 : 0x000000, emissiveIntensity: on ? 1 : 0, metalness: on ? .3 : .8, roughness: .3 });
+    const els = {};
+    Object.keys(E10).forEach(k => { const g = new T.Group(); g.position.copy(pos[k]); g.quaternion.setFromUnitVectors(Yv, nrm[k]); const m = new T.Mesh(new T.CylinderGeometry(.075, .08, .035, 28), elM(false)); m.castShadow = true; g.add(m); M.g.add(g); els[k] = { g, m }; });
+    const tube = (a, b, mat) => { const pts = []; const da = pos[a].clone().sub(new T.Vector3(0, .3, 0)).normalize(), db = pos[b].clone().sub(new T.Vector3(0, .3, 0)).normalize(); for (let i = 0; i <= 16; i++) { const d = da.clone().lerp(db, i / 16).normalize(); const h = M.surf(d, .3); pts.push(h.p.addScaledVector(h.n, .025)); } const m = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts), 40, .018, 8), mat); M.g.add(m); return m; };
+    const pairs = UC.eeg.pairs, tubes = pairs.map(([a, b]) => tube(a, b, new T.MeshStandardMaterial({ color: 0x60a5fa, emissive: 0x3b82f6, emissiveIntensity: 1, transparent: true, opacity: .85 })));
+    const mid = (a, b) => v => root.localToWorld(v.copy(pos[a]).add(pos[b]).multiplyScalar(.5));
+    L.s1 = LB.add("", mid("F7", "T3"), { dx: 90, dy: -40, cls: "s1" });
+    L.s2 = LB.add("", mid("F8", "T4"), { dx: -90, dy: -40, cls: "s2" });
+    L.x = LB.add("", mid("Fp1", "F3"), { dx: 60, dy: -110 });
+    upd = (time, b) => {
+      const used = b ? b.used : 4, pulse = .5 + .5 * Math.sin(time * 5.5);
+      const on = new Set(pairs.slice(0, used).flat());
+      Object.entries(els).forEach(([k, e]) => { const o = on.has(k); e.m.material.color.setHex(o ? 0x2563eb : 0x8a909c); e.m.material.emissive.setHex(o ? 0x3b82f6 : 0); e.m.material.emissiveIntensity = o ? (b ? .8 + 2.4 * pulse : .5) : 0; e.g.scale.setScalar(o && b ? 1 + .12 * pulse : 1); });
+      tubes.forEach((t, i) => { t.visible = i < used; t.material.emissiveIntensity = .6 + 1.4 * pulse; });
+      L.x.on = used > 2;
+    };
+    host._sensSync = b => {
+      const s = U.sensors;
+      LB.set(L.s1, `<b>${s[0].n}: ${s[0].what}</b><span>${s[0].where}${b ? "" : ". Being tried"}</span>`);
+      LB.set(L.s2, `<b>${s[1].n}: ${s[1].what}</b><span>${s[1].where}${b ? "" : ". Being tried"}</span>`);
+      const used = b ? b.used : 4; LB.set(L.x, `<b>${used - 2} more pair${used - 2 > 1 ? "s" : ""} being tried</b><span>Fp1 to F3${used > 3 ? ", Fp2 to F4" : ""}. Later rounds drop ${used - 2 > 1 ? "them" : "it"}.</span>`);
+    };
+  } else {
+    cam.position.set(-1.1, 1.25, 3.3); cam.lookAt(-.2, .4, .5);
+    const brain = new T.Mesh(new T.SphereGeometry(1, 48, 32), new T.MeshPhysicalMaterial({ color: 0xf2b6c3, roughness: .6, sheen: .6, sheenColor: new T.Color(0xffe4ea), transparent: true, opacity: .42, depthWrite: false }));
+    brain.scale.set(.64, .6, .74); brain.position.set(0, .42, -.04); M.g.add(brain);
+    const y = .5, at = phi => { const d = new T.Vector3(Math.sin(phi), 0, Math.cos(phi)); return M.surf(d, y); };
+    const srcH = at(-.44), src = new T.Mesh(new T.CylinderGeometry(.045, .045, .03, 24), new T.MeshStandardMaterial({ color: 0xef4444, emissive: 0xff3b30, emissiveIntensity: 2.5 })); src.position.copy(srcH.p); src.quaternion.setFromUnitVectors(Yv, srcH.n); M.g.add(src);
+    const pad = new T.Mesh(bandGeo(T, 1.0, 1.03, .62, .26), new T.MeshPhysicalMaterial({ color: 0xffffff, roughness: .5, transparent: true, opacity: .55, depthWrite: false }));
+    const zf = M.surf(new T.Vector3(0, 0, 1), y).p.z, xs = M.surf(new T.Vector3(1, 0, 0), y).p.x; pad.scale.set(xs * 1.01, 1, zf * 1.01); pad.position.y = y - .13; M.g.add(pad);
+    const dets = [1, 2, 3, 4].map(k => { const h = at(-.44 + k * .105), g = new T.Group(); g.position.copy(h.p); g.quaternion.setFromUnitVectors(Yv, h.n); const m = new T.Mesh(new RBox(.075, .035, .075, 2, .012), new T.MeshStandardMaterial({ color: 0x7c3aed, emissive: 0x8b5cf6, emissiveIntensity: 1, roughness: .2 })); m.castShadow = true; g.add(m); M.g.add(g); return { g, m, h, k }; });
+    const paths = dets.map(d => { const p0 = srcH.p, p2 = d.h.p, midp = p0.clone().lerp(p2, .5), inward = srcH.n.clone().add(d.h.n).normalize().negate(); const depth = .1 + d.k * .11; const p1 = midp.clone().addScaledVector(inward, depth * 2); const curve = new T.QuadraticBezierCurve3(p0.clone(), p1, p2.clone()); const m = new T.Mesh(new T.TubeGeometry(curve, 48, .022, 10), new T.MeshStandardMaterial({ color: 0xff8a6a, emissive: 0xff4a1f, emissiveIntensity: 1.6, transparent: true, opacity: .9, depthTest: false })); m.renderOrder = 2; M.g.add(m); const ph = new T.Mesh(new T.SphereGeometry(.03, 12, 10), new T.MeshStandardMaterial({ color: 0xffffff, emissive: 0xff6b4a, emissiveIntensity: 3 })); ph.renderOrder = 3; ph.material.depthTest = false; M.g.add(ph); return { m, ph, curve, d }; });
+    M.head.renderOrder = 4; M.torso.renderOrder = 4;
+    const LP = v => root.localToWorld(v.copy(srcH.p));
+    L.src = LB.add(`<b>Light source</b><span>Near-infrared light into the forehead</span>`, LP, { dx: -70, dy: -70 });
+    L.s1 = LB.add("", v => root.localToWorld(v.copy(dets[0].h.p)), { dx: -60, dy: 80, cls: "s1" });
+    L.s2 = LB.add("", v => root.localToWorld(v.copy(dets[2].h.p)), { dx: 70, dy: -70, cls: "s2" });
+    L.brain = LB.add(`<b>Brain</b><span>Only light that travels far gets this deep</span>`, v => root.localToWorld(v.set(.2, .25, .5)), { dx: 90, dy: 60 });
+    upd = (time, b) => {
+      const used = b ? b.used : 4, idx = used >= 4 ? [0, 1, 2, 3] : used === 3 ? [0, 1, 2] : [0, 2], pulse = .5 + .5 * Math.sin(time * 5.5);
+      dets.forEach((d, i) => { const o = idx.includes(i); d.m.material.color.setHex(o ? 0x7c3aed : 0x9aa0ab); d.m.material.emissiveIntensity = o ? (b ? .8 + 2.4 * pulse : .6) : 0; d.g.scale.setScalar(o && b ? 1 + .15 * pulse : 1); });
+      paths.forEach((p, i) => { const o = idx.includes(i); p.m.visible = o; p.ph.visible = o; if (o) p.ph.position.copy(p.curve.getPoint((time * .5 + i * .21) % 1)); });
+    };
+    host._sensSync = b => {
+      const s = U.sensors;
+      LB.set(L.s1, `<b>${s[0].n}: ${s[0].what}</b><span>${s[0].where}</span>`);
+      LB.set(L.s2, `<b>${s[1].n}: ${s[1].what}</b><span>${s[1].where}</span>`);
+    };
+  }
+  return {
+    scene, camera: cam, envI: .9,
+    sync() { const b = bestAt(r, elapsed(r)); host._sensSync(b); },
+    update(time, dt) { dr.step(dt); root.rotation.y = dr.yaw + (dr.idle() ? Math.sin(time * .3) * .2 : 0); root.rotation.x = dr.pitch * .3; upd(time, bestAt(r, elapsed(r))); },
+    after() { if (this.W) LB.place(cam, this.W, this.H); },
+    dispose() { dr.off(); },
+  };
+}
+const BUILD = { device: buildDevice, chip: buildChip, finetune: buildFunnel, sensors: buildSensors };
+
+/* ---------- Signal: always streaming, also on finished runs ---------- */
+function noise(x) { const i = Math.floor(x), f = x - i, h = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }; const u = f * f * (3 - 2 * f); return (h(i) * (1 - u) + h(i + 1) * u) * 2 - 1; }
+function eegEnv(s) { const m = mod(s, 40); return m > 22 && m < 34 ? Math.min(1, (m - 22) / 2.5) * Math.min(1, (34 - m) / 1.5) : 0; }
+function eegV(ch, s) {
+  const ph = [1.1, 2.3, 0.4, 3.1][ch];
+  let v = 6 * Math.sin(2 * Math.PI * 1.3 * s + ph) + 3 * Math.sin(2 * Math.PI * 10 * s + ph * 2) + 2.5 * Math.sin(2 * Math.PI * 4.7 * s + ph * 3) + noise(s * 55 + ch * 97) * 5 + noise(s * 9 + ch * 31) * 4;
+  const e = eegEnv(s); if (e > 0) { const p = mod(s * 3, 1), st = [1, .9, .45, .4][ch]; v += e * st * (p < .12 ? -26 * Math.sin(p / .12 * Math.PI) : 10 * Math.sin((p - .12) / .88 * Math.PI)); }
+  return v;
+}
+function oxyV(s) { const m = mod(s, 50); const dip = m > 24 && m < 42 ? Math.pow(Math.sin(Math.PI * (m - 24) / 18), 2) : 0; return 68 + 2.4 * Math.sin(s / 7) + noise(s * 3) * .9 - 18 * dip; }
+function mountSignal(host) {
+  stop3D();
+  const r = curRun, U = UC[r.uc];
+  const cv = document.createElement("canvas"); cv.className = "sig"; cv.setAttribute("role", "img"); cv.setAttribute("aria-label", r.uc === "eeg" ? "Streaming brainwave channels with seizure marks and the chip's answers" : "Streaming light and brain-oxygen readings with alarm marks and the chip's alarms"); host.appendChild(cv);
+  const ctx = cv.getContext("2d"); let W = 0, H = 0, dpr = 1;
+  const size = () => { dpr = Math.min(2, devicePixelRatio || 1); W = host.clientWidth; H = host.clientHeight; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); };
+  size(); const ro = new ResizeObserver(size); ro.observe(host);
+  const text = (t, x, y, o = {}) => { ctx.font = `${o.w || 400} ${o.s || 12.5}px Inter, -apple-system, "Segoe UI", Roboto, Arial, sans-serif`; ctx.fillStyle = o.c || "#40404f"; ctx.textAlign = o.a || "left"; ctx.textBaseline = "middle"; ctx.fillText(t, x, y); };
+  const rr = (x, y, w, h, rad, fill, stroke, dash) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, rad); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.setLineDash(dash || []); ctx.strokeStyle = stroke; ctx.lineWidth = 1.4; ctx.stroke(); ctx.setLineDash([]); } };
+  const st = {
+    scene: null, camera: null,
+    update() {
+      if (!W || !H) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+      const narrow = W < 600, x0 = narrow ? 92 : 170, x1 = W - (narrow ? 12 : 200), now_ = dclock(), b = bestAt(r, elapsed(r));
+      const win = r.uc === "eeg" ? 20 : 40, pps = (x1 - x0) / win, sAt = x => now_ - (x1 - x) / pps;
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, W, H);
+      const top = 64, laneH = 30, bottomPad = 80;
+      const sx = s => x1 - (now_ - s) * pps;
+      text(r.data.mode === "public" ? `Unseen ${U.person} from Siena, playing back` : `Unseen ${U.person} from the held-out set, playing back`, x0, 28, { w: 600, s: 13.5, c: "#1a1a2e" });
+      text(r.uc === "eeg" ? "Last 20 seconds" : "Last 10 minutes", x1, 28, { a: "right", c: "#4d4d5d" });
+      const evs = []; { const P = PER[r.uc], [a, e] = EVW[r.uc]; let base = Math.floor((now_ - win) / P) * P; for (; base < now_ + P; base += P) evs.push([base + a, base + e]); }
+      let rows;
+      if (r.uc === "eeg") {
+        const used = b ? b.used : 4, pairs = UC.eeg.pairs, avail = H - top - bottomPad - laneH * 2 - 24, rh = avail / 4;
+        evs.forEach(([a, e]) => { const xa = Math.max(x0, sx(a)), xe = Math.min(x1, sx(e)); if (xe > xa) { ctx.fillStyle = "#fef2f2"; ctx.fillRect(xa, top - 10, xe - xa, rh * 4 + 10); } });
+        pairs.forEach((pr, ci) => {
+          const y0 = top + rh * ci + rh / 2, on = ci < used, isS = ci < 2;
+          text(isS ? `${U.sensors[ci].n}` : `Pair ${ci + 1}`, 16, y0 - 8, { w: 600, c: on ? "#1a1a2e" : "#4d4d5d", s: narrow ? 11.5 : 12.5 });
+          text(`${pr[0]} to ${pr[1]}${on ? "" : ", not used"}`, 16, y0 + 9, { c: "#4d4d5d", s: narrow ? 10.5 : 11.5 });
+          ctx.beginPath(); ctx.lineWidth = on ? 1.3 : 1; ctx.strokeStyle = on ? (isS ? "#1d4ed8" : "#3b82f6") : "#c2c7d0";
+          for (let x = x0; x <= x1; x += 1.5) { const v = eegV(ci, sAt(x)); const y = y0 + v * (rh / 90); x === x0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+          ctx.stroke();
+          if (on && !narrow) { ctx.beginPath(); ctx.arc(x1 + 10, y0, 4.5, 0, Math.PI * 2); ctx.fillStyle = `rgba(37,99,235,${.45 + .55 * Math.abs(Math.sin(now_ * 5 + ci))})`; ctx.fill(); }
+        });
+        rows = top + rh * 4 + 14;
+      } else {
+        const avail = H - top - bottomPad - laneH * 2 - 24, rh1 = avail * .22, rh2 = avail * .56;
+        evs.forEach(([a, e]) => { const xa = Math.max(x0, sx(a)), xe = Math.min(x1, sx(e)); if (xe > xa) { ctx.fillStyle = "#fef2f2"; ctx.fillRect(xa, top - 10, xe - xa, rh1 * 2 + rh2 + 10); } });
+        const lanes = [{ n: "Sensor 1", d: "Near detector, light", f: s => 1 + .05 * Math.sin(2 * Math.PI * 1.6 * s) + .02 * noise(s * 8) }, { n: "Sensor 2", d: "Far detector, light", f: s => .6 + .03 * Math.sin(2 * Math.PI * 1.6 * s + .4) + .02 * noise(s * 8 + 9) - (68 - oxyV(s)) * .006 }];
+        lanes.forEach((ln, i) => { const y0 = top + rh1 * i + rh1 / 2; text(ln.n, 16, y0 - 8, { w: 600, c: "#1a1a2e", s: narrow ? 11.5 : 12.5 }); text(ln.d, 16, y0 + 9, { c: "#4d4d5d", s: narrow ? 10.5 : 11.5 }); ctx.beginPath(); ctx.strokeStyle = "#6d28d9"; ctx.lineWidth = 1.2; for (let x = x0; x <= x1; x += 1.5) { const v = ln.f(sAt(x)), y = y0 - (v - (i ? .6 : 1)) * rh1 * 3.5; x === x0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); } ctx.stroke(); });
+        const oy0 = top + rh1 * 2 + 6, oy = v => oy0 + rh2 - (v - 44) / 30 * rh2;
+        text("Brain oxygen", 16, oy0 + rh2 / 2 - 8, { w: 600, c: "#1a1a2e", s: narrow ? 11.5 : 12.5 }); text("from both detectors", 16, oy0 + rh2 / 2 + 9, { c: "#4d4d5d", s: narrow ? 10.5 : 11.5 });
+        [50, 60, 70].forEach(v => { ctx.strokeStyle = "#eceef2"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x0, oy(v)); ctx.lineTo(x1, oy(v)); ctx.stroke(); text(v + "%", x0 - 8, oy(v), { a: "right", c: "#4d4d5d", s: 11.5 }); });
+        ctx.setLineDash([6, 5]); ctx.strokeStyle = "#dc2626"; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(x0, oy(55)); ctx.lineTo(x1, oy(55)); ctx.stroke(); ctx.setLineDash([]);
+        text("Alarm line, 55%", x0 + 8, oy(55) + 12, { c: "#b91c1c", s: 12, w: 600 });
+        ctx.beginPath(); ctx.strokeStyle = "#6d28d9"; ctx.lineWidth = 2; for (let x = x0; x <= x1; x += 1.5) { const y = oy(oxyV(sAt(x))); x === x0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); } ctx.stroke();
+        if (!narrow) { const v = oxyV(now_); text(`${Math.round(v)}%`, x1 + 12, oy(v), { w: 700, s: 15, c: v < 55 ? "#b91c1c" : "#1a1a2e" }); }
+        rows = oy0 + rh2 + 18;
+      }
+      // marks: doctor and chip
+      const dy = rows, cy = rows + laneH + 8;
+      text("Doctor's mark", 16, dy + laneH / 2, { w: 600, c: "#1a1a2e", s: narrow ? 11.5 : 12.5 });
+      text("Chip's answer", 16, cy + laneH / 2, { w: 600, c: "#1a1a2e", s: narrow ? 11.5 : 12.5 });
+      rr(x0, dy, x1 - x0, laneH, 6, "#f6f7f9"); rr(x0, cy, x1 - x0, laneH, 6, "#f6f7f9");
+      evs.forEach(([a, e]) => { const xa = Math.max(x0, sx(a)), xe = Math.min(x1, sx(e)); if (xe > xa) rr(xa, dy + 3, xe - xa, laneH - 6, 4, "#dc2626"); });
+      if (b) {
+        const w0 = Math.floor((now_ - win) / 2) * 2;
+        for (let w = w0; w <= now_; w += 2) { const xa = Math.max(x0, sx(w)), xe = Math.min(x1, sx(Math.min(w + 2, now_))); if (xe - xa < 1) continue; const f = chipFlag(r.uc, b, w), tr = truthAt(r.uc, w + 1);
+          if (f && tr) rr(xa + 1, cy + 3, xe - xa - 2, laneH - 6, 4, "#1d4ed8"); else if (f) rr(xa + 1, cy + 3, xe - xa - 2, laneH - 6, 4, "#d97706"); else if (tr) rr(xa + 1.5, cy + 4.5, xe - xa - 3, laneH - 9, 4, null, "#1d4ed8", [3, 2]); }
+      } else text("No chip yet: answers appear once round 1's chip is checked.", (x0 + x1) / 2, cy + laneH / 2, { a: "center", c: "#40404f" });
+      ctx.strokeStyle = "#1a1a2e"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x1, top - 12); ctx.lineTo(x1, cy + laneH + 4); ctx.stroke();
+      if (!narrow) {
+        const f = b && chipFlag(r.uc, b, now_), yb = cy - 4;
+        rr(x1 + 14, yb, 170, 40, 10, b ? (f ? "#fef2f2" : "#ecfdf5") : "#f3f3f6", b ? (f ? "#fca5a5" : "#a7f3d0") : "#d4d4dc");
+        text(b ? (f ? (r.uc === "eeg" ? "Seizure flagged" : "Alarm raised") : (r.uc === "eeg" ? "No seizure" : "No alarm")) : "Waiting for a chip", x1 + 28, yb + 20, { w: 700, s: 13.5, c: b ? (f ? "#991b1b" : "#047857") : "#40404f" });
+        text("Now", x1 + 14, top - 26, { c: "#4d4d5d", s: 12 });
+      }
+      const ly = cy + laneH + 30;
+      if (b) {
+        let lx = x0; const item = (draw, label) => { draw(lx, ly - 6); text(label, lx + 22, ly, { c: "#40404f", s: 12 }); ctx.font = "400 12px Inter, Arial, sans-serif"; lx += 22 + ctx.measureText(label).width + 22; };
+        item((x, y) => rr(x, y, 14, 12, 3, "#dc2626"), "Doctor's mark");
+        item((x, y) => rr(x, y, 14, 12, 3, "#1d4ed8"), "Caught");
+        item((x, y) => rr(x, y, 14, 12, 3, null, "#1d4ed8", [3, 2]), "Missed");
+        item((x, y) => rr(x, y, 14, 12, 3, "#d97706"), "False alarm");
+        if (!narrow) text(`Each block is one ${r.uc === "eeg" ? "two-second" : "ten-second"} decision.`, lx, ly, { c: "#4d4d5d", s: 12 });
+      }
+    },
+    dispose() { ro.disconnect(); },
+  };
+  startLoop(host, st, null);
+}
+
+/* ================= Settings ================= */
+function sel(name, opts, val) { return `<select class="sel" name="${name}">${opts.map(([v, l]) => `<option value="${v}" ${String(val) === String(v) ? "selected" : ""}>${l}</option>`).join("")}</select>`; }
+const CFG_TABS = [["line", "Clinical line"], ["chip", "Chip limits"], ["compute", "Machine"], ["scientists", "Scientists"], ["models", "Models"]];
+function renderSettings(V) {
+  const tab = CFG_TABS.find(t => t[0] === route.tab) ? route.tab : "line";
+  const body = {
+    line: ["Clinical line", "What a chip must reach before it counts. Applies to new runs.", [
+      ["Events caught", "Share of seizures or oxygen drops each unseen person's chip must catch.", sel("line", [["85", "85%"], ["90", "90%"], ["95", "95%"]], defaults.line)],
+      ["False alarms allowed", "Per day for brainwave devices, per hour for newborn devices.", sel("fa", [["1", "Fewer than 1"], ["2", "Fewer than 2"], ["4", "Fewer than 4"]], defaults.fa)]]],
+    chip: ["Chip limits", "The box the scientists must design inside.", [
+      ["Largest chip allowed", "Candidates above this are dropped before building.", sel("maxGates", [["1000", "1,000 gates"], ["5000", "5,000 gates"], ["20000", "20,000 gates"], ["0", "No limit"]], defaults.maxGates)],
+      ["Bits per weight", "Fewer bits make smaller chips but can cost accuracy.", sel("bits", [["2", "2 bits"], ["4", "4 bits"], ["8", "8 bits"]], defaults.bits)]]],
+    compute: ["Machine", "How many candidate models are fine-tuned at once.", [
+      ["Default machine", "Used for new runs unless you pick another on the start page.", sel("mach", Object.entries(MACH).filter(([, m]) => !m.off).map(([k, m]) => [k, m.name]), defaults.mach)],
+      ["Spend limit per run", "The run wraps up and reports when it reaches this.", sel("spendCap", [["10", "$10"], ["25", "$25"], ["100", "$100"]], defaults.spendCap)]]],
+    scientists: ["Scientists", "The AI scientists that work on each run.", Object.entries(SCIENTISTS).map(([k, s]) => [s.name, s.role, `<button class="sw" role="switch" aria-checked="${defaults.scientists[k]}" data-sci="${k}" aria-label="${s.name}"></button>`])],
+    models: ["Models", "Which model each scientist thinks with.", Object.entries(SCIENTISTS).map(([k, s]) => [s.name, k === "lead" || k === "check" ? "Needs careful reasoning." : "Runs often; a fast model is enough.", `<select class="sel" data-model="${k}" aria-label="${s.name} model">${["Large reasoning model", "Balanced model", "Fast model"].map(m => `<option ${defaults.models[k] === m ? "selected" : ""}>${m}</option>`).join("")}</select>`])],
+  }[tab];
+  V.innerHTML = `<div class="cfg"><nav class="cfg-rail"><h1>Settings</h1>${CFG_TABS.map(([k, l]) => `<button class="${k === tab ? "on" : ""}" data-t="${k}">${l}</button>`).join("")}</nav>
+    <div class="cfg-main"><h2>${body[0]}</h2><p>${body[1]}</p><div class="cfg-card">${body[2].map(([a, b, c]) => `<div class="crow"><div class="cl"><b>${a}</b><span>${b}</span></div>${c}</div>`).join("")}</div></div></div>`;
+  V.querySelectorAll("[data-t]").forEach(b => b.onclick = () => go("#/settings/" + b.dataset.t));
+  V.onchange = e => { const s = e.target; if (s.name) { defaults[s.name] = s.value; toast("Saved. New runs will use this."); } if (s.dataset.model) { defaults.models[s.dataset.model] = s.value; toast("Saved. New runs will use this."); } };
+  V.onclick = e => { const sw = e.target.closest("[data-sci]"); if (sw) { const k = sw.dataset.sci; if (k === "lead") { toast("The lead scientist is always on."); return; } defaults.scientists[k] = !defaults.scientists[k]; sw.setAttribute("aria-checked", defaults.scientists[k]); } };
+}
+
+/* ================= Render loop ================= */
+function render() {
+  closePop(); closeModal();
+  const prev = route; route = parse();
+  if (!(route.page === "run" && route.view === "visual" && prev.page === "run" && prev.view === "visual" && prev.id === route.id && prev.vis === route.vis)) stop3D();
+  const V = $("#view"); V.onchange = null; V.onclick = null;
+  if (route.page === "new") { curRun = null; renderStart(V); }
+  else if (route.page === "settings") { curRun = null; renderSettings(V); }
+  else renderRun(V);
+  refreshSidebar();
+}
+let tickTitle = {};
+function tick() {
+  refreshSidebar();
+  const r = curRun; if (!r || route.page !== "run") return;
+  if (r.titleAt && now() >= r.titleAt && !tickTitle[r.id]) { tickTitle[r.id] = 1; renderTopbarOnly(); }
+  updTopbar();
+  if (route.view === "overview") updOverview(false);
+  if (route.view === "chat") updChat(false);
+  if (route.view === "visual") updVisual();
+}
+render();
+setInterval(tick, 500);
+})();
+</script>
+</body>
+</html>
