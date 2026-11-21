@@ -4,6 +4,7 @@ it and measure it."""
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import os
 import stat
@@ -41,7 +42,8 @@ def tool(summary: str, params: dict, lane: str = "cpu", cacheable: bool = False)
         @wraps(fn)
         def wrapper(**kw):
             from chiplab import cache, events
-            ctx = {k: kw.pop(k) for k in list(kw) if k in CONTEXT_ARGS}
+            own = inspect.signature(fn).parameters
+            ctx = {k: (kw[k] if k in own else kw.pop(k)) for k in list(kw) if k in CONTEXT_ARGS}
             force = bool(kw.pop("force", False))
             t0, c0 = time.time(), time.process_time()
             res = cache.get(name, kw) if cacheable and not force else None
@@ -364,11 +366,14 @@ def _test_access(design_id: str, why: str) -> int:
     return used + (why == "evaluate")
 
 
-@tool("Verification level 1: run inputs through the gate netlist and compare with the integer model (and with the "
-      "training framework's own decisions). inputs=val|test use real windows; test returns match counts only.",
-      {"design_id": "str", "inputs": "str — val|test|random", "n": "int — random vectors (100000)",
+@tool("Verification level 1: run inputs through the gate netlist and compare with the integer model, and with the "
+      "scientist's expected outputs when given (inputs=vectors). inputs=random exercises the whole input space.",
+      {"design_id": "str", "inputs": "str — random|vectors|val|test (random)", "n": "int — random vectors (100000)",
+       "vectors": "dict — port -> [[lane ints]], the scientist's test inputs (inputs=vectors)",
+       "expected": "list — expected first-output values per vector, from the scientist's own model (optional)",
        "device": "str — numpy|cuda", "seed": "int"}, lane="gpu", cacheable=True)
-def simulate(design_id: str, inputs: str = "val", n: int = 100000, device: str = "numpy", seed: int = 0) -> dict:
+def simulate(design_id: str, inputs: str = "random", n: int = 100000, device: str = "numpy", seed: int = 0,
+             vectors: dict | None = None, expected: list | None = None) -> dict:
     from chiplab.verify.bitexact import check
     d = _design_dir(design_id)
     syn = _ensure_synth(design_id)
@@ -380,6 +385,12 @@ def simulate(design_id: str, inputs: str = "val", n: int = 100000, device: str =
             lo, hi = (-(1 << (p["bits"] - 1)), 1 << (p["bits"] - 1)) if p["signed"] else (0, 1 << p["bits"])
             X[p["name"]] = rng.integers(lo, hi, size=(n, p["lanes"]))
         res = check(ir, syn["netlist_json"], info, X, device=device)
+    elif inputs == "vectors":
+        if not vectors:
+            raise ToolError("inputs=vectors needs `vectors`: {port: [[lane ints], ...]}")
+        X = {k: np.asarray(v, dtype=np.int64) for k, v in vectors.items()}
+        ref = np.asarray(expected, dtype=np.int64) if expected is not None else None
+        res = check(ir, syn["netlist_json"], info, X, reference=ref, device=device)
     else:
         X, ref, _, _ = _design_inputs(design_id, inputs)
         if inputs == "test":

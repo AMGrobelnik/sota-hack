@@ -18,7 +18,9 @@ from chiplab.hw.yosys import SynthError, run
 
 
 def _blif(src: Path, mod: str, name: str, workdir: Path, timeout: int, synth: bool) -> Path:
-    body = f"synth -flatten -top {mod}\n" if synth else "techmap\nopt_clean\n"
+    # synth -noabc + a fast structural mapping: Yosys's default ABC script can take >15 min on adder trees
+    body = (f"synth -flatten -noabc -top {mod}\nabc -g AND,NAND,OR,NOR,XOR,XNOR,ANDNOT,ORNOT,MUX -script \"+strash;map\"\n"
+            if synth else "techmap\nopt_clean\n")
     run(f"read_verilog {src}\nhierarchy -top {mod}\nproc\nflatten\n{body}rename {mod} cmp\nwrite_blif {name}.blif\n",
         workdir, timeout, f"blif_{name}")
     return workdir / f"{name}.blif"

@@ -150,14 +150,35 @@ def _env() -> dict:
     return env
 
 
-def tt_package(rtl_files: list[Path], top_module: str, workdir: Path, design_meta: dict, tiles: str = "1x1",
-               harden: bool = False, pdk: str = "sky130A", vectors: dict | None = None, clock_hz: int = 50_000_000,
+def pick_tiles(rtl_files: list[Path], top_module: str, workdir: Path, pdk: str = "sky130A", density: float = 0.55) -> dict:
+    """Smallest TT tile size whose area fits the design's Liberty-mapped cell area at the target density."""
+    from chiplab.hw.pdk import map_to_process
+    key = {"sky130A": "sky130", "gf180mcuD": "gf180", "ihp-sg13g2": "ihp"}[pdk]
+    merged = Path(workdir) / "tiles_estimate.v"
+    merged.parent.mkdir(parents=True, exist_ok=True)
+    merged.write_text("\n".join(Path(f).read_text() for f in rtl_files))
+    m = map_to_process(merged, top_module, Path(workdir) / "tiles_estimate", key)
+    need = (m["area_um2"] or 0) / density
+    for t, (w, h) in TILE_UM.items():
+        if w * h >= need:
+            return {"tiles": t, "cell_area_um2": m["area_um2"], "density": density, "tile_area_um2": round(w * h, 1)}
+    return {"tiles": None, "cell_area_um2": m["area_um2"], "density": density, "error": "larger than 8x2 tiles"}
+
+
+def tt_package(rtl_files: list[Path], top_module: str, workdir: Path, design_meta: dict, tiles: str = "auto",
+               harden: bool = False, pdk: str = "sky130A", vectors: dict | None = None, clock_hz: int = 25_000_000,
                timeout: int = 5400) -> dict:
     """Create a TT project folder (and optionally harden it). vectors: {"bits", "out_bits", "vectors": [{lanes, expect}]}
     from the integer model; they drive the RTL test (level 3) and the gate-level test (level 4)."""
     t0 = time.time()
+    tile_choice = None
+    if tiles == "auto":
+        tile_choice = pick_tiles(rtl_files, top_module, workdir, pdk)
+        if not tile_choice["tiles"]:
+            raise ValueError(f"design too large for Tiny Tapeout: {tile_choice}")
+        tiles = tile_choice["tiles"]
     if tiles not in TILE_UM:
-        raise ValueError(f"tiles must be one of {list(TILE_UM)}")
+        raise ValueError(f"tiles must be 'auto' or one of {list(TILE_UM)}")
     proj = Path(workdir) / f"tt_{top_module}"
     if proj.exists():
         shutil.rmtree(proj)
@@ -168,7 +189,10 @@ def tt_package(rtl_files: list[Path], top_module: str, workdir: Path, design_met
     for f in rtl_files:
         shutil.copy(f, proj / "src" / Path(f).name)
         sources.append(Path(f).name)
-    shutil.copy(TT_TEMPLATE / "src" / "config.json", proj / "src" / "config.json")
+    cfg_txt = (TT_TEMPLATE / "src" / "config.json").read_text()
+    period_ns = round(1e9 / clock_hz, 3)  # sensor decisions are slow: default 25 MHz leaves timing margin
+    cfg_txt = cfg_txt.replace('"CLOCK_PERIOD": 20,', f'"CLOCK_PERIOD": {period_ns},')
+    (proj / "src" / "config.json").write_text(cfg_txt)
     for name in ("LICENSE",):
         if (TT_TEMPLATE / name).exists():
             shutil.copy(TT_TEMPLATE / name, proj / name)
@@ -186,7 +210,7 @@ def tt_package(rtl_files: list[Path], top_module: str, workdir: Path, design_met
     if vectors:
         (proj / "test" / "vectors.json").write_text(json.dumps(vectors))
     # tt-support-tools expects ./tt inside the project (FP_DEF_TEMPLATE is dir::../tt/tech/...)
-    shutil.copytree(TT_TOOLS, proj / "tt", ignore=shutil.ignore_patterns(".git", "__pycache__"))
+    shutil.copytree(TT_TOOLS, proj / "tt", ignore=shutil.ignore_patterns("__pycache__"), symlinks=True)  # keeps tt/.git (tt_tool reads its version)
     (proj / ".gitignore").write_text("runs/\ntt/\ntest/sim_build/\ntest/results.xml\n*.fst\n")
     git = lambda *a: subprocess.run(["git", *a], cwd=proj, capture_output=True, text=True)
     git("init", "-q"); git("add", "-A")
@@ -195,7 +219,7 @@ def tt_package(rtl_files: list[Path], top_module: str, workdir: Path, design_met
     tt = lambda *a, t=timeout: subprocess.run([str(TT_PY), "tt/tt_tool.py", "--pdk", pdk, *a], cwd=proj, env=env,
                                               capture_output=True, text=True, timeout=t)
     r = tt("--create-user-config", t=600)
-    out = {"folder": str(proj), "top": top_module, "tiles": tiles, "tile_um": TILE_UM[tiles], "pdk": pdk,
+    out = {"folder": str(proj), "top": top_module, "tiles": tiles, "tile_um": TILE_UM[tiles], "pdk": pdk, "tile_choice": tile_choice,
            "user_config_ok": r.returncode == 0, "harden_ok": None, "gds": None, "png": None, "gl_test_passed": None}
     if r.returncode != 0:
         out["error"] = (r.stdout + r.stderr)[-1500:]
@@ -242,8 +266,9 @@ def harden_project(proj: Path, pdk: str = "sky130A", timeout: int = 5400, gl_tes
         pngs = sorted(proj.glob("*.png")) + sorted((proj / "runs").rglob("*.png"))
         res["png"] = str(pngs[0]) if p.returncode == 0 and pngs else None
     else:
-        res["png"] = None
-        res["png_note"] = "rsvg-convert/pngquant not installed; use hw.librelane render instead"
+        from chiplab.hw.librelane import render_png  # KLayout inside the LibreLane image
+        res["png"] = render_png(Path(res["gds"]), proj / f"{proj.name}.png") if res.get("gds") else None
+        res["png_note"] = "rendered with KLayout in the LibreLane image (rsvg-convert/pngquant not installed)"
     if gl_test:
         pnl = sorted((final / "pnl").glob("*.pnl.v")) or sorted((final / "nl").glob("*.nl.v"))
         if pnl:

@@ -11,7 +11,46 @@ This is exactly TreeLUTClassifier.predict(), checked bit for bit in tests/test_t
 """
 from __future__ import annotations
 
+import json
+
 from chiplab.ir.schema import validate
+
+
+class _BoosterCompat:
+    """XGBoost >= 2 writes base_score as '[5.0E-1]'; the vendored TreeLUT expects a plain float string."""
+
+    def __init__(self, booster):
+        self._b = booster
+
+    def __getattr__(self, k):
+        return getattr(self._b, k)
+
+    def save_config(self):
+        cfg = json.loads(self._b.save_config())
+        lmp = cfg.get("learner", {}).get("learner_model_param", {})
+        bs = lmp.get("base_score")
+        if isinstance(bs, str) and bs.strip().startswith("["):
+            lmp["base_score"] = bs.strip()[1:-1].split(",")[0].strip()
+        return json.dumps(cfg)
+
+
+class _XGBCompat:
+    def __init__(self, model):
+        self._m = model
+
+    def __getattr__(self, k):
+        return getattr(self._m, k)
+
+    def get_booster(self):
+        return _BoosterCompat(self._m.get_booster())
+
+
+def treelut_classifier(xgb_model, w_feature: int, w_tree: int):
+    """A converted TreeLUTClassifier for a trained XGBClassifier (works with XGBoost 3.x)."""
+    from chiplab.ingest.vendor.treelut import TreeLUTClassifier
+    tl = TreeLUTClassifier(_XGBCompat(xgb_model), w_feature=w_feature, w_tree=w_tree, pipeline=[0, 0, 0])
+    tl.convert()
+    return tl
 
 
 def from_treelut(tl, name: str = "treelut") -> dict:
@@ -75,7 +114,4 @@ def from_treelut(tl, name: str = "treelut") -> dict:
 
 def from_xgboost(xgb_model, w_feature: int, w_tree: int, name: str = "treelut") -> dict:
     """Quantise a trained XGBClassifier (on integer features in [0, 2^w_feature)) with TreeLUT, then convert."""
-    from chiplab.ingest.vendor.treelut import TreeLUTClassifier
-    tl = TreeLUTClassifier(xgb_model, w_feature=w_feature, w_tree=w_tree, pipeline=[0, 0, 0])
-    tl.convert()
-    return from_treelut(tl, name)
+    return from_treelut(treelut_classifier(xgb_model, w_feature, w_tree), name)
