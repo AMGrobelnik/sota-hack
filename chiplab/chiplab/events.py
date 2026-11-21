@@ -72,7 +72,7 @@ def read(run_id: str, from_seq: int = 0) -> list[dict]:
 def for_tool(tool: str, args: dict, res: dict) -> None:
     """Emit the dashboard event(s) that a successful tool result implies. No-op without run_id."""
     run_id, sid, rnd = args.get("run_id"), args.get("session_id"), args.get("round")
-    if not run_id or res.get("status") != "ok":
+    if not run_id or res.get("status") not in ("ok", "fail"):  # a failed check is still news (passed: false)
         return
     m = res.get("metrics") or {}
     did = res.get("design_id")

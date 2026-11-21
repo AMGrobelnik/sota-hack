@@ -1,65 +1,358 @@
-# Published hardware baselines. A comparison only counts as a "beat" when task, dataset, protocol AND unit match.
-# Every entry: what was measured, on what, how, in which unit. Checked 21 Nov 2026 (see SPEC.md section 6).
+# Published hardware baselines for tiny medical classifiers.
+#
+# A comparison only counts as a "beat" when task, dataset, protocol AND unit match (see comparable_if).
+# Every number below was read from the primary source on 2026-11-21 (paper PDF table/text, the authors' own
+# abstract page, or the journal's indexed abstract); `where` says where. Metric conventions:
+#   accuracy-type metrics are fractions (0.949 = 94.9 %); gate_equivalents = NAND2-equivalent count;
+#   luts_xc7 = AMD 7-series 6-input LUTs (Spartan-7, Artix-7, Zynq-7000 PL); luts_ice40 = iCE40 4-input LUTs.
+# kind: measured_asic | post_layout_asic | synthesis_asic | fpga_measured | fpga_synthesis | simulated | mcu_measured
+# Fields compare_hw_baseline reads: id, ref, task, dataset (string), protocol (string), metrics, units.
+
+# ---------------------------------------------------------------- ECG: atrial fibrillation
 - id: andersson2015
-  ref: "Andersson et al., IEEE TBioCAS 2015 (AF detection ASIC from beat intervals)"
+  ref: "Andersson, Chon, Sörnmo, Rodrigues. A 290 mV Sub-VT ASIC for Real-Time Atrial Fibrillation Detection. IEEE TBioCAS 9(3):377-386, 2015"
+  source: "https://doi.org/10.1109/TBCAS.2014.2354054"
   task: af_vs_normal
   input: rr_intervals
-  dataset: MIT-BIH AF database (AFDB)
-  protocol: record-level, per paper
-  metrics: {gate_equivalents: 24038, power_nw: 334, sensitivity: 0.949, specificity: 0.958}
-  units: {gate_equivalents: "NAND2-eq (core)", power_nw: nW}
+  dataset: "MIT-BIH AF database (AFDB), all 25 records; also MIT-BIH Arrhythmia 100- and 200-series for specificity"
+  protocol: "segment-level, segments of N=128 RR intervals; detector thresholds grid-searched on the same databases (no held-out split); Se/Sp per AF episode/segment as defined in the paper"
+  metrics: {gate_equivalents: 24038, area_um2: 50000, power_nw: 333.9, power_nw_at_0v3: 8.1, sensitivity: 0.949, specificity: 0.958, clock_hz: 1000}
+  units:
+    gate_equivalents: "NAND2-eq after synthesis (gate mapping), core with shared multiplier, PrecSeg variant"
+    area_um2: "um2 after synthesis, 65 nm low-leakage high-threshold CMOS"
+    power_nw: "nW measured, core + memory, at 1.2 V nominal, 1 kHz clock"
+    power_nw_at_0v3: "nW measured, core + memory, at 0.3 V, 1 kHz"
+    sensitivity: fraction
+    specificity: fraction
+    clock_hz: Hz
+  where: "Table III (Se/Sp, MIT-BIH AF, PrecSeg); Table IV (area, NAND2 eq.); Table V (measured power); Table II (N=128)"
   kind: measured_asic
+  comparable_if:
+    - "AF vs non-AF from RR intervals on AFDB"
+    - "segment of ~128 RR intervals"
+    - "gate count in NAND2-equivalents of the classifier core (theirs includes preprocessing and RAM-based storage)"
+    - "accuracy reported as Se/Sp on the same records (theirs has no held-out split)"
+  caveats:
+    - "334 nW is at 1.2 V nominal; 8.1 nW at 0.3 V. Quote the supply with the number."
+    - "Fabricated die area is 0.1 mm2 excluding pads (Fig. 9); 50,000 um2 is the synthesised core."
+  verified: {by: web, date: "2026-11-21", note: "tables read from the paper PDF hosted by the UConn biosignal lab (author copy)"}
+
 - id: einhaus2026_small
-  ref: "Einhaus et al., arXiv 2605.29994 (FPGA AF detector, SMALL)"
+  ref: "Einhaus, Maman, Hoever, Erbslöh, Schiele. Precomputed 1D-CNNs for Atrial Fibrillation Detection on Tiny Smart Sensor Systems. arXiv 2605.29994 (v2), 2026"
+  source: "https://arxiv.org/abs/2605.29994"
   task: af_vs_normal
   input: raw_ecg_125hz
-  dataset: MIT-BIH AF database, 16 of 25 records, channel 1
-  protocol: split not stated
-  metrics: {luts_xc7: 536, accuracy: 0.884}
-  units: {luts_xc7: "AMD 6-input LUTs (Spartan-7)"}
+  dataset: "MIT-BIH AF database, 16 of 25 records, channel 1, subsampled to 125 Hz, ~13,800 windows of ~42 s"
+  protocol: "window-level; train/test split not stated (patient-wise not stated)"
+  metrics: {luts_xc7: 536, dsp: 0, ff: 785, accuracy: 0.884, f1: 0.874, latency_us: 51}
+  units: {luts_xc7: "AMD Spartan-7 S15 6-input LUTs, Vivado 2023.1", dsp: "DSP slices", ff: flip-flops, accuracy: fraction, f1: fraction, latency_us: us}
+  where: "Table IV, row SMALL (ours); Section IV dataset description"
   kind: fpga_synthesis
+  comparable_if:
+    - "AF vs sinus rhythm on AFDB windows of ~42 s, raw ECG channel 1 at 125 Hz"
+    - "LUT count in AMD 7-series 6-LUTs, network only (excludes MCU interface and BRAM buffers)"
+    - "same (unstated) split cannot be reproduced exactly: treat as context"
+  caveats:
+    - "Vivado estimates 42-65 mW total power for all their designs (20 mW static): an estimate, not a measurement."
+  verified: {by: web, date: "2026-11-21", note: "Table IV and Section IV read from the arXiv PDF"}
+
 - id: einhaus2026_big
-  ref: "Einhaus et al., arXiv 2605.29994 (FPGA AF detector, BIG)"
+  ref: "Einhaus, Maman, Hoever, Erbslöh, Schiele. Precomputed 1D-CNNs for Atrial Fibrillation Detection on Tiny Smart Sensor Systems. arXiv 2605.29994 (v2), 2026"
+  source: "https://arxiv.org/abs/2605.29994"
   task: af_vs_normal
   input: raw_ecg_125hz
-  dataset: MIT-BIH AF database, 16 of 25 records, channel 1
-  protocol: split not stated
-  metrics: {luts_xc7: 2844, f1: 0.956, accuracy: 0.958, latency_us: 51}
-  units: {luts_xc7: "AMD 6-input LUTs (Spartan-7)"}
+  dataset: "MIT-BIH AF database, 16 of 25 records, channel 1, subsampled to 125 Hz, ~13,800 windows of ~42 s"
+  protocol: "window-level; train/test split not stated (patient-wise not stated)"
+  metrics: {luts_xc7: 2844, dsp: 0, ff: 871, accuracy: 0.958, f1: 0.956, latency_us: 51}
+  units: {luts_xc7: "AMD Spartan-7 S15 6-input LUTs, Vivado 2023.1", dsp: "DSP slices", ff: flip-flops, accuracy: fraction, f1: fraction, latency_us: us}
+  where: "Table IV, row BIG (ours); abstract"
   kind: fpga_synthesis
+  comparable_if:
+    - "AF vs sinus rhythm on AFDB windows of ~42 s, raw ECG channel 1 at 125 Hz"
+    - "LUT count in AMD 7-series 6-LUTs, network only"
+  caveats:
+    - "Abstract says no BRAM, but Section IV.C describes a BRAM input buffer outside the network."
+  verified: {by: web, date: "2026-11-21", note: "Table IV read from the arXiv PDF"}
+
 - id: loroch2025
-  ref: "Loroch et al., arXiv 2508.13181 (wearable AF patch, iCE40UP5K)"
+  ref: "Loroch, Feldmann, Rybalkin, Wehn. Low-power, Energy-efficient, Cardiologist-level Atrial Fibrillation Detection for Wearable Devices. arXiv 2508.13181, 2025"
+  source: "https://arxiv.org/abs/2508.13181"
   task: af_vs_normal
   input: raw_ecg_120s
-  dataset: own (30 probands), private
-  protocol: 70/15/15, proband split not stated
-  metrics: {power_mw_system: 3.81, sensitivity: 0.938, specificity: 0.981}
-  units: {power_mw_system: "mW, whole platform measured"}
-  kind: measured_system
-- id: sparrowsnn_v2
-  ref: "SparrowSNN v2 (arXiv 2406.06543)"
-  task: ecg_heartbeat_classes
-  input: raw_ecg
-  dataset: MIT-BIH arrhythmia
-  protocol: per paper
-  metrics: {accuracy: 0.9861, energy_nj: 11.76}
-  units: {energy_nj: "nJ per inference, 22 nm simulation"}
-  kind: simulated_asic
-- id: ekgnet
-  ref: "EKGNet (fully analog)"
-  task: ecg_heartbeat_classes
-  input: raw_ecg
-  dataset: MIT-BIH arrhythmia
-  protocol: per paper
-  metrics: {power_uw: 10.96, balanced_accuracy: 0.95}
-  units: {power_uw: uW}
-  kind: simulated_analog
+  dataset: "own dataset (CardioMem CM 100 XT recordings), not public"
+  protocol: "70/15/15 train/val/test split; proband-wise split not stated; 120 s windows"
+  metrics: {power_mw_system: 3.81, current_ma_system: 1.03, sensitivity: 0.938, specificity: 0.981, noise_specificity: 0.985, params: 7328}
+  units: {power_mw_system: "mW measured, whole platform (Lattice iCE40UP5K + MCU), without Bluetooth/eMMC", current_ma_system: mA, sensitivity: fraction, specificity: fraction, noise_specificity: fraction, params: parameters}
+  where: "Table I (Model 3), Section V power measurement (1.03 mA -> 3.81 mW), Table III"
+  kind: fpga_measured
+  comparable_if:
+    - "same private dataset is not available: context only"
+    - "power is the whole sensing platform, not the classifier alone"
+  caveats:
+    - "Table III 'Ours' reports 95.8 % / 95.8 %, which matches Model 3 on MIT-BIH (Table II), not the own dataset."
+    - "Abstract's '95 % accuracy' has no matching accuracy value in a table."
+  verified: {by: web, date: "2026-11-21", note: "Tables I-III and power text read from the arXiv PDF"}
+
 - id: akbari2025_m4
-  ref: "Akbari 2025, Cortex-M4 microcontroller model"
+  ref: "Akbari, Lei, Patel, Peng, Faust. Atrial Fibrillation Detection on the Embedded Edge: Energy-Efficient Inference on a Low-Power Microcontroller. Sensors 25(21):6601, 2025"
+  source: "https://doi.org/10.3390/s25216601"
   task: af_vs_normal
+  input: rr_intervals
+  dataset: "MIT-BIH AF database (18 subjects used); external test on the Long-Term AF database (LTAFDB): 94.44 % accuracy"
+  protocol: "windows of 40 RR intervals, step 1; no k-fold cross-validation; subject-wise split not verified"
+  metrics: {accuracy: 0.9846, energy_uj: 3532, latency_ms: 143, current_ma: 12.85, accuracy_ltafdb: 0.9444}
+  units: {accuracy: fraction, energy_uj: "uJ per inference, measured (STM32L475VGT6, Arm Cortex-M4, 1.8 V)", latency_ms: ms, current_ma: "mA average at 1.8 V", accuracy_ltafdb: fraction}
+  where: "abstract; Sections 2.1-2.5 (data, windowing, MCU); results text"
+  kind: mcu_measured
+  comparable_if:
+    - "AF vs non-AF from RR intervals on AFDB, 40-RR windows"
+    - "energy per decision on a general-purpose MCU (software baseline for 'why a custom chip')"
+  caveats:
+    - "Overlapping windows (step 1) and an unverified split: accuracy may be optimistic."
+  verified: {by: web, date: "2026-11-21", note: "abstract and full text via Europe PMC (PMC12608751)"}
+
+# ---------------------------------------------------------------- ECG: heartbeat classes
+- id: mommen2026_lutn_classifier
+  ref: "Mommen, Keuninckx, Patil, Detterer, Colpaert, Wambacq. Logic Gate Networks and Lookup Table Networks as Lightweight Hardware Classifiers for Inter-patient ECG Arrhythmia Classification. arXiv 2609.32854, 2026"
+  source: "https://arxiv.org/abs/2609.32854"
+  task: ecg_aami_4class
+  input: beat_features_138bit
+  dataset: "MIT-BIH Arrhythmia, paced records 102/104/107/217 removed, class Q ignored; R peaks from annotations"
+  protocol: "inter-patient (de Chazal DS1 train / DS2 test, 22 records each); beat-level"
+  metrics: {luts_xc7: 3223, ff: 267, dsp: 0, latency_cycles: 5, power_mw_dynamic: 0.092, energy_nj: 0.46, accuracy: 0.9404, jk: 0.651}
+  units: {luts_xc7: "Zynq-7000 (xc7z020) 6-LUTs, LUTN classifier IP only (2000 6-LUTs + readout)", ff: flip-flops, dsp: "DSP slices", latency_cycles: "clock cycles", power_mw_dynamic: "mW, Vivado estimate (vectorless, 1 MHz)", energy_nj: "nJ per inference, classifier IP only (estimate)", accuracy: fraction, jk: "j-kappa index"}
+  where: "abstract (0.46 nJ, 8.25 uJ system); Table of IP utilisation (LUTN Classifier IP 3223 LUTs, 267 FF, 5 cycles, 0.092 mW); 1-layer 6-LUTN hardware model accuracy"
+  kind: fpga_synthesis
+  comparable_if:
+    - "4-class AAMI (N, S, V, F) on MIT-BIH with the de Chazal inter-patient split"
+    - "classifier only, on precomputed 138-bit beat features (no peak detector)"
+    - "LUTs in AMD 7-series 6-LUTs"
+  caveats:
+    - "0.46 nJ is the classifier part only; the whole ECG system uses 8.25 uJ per inference (preprocessing 17,064 LUTs, 2,811 FF, 53 DSP)."
+    - "Depth and temperature appear to be chosen on the test set DS2 (no validation set mentioned)."
+    - "Power numbers are Vivado vectorless estimates, not measurements."
+  verified: {by: web, date: "2026-11-21", note: "abstract, utilisation table and Sections 3-5 read from the arXiv PDF; accuracy 94.04 / jk 0.651 per the team's checked notes"}
+
+- id: mommen2026_system
+  ref: "Mommen et al. Logic Gate Networks and Lookup Table Networks ... Inter-patient ECG Arrhythmia Classification. arXiv 2609.32854, 2026 (full pipeline)"
+  source: "https://arxiv.org/abs/2609.32854"
+  task: ecg_aami_4class
+  input: raw_ecg_360hz
+  dataset: "MIT-BIH Arrhythmia, paced records removed, class Q ignored"
+  protocol: "inter-patient (de Chazal DS1/DS2); beat-level"
+  metrics: {luts_xc7_preprocessing: 17064, ff_preprocessing: 2811, dsp_preprocessing: 53, energy_uj_system: 8.25}
+  units: {luts_xc7_preprocessing: "Zynq-7000 6-LUTs, ECG preprocessing IP", ff_preprocessing: flip-flops, dsp_preprocessing: "DSP slices", energy_uj_system: "uJ per inference, dynamic, whole pipeline (estimate)"}
+  where: "abstract; preprocessing IP utilisation text"
+  kind: fpga_synthesis
+  comparable_if:
+    - "same 4-class inter-patient task, including feature extraction on chip"
+  caveats:
+    - "Peak detection is not implemented (R peaks from annotations)."
+  verified: {by: web, date: "2026-11-21", note: "abstract and utilisation text read from the arXiv PDF"}
+
+- id: sparrowsnn_v2
+  ref: "Yan, Bai, Mitra, Wong. SparrowSNN: A Hardware/software Co-design for Energy Efficient ECG Classification. arXiv 2406.06543 (v2)"
+  source: "https://arxiv.org/abs/2406.06543"
+  task: ecg_beat_classes
   input: raw_ecg
-  dataset: per paper
-  protocol: per paper
-  metrics: {energy_uj: 3532, latency_ms: 143}
-  units: {energy_uj: "uJ per decision", latency_ms: ms}
-  kind: measured_mcu
+  dataset: "MIT-BIH Arrhythmia (4 records excluded)"
+  protocol: "intra-patient random beat split 60/20/20 (train/val/test) with SMOTE oversampling; beat-level"
+  metrics: {accuracy: 0.9861, energy_nj: 11.76, latency_ms: 0.124, area_mm2: 0.1147, power_uw_worst_case: 60}
+  units: {accuracy: fraction, energy_nj: "nJ per inference, synthesis + memory compiler estimate, commercial 22 nm, TT 0.85 V", latency_ms: ms, area_mm2: "mm2 synthesised (~90 % weight memory)", power_uw_worst_case: "uW at 100 MHz, toggle-rich worst case"}
+  where: "Table II (Hybrid model, T=31); Section on hardware synthesis"
+  kind: synthesis_asic
+  comparable_if:
+    - "MIT-BIH beat classification with the same intra-patient random split (not inter-patient)"
+    - "energy per inference from synthesis at 22 nm"
+  caveats:
+    - "v1 of the paper reported 98.29 % and 31.39 nJ (6.1 uW); v2 reports 98.61 % and 11.76 nJ. Cite the version."
+    - "Text calls 98.61 % a validation accuracy."
+    - "Intra-patient random beat splits are much easier than inter-patient: not comparable to DS1/DS2 results."
+  verified: {by: web, date: "2026-11-21", note: "arXiv v2 PDF, Table II and Section V-A"}
+
+- id: ekgnet2023
+  ref: "Haghi, Ma, Lale, Anandkumar, Emami. EKGNet: A 10.96 uW Fully Analog Neural Network for Intra-Patient Arrhythmia Classification. IEEE BioCAS 2023 (arXiv 2310.15466)"
+  source: "https://doi.org/10.1109/BIOCAS58349.2023.10389164"
+  task: ecg_beat_classes
+  input: raw_ecg_lead_ii_analog
+  dataset: "MIT-BIH Arrhythmia (lead II); also PTB Diagnostic for MI"
+  protocol: "intra-patient; random oversampling of classes; beat-level"
+  metrics: {power_uw: 10.96, balanced_accuracy: 0.95, params: 336, area_mm2_soc: 4.28}
+  units: {power_uw: "uW (title figure), fully analog classifier, no ADC", balanced_accuracy: fraction, params: "network parameters", area_mm2_soc: "mm2, complete SoC, 65 nm"}
+  where: "title/abstract; Table IV (comparison of hardware designs: 65 nm, 4.28 mm2, 336 parameters)"
+  kind: measured_asic
+  comparable_if:
+    - "intra-patient MIT-BIH beat classification"
+    - "analog compute: power is not comparable to a digital gate count"
+  caveats:
+    - "Power measurement conditions per the paper; the title figure is quoted here."
+  verified: {by: web, date: "2026-11-21", note: "arXiv PDF abstract and Table IV"}
+
+- id: bulten2026_approx
+  ref: "Bulten, Rasheed, John, Stoico, Gillani. Toward Energy-Efficient and Low-Power Arrhythmia Detection for Wearable Devices. arXiv 2607.14747, 2026"
+  source: "https://arxiv.org/abs/2607.14747"
+  task: ecg_aami_5class
+  input: raw_ecg
+  dataset: "MIT-BIH Arrhythmia, 15 classes grouped into 5 AAMI superclasses"
+  protocol: "train/validation/test split of beats (inter-patient not stated); beat-level"
+  metrics: {power_uw: 3.07, energy_uj: 2.17, clock_khz: 12, accuracy: 0.937, sensitivity: 0.921}
+  units: {power_uw: "uW synthesised, 180 nm SCL, at 12 kHz, approximate multipliers", energy_uj: "uJ per classification", clock_khz: kHz, accuracy: fraction, sensitivity: fraction}
+  where: "abstract; Section III (180 nm SCL, 12 kHz)"
+  kind: synthesis_asic
+  comparable_if:
+    - "5-class AAMI on MIT-BIH with the same beat split"
+    - "power from synthesis at 180 nm and 12 kHz"
+  caveats:
+    - "Reference (exact) architecture: 8.75 uW / 2.08 uJ; the approximate design trades accuracy for power."
+  verified: {by: web, date: "2026-11-21", note: "arXiv abstract and PDF text"}
+
+- id: qin2024_va_cnn
+  ref: "Qin, Jia, Yan, Mok, Yung, Liu, Liu, Wen, Liang, Cheng, Hu, Shi. A 10.60 uW 150 GOPS Mixed-Bit-Width Sparse CNN Accelerator for Life-Threatening Ventricular Arrhythmia Detection. ASP-DAC 2025 (arXiv 2410.17395)"
+  source: "https://arxiv.org/abs/2410.17395"
+  task: ventricular_arrhythmia_detection
+  input: iegm_from_icd
+  dataset: "intracardiac electrograms (IEGM) recorded by implantable cardioverter-defibrillators, as described in the paper (dataset name not checked)"
+  protocol: "per paper (not checked)"
+  metrics: {power_uw: 10.60, accuracy: 0.9995, area_mm2_chip: 18.63, power_density_uw_per_mm2: 0.57}
+  units: {power_uw: "uW measured on the prototype chip, TSMC 40 nm LP", accuracy: fraction, area_mm2_chip: "mm2 fabricated (512 PEs; 128 used for this CNN)", power_density_uw_per_mm2: "uW/mm2"}
+  where: "abstract; Table 1 (comparison) and text on fabricated area"
+  kind: measured_asic
+  comparable_if:
+    - "VA vs non-VA on the same IEGM data"
+    - "area is for a 512-PE chip, of which this CNN uses 128 PEs"
+  caveats:
+    - "Dataset and split were not verified in this pass."
+  verified: {by: web, date: "2026-11-21", note: "arXiv abstract and PDF text"}
+
+# ---------------------------------------------------------------- EEG / iEEG: seizure detection
+- id: shoaran2018_gbt
+  ref: "Shoaran, Haghi, Taghavi, Farivar, Emami-Neyestanak. Energy-Efficient Classification for Resource-Constrained Biomedical Applications. IEEE JETCAS 8(4):693-707, 2018"
+  source: "https://doi.org/10.1109/JETCAS.2018.2844733"
+  task: seizure_detection
+  input: ieeg_multichannel
+  dataset: "intracranial EEG, 26 patients, 3,074 h, 393 seizures"
+  protocol: "block-wise train/test split (F1 87.86 %); random split gives 99.23 % (optimistic)"
+  metrics: {energy_nj: 41.2, area_mm2: 0.999, f1_blockwise: 0.8786, f1_random: 0.9923, detection_latency_s: 1.1}
+  units: {energy_nj: "nJ per classification, fabricated 65 nm TSMC", area_mm2: "mm2 total (540 x 1850 um)", f1_blockwise: fraction, f1_random: fraction, detection_latency_s: s}
+  where: "abstract (Caltech authors repository record)"
+  kind: measured_asic
+  comparable_if:
+    - "iEEG seizure detection with a block-wise (temporal) split, per patient"
+    - "energy per classification of a gradient-boosted tree classifier"
+  caveats:
+    - "Tree count is set per patient (patient-specific model)."
+  verified: {by: web, date: "2026-11-21", note: "abstract from authors.library.caltech.edu/92186; DOI metadata from Crossref"}
+
+- id: neuraltree2022
+  ref: "Shin, Ding, Zhu, Vyza, Trouillet, Revol, Lacour, Shoaran. NeuralTree: A 256-Channel 0.227-uJ/Class Versatile Neural Activity Classification and Closed-Loop Neuromodulation SoC. arXiv 2205.06090 (v3)"
+  source: "https://arxiv.org/abs/2205.06090"
+  task: seizure_detection
+  input: eeg_ieeg_multichannel
+  dataset: "scalp EEG (18-28 channels) and iEEG (47-108 channels) epilepsy datasets"
+  protocol: "per patient; seizures counted for sensitivity (leave-one-out for patients with <5 seizures); specificity window-based"
+  metrics: {energy_uj: 0.227, area_mm2_per_channel: 0.014, sensitivity_eeg: 0.956, specificity_eeg: 0.968, sensitivity_ieeg: 0.94, specificity_ieeg: 0.969}
+  units: {energy_uj: "uJ per classification, fabricated 65 nm CMOS", area_mm2_per_channel: "mm2 per channel (SoC incl. front-end)", sensitivity_eeg: fraction, specificity_eeg: fraction, sensitivity_ieeg: fraction, specificity_ieeg: fraction}
+  where: "abstract; Section on measurement results (95.6 %/94 % sensitivity, 96.8 %/96.9 % specificity)"
+  kind: measured_asic
+  comparable_if:
+    - "patient-specific seizure detection with event-level sensitivity"
+    - "energy per classification of the classifier (SoC includes a 256-channel front-end and stimulator)"
+  caveats:
+    - "Patient- and disease-specific biomarkers and models."
+  verified: {by: web, date: "2026-11-21", note: "arXiv abstract and PDF text"}
+
+- id: soul2021
+  ref: "Chua, Jordan, Muller. SOUL: An Energy-Efficient Unsupervised Online Learning Seizure Detection Classifier. arXiv 2110.02169 (v2); VLSI Symposium 2021 version also exists"
+  source: "https://arxiv.org/abs/2110.02169"
+  task: seizure_detection
+  input: eeg_ieeg
+  dataset: "CHB-MIT scalp EEG; NeuroVista intracranial EEG (>100 h)"
+  protocol: "offline training then unsupervised online updates; sensitivity at >95 % specificity"
+  metrics: {energy_nj: 1.5, area_mm2: 0.1, sensitivity_chbmit: 0.975, sensitivity_neurovista: 0.979}
+  units: {energy_nj: "nJ per classification, fabricated TSMC 28 nm", area_mm2: mm2, sensitivity_chbmit: "fraction at >95 % specificity", sensitivity_neurovista: "fraction at >95 % specificity"}
+  where: "abstract"
+  kind: measured_asic
+  comparable_if:
+    - "CHB-MIT seizure detection, sensitivity at >95 % specificity"
+    - "classifier energy per classification (logistic regression with online updates)"
+  verified: {by: web, date: "2026-11-21", note: "arXiv abstract"}
+
+- id: yoo2012_eeg_soc
+  ref: "Yoo, Yan, El-Damak, Altaf, Shoeb, Yoo, Chandrakasan. An 8-channel scalable EEG acquisition SoC with fully integrated patient-specific seizure classification and recording processor. ISSCC 2012, pp. 292-294"
+  source: "https://mtlsites.mit.edu/annual_reports/2012/an-8-channel-scalable-eeg-acquisition-soc-with-fully-integrated-patient-specific-seizure-classification-and-recording-processor"
+  task: seizure_detection
+  input: eeg_8ch
+  dataset: "CHB-MIT EEG (verification) and a rapid eye-blink pattern test"
+  protocol: "patient-specific SVM; the 84.4 % figure is from the eye-blink test"
+  metrics: {energy_uj: 2.03, area_mm2: 25, eyeblink_detection_accuracy: 0.844}
+  units: {energy_uj: "uJ per classification, 0.18 um CMOS", area_mm2: "mm2 whole SoC (8 AFE channels, processor, 64 KB SRAM)", eyeblink_detection_accuracy: "fraction, rapid eye-blink test (NOT seizure accuracy)"}
+  where: "MIT MTL annual report 2012 entry"
+  kind: measured_asic
+  comparable_if:
+    - "energy per classification only; no seizure accuracy is reported in this source"
+  caveats:
+    - "Do not present 84.4 % as seizure-detection accuracy; it is an eye-blink test. The paper is ISSCC 2012 (not 2013)."
+  verified: {by: web, date: "2026-11-21", note: "MIT MTL annual report page and dblp ISSCC 2012 record"}
+
+- id: liu2021_lstm_mcu
+  ref: "Liu, Richardson. Edge Deep Learning for Neural Implants. J. Neural Eng. 18:046034, 2021 (arXiv 2012.00307)"
+  source: "https://arxiv.org/abs/2012.00307"
+  task: seizure_detection
+  input: scalp_eeg
+  dataset: "CHB-MIT scalp EEG"
+  protocol: "event-level seizure detection (ictal / preictal / interictal); split per paper (not checked)"
+  metrics: {sensitivity_lstm: 0.9761, fp_per_hour_lstm: 0.071, sensitivity_cnn: 0.967, fp_per_hour_cnn: 0.102}
+  units: {sensitivity_lstm: "fraction, seizure events", fp_per_hour_lstm: "false positives per hour", sensitivity_cnn: fraction, fp_per_hour_cnn: "false positives per hour"}
+  where: "abstract; results table (nRF52840, Arm Cortex-M4)"
+  kind: mcu_measured
+  comparable_if:
+    - "CHB-MIT event-level sensitivity and FP/h (a software-on-MCU baseline, not a custom chip)"
+  verified: {by: web, date: "2026-11-21", note: "arXiv abstract and PDF text (MCU: Nordic nRF52840)"}
+
+- id: epidenet2023_gap9
+  ref: "Ingolfsson, Chakraborty, Wang, Beniczky, Ducouret, Benatti, Ryvlin, Cossettini, Benini. EpiDeNet: An Energy-Efficient Approach to Seizure Detection for Embedded Systems. arXiv 2309.07135, 2023"
+  source: "https://arxiv.org/abs/2309.07135"
+  task: seizure_detection
+  input: eeg_4ch
+  dataset: "CHB-MIT (and PEDESITE), 4 EEG channels"
+  protocol: "event-level seizure detection; three-window majority smoothing; split per paper (not checked)"
+  metrics: {energy_mj: 0.051, seizure_events_detected_chbmit: 0.9116, fp_per_hour: 1.18}
+  units: {energy_mj: "mJ per inference on GAP9 (PULP MCU), high-performance mode", seizure_events_detected_chbmit: fraction, fp_per_hour: "false positives per hour (with smoothing; dataset per paper)"}
+  where: "abstract"
+  kind: mcu_measured
+  comparable_if:
+    - "4-channel CHB-MIT event detection; energy on a parallel MCU (software baseline)"
+  verified: {by: web, date: "2026-11-21", note: "arXiv abstract"}
+
+# ---------------------------------------------------------------- EEG: sleep staging
+- id: muxnet2024
+  ref: "Zhang, Guo, Sheng, Ma, Sun, Zhang, Zhao, Zhang, Wang, Sheng, Zhang. A Closed-loop Brain-Machine Interface SoC Featuring a 0.2 uJ/class Multiplexer Based Neural Network. IEEE CICC 2024 (arXiv 2401.03396)"
+  source: "https://arxiv.org/abs/2401.03396"
+  task: sleep_staging
+  input: eeg
+  dataset: "DREAMS public 20-subject database (82.4 %); private mice dataset (84.3 %)"
+  protocol: "per paper (not checked)"
+  metrics: {energy_uj: 0.2, power_uw: 172.4, accuracy: 0.824, area_mm2_soc: 1.6, clock_mhz: 23}
+  units: {energy_uj: "uJ per classification, fabricated 40 nm CMOS", power_uw: "uW average", accuracy: fraction, area_mm2_soc: "mm2 whole closed-loop SoC", clock_mhz: MHz}
+  where: "abstract and measurement text"
+  kind: measured_asic
+  comparable_if:
+    - "sleep staging on DREAMS with the same stage set and split"
+  verified: {by: web, date: "2026-11-21", note: "arXiv abstract and PDF text"}
+
+- id: sleepvit2025
+  ref: "Robitaille, Liu. Vision Transformer Accelerator ASIC for Real-Time Low-Power Sleep Staging. arXiv 2502.16334 (v2), 2025"
+  source: "https://arxiv.org/abs/2502.16334"
+  task: sleep_staging_4class
+  input: eeg
+  dataset: "MASS SS3"
+  protocol: "per paper (not checked); 4 sleep stages"
+  metrics: {accuracy: 0.829, weights: 31600, area_mm2: 0.754, power_mw_dynamic: 6.54, power_mw_leakage: 11.0, power_mw_avg_gated: 0.56, fmax_mhz: 379}
+  units: {accuracy: fraction, weights: count, area_mm2: "mm2 synthesised, 65 nm", power_mw_dynamic: "mW over a 45.6 ms inference window", power_mw_leakage: mW, power_mw_avg_gated: "mW effective average with aggressive power gating", fmax_mhz: MHz}
+  where: "abstract"
+  kind: synthesis_asic
+  comparable_if:
+    - "4-stage sleep staging on MASS SS3"
+  caveats:
+    - "Designed and synthesised, not fabricated. Quote 0.56 mW only with 'with power gating' (17.5 mW before gating)."
+  verified: {by: web, date: "2026-11-21", note: "arXiv abstract"}

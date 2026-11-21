@@ -3,6 +3,7 @@ to fix it. Output is one JSON object; `ok` is true when everything the core flow
 from __future__ import annotations
 
 import importlib
+import os
 import platform
 import shutil
 import subprocess
@@ -64,7 +65,9 @@ def run() -> dict:
     if dk:
         info = subprocess.run(["docker", "info", "--format", "{{.ServerVersion}}"], capture_output=True, text=True, timeout=30)
         up = info.returncode == 0
-        add("docker", up, info.stdout.strip() or info.stderr.strip()[:160], "start Docker Desktop / the docker daemon", required=False)
+        add("docker", up, {"server": info.stdout.strip() or info.stderr.strip()[:160], "DOCKER_HOST": os.environ.get("DOCKER_HOST")},
+            "start Docker (Docker Desktop, colima start, or OrbStack); with colima/OrbStack you can also set DOCKER_HOST=unix://<socket>",
+            required=False)
         if up:
             img = subprocess.run(["docker", "image", "inspect", config.LIBRELANE_IMAGE, "--format", "{{.Architecture}}"],
                                  capture_output=True, text=True, timeout=30)
@@ -78,6 +81,10 @@ def run() -> dict:
             add(f"pdk:{pdk}", True, str(liberty(pdk)), required=(pdk == "sky130"))
         except Exception as e:
             add(f"pdk:{pdk}", False, str(e)[:160], f"{INSTALL} (fetches PDKs with ciel into PDK_ROOT)", required=(pdk == "sky130"))
+    if platform.system() == "Darwin":
+        libs = [Path(d) / "libcairo.2.dylib" for d in ("/opt/homebrew/lib", "/usr/local/lib")]
+        found = next((str(l) for l in libs if l.exists()), None)
+        add("macos:cairo", bool(found), found or "libcairo not found", "brew install cairo   (Tiny Tapeout PNG export)", required=False)
     tt = Path(config.TT_TOOLS) / "tt_tool.py"
     add("tinytapeout:tools", tt.exists(), str(tt), f"{INSTALL} (clones tt-support-tools)", required=False)
     try:
@@ -89,3 +96,41 @@ def run() -> dict:
     missing_opt = [c["check"] for c in checks if not c["required"] and not c["ok"]]
     return {"status": "ok", "ok": not missing_req, "missing_required": missing_req, "missing_optional": missing_opt,
             "checks": checks}
+
+
+# The ChipIn backend's agent environment allowlist (backend/src/chipin_backend/agents/env.py on origin/amg/backend):
+# only these names reach an agent process, so the lab must work from ~/.config/chiplab/config.json alone.
+AGENT_ENV_ALLOWED = {"HOME", "PATH", "PWD", "SHELL", "TERM", "TMPDIR", "TZ", "USER", "LOGNAME", "LANG", "LANGUAGE", "COLUMNS",
+                     "LINES", "NO_COLOR", "FORCE_COLOR", "VIRTUAL_ENV", "PYTHONPATH", "PYTHONUNBUFFERED", "PYTHONIOENCODING",
+                     "NODE_PATH", "CUDA_VISIBLE_DEVICES", "HF_HOME", "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_ENABLE_TELEMETRY",
+                     "DISABLE_AUTOUPDATER", "IS_SANDBOX", "OPENROUTER_API_KEY", "HF_TOKEN"}
+
+
+def agent_env(base: dict | None = None) -> dict:
+    src = dict(os.environ if base is None else base)
+    env = {k: v for k, v in src.items() if k in AGENT_ENV_ALLOWED or k.startswith("LC_")}
+    env.update({"CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1", "DISABLE_AUTOUPDATER": "1"})
+    return env
+
+
+def run_agent_env() -> dict:
+    """Re-run the doctor in a child process that only sees the agent allowlist (like env -i + the allowed names)."""
+    import json as _json
+    import subprocess
+    import sys
+    env = agent_env()
+    launcher = shutil.which("chiplab", path=env.get("PATH"))
+    p = subprocess.run([sys.executable, "-m", "chiplab.cli", "doctor"], env=env, capture_output=True, text=True, timeout=600)
+    try:
+        r = _json.loads(p.stdout)
+    except ValueError:
+        r = {"status": "error", "ok": False, "checks": [], "error": (p.stderr or p.stdout)[-600:]}
+    r["agent_env"] = {"names_passed": sorted(env), "chiplab_on_path": launcher,
+                      "note": "CHIPLAB_*, DOCKER_HOST and PDK_ROOT are stripped; everything must come from the config file"}
+    if not launcher:
+        r["ok"] = False
+        r.setdefault("missing_required", []).append("launcher:chiplab")
+        r.setdefault("checks", []).append({"check": "launcher:chiplab", "ok": False, "required": True,
+                                           "detail": "chiplab not on the agent PATH",
+                                           "fix": "scripts/install.sh writes ~/.local/bin/chiplab; make sure ~/.local/bin is on PATH"})
+    return r

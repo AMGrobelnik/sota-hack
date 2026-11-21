@@ -91,7 +91,12 @@ def http_app(host: str):
     from chiplab import events
 
     srv = build_server()
-    sec = TransportSecuritySettings(enable_dns_rebinding_protection=False)
+    loopback = host in ("127.0.0.1", "localhost")
+    sec = TransportSecuritySettings(
+        enable_dns_rebinding_protection=loopback,
+        allowed_hosts=["127.0.0.1:*", "localhost:*"] if loopback else [],
+        allowed_origins=["http://127.0.0.1:*", "http://localhost:*"] if loopback else [])
+    os.environ["CHIPLAB_REMOTE"] = "1"  # tools refuse pickles etc. when called over the network
     app = srv.streamable_http_app(stateless_http=True, json_response=True, transport_security=sec, host=host)
 
     async def ev(request):

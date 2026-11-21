@@ -49,6 +49,42 @@ TT_PYTHON = setting("CHIPLAB_TT_PYTHON", "tt_python", "")          # python with
 LIBRELANE_IMAGE = os.environ.get("CHIPLAB_LIBRELANE_IMAGE") or _CFG.get("librelane_image") or "ghcr.io/librelane/librelane:3.0.14"
 
 
+DOCKER_SOCKETS = ["~/.colima/default/docker.sock", "~/.orbstack/run/docker.sock", "~/.docker/run/docker.sock",
+                  "~/.rd/docker.sock", "/var/run/docker.sock"]
+
+
+def ensure_docker_host() -> str | None:
+    """Make Docker reachable for every subprocess: keep DOCKER_HOST if set; otherwise, if the default socket is
+    missing, use the docker CLI's current context, then known sockets (colima, OrbStack, Docker Desktop, Rancher)."""
+    if os.environ.get("DOCKER_HOST"):
+        return os.environ["DOCKER_HOST"]
+    cfg_host = _CFG.get("docker_host") or ""   # written by install.sh (agent environments strip DOCKER_HOST)
+    if cfg_host.startswith("unix://") and Path(cfg_host[7:]).exists() and cfg_host != "unix:///var/run/docker.sock":
+        os.environ["DOCKER_HOST"] = cfg_host
+        return cfg_host
+    if Path("/var/run/docker.sock").exists():
+        return None
+    import subprocess
+    if shutil.which("docker"):
+        try:
+            h = subprocess.run(["docker", "context", "inspect", "--format", "{{.Endpoints.docker.Host}}"],
+                               capture_output=True, text=True, timeout=5).stdout.strip()
+            if h.startswith("unix://") and Path(h[7:]).exists():
+                os.environ["DOCKER_HOST"] = h
+                return h
+        except Exception:
+            pass
+    for c in DOCKER_SOCKETS:
+        p = Path(c).expanduser()
+        if p.exists():
+            os.environ["DOCKER_HOST"] = f"unix://{p}"
+            return os.environ["DOCKER_HOST"]
+    return None
+
+
+ensure_docker_host()
+
+
 def _docker_mem_gb() -> float | None:
     import subprocess
     if not shutil.which("docker"):

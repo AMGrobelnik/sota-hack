@@ -16,9 +16,9 @@ PDK_NAMES = {"sky130": "sky130A", "sky130A": "sky130A", "gf180": "gf180mcuD", "g
              "ihp": "ihp-sg13g2", "ihp-sg13g2": "ihp-sg13g2"}
 _GF180_33V = {  # Tiny Tapeout's 3.3 V library selection for gf180mcuD (tt-support-tools tech.py)
     "VDD_PIN_VOLTAGE": 3.3,
-    "LIB_SYNTH": "pdk_dir::libs.ref/gf180mcu_fd_sc_mcu7t5v0/lib/gf180mcu_fd_sc_mcu7t5v0__tt_025C_3v30.lib",
-    "LIB_FASTEST": "pdk_dir::libs.ref/gf180mcu_fd_sc_mcu7t5v0/lib/gf180mcu_fd_sc_mcu7t5v0__ff_n40C_3v60.lib",
-    "LIB_SLOWEST": "pdk_dir::libs.ref/gf180mcu_fd_sc_mcu7t5v0/lib/gf180mcu_fd_sc_mcu7t5v0__ss_125C_3v00.lib",
+    # LibreLane 3 reads LIB (corner -> liberty files); LIB_SYNTH/LIB_FASTEST/LIB_SLOWEST are no longer read
+    "LIB": {c: [f"pdk_dir::libs.ref/gf180mcu_fd_sc_mcu7t5v0/lib/gf180mcu_fd_sc_mcu7t5v0__{c[2:]}.lib"]
+            for c in ("*_tt_025C_3v30", "*_ss_125C_3v00", "*_ff_n40C_3v60")},
     "DEFAULT_CORNER": "nom_tt_025C_3v30",
     "STA_CORNERS": ["nom_tt_025C_3v30", "nom_ss_125C_3v00", "nom_ff_n40C_3v60"],
 }

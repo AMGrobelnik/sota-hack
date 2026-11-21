@@ -103,6 +103,14 @@ Each chip carries the highest level it reached with nothing skipped below it.
 
 A negative control is part of the tests: flip one gate and both the simulation and the proof must fail.
 
+**Proof sizes.**
+- Gates = RTL takes about a second at a few thousand gates.
+- The golden-model proof (`golden: true`, one whole-design miter) takes about 7 s on the 2.3k-gate spike.
+- The sequential proof is compositional (core black-boxed and proven separately), so the clocked wrapper proves
+  in seconds at any model size: 3 s on the spike, where a whole-design eqy run took over 10 minutes.
+
+**Status and exit codes.** `ok` = 0, `error` = 1, `fail` = 2 (a check ran and the design failed it), `timeout` = 3.
+
 ## 5. Outputs per chip and where they land
 
 Everything for a design is in `runs/designs/<design_id>/` (or `$CHIPLAB_HOME/designs/...`):
@@ -191,8 +199,8 @@ small design; their numbers go in the chip report when run.
   a few thousand gates; the tool reports which proof it got and the level stays honest.
 - **Published chips are context, not a scoreboard,** unless task, dataset, protocol and unit all match. The
   registry carries these fields and the report says "context only" otherwise.
-- **GF180 and IHP** are supported by the same flow but validated only up to configuration and PDK resolution.
-  Full layouts were validated on sky130.
+- **GF180 and IHP layouts work** (validated on the M3 Max and here). GF180 is slower, so its default clock for
+  timing is 40 ns, against 20 ns on sky130 and IHP.
 - **Optimisation headroom:** alkaid's shift-add sharing makes constant matrix multiplies 29–45% smaller than the
   lab's current emitter, which is not yet adopted.
 - Transistor counts, pre-layout tile counts and `estimate-batch` gate counts are estimates and are labelled as such.

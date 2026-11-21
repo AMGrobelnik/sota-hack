@@ -26,7 +26,51 @@ class ToolError(RuntimeError):
 
 CONTEXT_ARGS = {"run_id": "str — dashboard run to emit events into (optional)",
                 "session_id": "str — calling agent session (optional; used for quotas and the leaderboard)",
-                "round": "int — design round, copied onto dashboard events (optional)"}
+                "round": "int — design round, copied onto dashboard events (optional)",
+                "progress": "str — auto|off|<path>: report through a ChipIn ./progress helper (auto-detected in the cwd)",
+                "progress_stages": "bool — also mark the ChipIn stage started/done around this call (default false)"}
+
+
+STATUS_RC = {"ok": 0, "error": 1, "fail": 2, "timeout": 3}
+
+
+def outcome(res: dict) -> str:
+    """One honest status per answer: ok (tool did its job and every check it ran passed), fail (it ran, but the
+    design failed a check), timeout, or error (the tool could not do its job). The CLI exit code follows it."""
+    st = res.get("status", "ok")
+    if st not in ("ok", None):
+        return st if st in STATUS_RC else "error"
+    err = res.get("error")
+    if err:
+        return "timeout" if "timed out" in str(err).lower() else "error"
+    if res.get("accepted") is False or res.get("ok") is False or res.get("user_config_ok") is False or res.get("harden_ok") is False:
+        return "error"
+    for k in ("bit_exact", "proved", "passed", "rtl_test_passed", "gl_test_passed"):
+        if res.get(k) is False:
+            return "fail"
+    if "proved" in res and res.get("proved") is None:
+        return "timeout" if "timed out" in json.dumps(res, default=str).lower() else "error"
+    return "ok"
+
+
+def normalize_args(fn, kw: dict) -> dict:
+    """Bind to the signature with defaults filled in and integral floats as ints, so equivalent calls share one
+    cache entry (e.g. layout(clock_period_ns=20) and timing_power() with its default 20.0)."""
+    b = inspect.signature(fn).bind(**kw)
+    b.apply_defaults()
+    if "clock_period_ns" in b.arguments and b.arguments["clock_period_ns"] is None and "pdk" in b.arguments:
+        from chiplab.tools_hw import DEFAULT_CLOCK_NS, _PDK_ALIAS   # resolve the per-PDK default before hashing
+        b.arguments["clock_period_ns"] = DEFAULT_CLOCK_NS.get(_PDK_ALIAS.get(b.arguments["pdk"], b.arguments["pdk"]), 20.0)
+
+    def canon(v):
+        if isinstance(v, float) and v.is_integer():
+            return int(v)
+        if isinstance(v, dict):
+            return {k: canon(x) for k, x in v.items()}
+        if isinstance(v, list):
+            return [canon(x) for x in v]
+        return v
+    return {k: canon(v) for k, v in b.arguments.items()}
 
 
 def tool(summary: str, params: dict, lane: str = "cpu", cacheable: bool = False):
@@ -41,12 +85,21 @@ def tool(summary: str, params: dict, lane: str = "cpu", cacheable: bool = False)
 
         @wraps(fn)
         def wrapper(**kw):
-            from chiplab import cache, events
+            from chiplab import cache, events, progress
             own = inspect.signature(fn).parameters
             ctx = {k: (kw[k] if k in own else kw.pop(k)) for k in list(kw) if k in CONTEXT_ARGS}
             force = bool(kw.pop("force", False))
             t0, c0 = time.time(), time.process_time()
-            res = cache.get(name, kw) if cacheable and not force else None
+            ph = progress.helper(ctx.get("progress"))
+            pst = bool(ctx.get("progress_stages"))
+            progress.before(name, {**kw, **ctx}, ph, pst)
+            try:
+                norm = normalize_args(fn, kw)
+            except TypeError as e:  # unknown or missing arguments
+                res = {"status": "error", "error": f"bad arguments: {e}"}
+                log.log_call(name, {**kw, **ctx}, res, time.time() - t0)
+                return res
+            res = cache.get(name, norm) if cacheable and not force else None
             if res is not None:
                 res = dict(res, cached=True)
             else:
@@ -58,14 +111,16 @@ def tool(summary: str, params: dict, lane: str = "cpu", cacheable: bool = False)
                     if os.environ.get("CHIPLAB_DEBUG"):
                         res["traceback"] = traceback.format_exc()
                 res = _jsonable(res)
+                res["status"] = outcome(res)
                 res.setdefault("cost", {}).update({"wall_s": round(time.time() - t0, 3), "cpu_s_host": round(time.process_time() - c0, 3)})
                 if cacheable:
-                    cache.put(name, kw, res)
+                    cache.put(name, norm, res)
             log.log_call(name, {**kw, **ctx}, res, time.time() - t0)
             try:
                 events.for_tool(name, {**kw, **ctx}, res)
             except Exception:  # events must never break a tool
                 pass
+            progress.after(name, {**kw, **ctx}, res, ph, pst)
             return res
         TOOLS[name] = {"fn": wrapper, "summary": summary, "params": {**params}, "lane": lane, "cacheable": cacheable}
         return wrapper

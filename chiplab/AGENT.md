@@ -25,6 +25,9 @@ GitHub's cloud: commit the folder from `tt-package` and run the `tt-gds` workflo
 - Python: `import chiplab.api as lab; lab.<tool_name>(**args)` returns the same dict.
 - Async (several agents at once): `submit-job {tool, args, session_id}` returns a `job_id`; poll `job-status` / `job-result`. Lanes are sized to the machine: cpu = cores - 1, gpu = 1, docker = Docker memory / 12 GB (1-4); override with CHIPLAB_CPU_WORKERS / CHIPLAB_GPU_WORKERS / CHIPLAB_DOCKER_WORKERS (or "lanes" in the config file); `chiplab doctor` shows what it picked. Start workers with `chiplab workers`. Results are cached by content, so duplicate designs return instantly (`cached: true`).
 - Every tool also accepts `run_id`, `session_id`, `round` (events, see EVENTS.md) and `force` (skip the cache).
+- Status and exit code are honest: `ok` = 0 (the tool did its job and every check it ran passed), `error` = 1 (it could not do its job; see `error`), `fail` = 2 (it ran, and the design failed a check, e.g. `bit_exact: false`), `timeout` = 3. A queued job is `ok` with `state: queued`.
+- Proof sizes: `prove-equivalence` (gates = RTL) takes about a second at a few thousand gates; with `golden: true` it also proves the RTL against an independent golden model of the IR in one miter (spike, 2.3k gates: about 7 s). `prove-sequential` is compositional (the core is a black box, proven by prove-equivalence), so it proves the clocked wrapper in seconds at any model size; `whole: true` proves the flattened design and is only practical for a few hundred gates.
+- Safety: `submit-verilog` runs lint/synthesis only inside the sandbox container unless you pass `allow_host: true`; `ingest-model` with `format: torchlogix` loads a pickle and needs `trusted: true` (and `CHIPLAB_ALLOW_PICKLE=1` when called through the optional network server). XGBoost models are converted in a separate process.
 - Verification levels: 1 bit-exact simulation, 2 formal proof, 3 streaming RTL simulation (cocotb + Icarus) + lint, 4 Tiny Tapeout gate-level test after layout, 5 real hardware (never set automatically).
 
 ## Tools
@@ -131,7 +134,7 @@ Synthesise a design. target=generic: gate count by type, logic depth, transistor
 
 Example:
 ```bash
-chiplab synthesize --json '{"design_id": "cdaea5efb328"}'
+chiplab synthesize --json '{"design_id": "765fa47586bd"}'
 ```
 
 ### `count-luts`
@@ -179,7 +182,7 @@ Lookup-table count for an FPGA family: xc7 (6-input, Spartan-7 class, for compar
 
 Example:
 ```bash
-chiplab count-luts --json '{"design_id": "cdaea5efb328", "family": "ice40"}'
+chiplab count-luts --json '{"design_id": "765fa47586bd", "family": "ice40"}'
 ```
 
 ### `simulate`
@@ -252,7 +255,7 @@ Verification level 1: run inputs through the gate netlist and compare with the i
 
 Example:
 ```bash
-chiplab simulate --json '{"design_id": "cdaea5efb328", "inputs": "random", "n": 100000}'
+chiplab simulate --json '{"design_id": "765fa47586bd", "inputs": "random", "n": 100000}'
 ```
 
 ### `prove-equivalence`
@@ -305,7 +308,7 @@ Verification level 2: prove the gate netlist equals the model for every possible
 
 Example:
 ```bash
-chiplab prove-equivalence --json '{"design_id": "cdaea5efb328"}'
+chiplab prove-equivalence --json '{"design_id": "765fa47586bd"}'
 ```
 
 ### `map-to-process`
@@ -353,7 +356,7 @@ Map a design onto a real process's standard cells: area in µm², gate-equivalen
 
 Example:
 ```bash
-chiplab map-to-process --json '{"design_id": "cdaea5efb328", "pdk": "sky130"}'
+chiplab map-to-process --json '{"design_id": "765fa47586bd", "pdk": "sky130"}'
 ```
 
 ### `ingest-model`
@@ -436,7 +439,7 @@ Bring a trained model into the lab and compile it to a chip design. Formats: chi
 
 Example:
 ```bash
-chiplab ingest-model --json '{"format": "intnn", "model": "<contents of fixtures/spike_best.json>", "name": "spike"}'
+chiplab ingest-model --json "{\"format\": \"intnn\", \"model\": $(cat fixtures/spike_best.json), \"name\": \"spike\"}"
 ```
 
 ### `compose-chip`
@@ -494,7 +497,7 @@ Build ONE chip from several model heads (multi-output, multi-input) with fusion 
 
 Example:
 ```bash
-chiplab compose-chip --json '{"heads": {"a": "<design_id>", "b": "<design_id>"}, "fusion": [{"name": "alarm", "op": "and", "inputs": ["a_y", "b_y"]}], "shared_inputs": false}'
+chiplab compose-chip --json '{"heads": {"a": "765fa47586bd", "b": "ed8e52cb7a11"}, "fusion": [{"name": "alarm", "op": "and", "inputs": ["a_y", "b_y"]}], "shared_inputs": false}'
 ```
 
 ### `compile-stream`
@@ -542,7 +545,7 @@ Wrap a design for streaming hardware: inputs arrive one 15-bit word per strobe (
 
 Example:
 ```bash
-chiplab compile-stream --json '{"design_id": "cdaea5efb328", "tt": true}'
+chiplab compile-stream --json '{"design_id": "765fa47586bd", "tt": true}'
 ```
 
 ### `rtl-simulate`
@@ -605,7 +608,7 @@ Verification level 3: cocotb + Icarus simulation of the streaming wrapper (frame
 
 Example:
 ```bash
-chiplab rtl-simulate --json '{"design_id": "cdaea5efb328", "n": 300}'
+chiplab rtl-simulate --json '{"design_id": "765fa47586bd", "n": 300}'
 ```
 
 ### `estimate-cost`
@@ -648,7 +651,7 @@ Manufacturing routes for a design (iCE40 FPGA, Tiny Tapeout sky130/GF180, wafer.
 
 Example:
 ```bash
-chiplab estimate-cost --json '{"design_id": "cdaea5efb328"}'
+chiplab estimate-cost --json '{"design_id": "765fa47586bd"}'
 ```
 
 ### `compare-hw-baseline`
@@ -706,7 +709,7 @@ Compare a design with published hardware from the lab's registry. Only entries w
 
 Example:
 ```bash
-chiplab compare-hw-baseline --json '{"design_id": "cdaea5efb328", "task": "af_vs_normal", "dataset": "AFDB", "protocol": "record-level, per paper"}'
+chiplab compare-hw-baseline --json '{"design_id": "765fa47586bd", "task": "af_vs_normal", "dataset": "AFDB", "protocol": "record-level, per paper"}'
 ```
 
 ### `gate-activity`
@@ -773,7 +776,7 @@ Gate activity as raw numbers: run the scientist's input sequence (or random vect
 
 Example:
 ```bash
-chiplab gate-activity --json '{"design_id": "cdaea5efb328", "n": 2000, "vcd": true}'
+chiplab gate-activity --json '{"design_id": "765fa47586bd", "n": 2000, "vcd": true}'
 ```
 
 ### `chip-report`
@@ -821,14 +824,14 @@ One-page chip report (markdown text): ports, hardware numbers with their basis, 
 
 Example:
 ```bash
-chiplab chip-report --json '{"design_id": "cdaea5efb328"}'
+chiplab chip-report --json '{"design_id": "765fa47586bd"}'
 ```
 
 ### `submit-verilog`
 
 Submit hand- or agent-written Verilog safely. It is screened (no system tasks or includes), linted and synthesised inside a locked-down container, then checked bit for bit against a reference: a chipir/1 model (reference_ir) or the scientist's vectors + expected outputs. Ports must follow the lab convention (port_spec: inputs/outputs with lanes, bits, signed). Accepted designs get a design_id like any other.
 
-- Python: `lab.submit_verilog(verilog: str, top: str, port_spec: dict, reference_ir: dict | None = None, vectors: dict | None = None, expected: dict | None = None, n: int = 20000) -> dict`
+- Python: `lab.submit_verilog(verilog: str, top: str, port_spec: dict, reference_ir: dict | None = None, vectors: dict | None = None, expected: dict | None = None, n: int = 20000, allow_host: bool = False) -> dict`
 - Lane: cpu; cached: False
   - `verilog`: str — the source
   - `top`: str — top module name
@@ -837,6 +840,7 @@ Submit hand- or agent-written Verilog safely. It is screened (no system tasks or
   - `vectors`: dict — port -> [[ints]] (optional)
   - `expected`: dict — output -> [[ints]] (optional)
   - `n`: int — random vectors when checking against reference_ir (20000)
+  - `allow_host`: bool — run lint/synthesis on this machine if the sandbox container is missing (default false: refuse)
 
 <details><summary>JSON schema</summary>
 
@@ -869,6 +873,10 @@ Submit hand- or agent-written Verilog safely. It is screened (no system tasks or
    "type": "integer",
    "default": 20000
   },
+  "allow_host": {
+   "type": "boolean",
+   "default": false
+  },
   "run_id": {
    "type": "string"
   },
@@ -894,18 +902,18 @@ Submit hand- or agent-written Verilog safely. It is screened (no system tasks or
 
 Example:
 ```bash
-chiplab submit-verilog --json '{"verilog": "module m(input [3:0] x, output [4:0] y); assign y = x + x; endmodule", "top": "m", "port_spec": {"inputs": [{"name": "x", "lanes": 1, "bits": 4, "signed": false}], "outputs": [{"name": "y", "lanes": 1, "bits": 5, "signed": false}]}, "reference_ir": "<chipir/1 doc computing x + x>"}'
+chiplab submit-verilog --json '{"verilog": "module xx(input [3:0] x, output [4:0] y); assign y = x + x; endmodule", "top": "xx", "port_spec": {"inputs": [{"name": "x", "lanes": 1, "bits": 4, "signed": false}], "outputs": [{"name": "y", "lanes": 1, "bits": 5, "signed": false}]}, "reference_ir": {"ir": "chipir/1", "name": "xx", "inputs": [{"name": "x", "lanes": 1, "bits": 4, "signed": false}], "nodes": [{"id": "s", "op": "add", "a": "x", "b": "x"}], "outputs": [{"name": "y", "src": "s"}], "meta": {}}}'
 ```
 
 ### `layout`
 
 Place and route the chip with LibreLane (Docker): real cell area, die area, timing slack against a clock, power (vectorless, or from an activity VCD), GDS and the KLayout image. Validated on sky130; gf180 and ihp use the same flow (validated up to configuration).
 
-- Python: `lab.layout(design_id: str, pdk: str = sky130, clock_period_ns: float = 20.0, core_util: int = 40, activity_vcd: str | None = None, timeout: int = 3600) -> dict`
+- Python: `lab.layout(design_id: str, pdk: str = sky130, clock_period_ns: float | None = None, core_util: int = 40, activity_vcd: str | None = None, timeout: int = 3600) -> dict`
 - Lane: docker; cached: True
   - `design_id`: str
   - `pdk`: str — sky130|gf180|ihp (sky130)
-  - `clock_period_ns`: float — decision clock for timing (20)
+  - `clock_period_ns`: float — clock for timing (default 20 ns; 40 ns on gf180)
   - `core_util`: int — target utilisation % (40)
   - `activity_vcd`: str — VCD of real activity for power (optional)
   - `timeout`: int seconds (3600)
@@ -925,7 +933,7 @@ Place and route the chip with LibreLane (Docker): real cell area, die area, timi
   },
   "clock_period_ns": {
    "type": "number",
-   "default": 20.0
+   "default": null
   },
   "core_util": {
    "type": "integer",
@@ -962,18 +970,18 @@ Place and route the chip with LibreLane (Docker): real cell area, die area, timi
 
 Example:
 ```bash
-chiplab layout --json '{"design_id": "cdaea5efb328", "pdk": "sky130", "clock_period_ns": 20}'
+chiplab layout --json '{"design_id": "ed8e52cb7a11", "pdk": "sky130", "clock_period_ns": 20}'
 ```
 
 ### `timing-power`
 
 Timing and power of the laid-out chip (same LibreLane run as layout; cached, so calling both costs one run).
 
-- Python: `lab.timing_power(design_id: str, pdk: str = sky130, clock_period_ns: float = 20.0, activity_vcd: str | None = None) -> dict`
+- Python: `lab.timing_power(design_id: str, pdk: str = sky130, clock_period_ns: float | None = None, activity_vcd: str | None = None) -> dict`
 - Lane: docker; cached: True
   - `design_id`: str
   - `pdk`: str — sky130|gf180|ihp (sky130)
-  - `clock_period_ns`: float (20)
+  - `clock_period_ns`: float (default 20 ns; 40 ns on gf180)
   - `activity_vcd`: str — optional VCD for activity-based power
 
 <details><summary>JSON schema</summary>
@@ -991,7 +999,7 @@ Timing and power of the laid-out chip (same LibreLane run as layout; cached, so 
   },
   "clock_period_ns": {
    "type": "number",
-   "default": 20.0
+   "default": null
   },
   "activity_vcd": {
    "type": "string",
@@ -1020,7 +1028,7 @@ Timing and power of the laid-out chip (same LibreLane run as layout; cached, so 
 
 Example:
 ```bash
-chiplab timing-power --json '{"design_id": "cdaea5efb328", "pdk": "sky130"}'
+chiplab timing-power --json '{"design_id": "ed8e52cb7a11", "pdk": "sky130", "clock_period_ns": 20}'
 ```
 
 ### `bitstream`
@@ -1073,7 +1081,7 @@ iCE40UP5K bitstream (UPduino class board): the streaming wrapper plus a board to
 
 Example:
 ```bash
-chiplab bitstream --json '{"design_id": "cdaea5efb328"}'
+chiplab bitstream --json '{"design_id": "765fa47586bd"}'
 ```
 
 ### `tt-package`
@@ -1146,17 +1154,18 @@ Tiny Tapeout project for the chip: streaming top tt_um_chipin_<id>, info.yaml, d
 
 Example:
 ```bash
-chiplab tt-package --json '{"design_id": "cdaea5efb328", "harden": false}'
+chiplab tt-package --json '{"design_id": "ed8e52cb7a11", "harden": false}'
 ```
 
 ### `prove-sequential`
 
-Sequential equivalence (eqy) of the streaming wrapper against its synthesised netlist: verification level 2 for clocked designs. Works on small chips; may time out on large ones (reported honestly).
+Sequential equivalence (eqy) of the streaming wrapper against its synthesised netlist: verification level 2 for clocked designs. Compositional by default: the combinational core is a black box here (prove it with prove_equivalence), so the proof covers only the clocked wrapper and takes seconds at any model size (spike: 3 s). whole=true proves the flattened design instead (small chips only, a few hundred gates).
 
-- Python: `lab.prove_sequential(design_id: str, timeout: int = 600) -> dict`
+- Python: `lab.prove_sequential(design_id: str, timeout: int = 600, whole: bool = False) -> dict`
 - Lane: cpu; cached: True
   - `design_id`: str
   - `timeout`: int seconds (600)
+  - `whole`: bool — prove the whole flattened design (false)
 
 <details><summary>JSON schema</summary>
 
@@ -1170,6 +1179,10 @@ Sequential equivalence (eqy) of the streaming wrapper against its synthesised ne
   "timeout": {
    "type": "integer",
    "default": 600
+  },
+  "whole": {
+   "type": "boolean",
+   "default": false
   },
   "run_id": {
    "type": "string"
@@ -1194,7 +1207,7 @@ Sequential equivalence (eqy) of the streaming wrapper against its synthesised ne
 
 Example:
 ```bash
-chiplab prove-sequential --json '{"design_id": "cdaea5efb328", "timeout": 300}'
+chiplab prove-sequential --json '{"design_id": "765fa47586bd", "timeout": 300}'
 ```
 
 ### `verification-level`
@@ -1237,7 +1250,113 @@ The chip's verification level (1 bit-exact, 2 formal, 3 streaming RTL sim + lint
 
 Example:
 ```bash
-chiplab verification-level --json '{"design_id": "cdaea5efb328"}'
+chiplab verification-level --json '{"design_id": "765fa47586bd"}'
+```
+
+### `tt-readiness`
+
+Tiny Tapeout submission readiness of a design's TT project (made by tt_package): info.yaml, pinout, docs, top ports, lint, licence, RTL test, and TT's official precheck if the project was hardened. Never submits or pays.
+
+- Python: `lab.tt_readiness(design_id: str, run_tests: bool = True, precheck: bool = True) -> dict`
+- Lane: docker; cached: False
+  - `design_id`: str
+  - `run_tests`: bool (true)
+  - `precheck`: bool — run TT precheck if hardened (true)
+
+<details><summary>JSON schema</summary>
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "design_id": {
+   "type": "string"
+  },
+  "run_tests": {
+   "type": "boolean",
+   "default": true
+  },
+  "precheck": {
+   "type": "boolean",
+   "default": true
+  },
+  "run_id": {
+   "type": "string"
+  },
+  "session_id": {
+   "type": "string"
+  },
+  "round": {
+   "type": "integer"
+  },
+  "force": {
+   "type": "boolean",
+   "default": false
+  }
+ },
+ "required": [
+  "design_id"
+ ]
+}
+```
+</details>
+
+Example:
+```bash
+chiplab tt-readiness --json '{"design_id": "ed8e52cb7a11", "run_tests": true}'
+```
+
+### `tt-export`
+
+Export a design's TT project as a standalone repo shaped like Tiny Tapeout's template (or staged under chiplab/tt_projects/ for the tt-gds workflow), ready for a human to push and submit. Creates no remote repo.
+
+- Python: `lab.tt_export(design_id: str, out_dir: str | None = None, mode: str = standalone) -> dict`
+- Lane: cpu; cached: False
+  - `design_id`: str
+  - `out_dir`: str — where to write (optional)
+  - `mode`: str — standalone|monorepo (standalone)
+
+<details><summary>JSON schema</summary>
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "design_id": {
+   "type": "string"
+  },
+  "out_dir": {
+   "type": "string",
+   "default": null
+  },
+  "mode": {
+   "type": "string",
+   "default": "standalone"
+  },
+  "run_id": {
+   "type": "string"
+  },
+  "session_id": {
+   "type": "string"
+  },
+  "round": {
+   "type": "integer"
+  },
+  "force": {
+   "type": "boolean",
+   "default": false
+  }
+ },
+ "required": [
+  "design_id"
+ ]
+}
+```
+</details>
+
+Example:
+```bash
+chiplab tt-export --json '{"design_id": "ed8e52cb7a11", "mode": "standalone"}'
 ```
 
 ### `submit-job`
@@ -1291,7 +1410,7 @@ Run any tool asynchronously on its resource lane (cpu, gpu, docker). Returns a j
 
 Example:
 ```bash
-chiplab submit-job --json '{"tool": "map_to_process", "args": {"design_id": "cdaea5efb328", "pdk": "sky130"}, "session_id": "agent-A"}'
+chiplab submit-job --json '{"tool": "map_to_process", "args": {"design_id": "765fa47586bd", "pdk": "sky130"}, "session_id": "agent-A"}'
 ```
 
 ### `submit-batch`
@@ -1376,6 +1495,11 @@ State of a job: queued | running | done | failed | cancelled, with timings.
 ```
 </details>
 
+Example (`@job_id` = the job id printed by the submit-job example):
+```bash
+chiplab job-status --json '{"job_id": "@job_id"}'
+```
+
 ### `job-result`
 
 Result of a finished job (the tool's own JSON answer).
@@ -1414,9 +1538,9 @@ Result of a finished job (the tool's own JSON answer).
 ```
 </details>
 
-Example:
+Example (`@job_id` = the job id printed by the submit-job example):
 ```bash
-chiplab job-result --json '{"job_id": "j-\u2026"}'
+chiplab job-result --json '{"job_id": "@job_id"}'
 ```
 
 ### `cancel-job`
@@ -1527,6 +1651,11 @@ Cache statistics: entries, hits, misses, bytes.
 ```
 </details>
 
+Example:
+```bash
+chiplab cache-stats --json '{}'
+```
+
 ### `estimate-batch`
 
 Fast pre-synthesis gate estimates for many designs (chipir/1 documents or design ids), labelled as estimates. Use it to rank candidates; only finalists need real synthesis. Optionally keep the best N.
@@ -1572,7 +1701,7 @@ Fast pre-synthesis gate estimates for many designs (chipir/1 documents or design
 
 Example:
 ```bash
-chiplab estimate-batch --json '{"designs": ["<design_id>", "<design_id>"], "keep": 5}'
+chiplab estimate-batch --json '{"designs": ["765fa47586bd", "ed8e52cb7a11"], "keep": 1}'
 ```
 
 ### `synthesize-batch`

@@ -51,8 +51,9 @@ def main(argv=None) -> int:
             print(json.dumps({"written": docs.write()})); return 0
         print(docs.agent_md()); return 0
     if cmd == "doctor":
-        from chiplab.doctor import run
-        r = run(); print(json.dumps(r, indent=1, default=str)); return 0 if r["ok"] else 1
+        from chiplab.doctor import run, run_agent_env
+        r = run_agent_env() if "--agent-env" in argv else run()
+        print(json.dumps(r, indent=1, default=str)); return 0 if r["ok"] else 1
     if cmd == "mcp":
         from chiplab.mcp_server import stdio
         stdio(); return 0
@@ -80,7 +81,8 @@ def main(argv=None) -> int:
         args = json.loads(data) if data else {}
     res = T[cmd]["fn"](**args)
     print(json.dumps(res, indent=1, default=str))
-    return 0 if res.get("status") == "ok" else 1
+    from chiplab.tools import STATUS_RC
+    return STATUS_RC.get(res.get("status"), 1)  # 0 ok, 1 error, 2 a check failed, 3 timeout
 
 
 if __name__ == "__main__":

@@ -92,7 +92,8 @@ def emit_golden(ir: dict, module: str, port_info: dict, wide: int | None = None)
         lanes = L[ir_src(ir, o["name"])]
         body.append(f"  assign {o['name']} = {{{', '.join(f'{x}[{wo - 1}:0]' for x in reversed(lanes))}}};")
     text = "\n".join([f"module {module} (", ",\n".join("  " + p for p in ports), ");"] + body + ["endmodule", ""])
-    return text.replace("[63:0]", f"[{wide - 1}:0]").replace("64'sd", f"{wide}'sd")
+    # only the internal lane wires are 64-bit placeholders; a port or slice that is really 64 bits wide must keep its width
+    return text.replace("signed [63:0]", f"signed [{wide - 1}:0]").replace("64'sd", f"{wide}'sd")
 
 
 def ir_src(ir: dict, out_name: str) -> str:
