@@ -45,5 +45,6 @@ Everything collected for the hackathon, one line per file.
 - `adrian-notes/2026-11-21-newborn-eeg-test.md`: quick feasibility test of newborn seizure detection from EEG on the open Helsinki dataset, 21 Nov, research note.
 - `adrian-notes/2026-11-21-architecture-whiteboard.md`: description of the team's architecture sketch from the whiteboard, 21 Nov.
 - `adrian-notes/2026-11-21-whatsapp-group.md`: summary of the team's WhatsApp group, 21 Nov, research note.
+- `adrian-notes/2026-11-21-ui-feedback-round1.md`: feedback on round 1 of the landing pages and dashboards, 21 Nov.
 - `adrian-notes/data/`: structured JSON outputs behind the notes (idea panels, sponsors, past events, dialysis verification), research note.
 - `whatsapp/team-group-chat.md`: the team's WhatsApp group, 4 to 21 Nov, read-only export, 21 Nov.
