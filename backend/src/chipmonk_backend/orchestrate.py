@@ -7,10 +7,13 @@ verify) compose :func:`run_agent` calls.
 
 from __future__ import annotations
 
+import asyncio
 import shlex
 import sys
 import time
+import weakref
 from dataclasses import replace
+from typing import Any
 
 from loguru import logger
 
@@ -53,48 +56,67 @@ async def run_agent(
 ) -> tuple[RunDir, AgentResult]:
     """Run ``spec`` once and return its run folder and result.
 
-    ``run.json`` moves ``running`` -> ``succeeded`` | ``failed`` and ends with
-    the resolved config, timings and the costs known. An exception from the
-    runner (no machine, no key, wrong OS) is recorded as ``failed`` with the
-    error and then re-raised.
+    ``run.json`` moves ``running`` -> ``succeeded`` | ``failed`` | ``stopped``
+    and ends with the resolved config, timings, the costs known and the
+    runner's ``compute`` facts (the file is the one record; every change goes
+    through :meth:`RunDir.update_record`). An exception from the runner (no
+    machine, no key, wrong OS) is recorded as ``failed`` and re-raised; Ctrl-C
+    or cancellation is recorded as ``stopped`` and re-raised. Pods are
+    terminated (``runner.close()``) on every path.
+
+    At most ``compute.max_concurrent_agents`` runs execute at once per event
+    loop; further calls wait for a slot before creating their run folder.
     """
     mode = run_mode or config.compute.run_mode
     chosen_tier = tier or config.compute.tier
+    async with _agent_slots(config.compute.max_concurrent_agents):
+        return await _run_agent(spec, config, mode=mode, tier=chosen_tier, run_id=run_id)
+
+
+async def _run_agent(
+    spec: AgentSpec, config: BackendConfig, *, mode: RunMode, tier: ComputeTier, run_id: str | None
+) -> tuple[RunDir, AgentResult]:
+    """:func:`run_agent` once a slot is held."""
     run = RunDir.create(config.resolved_runs_dir(), run_id)
     if config.agents.openrouter_tool:
         if mode == "on_demand":
             logger.warning("openrouter_tool is for local and flex runs; not offered on a pod")
         else:
             spec = _with_openrouter_tool(spec, run, config)
-    record = RunRecord(
-        run_id=run.run_id,
-        run_mode=mode,
-        agent=spec.to_dict(),
-        tier=chosen_tier,
-        config=config.model_dump(mode="json"),
+    run.write_record(
+        RunRecord(
+            run_id=run.run_id,
+            run_mode=mode,
+            agent=spec.to_dict(),
+            tier=tier,
+            config=config.model_dump(mode="json"),
+            status="running",
+        )
     )
-    record.status = "running"
-    run.write_record(record)
-    logger.info("run {} started: agent={} mode={} tier={}", run.run_id, spec.name, mode, chosen_tier)
+    logger.info("run {} started: agent={} mode={} tier={}", run.run_id, spec.name, mode, tier)
     started = time.monotonic()
     runner = runner_for(config, mode)
     try:
-        result = await runner.run(spec, run, tier=chosen_tier)
+        try:
+            result = await runner.run(spec, run, tier=tier)
+        finally:
+            await runner.close()
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        _finish(run, started, status="stopped", error="stopped before it finished (interrupted)")
+        logger.warning("run {} stopped before it finished", run.run_id)
+        raise
     except Exception as exc:
-        record.status = "failed"
-        record.error = f"{type(exc).__name__}: {exc}"
-        _finish(record, run, started)
-        run.write_record(record)
+        _finish(run, started, status="failed", error=f"{type(exc).__name__}: {exc}")
         logger.exception("run {} failed in the runner", run.run_id)
         raise
-    finally:
-        await runner.close()
-    record.status = "failed" if result.failed else "succeeded"
-    record.result = result.to_dict()
-    record.error = result.error
-    record.agent_cost_usd = result.cost_usd
-    _finish(record, run, started)
-    run.write_record(record)
+    record = _finish(
+        run,
+        started,
+        status="failed" if result.failed else "succeeded",
+        error=result.error,
+        result=result.to_dict(),
+        agent_cost_usd=result.cost_usd,
+    )
     logger.info(
         "run {} {} in {:.1f}s (agent ${:.4f}, OpenRouter ${:.4f} over {} calls)",
         run.run_id,
@@ -107,14 +129,31 @@ async def run_agent(
     return run, result
 
 
-def _finish(record: RunRecord, run: RunDir, started: float) -> None:
-    """Stamp the end time, the wall clock and the agent's OpenRouter spend."""
-    record.finished_at = utc_now()
-    record.duration_s = round(time.monotonic() - started, 3)
+#: One semaphore per (event loop, limit): asyncio primitives belong to one loop.
+_SLOTS: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[int, asyncio.Semaphore]] = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _agent_slots(limit: int) -> asyncio.Semaphore:
+    """The semaphore capping concurrent runs at ``limit`` on the running loop."""
+    per_loop = _SLOTS.setdefault(asyncio.get_running_loop(), {})
+    if limit not in per_loop:
+        per_loop[limit] = asyncio.Semaphore(limit)
+    return per_loop[limit]
+
+
+def _finish(run: RunDir, started: float, **fields: Any) -> RunRecord:
+    """Write the outcome ``fields`` plus the end time, wall clock and OpenRouter spend."""
     calls = run.read_llm_calls()
-    record.llm_calls = len(calls)
     costs = [call["cost_usd"] for call in calls if isinstance(call.get("cost_usd"), int | float)]
-    record.llm_cost_usd = sum(costs) if costs else None
+    return run.update_record(
+        finished_at=utc_now(),
+        duration_s=round(time.monotonic() - started, 3),
+        llm_calls=len(calls),
+        llm_cost_usd=sum(costs) if costs else None,
+        **fields,
+    )
 
 
 __all__ = ["LLM_CALLS_ENV", "openrouter_tool_prompt", "run_agent"]

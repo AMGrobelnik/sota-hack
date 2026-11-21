@@ -22,13 +22,18 @@ async def reap_orphans(
     dry_run: bool = True,
 ) -> list[PodInfo]:
     """Pods named ``prefix*`` (older than ``older_than_s``); terminated only when
-    ``dry_run`` is false. ``ValueError`` for an empty prefix. Returns the matches.
+    ``dry_run`` is false. Returns the matches.
 
+    ``ValueError`` for an empty prefix, and for ``dry_run=False`` without a
+    positive ``older_than_s``: on a shared account the prefix also matches
+    teammates' live runs, and only age tells an orphan from one of those.
     A pod with no creation time counts as old only when ``older_than_s`` is 0:
     an age that cannot be read never makes a pod eligible.
     """
     if not prefix:
         raise ValueError("a prefix is required; there is no sweep-everything")
+    if not dry_run and older_than_s <= 0:
+        raise ValueError("terminating needs a minimum age (older_than_s > 0): live runs share the prefix")
     matches = []
     for pod in await api.list_pods():
         if not is_ours(pod.name, prefix) or pod.desired_status == "TERMINATED":

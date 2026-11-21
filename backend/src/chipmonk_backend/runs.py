@@ -15,6 +15,7 @@ Layout of one run::
 from __future__ import annotations
 
 import json
+import re
 import secrets
 import threading
 from dataclasses import asdict, dataclass, field
@@ -26,16 +27,24 @@ from loguru import logger
 
 from chipmonk_backend.agents.types import AgentEvent, utc_now
 
-RunStatus = Literal["created", "running", "succeeded", "failed"]
+#: ``stopped``: interrupted (Ctrl-C, task cancelled) before it finished.
+RunStatus = Literal["created", "running", "succeeded", "failed", "stopped"]
 RECORD_FILE = "run.json"
 EVENTS_FILE = "events.jsonl"
 WORKSPACE_DIR = "workspace"
 LLM_CALLS_FILE = "llm_calls.jsonl"
+#: A run id is one plain path segment: no separators, no ``..``, bounded length.
+_SAFE_RUN_ID = re.compile(r"[A-Za-z0-9._-]{1,128}")
 
 
 def new_run_id() -> str:
     """A sortable, unique id: ``YYYYmmdd-HHMMSS-<6 hex>`` (UTC)."""
     return f"{datetime.now(UTC):%Y%m%d-%H%M%S}-{secrets.token_hex(3)}"
+
+
+def is_safe_run_id(run_id: str) -> bool:
+    """Whether ``run_id`` is a single safe folder name (letters, digits, ``._-``; not ``.``/``..``)."""
+    return bool(_SAFE_RUN_ID.fullmatch(run_id)) and run_id not in (".", "..")
 
 
 @dataclass
@@ -112,8 +121,12 @@ class RunDir:
 
     @classmethod
     def create(cls, runs_dir: Path, run_id: str | None = None) -> RunDir:
-        """Make ``runs_dir/<run_id>/workspace``; ``FileExistsError`` if the run exists."""
-        run = cls(runs_dir / (run_id or new_run_id()))
+        """Make ``runs_dir/<run_id>/workspace``; ``FileExistsError`` if the run exists,
+        ``ValueError`` for a run id that is not one safe folder name."""
+        chosen = new_run_id() if run_id is None else run_id
+        if not is_safe_run_id(chosen):
+            raise ValueError(f"bad run_id {chosen!r}: use letters, digits, '.', '_' or '-' (max 128)")
+        run = cls(runs_dir / chosen)
         run.path.mkdir(parents=True, exist_ok=False)
         run.workspace.mkdir()
         return run
@@ -170,6 +183,27 @@ class RunDir:
         """Load ``run.json``."""
         return RunRecord(**json.loads(self.record_path.read_text(encoding="utf-8")))
 
+    def update_record(self, **fields: Any) -> RunRecord:
+        """Set ``fields`` on the record in ``run.json`` and write it back.
+
+        The file is the one record of a run: the orchestrator and the runner
+        both change it through here, so neither overwrites the other's facts.
+        """
+        record = self.read_record()
+        for name, value in fields.items():
+            if not hasattr(record, name):
+                raise TypeError(f"RunRecord has no field {name!r}")
+            setattr(record, name, value)
+        self.write_record(record)
+        return record
+
+    def add_compute(self, **facts: Any) -> RunRecord:
+        """Merge ``facts`` into the record's ``compute`` block (pod id, machine, $/hr)."""
+        record = self.read_record()
+        record.compute.update(facts)
+        self.write_record(record)
+        return record
+
     def read_events(self) -> list[AgentEvent]:
         """Every event so far, in order."""
         if not self.events_path.is_file():
@@ -188,5 +222,6 @@ __all__ = [
     "RunRecord",
     "RunStatus",
     "event_summary",
+    "is_safe_run_id",
     "new_run_id",
 ]

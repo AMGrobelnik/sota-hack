@@ -2,7 +2,9 @@
 
 * ``check``    authenticate, list pods, print stock and price for each tier chain
 * ``dry-run``  print the exact create request each run mode would send
-* ``reap``     list our leftover pods by name prefix (``--delete`` to terminate)
+* ``reap``     list our leftover pods by name prefix (``--delete`` to terminate
+  those older than the longest a live pod can run; this sweep, run on a
+  schedule, is the safety net for pods whose launcher died)
 
 ``--env-file`` reads ``RUNPOD_API_KEY`` (and nothing else) from a dotenv file;
 otherwise the key comes from the environment. The key is never printed.
@@ -23,7 +25,7 @@ from loguru import logger
 from chipmonk_backend.compute.modes import RUN_MODES, chain_for_tier, rents_pods
 from chipmonk_backend.compute.runpod.api import RUNPOD_KEY_ENV, RunPodAPI, offer_for
 from chipmonk_backend.compute.runpod.reaper import reap_orphans
-from chipmonk_backend.compute.runpod.runner import RunPodRunner
+from chipmonk_backend.compute.runpod.runner import RunPodRunner, max_pod_lifetime_s
 from chipmonk_backend.config import BackendConfig, ComputeTier, load_config
 
 
@@ -83,7 +85,7 @@ async def _reap(
     async with api:
         pods = await reap_orphans(api, prefix=prefix, older_than_s=older_than_s, dry_run=not delete)
     verb = "terminated" if delete else "would terminate"
-    print(f"{verb} {len(pods)} pod(s) named {prefix}*")
+    print(f"{verb} {len(pods)} pod(s) named {prefix}* older than {older_than_s}s")
     for pod in pods:
         print(f"  {pod.id}  {pod.name}  {pod.desired_status}  ${pod.usd_per_hr or 0:.3f}/hr")
 
@@ -99,12 +101,20 @@ def main(argv: list[str] | None = None) -> int:
     dry.add_argument("--tier", choices=get_args(ComputeTier), default=None)
     reap = sub.add_parser("reap", help="our leftover pods by prefix (report only unless --delete)")
     reap.add_argument("--prefix", default=None, help="default: compute.runpod.pod_name_prefix")
-    reap.add_argument("--older-than-s", type=int, default=0)
+    reap.add_argument(
+        "--older-than-s",
+        type=int,
+        default=None,
+        help="minimum pod age; default 0 when listing, and with --delete the longest a live pod "
+        "can run (health check + pod_timeout_s + graces), so teammates' live pods are never hit",
+    )
     reap.add_argument("--delete", action="store_true")
     args = parser.parse_args(argv)
     config = load_config(args.config)
     logger.remove()
     logger.add(sys.stderr, level="WARNING")
+    if args.command == "reap" and args.delete and args.older_than_s is not None and args.older_than_s <= 0:
+        parser.error("--delete needs --older-than-s > 0: live runs share the prefix")
     api = _api(args.env_file)
     if args.command == "check":
         asyncio.run(_check(config, api))
@@ -112,7 +122,10 @@ def main(argv: list[str] | None = None) -> int:
         asyncio.run(_dry_run(config, api, args.tier or config.compute.tier))
     else:
         prefix = args.prefix or config.compute.runpod.pod_name_prefix
-        asyncio.run(_reap(config, api, prefix=prefix, older_than_s=args.older_than_s, delete=args.delete))
+        older_than_s = args.older_than_s
+        if older_than_s is None:
+            older_than_s = max_pod_lifetime_s(config.compute.runpod) if args.delete else 0
+        asyncio.run(_reap(config, api, prefix=prefix, older_than_s=older_than_s, delete=args.delete))
     return 0
 
 

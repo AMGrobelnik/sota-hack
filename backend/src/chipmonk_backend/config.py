@@ -1,14 +1,18 @@
 """Backend configuration: one YAML file, an optional local overlay, and ``.env``.
 
-Load order (later wins):
+Load order (later wins, each deep-merged on top of the one before):
 
-1. ``backend/config/backend.yaml`` (committed, commented defaults), or the file
-   named by ``$CHIPMONK_CONFIG`` or the ``path`` argument;
-2. its sibling ``<stem>.local.yaml`` if present (gitignored: RunPod ids, image
-   refs, anything per machine), deep-merged on top;
-3. ``backend/.env`` is loaded into ``os.environ`` with ``override=False`` so the
-   process environment wins. Keys are only ever read from the environment by
-   NAME; no secret value belongs in any YAML file.
+1. ``backend/config/backend.yaml`` (committed, commented defaults), always;
+2. its sibling ``backend.local.yaml`` if present (gitignored: RunPod ids,
+   image refs, anything per machine);
+3. the file named by the ``path`` argument (``--config``) or
+   ``$CHIPMONK_CONFIG``, if any: it OVERLAYS the defaults, so it need only
+   hold the values that differ;
+4. that file's sibling ``<stem>.local.yaml`` if present.
+
+``backend/.env`` is loaded into ``os.environ`` with ``override=False`` so the
+process environment wins. Keys are only ever read from the environment by
+NAME; no secret value belongs in any YAML file.
 
 The value vocabularies (:data:`RunMode`, :data:`ComputeTier`, :data:`Effort`)
 are declared here because the schema is where they are enforced; the
@@ -104,12 +108,16 @@ class RunPodConfig(_Section):
 
     #: True = build and log every create-pod request but never send it.
     dry_run: bool = True
+    #: Must be true, with ``dry_run`` false, before any pod is created (it
+    #: costs money). Even then only a backend that can authenticate on a pod
+    #: runs there: a pod gets no Claude login and no API key, only its token.
+    allow_paid_pods: bool = False
     cloud_type: Literal["SECURE", "COMMUNITY"] = "SECURE"
     data_center_id: str = ""  # empty = any data center
     image: str = ""  # the team's worker image ref; set in backend.local.yaml
     network_volume_id: str = ""  # empty = no volume; never default a name
     pod_name_prefix: str = "chipmonk_worker_"
-    pod_timeout_s: int = 7200  # hard TTL: the worker kills itself after this
+    pod_timeout_s: int = 7200  # the worker process exits after this (the pod is NOT ended)
     healthcheck_timeout_s: int = 600  # image pull plus boot can take minutes
     max_usd_per_hr: float = 1.0  # never rent a machine above this price
     disk_gb: int = 20
@@ -132,7 +140,9 @@ class ComputeConfig(_Section):
 
     run_mode: RunMode = "local"
     tier: ComputeTier = "cpu_basic"
-    max_concurrent_agents: int = 4
+    #: Agents (and so pods) one process runs at once; further ``run_agent``
+    #: calls wait for a slot.
+    max_concurrent_agents: int = Field(default=4, ge=1)
     runpod: RunPodConfig = Field(default_factory=RunPodConfig)
     flex: FlexConfig = Field(default_factory=FlexConfig)
 
@@ -193,11 +203,18 @@ def load_config(path: Path | None = None, *, env_file: Path | None = None) -> Ba
     unknown key or a bad value.
     """
     load_dotenv(env_file or DEFAULT_ENV_PATH, override=False)
-    chosen = path or Path(os.environ.get(CONFIG_ENV_VAR) or DEFAULT_CONFIG_PATH)
-    data = _read_yaml(chosen)
-    overlay = chosen.with_name(f"{chosen.stem}.local.yaml")
-    if overlay.is_file():
-        data = deep_merge(data, _read_yaml(overlay))
+    chosen = path or (Path(os.environ[CONFIG_ENV_VAR]) if os.environ.get(CONFIG_ENV_VAR) else None)
+    files = [DEFAULT_CONFIG_PATH]
+    if chosen is not None and chosen.resolve() != DEFAULT_CONFIG_PATH.resolve():
+        if not chosen.is_file():
+            raise FileNotFoundError(f"config file {chosen} does not exist")
+        files.append(chosen)
+    data: dict[str, Any] = {}
+    for file in files:
+        data = deep_merge(data, _read_yaml(file))
+        local = file.with_name(f"{file.stem}.local.yaml")
+        if local.is_file():
+            data = deep_merge(data, _read_yaml(local))
     return BackendConfig.model_validate(data)
 
 

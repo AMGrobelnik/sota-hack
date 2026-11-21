@@ -44,7 +44,7 @@ from chipmonk_backend.compute.runpod.worker import (
     WorkerClient,
     WorkerUnreachableError,
 )
-from chipmonk_backend.config import BackendConfig, ComputeTier, RunMode
+from chipmonk_backend.config import BackendConfig, ComputeTier, RunMode, RunPodConfig
 from chipmonk_backend.runs import RunDir
 
 POD_REQUEST_FILE = "pod_request.json"
@@ -55,19 +55,37 @@ RESULT_GRACE_S = 120
 REDACTED = "<redacted>"
 
 
+def max_pod_lifetime_s(rp: RunPodConfig) -> int:
+    """The longest a healthy worker pod of this config can legitimately live:
+    boot and health check, the job, its result grace, and the worker's TTL grace.
+    A pod of ours older than this is an orphan, never a live run."""
+    return rp.healthcheck_timeout_s + rp.pod_timeout_s + RESULT_GRACE_S + TTL_GRACE_S
+
+
 class _MachineUnavailableError(RuntimeError):
     """This machine could not be had (create refused, never healthy, pod gone)."""
 
 
 class RunPodRunner(Runner):
-    """Rents a worker pod, ships the spec, streams events back, terminates the pod."""
+    """Rents a worker pod, ships the spec, streams events back, terminates the pod.
+
+    Paid pods are refused unless ``compute.runpod.allow_paid_pods`` is true and
+    the agent backend is in :attr:`POD_READY_BACKENDS`: a pod receives only its
+    worker token, so a backend that needs a login or an API key (``claude_cli``,
+    ``openrouter``) cannot authenticate there as built.
+    """
 
     mode: ClassVar[RunMode] = "on_demand"
+    #: Backends that can run on a pod with no credential but the worker token.
+    POD_READY_BACKENDS: ClassVar[frozenset[str]] = frozenset({"stub"})
 
     def __init__(self, config: BackendConfig, *, api: RunPodAPI | None = None) -> None:
         super().__init__(config)
         self.api = api or RunPodAPI()
         self._live_pods: dict[str, PodInfo] = {}
+        #: Names whose create failed ambiguously (timeout, 5xx, dropped answer):
+        #: the pod may exist. :meth:`close` looks them up once more.
+        self._doubtful: dict[str, RunDir] = {}
         #: Seconds between readiness probes; tests shrink it.
         self.poll_interval_s = 10.0
 
@@ -86,16 +104,17 @@ class RunPodRunner(Runner):
         5. Terminate the pod in ``finally``; a failed terminate is logged,
            kept for :meth:`close`, and left for the reaper.
 
-        Raises :class:`RunPodError` only when no machine could be had.
+        Raises :class:`RunPodError` when no machine could be had, and before
+        any create when paid pods are not enabled (see :meth:`check_paid_run`).
         """
         rp = self.config.compute.runpod
         chosen = tier or self.config.compute.tier
         token = secrets.token_urlsafe(32)
+        if not rp.dry_run:
+            self.check_paid_run(spec)
         machines = await self.candidates(chosen)
         if rp.dry_run:
             return self._dry_run(spec, run, chosen, machines, token)
-        if not rp.image:
-            raise RunPodError("compute.runpod.image is not set (the team's worker image ref)")
         sink = run.event_sink()
         errors: list[str] = []
         for attempt, machine in enumerate(machines, start=1):
@@ -103,7 +122,7 @@ class RunPodRunner(Runner):
                 run_id=run.run_id, agent=spec.name, attempt=attempt, machine=machine, token=token
             )
             try:
-                pod = await self._create(pod_spec)
+                pod = await self._create(pod_spec, run)
             except (RunPodError, _MachineUnavailableError) as exc:
                 errors.append(f"{machine}: {exc}")
                 logger.warning("pod on {} not created: {}", machine, exc)
@@ -120,6 +139,29 @@ class RunPodRunner(Runner):
             finally:
                 await self._terminate(pod.id, run)
         raise RunPodError(f"no {chosen} machine could be had: " + "; ".join(errors or ["empty chain"]))
+
+    def check_paid_run(self, spec: AgentSpec) -> None:
+        """:class:`RunPodError` unless a real (paid) pod may be created for ``spec``.
+
+        Three conditions: ``compute.runpod.allow_paid_pods`` is true, the
+        worker image is set, and the agent backend can authenticate on a pod
+        that holds nothing but its worker token (:attr:`POD_READY_BACKENDS`).
+        """
+        rp = self.config.compute.runpod
+        backend = spec.backend or self.config.agents.default_backend
+        if not rp.allow_paid_pods:
+            raise RunPodError(
+                "paid pods are off: set compute.runpod.allow_paid_pods: true to create real pods "
+                "(compute.runpod.dry_run: true writes the request without creating one)"
+            )
+        if backend not in self.POD_READY_BACKENDS:
+            raise RunPodError(
+                f"agent backend {backend!r} cannot authenticate on a pod: a pod gets only its worker "
+                f"token, no Claude login and no API key. Backends that can run there: "
+                f"{sorted(self.POD_READY_BACKENDS)}"
+            )
+        if not rp.image:
+            raise RunPodError("compute.runpod.image is not set (the team's worker image ref)")
 
     async def candidates(self, tier: ComputeTier) -> list[str]:
         """Machines to try for ``tier``: in stock, then unknown, then out of stock; capped by price.
@@ -152,7 +194,12 @@ class RunPodRunner(Runner):
 
     def pod_spec(self, *, run_id: str, agent: str, attempt: int, machine: str, token: str) -> PodSpec:
         """The create request for one worker: image, machine, ports, disk, the
-        worker token in env, TTL ``runpod.pod_timeout_s``; no secret but the token."""
+        worker token in env, and the worker's TTL; no secret but the token.
+
+        The TTL ends the worker PROCESS only, not the pod (see
+        :func:`~chipmonk_backend.compute.runpod.worker.start_ttl_watchdog`):
+        this runner's ``finally`` and :meth:`close` terminate the pod, and the
+        prefix reaper is the safety net when this process dies first."""
         rp = self.config.compute.runpod
         ports = list(rp.ports)
         if f"{WORKER_PORT}/http" not in ports:
@@ -192,9 +239,15 @@ class RunPodRunner(Runner):
     async def close(self) -> None:
         """Terminate every pod this runner still holds, then close the API client.
 
-        A pod that will not terminate is logged and kept in ``_live_pods`` for
-        the next call or the reaper; ``close`` itself never raises for it.
+        First the names of failed creates are looked up once more (a pod can
+        show up in the listing late) and any pod found is terminated. A pod
+        that will not terminate, or a name that cannot be checked, is logged,
+        recorded in ``run.json`` as a possible leak and kept for the next call
+        or the reaper; ``close`` itself never raises for it.
         """
+        for name, run in list(self._doubtful.items()):
+            if await self._settle_failed_create(name, run):
+                del self._doubtful[name]
         for pod_id in list(self._live_pods):
             try:
                 await self.api.terminate_pod(pod_id)
@@ -221,9 +274,21 @@ class RunPodRunner(Runner):
         logger.info(message)
         return AgentResult(agent=spec.name, failed=True, error=message)
 
-    async def _create(self, pod_spec: PodSpec) -> PodInfo:
-        """Create one pod and hold it; a pod billing above the cap is terminated at once."""
-        pod = await self.api.create_pod(pod_spec)
+    async def _create(self, pod_spec: PodSpec, run: RunDir) -> PodInfo:
+        """Create one pod and hold it; a pod billing above the cap is terminated at once.
+
+        Any failed create may still have made a pod (the request timed out,
+        the connection dropped, RunPod answered 5xx after acting, or the
+        answer lacked an id), so the pod is looked up by its unique name and
+        terminated. The name stays doubtful, because a pod can reach the
+        listing late, and :meth:`close` looks once more.
+        """
+        try:
+            pod = await self.api.create_pod(pod_spec)
+        except RunPodError:
+            self._doubtful[pod_spec.name] = run
+            await self._settle_failed_create(pod_spec.name, run)
+            raise
         self._live_pods[pod.id] = pod
         cap = self.config.compute.runpod.max_usd_per_hr
         if pod.usd_per_hr is not None and pod.usd_per_hr > cap:
@@ -291,6 +356,38 @@ class RunPodRunner(Runner):
                 )
             await asyncio.sleep(self.poll_interval_s)
 
+    async def _settle_failed_create(self, name: str, run: RunDir) -> bool:
+        """Terminate any live pod named ``name``; ``True`` when the listing could be read.
+
+        An unreadable listing records ``name`` under ``possible_leaks`` in
+        ``run.json`` (the reaper finds it by prefix) and returns ``False``.
+        """
+        try:
+            pods = await self.api.list_pods()
+        except RunPodError as exc:
+            logger.error("could not check for a pod named {} after a failed create: {}", name, exc)
+            self._record_leak(run, name)
+            return False
+        for pod in pods:
+            if pod.name == name and pod.desired_status != "TERMINATED":
+                logger.warning("create of {} failed, yet pod {} exists: terminating it", name, pod.id)
+                self._live_pods[pod.id] = pod
+                self._record(run, pod=pod.id, pod_name=name, machine=pod.machine, created_despite_error=True)
+                await self._terminate(pod.id, run)
+        return True
+
+    def _record_leak(self, run: RunDir, name: str) -> None:
+        """Add ``name`` to ``RunRecord.compute["possible_leaks"]``."""
+        if not run.record_path.is_file():
+            return
+        try:
+            leaks = list(run.read_record().compute.get("possible_leaks") or [])
+        except (OSError, ValueError, TypeError) as exc:
+            logger.error("could not read {} to record leak {}: {}", run.record_path, name, exc)
+            return
+        if name not in leaks:
+            self._record(run, possible_leaks=[*leaks, name])
+
     async def _terminate(self, pod_id: str, run: RunDir | None) -> None:
         """Terminate and forget a pod; on failure keep it for :meth:`close` and the reaper."""
         try:
@@ -318,9 +415,7 @@ class RunPodRunner(Runner):
         if not run.record_path.is_file():
             return
         try:
-            record = run.read_record()
-            record.compute.update(facts)
-            run.write_record(record)
+            run.add_compute(**facts)
         except (OSError, ValueError, TypeError) as exc:
             logger.error("could not record compute facts in {}: {}", run.record_path, exc)
 
@@ -332,4 +427,4 @@ def _stock_rank(offer: Offer | None) -> int:
     return 0 if offer.stock else 2
 
 
-__all__ = ["POD_REQUEST_FILE", "WORKER_VOLUME_PATH", "RunPodRunner"]
+__all__ = ["POD_REQUEST_FILE", "WORKER_VOLUME_PATH", "RunPodRunner", "max_pod_lifetime_s"]

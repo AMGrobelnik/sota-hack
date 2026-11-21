@@ -51,20 +51,28 @@ compute:
   # on_demand: one rented RunPod worker pod per agent
   run_mode: local
   tier: cpu_basic                 # cpu_basic | cpu_plus | gpu_basic | gpu_plus
-  max_concurrent_agents: 4
+  max_concurrent_agents: 4        # run_agent calls running at once (so pods too); others wait
 
   flex:
     isolation: host               # host only for now; macOS-VM isolation deferred
     require_macos: true
 
+  # Pods today: a pod gets only its worker token (no Claude login, no API
+  # key), so only the stub backend can run there and any other backend is
+  # refused. Real agents on pods still need a team-chosen credential path and
+  # a non-root image user. The worker's TTL ends its process, not the pod
+  # (RunPod restarts the container); the launcher terminates pods, and
+  # `python -m chipmonk_backend.compute.runpod reap --delete` (run on a
+  # schedule) ends pods older than the longest a live pod can run.
   runpod:
     dry_run: true                 # true = build and save the create request, never send it
+    allow_paid_pods: false        # must be true (with dry_run false) before any pod is created
     cloud_type: SECURE            # SECURE | COMMUNITY
     data_center_id: ""            # "" = any; a network volume pins pods to its data center
     image: ""                     # the team's worker image; set in backend.local.yaml
     network_volume_id: ""         # "" = no volume
     pod_name_prefix: chipmonk_worker_   # every sweep matches this prefix only
-    pod_timeout_s: 7200           # hard TTL: the worker exits after this (+300 s grace)
+    pod_timeout_s: 7200           # the worker process exits after this (+300 s); the pod does not
     healthcheck_timeout_s: 600    # image pull plus boot can take 5-10 minutes
     max_usd_per_hr: 1.0           # never rent above this
     disk_gb: 20

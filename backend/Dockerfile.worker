@@ -12,6 +12,15 @@
 #
 # The CLI is fetched like AI Inventor's Dockerfile.base does it: the pinned
 # release binary, checked against the release manifest's sha256.
+#
+# NOT YET USABLE FOR REAL AGENTS: the pod receives no Claude login and no
+# OpenRouter key, so only the `stub` backend can run here, and the launcher
+# refuses any other backend on a pod (compute.runpod.allow_paid_pods also
+# defaults to false). A real agent on a pod needs a credential path chosen by
+# the team (for example a RunPod account secret referenced from the pod env,
+# scoped to OpenRouter spend) and a non-root user; neither exists yet.
+# The worker's TTL ends its process, not the pod: RunPod restarts the
+# container and the pod bills until the launcher or the reaper terminates it.
 
 FROM python:3.12-slim-bookworm
 
@@ -45,6 +54,8 @@ COPY config/backend.yaml ./config/backend.yaml
 # Editable, so the package finds config/ and writes runs/ and logs/ under /app.
 RUN uv pip install --system --no-cache -e .
 
-ENV PYTHONUNBUFFERED=1 DISABLE_AUTOUPDATER=1
+# IS_SANDBOX tells the claude CLI it runs in a disposable sandbox, which it
+# requires before it accepts --dangerously-skip-permissions as root.
+ENV PYTHONUNBUFFERED=1 DISABLE_AUTOUPDATER=1 IS_SANDBOX=1
 EXPOSE 8080
 CMD ["python", "-m", "chipmonk_backend.compute.runpod.worker", "--port", "8080"]

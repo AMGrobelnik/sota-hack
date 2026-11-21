@@ -20,6 +20,7 @@ from script_backend import use_script_backend
 
 from chipmonk_backend.agents.types import AgentSpec
 from chipmonk_backend.compute.factory import runner_for
+from chipmonk_backend.compute.runpod import __main__ as runpod_cli
 from chipmonk_backend.compute.runpod.api import (
     Offer,
     PodInfo,
@@ -30,11 +31,11 @@ from chipmonk_backend.compute.runpod.api import (
     RunPodTransientError,
 )
 from chipmonk_backend.compute.runpod.reaper import reap_orphans
-from chipmonk_backend.compute.runpod.runner import RunPodRunner
+from chipmonk_backend.compute.runpod.runner import RunPodRunner, max_pod_lifetime_s
 from chipmonk_backend.compute.runpod.worker import WORKER_TOKEN_ENV, create_app
-from chipmonk_backend.config import BackendConfig
+from chipmonk_backend.config import BACKEND_ROOT, BackendConfig, load_config
 from chipmonk_backend.orchestrate import run_agent
-from chipmonk_backend.runs import RunDir
+from chipmonk_backend.runs import RunDir, RunRecord
 
 TRAINS = """
 import pathlib
@@ -56,6 +57,9 @@ class FakeRunPod(RunPodAPI):
         self.never_healthy: set[str] = set(behaviour.get("never_healthy", ()))
         self.price: dict[str, float] = behaviour.get("price", {})
         self.terminate_failures: int = behaviour.get("terminate_failures", 0)
+        #: Machines whose create makes the pod but loses the answer (timeout, 5xx).
+        self.ambiguous: set[str] = set(behaviour.get("ambiguous", ()))
+        self.list_failures: int = behaviour.get("list_failures", 0)
         self.created: list[PodSpec] = []
         self.terminated: list[str] = []
         self.pods: dict[str, PodInfo] = {}
@@ -81,6 +85,8 @@ class FakeRunPod(RunPodAPI):
             created_at="2026-11-21T10:00:00Z",
         )
         self.pods[pod.id] = pod
+        if spec.machine in self.ambiguous:
+            raise RunPodTransientError("RunPod POST /pods: ReadTimeout")
         if spec.machine not in self.never_healthy:
             server = TestServer(create_app(self.pod_config, token=spec.env[WORKER_TOKEN_ENV]))
             await server.start_server()
@@ -94,6 +100,9 @@ class FakeRunPod(RunPodAPI):
         return self.pods[pod_id]
 
     async def list_pods(self) -> list[PodInfo]:
+        if self.list_failures > 0:
+            self.list_failures -= 1
+            raise RunPodTransientError("HTTP 503 on GET /pods")
         return list(self.pods.values())
 
     async def terminate_pod(self, pod_id: str) -> None:
@@ -112,6 +121,8 @@ class FakeRunPod(RunPodAPI):
 class LocalPodRunner(RunPodRunner):
     """Reaches a pod's worker on localhost instead of RunPod's proxy."""
 
+    POD_READY_BACKENDS = frozenset({"stub", "script"})
+
     def worker_url(self, pod: PodInfo) -> str:
         assert isinstance(self.api, FakeRunPod)
         return self.api.urls.get(pod.id, "http://127.0.0.1:9")  # nothing listens: never healthy
@@ -120,6 +131,7 @@ class LocalPodRunner(RunPodRunner):
 def _with_runpod(config: BackendConfig, **runpod: Any) -> BackendConfig:
     settings = {
         "dry_run": False,
+        "allow_paid_pods": True,
         "image": "registry.example/chipmonk-worker:test",
         "healthcheck_timeout_s": 1,
         "tier_chains": {
@@ -259,3 +271,116 @@ async def test_reaper_matches_prefix_and_age_and_only_acts_when_asked(fake: Fake
     assert [p.id for p in found] == ["a", "d"] and fake.terminated == []
     old = await reap_orphans(fake, prefix="chipmonk_worker_", older_than_s=60, dry_run=False)
     assert [p.id for p in old] == ["a"] and fake.terminated == ["a"]
+
+
+async def _recorded_run(cfg: BackendConfig, run_id: str) -> RunDir:
+    """A run folder with a ``running`` record, as ``run_agent`` leaves it for the runner."""
+    run = RunDir.create(cfg.resolved_runs_dir(), run_id)
+    run.write_record(RunRecord(run_id=run_id, run_mode="on_demand", agent={}, status="running"))
+    return run
+
+
+async def test_ambiguous_create_finds_the_pod_by_name_and_terminates_it(
+    config: BackendConfig, fake: FakeRunPod
+) -> None:
+    fake.ambiguous = {"cpu3g-2-8"}  # the pod is made, the answer is lost
+    cfg = _with_runpod(config)
+    run = await _recorded_run(cfg, "r6")
+    runner = _runner(cfg, fake)
+
+    result = await runner.run(AgentSpec(name="a", prompts=["hi"], backend="stub"), run)
+
+    assert not result.failed  # the next machine in the chain ran the agent
+    assert sorted(fake.terminated) == ["pod1", "pod2"]  # the ghost pod too
+    await runner.close()
+    assert all(p.desired_status == "TERMINATED" for p in fake.pods.values())
+
+
+async def test_ambiguous_create_with_listing_down_is_recorded_then_closed(
+    config: BackendConfig, fake: FakeRunPod
+) -> None:
+    fake.ambiguous = {"cpu3g-2-8", "cpu5g-2-8"}
+    fake.list_failures = 2  # both immediate lookups fail
+    cfg = _with_runpod(config)
+    run = await _recorded_run(cfg, "r7")
+    runner = _runner(cfg, fake)
+
+    with pytest.raises(RunPodError, match="no cpu_basic machine"):
+        await runner.run(AgentSpec(name="a", prompts=["hi"], backend="stub"), run)
+
+    leaks = run.read_record().compute["possible_leaks"]
+    assert leaks == ["chipmonk_worker_r7_a_a1", "chipmonk_worker_r7_a_a2"]
+    assert fake.terminated == []
+    await runner.close()  # the listing works again: both ghosts are found and ended
+    assert sorted(fake.terminated) == ["pod1", "pod2"] and not runner._doubtful
+
+
+@pytest.mark.parametrize(
+    ("settings", "backend", "message"),
+    [
+        ({"allow_paid_pods": False}, "stub", "paid pods are off"),
+        ({}, "claude_cli", "cannot authenticate on a pod"),
+        ({}, "openrouter", "cannot authenticate on a pod"),
+        ({"image": ""}, "stub", "image is not set"),
+    ],
+)
+async def test_paid_pod_is_refused_unless_enabled_and_the_backend_can_run_there(
+    config: BackendConfig, fake: FakeRunPod, settings: dict[str, Any], backend: str, message: str
+) -> None:
+    cfg = _with_runpod(config, **settings)
+    runner = RunPodRunner(cfg, api=fake)  # the real backend allowlist
+    spec = AgentSpec(name="a", prompts=["hi"], backend=backend)  # type: ignore[arg-type]
+    with pytest.raises(RunPodError, match=message):
+        await runner.run(spec, RunDir.create(cfg.resolved_runs_dir(), "r8"))
+    assert fake.created == []
+
+
+async def test_default_config_refuses_a_paid_pod(config: BackendConfig, fake: FakeRunPod) -> None:
+    cfg = _with_runpod(config, allow_paid_pods=config.compute.runpod.allow_paid_pods)
+    assert config.compute.runpod.allow_paid_pods is False
+    with pytest.raises(RunPodError, match="paid pods are off"):
+        await RunPodRunner(cfg, api=fake).run(
+            AgentSpec(name="a", prompts=["hi"]), RunDir.create(cfg.resolved_runs_dir(), "r9")
+        )
+    assert fake.created == []
+
+
+async def test_reaper_refuses_to_delete_without_a_minimum_age(fake: FakeRunPod) -> None:
+    fake.pods = {
+        "a": PodInfo("a", "chipmonk_worker_r1_x_a1", "RUNNING", "cpu3g", created_at="2020-01-01T00:00:00Z")
+    }
+    with pytest.raises(ValueError, match="minimum age"):
+        await reap_orphans(fake, prefix="chipmonk_worker_", dry_run=False)
+    assert fake.terminated == []
+
+
+def test_reap_cli_deletes_only_pods_older_than_a_live_pod_can_be(
+    config: BackendConfig, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seen: dict[str, Any] = {}
+
+    async def fake_reap(api: RunPodAPI, **kwargs: Any) -> list[PodInfo]:
+        seen.update(kwargs)
+        return []
+
+    monkeypatch.setattr(runpod_cli, "reap_orphans", fake_reap)
+    monkeypatch.setenv("RUNPOD_API_KEY", "not-a-real-key")
+    assert runpod_cli.main(["reap", "--delete"]) == 0
+    assert seen["older_than_s"] == max_pod_lifetime_s(config.compute.runpod) == 600 + 7200 + 120 + 300
+    assert seen["dry_run"] is False
+    assert runpod_cli.main(["reap"]) == 0 and seen["older_than_s"] == 0 and seen["dry_run"] is True
+    with pytest.raises(SystemExit):
+        runpod_cli.main(["reap", "--delete", "--older-than-s", "0"])
+
+
+async def test_on_demand_dry_run_works_from_the_example_config(tmp_path: Path) -> None:
+    cfg = load_config(BACKEND_ROOT / "config" / "example.yaml", env_file=tmp_path / "absent.env")
+    cfg = cfg.model_copy(update={"runs_dir": tmp_path / "runs"})
+    assert cfg.compute.runpod.tier_chains["cpu_basic"]  # the overlay kept the default chains
+    run, result = await run_agent(
+        AgentSpec(name="a", prompts=["hi"], backend="stub"), cfg, run_mode="on_demand", run_id="ex"
+    )
+    assert result.failed and "dry run" in (result.error or "")
+    record = run.read_record()
+    assert record.compute["dry_run"] is True and record.compute["pod_request"]  # kept at the end
+    assert record.status == "failed" and record.finished_at

@@ -15,8 +15,8 @@ runs it with :class:`~chipmonk_backend.compute.local.LocalRunner`, and serves:
 Every route requires ``Authorization: Bearer <token>``, a random per-pod token
 the launcher generates and passes in the pod env as :data:`WORKER_TOKEN_ENV`
 (the worker is reachable by anyone who learns the pod id through RunPod's
-proxy). A TTL watchdog ends the process at ``pod_timeout_s + 300`` so an
-orphan cannot bill forever.
+proxy). A TTL watchdog ends the process at ``pod_timeout_s + 300``, which
+stops the agent but NOT the bill: see :func:`start_ttl_watchdog`.
 
 Ported from AI Inventor ``aii_lib/run/agent_worker_server.py`` (routes, SSE
 buffer and resume, result-after-stream), ``aii_runpod/comms/entrypoint.py``
@@ -32,7 +32,6 @@ import argparse
 import asyncio
 import json
 import os
-import re
 import secrets
 import signal
 import tarfile
@@ -52,7 +51,7 @@ from chipmonk_backend.agents.types import AgentEvent, AgentResult, AgentSpec
 from chipmonk_backend.compute.local import LocalRunner
 from chipmonk_backend.config import BackendConfig, load_config
 from chipmonk_backend.log import setup_logging
-from chipmonk_backend.runs import JsonlEventSink, RunDir
+from chipmonk_backend.runs import JsonlEventSink, RunDir, is_safe_run_id
 
 WORKER_PORT = 8080
 WORKER_TOKEN_ENV = "CHIPMONK_WORKER_TOKEN"
@@ -61,7 +60,6 @@ TTL_GRACE_S = 300
 RUNPOD_PROXY_URL = "https://{pod_id}-{port}.proxy.runpod.net"
 #: Proxy answers while the pod is still booting or briefly unwell.
 _TRANSIENT_HTTP = frozenset({404, 502, 503, 504})
-_SAFE_RUN_ID = re.compile(r"[A-Za-z0-9._-]{1,128}")
 _HEARTBEAT_S = 5.0
 _STREAM_POLL_S = 0.2
 
@@ -146,7 +144,7 @@ def create_app(config: BackendConfig, *, token: str) -> web.Application:
             run_id = str(body["run_id"])
         except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
             return web.json_response({"error": f"bad job: {exc}"}, status=400)
-        if not _SAFE_RUN_ID.fullmatch(run_id) or run_id in (".", ".."):
+        if not is_safe_run_id(run_id):
             return web.json_response({"error": f"bad run_id {run_id!r}"}, status=400)
         run = _WorkerRunDir(config.resolved_runs_dir() / run_id)
         run.workspace.mkdir(parents=True, exist_ok=True)
@@ -278,7 +276,20 @@ def _tar_workspace(workspace: Path) -> Path:
 
 
 def start_ttl_watchdog(ttl_s: float) -> threading.Timer:
-    """SIGTERM this process after ``ttl_s`` seconds, so an orphaned pod stops billing."""
+    """SIGTERM this process after ``ttl_s`` seconds, so a forgotten agent stops working.
+
+    This does NOT stop the pod's bill. RunPod restarts a pod's container when
+    its process exits, and the pod keeps billing until it is terminated
+    through the control plane. Ending the pod from inside needs an API key on
+    the pod, and this design gives a pod none (its only secret is the worker
+    token); RunPod's create request has no time-to-live or auto-terminate
+    option (REST v2 schema, checked 2026-11-21). The pod is ended by the
+    launcher (:class:`~chipmonk_backend.compute.runpod.runner.RunPodRunner`
+    terminates it in ``finally`` and in ``close``), and when the launcher
+    itself dies, by the prefix reaper
+    (``python -m chipmonk_backend.compute.runpod reap --delete``), whose
+    default minimum age is the longest a live pod can run.
+    """
 
     def _expire() -> None:
         logger.error("worker: TTL of {}s reached, terminating", ttl_s)
