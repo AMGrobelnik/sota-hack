@@ -1,4 +1,4 @@
-"""Command line: ``chipmonk-backend run``, ``ask`` and ``config``.
+"""Command line: ``chipmonk-backend run``, ``ask``, ``serve`` and ``config``.
 
 Examples::
 
@@ -6,6 +6,7 @@ Examples::
     chipmonk-backend run --backend stub --prompt "hello"
     chipmonk-backend run --config config/example.yaml --prompt-file examples/seizure_eeg_prompt.md
     chipmonk-backend ask --model cheap "Name one low-power EEG seizure feature"
+    chipmonk-backend serve --agent stub
 
 ``python -m chipmonk_backend`` is the same command.
 """
@@ -25,6 +26,7 @@ from loguru import logger
 
 from chipmonk_backend.agents.base import BACKENDS
 from chipmonk_backend.agents.types import AgentResult, AgentSpec, utc_now
+from chipmonk_backend.api.cli import add_serve_parser, run_serve
 from chipmonk_backend.config import BackendConfig, ComputeTier, RunMode, load_config
 from chipmonk_backend.llm import OpenRouterClient
 from chipmonk_backend.llm.keys import OPENROUTER_KEY_ENV, has_openrouter_key
@@ -75,6 +77,7 @@ def _parser() -> argparse.ArgumentParser:
     ask.add_argument("question")
     ask.add_argument("--model", default=None, help="preset name or OpenRouter model id")
     ask.add_argument("--max-tokens", type=int, default=4096)
+    add_serve_parser(sub)
     return parser
 
 
@@ -93,6 +96,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "config":
         print(json.dumps(config.model_dump(mode="json"), indent=2))
         return 0
+    if args.command == "serve":
+        return run_serve(args, config)
     if args.command == "ask":
         return asyncio.run(_ask(config, args.question, model=args.model, max_tokens=args.max_tokens))
     prompts = list(args.prompt) + [path.read_text(encoding="utf-8").strip() for path in args.prompt_file]
