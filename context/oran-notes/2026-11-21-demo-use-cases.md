@@ -1,18 +1,21 @@
-# Demo use cases (locked, Sat 21 Nov 2026)
+# Demo use cases (final, Sat 21 Nov 2026)
 
-Theme: **NICU on a chip.** The design environment designs the core chip for neonatal
-monitoring devices. Two case studies:
+Theme: **always-on monitoring, from the incubator to the home.** One design environment
+designs the core chip for two very different continuous-monitoring devices. Two case
+studies, locked:
 
-1. **Incubator Watch** (radar plus thermal infrared): contactless detection of apnoea and
-   bradycardia (radar) and temperature warning signs of cold stress and early sepsis
-   (thermal). Real neonatal physiology, simulated sensors.
-2. **Neonatal seizure detection from EEG**: real open expert-labelled data, a richer chip
-   design problem.
+1. **Incubator Watch** (premature babies; radar plus thermal infrared): contactless
+   detection of apnoea and bradycardia (radar, fused with thermal nostril breathing) and
+   temperature warning signs of cold stress and early sepsis (thermal). Real neonatal
+   physiology, simulated sensors.
+2. **Epilepsy wearable** (adults at home; EEG): the smallest chip that still catches
+   seizures from the two to four electrodes a real wearable has. Real recordings with
+   expert seizure labels.
 
-AF from ECG is dropped completely (decision, 21 Nov). AF screening is already served by
-existing devices, so it is not a case study.
+Two populations, two sensor types, one case on simulated data and one on real data: this
+shows the environment is general.
 
-## What each sensor is for
+## What each sensor is for (Case 1)
 
 - **Radar**: mounted on the incubator, it senses the tiny chest movements of breathing and
   the heartbeat without touching the baby. The chip turns that into breathing and heart
@@ -88,27 +91,56 @@ Report false alarms per hour for radar alone, thermal alone and fused.
 
 **On the slide:** "real neonatal physiology, simulated radar and thermal".
 
-## Case 2: Neonatal seizure detection
+## Case 2: Epilepsy wearable
 
-- Data: Helsinki neonatal EEG dataset, Stevenson et al., Scientific Data 2019
-  (doi:10.1038/sdata.2019.39), CC BY 4.0, Zenodo 10.5281/zenodo.4940267 (several versions;
-  use the latest, which corrected annotations and headers). 79 term neonates from the
-  Helsinki University Hospital NICU; seizures annotated independently by three experts;
-  39 with seizures and 22 seizure-free by consensus.
-- Clinical problem: many neonatal seizures have no visible signs and are only seen on EEG;
-  expert EEG reading is not available around the clock.
-- Chip: bedside or wearable EEG seizure detector, on the device.
-- Why the design search matters: many channels, so the AI scientist chooses channels,
-  window length and bits; a richer design space than single-lead ECG, and more data per
-  second, so gate count matters more.
-- Metric: seizures detected (per event, using expert consensus) against false detections
-  per hour; split by baby.
+**The claim (a design study, not a product):** "If a wearable only has these two
+electrodes, here is the smallest chip that works, and what it costs in missed seizures."
+We design the chip for whoever builds the wearable; we do not build the wearable.
+
+- Clinical problem: people with epilepsy undercount their own seizures, so treatment
+  decisions rest on unreliable seizure diaries. A discreet wearable needs a tiny,
+  low-power chip that detects seizures on the device.
+- Real wearables use two to four electrodes (behind or around the ear, under the scalp,
+  patches, headbands), not a full cap. Company examples to check before naming on a slide.
+- Method:
+  1. Hospital EEG with expert seizure labels (Siena).
+  2. Keep only the channels a wearable would have (for example those nearest the ear).
+  3. The environment finds the smallest chip that still catches seizures from those
+     channels.
+  4. Show the trade-off: number of electrodes against chip size against seizures caught.
+- Data: Siena Scalp EEG Database, PhysioNet v1.0.0, CC BY 4.0, 14 adults (ages 20 to 71),
+  University of Siena, 20.3 GB, annotated seizures.
+  https://physionet.org/content/siena-scalp-eeg/1.0.0/ . Scale-up options: CHB-MIT
+  (PhysioNet, younger patients, licence to check), TUH EEG Seizure Corpus (large, free
+  with registration).
+- Metric: seizures caught (per event) against false alarms per day; split by patient.
+- Caveat to state: hospital electrodes near the ear are not identical to a wearable's
+  (contact quality, placement), so this is an approximation.
+- Competition: home seizure wearables and Ceribell in the ICU exist. Our claim is the
+  design environment and the electrode-against-chip-size map, verified bit for bit.
+
+## Data model (how customers use it)
+
+1. **Feasibility, on public or simulated data** (what we demo): before any hardware, is
+   the device possible and how big must the chip be?
+2. **Final design, on the customer's own device data**: their electrodes and noise differ
+   from hospital data, so the chip is redesigned on their recordings. The platform runs
+   in the customer's environment; their patient data never leaves their control.
+
+The device maker remains responsible for clinical validation and regulatory approval.
+
+## Dropped
+
+- AF from ECG (served by existing devices).
+- Neonatal EEG seizures and HIE grading (kept as backup; both datasets open CC BY 4.0:
+  Helsinki, Zenodo 10.5281/zenodo.4940267, 79 neonates, three expert labellers; Cork,
+  Zenodo 7477575, 53 neonates with HIE, 169 h, hourly background grades by two experts).
 
 ## Open decisions (Oran)
 
 - Desaturation threshold and its UK source.
 - The clinical line for each case, as events detected and false alarms per hour.
-- Whether to use consensus or any-expert seizure labels.
+- Which channels count as "wearable" for the epilepsy case.
 
 ## Sources
 
@@ -116,5 +148,6 @@ Report false alarms per hour for radar alone, thermal alone and fused.
   https://www.clinicalguidelines.scot.nhs.uk/nhsggc-guidelines/nhsggc-guidelines/neonatology/apnoea-of-prematurity/
 - Alarm fatigue: https://www.childrenshospitals.org/news/childrens-hospitals-today/2019/04/patient-safety-project-aims-to-reduce-alarm-fatigue-in-the-nicu ;
   https://pmc.ncbi.nlm.nih.gov/articles/PMC11353546/ ; https://onlinelibrary.wiley.com/doi/10.1111/nicc.70322
-- Helsinki EEG: https://pmc.ncbi.nlm.nih.gov/articles/PMC6400100/ ; https://zenodo.org/records/4940267
+- Siena Scalp EEG: https://physionet.org/content/siena-scalp-eeg/1.0.0/
+- Backup neonatal EEG: https://zenodo.org/records/4940267 ; https://zenodo.org/record/7477575
 - Neonatal radar simulator: https://doaj.org/article/6d2b87fb398d490d9916b5649b3aa08c
