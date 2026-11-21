@@ -19,25 +19,25 @@ Everything collected for the hackathon, one line per file.
 - `transcripts/2026-11-21-1445-medical-devices-chip-weights.md`: spoken team talk about medical devices, ultrasound machines and embedding weights into a chip, 21 Nov 2026, 14:45.
 - `transcripts/2026-11-21-1448-chip-design-space-environment.md`: spoken team talk about building the chip for other people, the design space and an environment with AI scientists, 21 Nov 2026, 14:48.
 
-## notes/ (research notes, 20 to 21 Nov 2026)
+## adrian-notes/ (research notes, 20 to 21 Nov 2026)
 
-- `notes/event-and-background.md`: event overview, judging, Adrian's constraints and shortlist (team background section left out).
-- `notes/ideas.md`: all ideas considered with scores and verdicts, research note.
-- `notes/sponsors.md`: what the sponsors build and what would resonate, research note.
-- `notes/past-events.md`: past events by the organiser and what won, research note.
-- `notes/dialysis-graft.md`: dialysis graft simulation idea with evidence, research note.
-- `notes/2026-11-20-team-call.md`: notes from the team call, 20 Nov.
-- `notes/2026-11-21-opening-talk.md`: notes from the opening talk, 21 Nov.
-- `notes/2026-11-21-discord-digest.md`: digest of the event Discord, 21 Nov, research note.
-- `notes/2026-11-21-idealab-search.md`: search of an idea database for overlap, 21 Nov, research note.
-- `notes/2026-11-21-judges-check.md`: who the judges likely are, 21 Nov, research note.
-- `notes/2026-11-21-medical-chip-evidence.md`: evidence for the medical chip idea, 21 Nov, research note.
-- `notes/2026-11-21-neonatal-ir-clinical.md`: neonatal infrared monitoring, clinical side, 21 Nov, research note.
-- `notes/2026-11-21-neonatal-ir-computation.md`: neonatal infrared monitoring, computation side, 21 Nov, research note.
-- `notes/2026-11-21-neonatal-ir-data.md`: neonatal infrared monitoring, available data, 21 Nov, research note.
-- `notes/2026-11-21-oran-ideas.md`: Oran's idea work: ranked candidates, problem sizes, chip hunches and case-study options, 21 Nov, research note.
-- `notes/2026-11-21-figure-ledger.md`: source-by-source check of the dialysis graft figures, 20 to 21 Nov, research note.
-- `notes/2026-11-21-idealab-ranking.md`: seven idea-database searches and a ranking against the judging slide, 21 Nov, research note.
-- `notes/2026-11-21-ideation-prompt.md`: paste-in prompt for generating and stress-testing ideas against the judging slide, 21 Nov.
-- `notes/data/`: structured JSON outputs behind the notes (idea panels, sponsors, past events, dialysis verification), research note.
+- `adrian-notes/event-and-background.md`: event overview, judging, Adrian's constraints and shortlist (team background section left out).
+- `adrian-notes/ideas.md`: all ideas considered with scores and verdicts, research note.
+- `adrian-notes/sponsors.md`: what the sponsors build and what would resonate, research note.
+- `adrian-notes/past-events.md`: past events by the organiser and what won, research note.
+- `adrian-notes/dialysis-graft.md`: dialysis graft simulation idea with evidence, research note.
+- `adrian-notes/2026-11-20-team-call.md`: notes from the team call, 20 Nov.
+- `adrian-notes/2026-11-21-opening-talk.md`: notes from the opening talk, 21 Nov.
+- `adrian-notes/2026-11-21-discord-digest.md`: digest of the event Discord, 21 Nov, research note.
+- `adrian-notes/2026-11-21-idealab-search.md`: search of an idea database for overlap, 21 Nov, research note.
+- `adrian-notes/2026-11-21-judges-check.md`: who the judges likely are, 21 Nov, research note.
+- `adrian-notes/2026-11-21-medical-chip-evidence.md`: evidence for the medical chip idea, 21 Nov, research note.
+- `adrian-notes/2026-11-21-neonatal-ir-clinical.md`: neonatal infrared monitoring, clinical side, 21 Nov, research note.
+- `adrian-notes/2026-11-21-neonatal-ir-computation.md`: neonatal infrared monitoring, computation side, 21 Nov, research note.
+- `adrian-notes/2026-11-21-neonatal-ir-data.md`: neonatal infrared monitoring, available data, 21 Nov, research note.
+- `adrian-notes/2026-11-21-oran-ideas.md`: Oran's idea work: ranked candidates, problem sizes, chip hunches and case-study options, 21 Nov, research note.
+- `adrian-notes/2026-11-21-figure-ledger.md`: source-by-source check of the dialysis graft figures, 20 to 21 Nov, research note.
+- `adrian-notes/2026-11-21-idealab-ranking.md`: seven idea-database searches and a ranking against the judging slide, 21 Nov, research note.
+- `adrian-notes/2026-11-21-ideation-prompt.md`: paste-in prompt for generating and stress-testing ideas against the judging slide, 21 Nov.
+- `adrian-notes/data/`: structured JSON outputs behind the notes (idea panels, sponsors, past events, dialysis verification), research note.
 - `whatsapp/team-group-chat.md`: the team's WhatsApp group, 4 to 21 Nov, read-only export, 21 Nov.
