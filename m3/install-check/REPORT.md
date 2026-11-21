@@ -5,7 +5,10 @@ Lab: `origin/ant/chip-lab` 021f68d (branch `m3/install-check` merged with it). D
 (Docker 29.5.2, arm64 image `ghcr.io/librelane/librelane:3.0.14`). Every number below was measured on this
 machine; layout numbers are LibreLane layout results, not estimates.
 
-Result in five lines:
+Update (re-check on b77cc76, merged as f0c296c): all 28 AGENT.md examples return rc 0 (the first pass below
+had 24, 23 passed); details in "Re-check on b77cc76" and "End-to-end prep" further down.
+
+Result in five lines (first pass, on 021f68d):
 
 1. The fast install and the full install both work on the M3 with only `CHIPLAB_USER_DIR` and `CHIPLAB_CONFIG` set; nothing was written to `~/.chiplab` or `~/.config/chiplab`.
 2. `chiplab doctor` reports ok with the engine reachable: only the optional `python:mcp` is missing.
@@ -141,6 +144,82 @@ Homebrew `cairo` installed, `tt-package` fails with `no library called "libcairo
 `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib` is set; with it set, `tt-package` returns user_config_ok true and
 rtl_test_passed true (observed, 5 s), and the TT test passes. Patch 05 sets it inside the lab's TT environment on
 macOS. `scripts/install.sh` does not install `cairo`; here it was already present.
+
+## Re-check on b77cc76
+
+What ran: `origin/ant/chip-lab` had moved one commit past the fix when it was pulled (f0c296c, the ChipIn
+progress bridge, on top of b77cc76 and a CI commit bde3e80). The branch was merged normally
+(`merge: origin/ant/chip-lab f0c296c`), so this re-check ran on b77cc76 plus f0c296c. Then
+`uv sync --directory chiplab --extra dev --extra sim --extra ingest` (57 packages checked, no change) and a
+restart of this worktree's `chiplab workers` (lanes it picked: cpu 15, gpu 1, docker 3).
+
+How: `m3/install-check/recheck/` holds one log per example (`NN-<tool>.log`: the command as run, rc, wall
+time, stdout, stderr) and `results.json`. The runner (`_logs/p1_recheck.py`, outside the repo) takes every
+`Example:` block of `chiplab/AGENT.md` verbatim and runs it through bash from `chiplab/`, with
+`CHIPLAB_USER_DIR`, `CHIPLAB_CONFIG`, `DOCKER_HOST` (colima) and a fresh, empty `CHIPLAB_HOME`
+(so nothing came from the first pass's cache), and no `DYLD_FALLBACK_LIBRARY_PATH`. It ran ingest-model and
+compile-ir first, then all others at once on 15 threads (the cpu lane), at most 3 Docker examples at a time
+(the docker lane); timing-power after layout, tt-readiness and tt-export after tt-package, job-status and
+job-result after submit-job. The only substitution is the one AGENT.md asks for: `@job_id` became the id
+printed by submit-job (j-9a6d966f70bd); job-result ran 10 s after job-status. Limit 900 s per example.
+Wall times are one run each, on this M3 Max, colima at 12 CPUs and 47 GiB at the time (the engine was
+resized to 8 CPUs and 16 GiB after this run; nothing below ran on the smaller engine).
+
+Result: AGENT.md now has 28 examples (it had 24); all 28 returned rc 0 with status ok. No rc 2 (failed
+check) and no rc 3 (timeout). The whole set took 51.5 s wall clock (one run).
+
+| # | Example | rc | Seconds | Note |
+| --- | --- | --- | --- | --- |
+| 1 | synthesize | 0 | 1.4 | design 765fa47586bd (the literal id) |
+| 2 | count-luts | 0 | 32.7 |  |
+| 3 | simulate | 0 | 5.7 | bit_exact true, 100000 vectors |
+| 4 | prove-equivalence | 0 | 3.8 | proved true |
+| 5 | map-to-process | 0 | 1.8 | sky130 |
+| 6 | ingest-model | 0 | 0.7 | gives 765fa47586bd, as AGENT.md says |
+| 7 | compose-chip | 0 | 0.8 | new design 9141eff1cf53 |
+| 8 | compile-stream | 0 | 0.3 |  |
+| 9 | rtl-simulate | 0 | 4.1 |  |
+| 10 | estimate-cost | 0 | 0.3 |  |
+| 11 | compare-hw-baseline | 0 | 0.5 |  |
+| 12 | gate-activity | 0 | 1.4 |  |
+| 13 | chip-report | 0 | 0.5 |  |
+| 14 | submit-verilog | 0 | 2.5 | ran in the Docker sandbox; bit_exact true |
+| 15 | layout | 0 | 50.6 | LibreLane, sky130, 20 ns, design ed8e52cb7a11 |
+| 16 | timing-power | 0 | 0.2 | cached true: reused the layout run |
+| 17 | bitstream | 0 | 39.1 | iCE40 |
+| 18 | tt-package | 0 | 6.6 | user_config_ok and rtl_test_passed true |
+| 19 | prove-sequential | 0 | 16.6 | proved true |
+| 20 | verification-level | 0 | 0.2 |  |
+| 21 | tt-readiness | 0 | 8.8 | new example; ready true |
+| 22 | tt-export | 0 | 0.4 | new example |
+| 23 | submit-job | 0 | 0.5 | state queued |
+| 24 | job-status | 0 | 0.3 | new example; state queued |
+| 25 | job-result | 0 | 1.3 | state done |
+| 26 | cache-stats | 0 | 0.2 | new example |
+| 27 | estimate-batch | 0 | 0.2 |  |
+| 28 | compile-ir | 0 | 0.7 | gives ed8e52cb7a11, as AGENT.md says |
+
+Against the first pass (24 examples on 021f68d, 23 passed):
+
+- Fixed: tt-package. It failed before on the macOS cairo path; now it passes with no extra variable
+  (the lab sets `DYLD_FALLBACK_LIBRARY_PATH` itself: `chiplab/chiplab/hw/tinytapeout.py:176`). Patch 05 is
+  no longer needed.
+- Fixed: the placeholders. Design ids are concrete and match what ingest-model and compile-ir return on a
+  fresh lab, so no substitution was needed except the documented `@job_id`.
+- Fixed and better than reported: prove-sequential. The first pass counted it as a pass, but its output was
+  `status: ok` with `proved: null` after 300.7 s, i.e. a timeout reported as ok. Now `proved: true` in 16.6 s,
+  and a timeout would return rc 3.
+- Fixed: timing-power reuses the layout (0.2 s, `cached: true`; it was 172.2 s, running its own layout).
+- Fixed: submit-verilog now runs in the Docker sandbox and refuses the host without `allow_host: true`
+  (HARDENING point 8).
+- All five proposed patches are upstream in some form: each now fails `git apply --check` because the lines
+  it changes were rewritten by b77cc76 (01 timing-power error, 02 `top` identifier, 03 DNS-rebinding on
+  loopback, 04 pinned tag, sha256, `uv sync --locked`, pinned tt-support-tools commit, 05 cairo). They are
+  kept in `proposed/` as the record; none is still needed.
+- Still open: the default install folders are still `~/.chiplab` and `~/.config/chiplab`, and f0c296c adds
+  a launcher at `~/.local/bin/chiplab` (HARDENING point 1). The colima temp-folder note for the Docker tests
+  is not addressed in the README (not re-tested here).
+- Worse: nothing observed.
 
 ## Files
 
