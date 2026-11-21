@@ -41,6 +41,15 @@ def test_spike_proved(built):
     assert r["proved"] is True and r["verification_level"] == 2
 
 
+def test_small_chip_proved_against_golden(tmp_path):
+    from test_fpga import tiny_ir
+    ir = tiny_ir(); text, info = emit(ir)
+    (tmp_path / "d.v").write_text(text)
+    syn = synth_generic(tmp_path / "d.v", info["top"], tmp_path / "syn")
+    r = prove(ir, info, Path(syn["gate_verilog"]), tmp_path / "d.v", tmp_path / "p", timeout=120, golden=True)
+    assert r["proved"] is True and "golden" in r["against"] and all(n["proved"] for n in r["nodes"])
+
+
 def test_mutant_refuted(built):
     d, ir, info, gates = built
     g = gates.read_text()

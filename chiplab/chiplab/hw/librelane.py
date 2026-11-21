@@ -77,25 +77,9 @@ def timing_power_layout(rtl_files: list[Path], top: str, workdir: Path, pdk: str
     wd = Path(workdir).resolve()
     wd.mkdir(parents=True, exist_ok=True)
     (wd / "src").mkdir(exist_ok=True)
-    srcs = []
     for f in rtl_files:
         shutil.copy(f, wd / "src" / Path(f).name)
-        srcs.append(f"dir::src/{Path(f).name}")
-    cfg = {"DESIGN_NAME": top, "VERILOG_FILES": srcs, "CLOCK_PERIOD": clock_period_ns, "IO_DELAY_CONSTRAINT": 0,
-           "RUN_MAGIC_DRC": False, "RUN_KLAYOUT_DRC": False, "RUN_KLAYOUT_XOR": False, "RUN_LVS": False,
-           "RUN_CTS": clock_port is not None, "GRT_ALLOW_CONGESTION": True, "PL_TARGET_DENSITY_PCT": 55,
-           "DESIGN_REPAIR_BUFFER_OUTPUT_PORTS": False}
-    if clock_port:
-        cfg["CLOCK_PORT"] = clock_port
-    else:
-        cfg["CLOCK_PORT"] = None
-    if die_area:
-        cfg.update({"FP_SIZING": "absolute", "DIE_AREA": list(die_area)})
-    else:
-        cfg.update({"FP_SIZING": "relative", "FP_CORE_UTIL": core_util})
-    if pdk == "gf180mcuD":
-        cfg.update(_GF180_33V)
-    (wd / "config.json").write_text(json.dumps(cfg, indent=1))
+    write_config([Path(f).name for f in rtl_files], top, wd, pdk, clock_period_ns, clock_port, die_area, core_util)
     run_dir = wd / "runs" / tag
     if run_dir.exists():
         shutil.rmtree(run_dir)
@@ -135,6 +119,33 @@ def timing_power_layout(rtl_files: list[Path], top: str, workdir: Path, pdk: str
         res.update(activity_power(run_dir, top, pdk, Path(activity_vcd), vcd_scope, clock_period_ns))
     res["seconds"] = round(time.time() - t0, 1)
     return res
+
+
+def check_pdk(pdk: str) -> dict:
+    """Resolve a PDK under config.PDK_ROOT and its standard-cell library without running a flow."""
+    name = PDK_NAMES[pdk]
+    root = Path(config.PDK_ROOT) / name
+    scl = {"sky130A": "sky130_fd_sc_hd", "gf180mcuD": "gf180mcu_fd_sc_mcu7t5v0", "ihp-sg13g2": "sg13g2_stdcell"}[name]
+    libs = sorted((root / "libs.ref" / scl / "lib").glob("*.lib")) if root.exists() else []
+    tech = sorted((root / "libs.tech" / "librelane").glob("*")) if root.exists() else []
+    return {"pdk": name, "root": str(root), "found": root.exists(), "scl": scl, "liberty_files": len(libs),
+            "librelane_tech_dir": bool(tech), "ok": root.exists() and bool(libs)}
+
+
+def write_config(rtl_names: list[str], top: str, workdir: Path, pdk: str, clock_period_ns: float = 10.0,
+                 clock_port: str | None = None, die_area: tuple | None = None, core_util: int = 40) -> dict:
+    """The LibreLane config the flow would use (also used to check GF180/IHP set-ups without running them)."""
+    pdk = PDK_NAMES[pdk]
+    cfg = {"DESIGN_NAME": top, "VERILOG_FILES": [f"dir::src/{n}" for n in rtl_names], "CLOCK_PERIOD": clock_period_ns,
+           "IO_DELAY_CONSTRAINT": 0, "RUN_MAGIC_DRC": False, "RUN_KLAYOUT_DRC": False, "RUN_KLAYOUT_XOR": False,
+           "RUN_LVS": False, "RUN_CTS": clock_port is not None, "GRT_ALLOW_CONGESTION": True,
+           "PL_TARGET_DENSITY_PCT": 55, "DESIGN_REPAIR_BUFFER_OUTPUT_PORTS": False, "CLOCK_PORT": clock_port}
+    cfg.update({"FP_SIZING": "absolute", "DIE_AREA": list(die_area)} if die_area else {"FP_SIZING": "relative", "FP_CORE_UTIL": core_util})
+    if pdk == "gf180mcuD":
+        cfg.update(_GF180_33V)
+    Path(workdir).mkdir(parents=True, exist_ok=True)
+    (Path(workdir) / "config.json").write_text(json.dumps(cfg, indent=1))
+    return cfg
 
 
 def _first(d: Path, pattern: str) -> str | None:
