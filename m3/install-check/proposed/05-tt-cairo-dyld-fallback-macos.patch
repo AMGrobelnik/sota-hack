@@ -1,0 +1,13 @@
+diff --git a/chiplab/chiplab/hw/tinytapeout.py b/chiplab/chiplab/hw/tinytapeout.py
+--- a/chiplab/chiplab/hw/tinytapeout.py
++++ b/chiplab/chiplab/hw/tinytapeout.py
+@@ -170,5 +170,9 @@ def _env() -> dict:
+ def _env() -> dict:
+     env = os.environ.copy()
+     env.update({"PDK_ROOT": str(config.PDK_ROOT), "LIBRELANE_TAG": LIBRELANE_TAG})
++    if sys.platform == "darwin":
++        # cairocffi (used by tt-support-tools) does not search Homebrew's lib folder on macOS
++        brew = "/opt/homebrew/lib" if Path("/opt/homebrew/lib").is_dir() else "/usr/local/lib"
++        env.setdefault("DYLD_FALLBACK_LIBRARY_PATH", brew)
+     env["PATH"] = f"{_shims()}:{Path(tt_python()).parent}:{env['PATH']}"
+     return env

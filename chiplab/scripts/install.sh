@@ -115,14 +115,29 @@ if [ "$DO_TT" = 1 ]; then
   TT_PY="$PREFIX/tt-venv/bin/python"
 else echo "skipped (--no-tt)"; fi
 
+# Docker socket for agent environments (they strip DOCKER_HOST): docker context, else known sockets
+DOCKER_SOCK="${DOCKER_HOST:-}"
+if [ -z "$DOCKER_SOCK" ] && command -v docker >/dev/null 2>&1; then
+  DOCKER_SOCK=$(docker context inspect --format '{{.Endpoints.docker.Host}}' 2>/dev/null || true)
+fi
+for s in "$HOME/.colima/default/docker.sock" "$HOME/.orbstack/run/docker.sock" "$HOME/.docker/run/docker.sock" /var/run/docker.sock; do
+  [ -n "$DOCKER_SOCK" ] && break; [ -S "$s" ] && DOCKER_SOCK="unix://$s"
+done
+
 CFG="${CHIPLAB_CONFIG:-$HOME/.config/chiplab/config.json}"
 mkdir -p "$(dirname "$CFG")"
 [ -f "$CFG" ] && cp "$CFG" "$CFG.bak"
-cat > "$CFG" <<EOF
+cat > "$CFG" <<CFGJSON
 {"oss": "$OSS_DIR", "pdk_root": "$PDK_ROOT", "tt_tools": "$TT_DIR", "tt_python": "$TT_PY",
- "data": "$PREFIX/data", "librelane_image": "$LIBRELANE_IMAGE"}
-EOF
+ "data": "$PREFIX/data", "librelane_image": "$LIBRELANE_IMAGE", "home": "$HERE/runs", "docker_host": "$DOCKER_SOCK"}
+CFGJSON
 echo "wrote $CFG"
+
+# a chiplab launcher on PATH, so agents (whose environment is an allowlist) can call the lab
+mkdir -p "$HOME/.local/bin"
+printf '#!/bin/sh\nexec "%s/.venv/bin/chiplab" "$@"\n' "$HERE" > "$HOME/.local/bin/chiplab"
+chmod +x "$HOME/.local/bin/chiplab"
+case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) echo "note: add ~/.local/bin to PATH so agents find the chiplab launcher";; esac
 
 say "chiplab doctor"
 "$HERE/.venv/bin/chiplab" doctor | "$HERE/.venv/bin/python" -c '

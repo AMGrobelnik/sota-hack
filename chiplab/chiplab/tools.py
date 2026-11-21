@@ -26,7 +26,9 @@ class ToolError(RuntimeError):
 
 CONTEXT_ARGS = {"run_id": "str — dashboard run to emit events into (optional)",
                 "session_id": "str — calling agent session (optional; used for quotas and the leaderboard)",
-                "round": "int — design round, copied onto dashboard events (optional)"}
+                "round": "int — design round, copied onto dashboard events (optional)",
+                "progress": "str — auto|off|<path>: report through a ChipIn ./progress helper (auto-detected in the cwd)",
+                "progress_stages": "bool — also mark the ChipIn stage started/done around this call (default false)"}
 
 
 STATUS_RC = {"ok": 0, "error": 1, "fail": 2, "timeout": 3}
@@ -83,11 +85,14 @@ def tool(summary: str, params: dict, lane: str = "cpu", cacheable: bool = False)
 
         @wraps(fn)
         def wrapper(**kw):
-            from chiplab import cache, events
+            from chiplab import cache, events, progress
             own = inspect.signature(fn).parameters
             ctx = {k: (kw[k] if k in own else kw.pop(k)) for k in list(kw) if k in CONTEXT_ARGS}
             force = bool(kw.pop("force", False))
             t0, c0 = time.time(), time.process_time()
+            ph = progress.helper(ctx.get("progress"))
+            pst = bool(ctx.get("progress_stages"))
+            progress.before(name, {**kw, **ctx}, ph, pst)
             try:
                 norm = normalize_args(fn, kw)
             except TypeError as e:  # unknown or missing arguments
@@ -115,6 +120,7 @@ def tool(summary: str, params: dict, lane: str = "cpu", cacheable: bool = False)
                 events.for_tool(name, {**kw, **ctx}, res)
             except Exception:  # events must never break a tool
                 pass
+            progress.after(name, {**kw, **ctx}, res, ph, pst)
             return res
         TOOLS[name] = {"fn": wrapper, "summary": summary, "params": {**params}, "lane": lane, "cacheable": cacheable}
         return wrapper

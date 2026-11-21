@@ -58,6 +58,10 @@ def ensure_docker_host() -> str | None:
     missing, use the docker CLI's current context, then known sockets (colima, OrbStack, Docker Desktop, Rancher)."""
     if os.environ.get("DOCKER_HOST"):
         return os.environ["DOCKER_HOST"]
+    cfg_host = _CFG.get("docker_host") or ""   # written by install.sh (agent environments strip DOCKER_HOST)
+    if cfg_host.startswith("unix://") and Path(cfg_host[7:]).exists() and cfg_host != "unix:///var/run/docker.sock":
+        os.environ["DOCKER_HOST"] = cfg_host
+        return cfg_host
     if Path("/var/run/docker.sock").exists():
         return None
     import subprocess
