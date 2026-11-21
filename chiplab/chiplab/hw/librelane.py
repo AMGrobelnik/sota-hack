@@ -139,7 +139,9 @@ def write_config(rtl_names: list[str], top: str, workdir: Path, pdk: str, clock_
     cfg = {"DESIGN_NAME": top, "VERILOG_FILES": [f"dir::src/{n}" for n in rtl_names], "CLOCK_PERIOD": clock_period_ns,
            "IO_DELAY_CONSTRAINT": 0, "RUN_MAGIC_DRC": False, "RUN_KLAYOUT_DRC": False, "RUN_KLAYOUT_XOR": False,
            "RUN_LVS": False, "RUN_CTS": clock_port is not None, "GRT_ALLOW_CONGESTION": True,
-           "PL_TARGET_DENSITY_PCT": 55, "DESIGN_REPAIR_BUFFER_OUTPUT_PORTS": False, "CLOCK_PORT": clock_port}
+           "PL_TARGET_DENSITY_PCT": 55, "DESIGN_REPAIR_BUFFER_OUTPUT_PORTS": False, "CLOCK_PORT": clock_port,
+           # this run's share of the machine when several layouts run in parallel (docker lane workers)
+           "ROUTING_CORES": config.threads_per_docker_job()}
     cfg.update({"FP_SIZING": "absolute", "DIE_AREA": list(die_area)} if die_area else {"FP_SIZING": "relative", "FP_CORE_UTIL": core_util})
     if pdk == "gf180mcuD":
         cfg.update(_GF180_33V)

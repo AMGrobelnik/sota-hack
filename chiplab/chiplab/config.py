@@ -49,6 +49,40 @@ TT_PYTHON = setting("CHIPLAB_TT_PYTHON", "tt_python", "")          # python with
 LIBRELANE_IMAGE = os.environ.get("CHIPLAB_LIBRELANE_IMAGE") or _CFG.get("librelane_image") or "ghcr.io/librelane/librelane:3.0.14"
 
 
+def _docker_mem_gb() -> float | None:
+    import subprocess
+    if not shutil.which("docker"):
+        return None
+    try:
+        out = subprocess.run(["docker", "info", "--format", "{{.MemTotal}}"], capture_output=True, text=True, timeout=10).stdout.strip()
+        return int(out) / 2 ** 30 if out.isdigit() else None
+    except Exception:
+        return None
+
+
+def lanes() -> dict:
+    """Worker counts per job lane, sized to this machine (env CHIPLAB_*_WORKERS or config 'lanes' override):
+    cpu = cores - 1 (Yosys/ABC/Icarus are single-threaded, so one job per core); docker = Docker memory / 12 GB,
+    1..4 (each LibreLane run needs ~8-12 GB); gpu = 1."""
+    cfg = _CFG.get("lanes", {}) if isinstance(_CFG.get("lanes"), dict) else {}
+    cores = os.cpu_count() or 2
+
+    def pick(env, key, default):
+        v = os.environ.get(env) or cfg.get(key)
+        return max(1, int(v)) if v else default
+    mem = _docker_mem_gb()
+    return {"cpu": pick("CHIPLAB_CPU_WORKERS", "cpu", max(1, cores - 1)),
+            "gpu": pick("CHIPLAB_GPU_WORKERS", "gpu", 1),
+            "docker": pick("CHIPLAB_DOCKER_WORKERS", "docker", max(1, min(4, int(mem // 12))) if mem else 1),
+            "cores": cores, "docker_mem_gb": round(mem, 1) if mem else None}
+
+
+def threads_per_docker_job() -> int:
+    """CPU threads one LibreLane run may use so parallel runs don't oversubscribe the machine."""
+    L = lanes()
+    return max(1, (L["cores"]) // max(1, L["docker"]))
+
+
 def find_bin(name: str) -> str | None:
     """OSS CAD Suite binary: CHIPLAB_OSS/bin, then the config file's oss, then PATH."""
     for base in (OSS,):
@@ -75,4 +109,4 @@ def home(*parts: str) -> Path:
 def summary() -> dict:
     return {"config_file": str(CONFIG_FILE), "config_file_found": CONFIG_FILE.exists(), "home": str(HOME),
             "data": str(DATA), "oss": str(OSS), "pdk_root": str(PDK_ROOT), "tt_tools": str(TT_TOOLS),
-            "tt_python": str(TT_PYTHON), "librelane_image": LIBRELANE_IMAGE}
+            "tt_python": str(TT_PYTHON), "librelane_image": LIBRELANE_IMAGE, "lanes": lanes()}

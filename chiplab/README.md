@@ -137,9 +137,15 @@ No route is medically certified; the device maker remains responsible for clinic
 - **Where it runs.** The lab runs where the AI scientist runs (a Mac, a Linux box, a GPU server). It needs nothing
   from the machine it was built on.
 - **Async jobs.** `submit-job` / `submit-batch` return job ids; `job-status`, `job-result`, `cancel-job`,
-  `list-jobs`. Jobs run on lanes: cpu (6 workers: Yosys, Icarus, Verilator, ABC), gpu (1: batched bit-exact
-  checks; CUDA, else Apple MPS, else CPU), docker (1: LibreLane and the Tiny Tapeout build). Start the workers with
-  `chiplab workers`.
+  `list-jobs`. Jobs run on lanes sized to the machine:
+  - cpu: cores − 1 workers (Yosys, ABC, Icarus and Verilator are single-threaded, so batches fan out one job per
+    core);
+  - gpu: 1 (batched bit-exact checks; CUDA, else Apple MPS, else CPU);
+  - docker: Docker memory ÷ 12 GB, 1–4 workers (LibreLane and the Tiny Tapeout build; each layout gets
+    cores ÷ docker-workers routing threads).
+
+  Override with `CHIPLAB_CPU_WORKERS`, `CHIPLAB_GPU_WORKERS`, `CHIPLAB_DOCKER_WORKERS`, or `"lanes"` in the config
+  file. `chiplab doctor` shows the sizes it picked. Start the workers with `chiplab workers`.
 - **Cache.** Results are keyed by design content, tool, arguments and lab version, so two agents submitting the
   same design share one result (`cached: true`).
 - **Sessions.** Pass `session_id` for per-agent quotas and history. The job table is SQLite and the cache is

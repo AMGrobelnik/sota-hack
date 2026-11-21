@@ -103,7 +103,9 @@ def agent_md() -> str:
            "exit code 0 when `status` is `ok`.",
            "- Python: `import chiplab.api as lab; lab.<tool_name>(**args)` returns the same dict.",
            "- Async (several agents at once): `submit-job {tool, args, session_id}` returns a `job_id`; poll `job-status` / "
-           "`job-result`. Lanes: cpu (6 workers), gpu (1), docker (1); start workers with `chiplab workers`. Results are "
+           "`job-result`. Lanes are sized to the machine: cpu = cores - 1, gpu = 1, docker = Docker memory / 12 GB (1-4); "
+           "override with CHIPLAB_CPU_WORKERS / CHIPLAB_GPU_WORKERS / CHIPLAB_DOCKER_WORKERS (or \"lanes\" in the config "
+           "file); `chiplab doctor` shows what it picked. Start workers with `chiplab workers`. Results are "
            "cached by content, so duplicate designs return instantly (`cached: true`).",
            "- Every tool also accepts `run_id`, `session_id`, `round` (events, see EVENTS.md) and `force` (skip the cache).",
            "- Verification levels: 1 bit-exact simulation, 2 formal proof, 3 streaming RTL simulation (cocotb + Icarus) + "

@@ -1,7 +1,8 @@
 """Async jobs for several agents at once: Huey (SQLite backend) with one queue per resource lane, plus a job table.
 
-Lanes and worker counts (8 cores, 1 GPU, Docker RAM-bound): cpu 6 (yosys, iverilog, verilator, ABC), gpu 1
-(batched netlist simulation, population training), docker 1 (LibreLane, Tiny Tapeout harden). Start the
+Lanes are sized to the machine (config.lanes()): cpu = cores - 1 (yosys, iverilog, verilator, ABC are single-
+threaded, so batches fan out one job per worker), gpu = 1 (batched netlist simulation, training), docker = Docker
+memory / 12 GB, 1..4 (LibreLane, Tiny Tapeout harden). Override with CHIPLAB_{CPU,GPU,DOCKER}_WORKERS. Start the
 workers with `chiplab workers` (or `chiplab serve`, which starts them too). Each job gets its own row; results
 are also cached by content (cache.py), so duplicate designs from different agents return instantly.
 """
@@ -17,7 +18,7 @@ from huey import SqliteHuey
 
 from chiplab import config
 
-LANES = {"cpu": int(os.environ.get("CHIPLAB_CPU_WORKERS", 6)), "gpu": 1, "docker": 1}
+LANES = {k: v for k, v in config.lanes().items() if k in ("cpu", "gpu", "docker")}  # sized to this machine
 _jobs_dir = config.home("jobs")
 HUEY_CPU = SqliteHuey(name="chiplab-cpu", filename=str(_jobs_dir / "cpu.db"))
 HUEY_GPU = SqliteHuey(name="chiplab-gpu", filename=str(_jobs_dir / "gpu.db"))

@@ -53,6 +53,9 @@ def run() -> dict:
     from chiplab.device import describe
     dev = describe()
     add("compute", True, dev, required=False)
+    L = config.lanes()
+    add("job_lanes", True, {**L, "threads_per_layout": config.threads_per_docker_job(),
+                            "override": "CHIPLAB_CPU_WORKERS / CHIPLAB_GPU_WORKERS / CHIPLAB_DOCKER_WORKERS or config 'lanes'"}, required=False)
     for b, why, req in BINARIES:
         p = config.find_bin(b)
         add(f"tool:{b}", p is not None, {"path": p, "version": _ver(p) if p else None, "for": why},
