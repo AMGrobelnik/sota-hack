@@ -131,6 +131,8 @@ def run_agent_env() -> dict:
         r["ok"] = False
         r.setdefault("missing_required", []).append("launcher:chiplab")
         r.setdefault("checks", []).append({"check": "launcher:chiplab", "ok": False, "required": True,
-                                           "detail": "chiplab not on the agent PATH",
-                                           "fix": "scripts/install.sh writes ~/.local/bin/chiplab; make sure ~/.local/bin is on PATH"})
+                                           "detail": f"chiplab not found on the PATH an agent gets: {env.get('PATH')}",
+                                           "fix": "put ~/.local/bin on PATH for whoever starts the backend (zsh: add "
+                                                  "'export PATH=\"$HOME/.local/bin:$PATH\"' to ~/.zprofile; bash: ~/.bashrc or "
+                                                  "~/.profile), or have the agent call ~/.local/bin/chiplab by its full path"})
     return r

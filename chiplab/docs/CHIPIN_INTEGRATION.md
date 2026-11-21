@@ -120,6 +120,7 @@ The lab's own working copy stays in its home folder (`runs/designs/<design_id>/`
 > **Chip lab (compile, verify and the chip part of report).** The `chiplab` command turns your trained model into
 > a verified, measured chip. Its full reference is `chiplab/AGENT.md` in the sota-hack repository, or run
 > `chiplab agent-doc`. Every tool takes JSON (`chiplab <tool> --json '{...}'`) and prints one JSON answer.
+> If `chiplab` is not found (exit 127), call it by its full path: `~/.local/bin/chiplab`.
 > Exit codes: 0 ok, 1 error (read `error`), 2 a check ran and the design failed it (e.g. not bit-exact), 3 timeout.
 > - **compile**: `ingest-model` (or `compile-ir`) to bring in your model, then `synthesize`, `count-luts` and
 >   `map-to-process`.
