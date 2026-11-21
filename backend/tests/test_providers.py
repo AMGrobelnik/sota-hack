@@ -14,12 +14,14 @@ from aiohttp.test_utils import TestClient, TestServer
 from chipin_backend import cli
 from chipin_backend.agents import AgentSpec, backend_for
 from chipin_backend.agents.openrouter_agent import normalize_model
+from chipin_backend.api import manager as manager_mod
 from chipin_backend.api.config import ApiConfig
 from chipin_backend.api.server import TOKEN_HEADER, create_app
 from chipin_backend.config import BackendConfig
 from chipin_backend.llm import client as client_mod
 from chipin_backend.llm.client import OpenRouterClient
 from chipin_backend.llm.keys import MissingKeyError
+from chipin_backend.llm.presets import expand_preset
 from chipin_backend.llm.providers import ProviderError, provider_status, resolve_provider
 
 TOKEN = "test-token"
@@ -180,3 +182,42 @@ async def test_inkling_2_presets_and_ids_go_through_openrouter(
         assert str(request.url) == "https://openrouter.ai/api/v1/chat/completions"
         assert model_id.encode() in request.content
     assert normalize_model(model_id) == f"openrouter/{model_id}"
+
+
+def test_expand_preset_only_for_openrouter(config: BackendConfig) -> None:
+    presets = config.llm.presets
+    assert expand_preset("inkling-small", None, presets) == "thinkingmachines/inkling-2-small"
+    assert expand_preset("inkling-mini", "openrouter", presets) == "thinkingmachines/inkling-2-mini"
+    assert expand_preset("inkling-mini", "tinker", presets) == "inkling-mini"
+    assert expand_preset("vendor/model", None, presets) == "vendor/model"
+    assert expand_preset(None, None, presets) is None
+
+
+def test_cli_run_expands_a_preset_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[AgentSpec] = []
+
+    async def fake_run_agent(spec: AgentSpec, *_a: Any, **_k: Any) -> Any:
+        seen.append(spec)
+        raise NotImplementedError("stop here")
+
+    monkeypatch.setattr(cli, "run_agent", fake_run_agent)
+    assert cli.main(["run", "--backend", "stub", "--model", "inkling-mini", "--prompt", "x"]) == 2
+    assert seen[0].model == "thinkingmachines/inkling-2-mini"
+
+
+async def test_post_run_expands_a_preset_model(
+    config: BackendConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
+    seen: list[AgentSpec] = []
+
+    async def fake_drive(self: Any, item: Any, spec: AgentSpec, translator: Any) -> None:
+        seen.append(spec)
+
+    monkeypatch.setattr(manager_mod.RunManager, "_drive", fake_drive)
+    async with await _server(config) as c:
+        resp = await c.post(
+            "/api/runs", json={"prompt": "p", "model": "inkling-small"}, headers={TOKEN_HEADER: TOKEN}
+        )
+        assert resp.status < 300
+    assert seen[0].model == "thinkingmachines/inkling-2-small"

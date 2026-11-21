@@ -37,6 +37,7 @@ from chipin_backend.api.translate import Translator, clip
 from chipin_backend.compute.base import Runner
 from chipin_backend.config import BackendConfig, RunMode
 from chipin_backend.llm.keys import MissingKeyError
+from chipin_backend.llm.presets import expand_preset
 from chipin_backend.llm.providers import ProviderError, resolve_provider
 from chipin_backend.orchestrate import run_agent
 from chipin_backend.runs import JsonlEventSink, RunDir, is_safe_run_id, new_run_id
@@ -253,7 +254,7 @@ class RunManager:
             chosen.model_for(model, fallback=self.config.agents.openrouter.model)
         except (ProviderError, MissingKeyError) as exc:
             raise RequestError(str(exc)) from None
-        return chosen.name, model
+        return chosen.name, expand_preset(model, chosen.name, self.config.llm.presets)
 
     async def _drive(self, item: ApiRun, spec: AgentSpec, translator: Translator) -> None:
         """Run the agent through :func:`run_agent`; always ends the event log with ``run.finished``.

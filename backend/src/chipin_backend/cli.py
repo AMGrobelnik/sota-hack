@@ -28,7 +28,7 @@ from chipin_backend.agents.base import BACKENDS
 from chipin_backend.agents.types import AgentSpec, utc_now
 from chipin_backend.api.cli import add_serve_parser, run_serve
 from chipin_backend.config import BackendConfig, ComputeTier, RunMode, load_config
-from chipin_backend.llm import MissingKeyError, OpenRouterClient
+from chipin_backend.llm import MissingKeyError, OpenRouterClient, expand_preset
 from chipin_backend.llm.providers import ProviderError, resolve_provider
 from chipin_backend.log import setup_logging
 from chipin_backend.orchestrate import LLM_CALLS_ENV, run_agent
@@ -128,7 +128,7 @@ def _main(argv: list[str] | None) -> int:
         name=args.name,
         prompts=prompts,
         backend=backend,
-        model=args.model,
+        model=expand_preset(args.model, args.provider, config.llm.presets),
         provider=args.provider,
         timeout_s=args.timeout,
     )

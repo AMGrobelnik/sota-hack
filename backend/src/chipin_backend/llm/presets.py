@@ -18,4 +18,15 @@ def resolve_model(name_or_id: str, presets: Mapping[str, str]) -> str:
     raise ValueError(f"{name_or_id!r} is neither a preset ({sorted(presets)}) nor a model id")
 
 
-__all__ = ["resolve_model"]
+def expand_preset(model: str | None, provider: str | None, presets: Mapping[str, str]) -> str | None:
+    """``model`` with a preset name swapped for its OpenRouter id.
+
+    Presets are OpenRouter ids, so only the OpenRouter provider (the default)
+    expands them; another provider's model, an id and ``None`` pass through.
+    """
+    if model is not None and provider in (None, "openrouter"):
+        return presets.get(model, model)
+    return model
+
+
+__all__ = ["expand_preset", "resolve_model"]
