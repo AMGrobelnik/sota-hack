@@ -322,8 +322,10 @@ def _design_dir(design_id: str) -> Path:
 
 @tool("Compile one trained candidate (or a raw chipir/1 document) to Verilog-2005 with its weights wired in. "
       "Returns a design_id used by every hardware and verification tool.",
-      {"batch_id": "str", "k": "int — candidate index in the batch", "ir": "dict — a chipir/1 document instead"}, lane="cpu", cacheable=True)
-def compile_verilog(batch_id: str | None = None, k: int | None = None, ir: dict | None = None) -> dict:
+      {"batch_id": "str", "k": "int — candidate index in the batch", "ir": "dict — a chipir/1 document instead",
+       "optimizer": "str — none (default) | alkaid: constant multiplies via alkaid's shared shift-adds (smaller; design id gets -alk)"},
+      lane="cpu", cacheable=True)
+def compile_verilog(batch_id: str | None = None, k: int | None = None, ir: dict | None = None, optimizer: str | None = None) -> dict:
     from chiplab.emit.verilog import emit
     from chiplab.ir.schema import design_id as did, validate
     meta = {}
@@ -334,8 +336,14 @@ def compile_verilog(batch_id: str | None = None, k: int | None = None, ir: dict 
         meta = {"batch_id": batch_id, "k": k, **json.loads((bd / "meta.json").read_text())}
     validate(ir)
     d_id = did(ir)
+    if optimizer and optimizer.lower() not in ("none", "default"):
+        from chiplab.emit.optimized import emit_optimized
+        text, info = emit_optimized(ir, optimizer=optimizer.lower())
+        d_id = f"{d_id}-{optimizer.lower()[:3]}"
+        meta = {**meta, "optimizer": info.get("optimizer")}
+    else:
+        text, info = emit(ir)
     d = config.home("designs", d_id)
-    text, info = emit(ir)
     (d / "ir.json").write_text(json.dumps(ir))
     (d / "design.v").write_text(text)
     (d / "port.json").write_text(json.dumps(info))

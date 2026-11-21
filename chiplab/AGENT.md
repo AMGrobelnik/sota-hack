@@ -36,11 +36,12 @@ GitHub's cloud: commit the folder from `tt-package` and run the `tt-gds` workflo
 
 Compile one trained candidate (or a raw chipir/1 document) to Verilog-2005 with its weights wired in. Returns a design_id used by every hardware and verification tool.
 
-- Python: `lab.compile_verilog(batch_id: str | None = None, k: int | None = None, ir: dict | None = None) -> dict`
+- Python: `lab.compile_verilog(batch_id: str | None = None, k: int | None = None, ir: dict | None = None, optimizer: str | None = None) -> dict`
 - Lane: cpu; cached: True
   - `batch_id`: str
   - `k`: int — candidate index in the batch
   - `ir`: dict — a chipir/1 document instead
+  - `optimizer`: str — none (default) | alkaid: constant multiplies via alkaid's shared shift-adds (smaller; design id gets -alk)
 
 <details><summary>JSON schema</summary>
 
@@ -58,6 +59,10 @@ Compile one trained candidate (or a raw chipir/1 document) to Verilog-2005 with 
   },
   "ir": {
    "type": "object",
+   "default": null
+  },
+  "optimizer": {
+   "type": "string",
    "default": null
   },
   "run_id": {
@@ -363,7 +368,7 @@ chiplab map-to-process --json '{"design_id": "765fa47586bd", "pdk": "sky130"}'
 
 Bring a trained model into the lab and compile it to a chip design. Formats: chipir (chipir/1 JSON), intnn (integer-network params: cfg/W1/b1/shift/W2/b2/amax or the multi-layer form), xgboost_json (an XGBoost model saved as JSON + w_feature/w_tree quantisation, converted via TreeLUT), torchlogix (a saved torchlogix module, local path only, trusted=true required because it is a pickle). Returns design_id, ports and lint.
 
-- Python: `lab.ingest_model(format: str, model: dict | None = None, path: str | None = None, b64: str | None = None, in_spec: dict | None = None, w_feature: int = 4, w_tree: int = 4, trusted: bool = False, name: str = model) -> dict`
+- Python: `lab.ingest_model(format: str, model: dict | None = None, path: str | None = None, b64: str | None = None, in_spec: dict | None = None, w_feature: int = 4, w_tree: int = 4, trusted: bool = False, name: str = model, optimizer: str | None = None) -> dict`
 - Lane: cpu; cached: True
   - `format`: str — chipir|intnn|xgboost_json|torchlogix
   - `model`: dict — the model JSON (chipir/intnn/xgboost_json)
@@ -374,6 +379,7 @@ Bring a trained model into the lab and compile it to a chip design. Formats: chi
   - `w_tree`: int — TreeLUT leaf bits (xgboost_json)
   - `trusted`: bool — allow unpickling (torchlogix)
   - `name`: str
+  - `optimizer`: str — none (default) | alkaid (smaller constant multiplies; design id gets -alk)
 
 <details><summary>JSON schema</summary>
 
@@ -415,6 +421,10 @@ Bring a trained model into the lab and compile it to a chip design. Formats: chi
   "name": {
    "type": "string",
    "default": "model"
+  },
+  "optimizer": {
+   "type": "string",
+   "default": null
   },
   "run_id": {
    "type": "string"
@@ -1868,9 +1878,10 @@ Bit-exact check many designs at once on the GPU lane. Returns job ids.
 
 Compile a chipir/1 document directly (no training batch): validates, emits Verilog, lints. Same as compile_verilog(ir=...).
 
-- Python: `lab.compile_ir(ir: dict) -> dict`
+- Python: `lab.compile_ir(ir: dict, optimizer: str | None = None) -> dict`
 - Lane: cpu; cached: True
   - `ir`: dict — chipir/1
+  - `optimizer`: str — none (default) | alkaid (smaller constant multiplies; design id gets -alk)
 
 <details><summary>JSON schema</summary>
 
@@ -1880,6 +1891,10 @@ Compile a chipir/1 document directly (no training batch): validates, emits Veril
  "properties": {
   "ir": {
    "type": "object"
+  },
+  "optimizer": {
+   "type": "string",
+   "default": null
   },
   "run_id": {
    "type": "string"

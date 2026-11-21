@@ -126,9 +126,10 @@ def simulate_batch(design_ids: list, inputs: str = "random", n: int = 100000, se
 
 
 @tool("Compile a chipir/1 document directly (no training batch): validates, emits Verilog, lints. Same as "
-      "compile_verilog(ir=...).", {"ir": "dict — chipir/1"}, lane="cpu", cacheable=True)
-def compile_ir(ir: dict) -> dict:
-    return TOOLS["compile_verilog"]["fn"].__wrapped__(ir=ir)
+      "compile_verilog(ir=...).", {"ir": "dict — chipir/1",
+      "optimizer": "str — none (default) | alkaid (smaller constant multiplies; design id gets -alk)"}, lane="cpu", cacheable=True)
+def compile_ir(ir: dict, optimizer: str | None = None) -> dict:
+    return TOOLS["compile_verilog"]["fn"].__wrapped__(ir=ir, optimizer=optimizer)
 
 
 def _unused():  # keep ToolError imported for plugins that extend this module

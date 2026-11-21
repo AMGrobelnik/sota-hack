@@ -95,7 +95,7 @@ def random_inputs(ir: dict, n: int, seed: int = 0) -> dict:
     return X
 
 
-def rtl_simulate(ir: dict, workdir: Path, X: dict | None = None, n: int = 1000, tt: bool = True, seed: int = 0,
+def rtl_simulate(ir: dict, workdir: Path, X: dict | None = None, n: int = 1000, tt: bool = True, seed: int = 0, core_text: str | None = None,
                  timeout: int = 900, reference: dict | None = None, expected: dict | None = None) -> dict:
     """Stream vectors through the wrapper in Icarus via cocotb; compare with the integer model. Level 3.
 
@@ -104,7 +104,7 @@ def rtl_simulate(ir: dict, workdir: Path, X: dict | None = None, n: int = 1000, 
     """
     workdir = Path(workdir); workdir.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
-    text, info = emit_stream(ir, tt=tt)
+    text, info = emit_stream(ir, tt=tt, core_text=core_text)
     vpath = workdir / f"{info['top']}.v"
     vpath.write_text(text)
     li = lint(vpath, info["top"])

@@ -40,10 +40,10 @@ def map_to_process(design_id: str, pdk: str = "sky130") -> dict:
 
 # ------------------------------------------------------------------------------------------------ model ingest
 
-def _store_ir(ir: dict, meta: dict | None = None) -> dict:
+def _store_ir(ir: dict, meta: dict | None = None, optimizer: str | None = None) -> dict:
     """Validate, emit, lint and store an IR as a design; returns compile_verilog's answer."""
     from chiplab.tools import TOOLS
-    res = TOOLS["compile_verilog"]["fn"].__wrapped__(ir=ir)
+    res = TOOLS["compile_verilog"]["fn"].__wrapped__(ir=ir, optimizer=optimizer)
     if meta:
         d = _design_dir(res["design_id"])
         old = json.loads((d / "meta.json").read_text()) if (d / "meta.json").exists() else {}
@@ -71,10 +71,11 @@ def _read_blob(model=None, path: str | None = None, b64: str | None = None):
        "path": "str — file on this machine", "b64": "str — base64 file content (xgboost_json)",
        "in_spec": "dict — intnn input port {lanes, bits, signed} if not in the params",
        "w_feature": "int — TreeLUT input bits (xgboost_json)", "w_tree": "int — TreeLUT leaf bits (xgboost_json)",
-       "trusted": "bool — allow unpickling (torchlogix)", "name": "str"}, lane="cpu", cacheable=True)
+       "trusted": "bool — allow unpickling (torchlogix)", "name": "str",
+       "optimizer": "str — none (default) | alkaid (smaller constant multiplies; design id gets -alk)"}, lane="cpu", cacheable=True)
 def ingest_model(format: str, model: dict | None = None, path: str | None = None, b64: str | None = None,
                  in_spec: dict | None = None, w_feature: int = 4, w_tree: int = 4, trusted: bool = False,
-                 name: str = "model") -> dict:
+                 name: str = "model", optimizer: str | None = None) -> dict:
     fmt = format.lower()
     if fmt == "chipir":
         from chiplab.ingest.chipir import load
@@ -103,7 +104,7 @@ def ingest_model(format: str, model: dict | None = None, path: str | None = None
         ir = to_ir(torch.load(path, weights_only=False), name=name)
     else:
         raise ValueError("format must be chipir, intnn, xgboost_json or torchlogix")
-    res = _store_ir(ir, {"ingested_from": fmt, "name": name})
+    res = _store_ir(ir, {"ingested_from": fmt, "name": name}, optimizer=optimizer)
     return {**res, "format": fmt}
 
 
@@ -129,7 +130,8 @@ def compile_stream(design_id: str, tt: bool = True) -> dict:
     from chiplab.emit.stream import emit_stream
     d = _design_dir(design_id)
     ir = json.loads((d / "ir.json").read_text()); info = json.loads((d / "port.json").read_text())
-    text, sinfo = emit_stream(ir, info, tt=tt)
+    core_text = (d / "design.v").read_text() if info.get("optimizer") else None   # keep the optimised core
+    text, sinfo = emit_stream(ir, info, tt=tt, core_text=core_text)
     fn = "stream_tt.v" if tt else "stream.v"
     (d / fn).write_text(text)
     (d / (fn[:-2] + ".json")).write_text(json.dumps(sinfo, default=str))
@@ -148,7 +150,9 @@ def rtl_simulate(design_id: str, n: int = 1000, vectors: dict | None = None, exp
     ir = json.loads((d / "ir.json").read_text())
     X = {k: np.asarray(v, dtype=np.int64) for k, v in vectors.items()} if vectors else None
     E = {k: np.asarray(v, dtype=np.int64) for k, v in expected.items()} if expected else None
-    r = _rs(ir, d / ("rtlsim_tt" if tt else "rtlsim"), X=X, n=n, tt=tt, expected=E)
+    pinfo = json.loads((d / "port.json").read_text())
+    core_text = (d / "design.v").read_text() if pinfo.get("optimizer") else None   # simulate the design's own core
+    r = _rs(ir, d / ("rtlsim_tt" if tt else "rtlsim"), X=X, n=n, tt=tt, expected=E, core_text=core_text)
     (d / "rtlsim.json").write_text(json.dumps(r, default=str))
     return {"design_id": design_id, **{k: v for k, v in r.items() if k != "first_mismatches"},
             "first_mismatches": r.get("first_mismatches", [])[:5]}
@@ -509,9 +513,14 @@ def prove_sequential(design_id: str, timeout: int = 600, whole: bool = False) ->
     from chiplab.verify.eqy import prove_sequential as _ps
     d = _design_dir(design_id)
     s = TOOLS["compile_stream"]["fn"].__wrapped__(design_id=design_id, tt=True)
-    core = json.loads((d / "port.json").read_text())["top"]
+    pinfo = json.loads((d / "port.json").read_text())
+    core = pinfo["top"]
+    stub = d / "core_stub.v"   # ports only: the black box's declaration for the gate side
+    ports = [f"input wire [{p['lanes'] * p['bits'] - 1}:0] {p['name']}" for p in pinfo["inputs"]] + \
+            [f"output wire [{o['lanes'] * o['bits'] - 1}:0] {o['name']}" for o in pinfo["outputs"]]
+    stub.write_text(f"(* blackbox *)\nmodule {core} ({', '.join(ports)});\nendmodule\n")
     r = _ps([d / "stream_tt.v"], s["top"], d / ("eqy_whole" if whole else "eqy"), timeout=timeout,
-            blackbox=None if whole else [core], blackbox_sources=None if whole else [d / "design.v"])
+            blackbox=None if whole else [core], blackbox_sources=None if whole else [stub])
     (d / "eqy.json").write_text(json.dumps(r, default=str))
     return {"design_id": design_id, **r}
 
