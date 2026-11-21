@@ -1,7 +1,7 @@
 """``claude_cli`` backend: drives the interactive ``claude`` CLI under a PTY.
 
-This is NOT the Claude Agent SDK. As in AI Inventor's ``terminal_claude_agent``,
-the backend spawns ``claude`` with ``pexpect``, types the prompts into its REPL,
+This is NOT the Claude Agent SDK. As in AI Inventor's Claude CLI driver, the
+backend spawns ``claude`` with ``pexpect``, types the prompts into its REPL,
 and reads the CLI's own session transcript
 (``$CLAUDE_CONFIG_DIR/projects/<cwd-slug>/<session-id>.jsonl``) to turn each
 record into :class:`~chipmonk_backend.agents.types.AgentEvent`. A turn ends at
@@ -366,7 +366,7 @@ class _TurnDriver:
 def build_argv(spec: AgentSpec, cli: ClaudeCliConfig, *, session_id: str, resume: bool) -> list[str]:
     """The ``claude`` command line for ``spec``.
 
-    Flags as in AI Inventor's ``repl_driver._build_argv``: ``--session-id`` or
+    Flags: ``--session-id`` or
     ``--resume``, ``--model``, ``--effort``, ``--permission-mode``,
     ``--dangerously-skip-permissions``, ``--setting-sources``, ``--settings``
     (JSON), ``--allowed-tools``, ``--disallowed-tools``, ``--mcp-config``.

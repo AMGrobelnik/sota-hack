@@ -1,6 +1,6 @@
 """Parsing the CLI's ``/cost`` dialog, and token totals from the transcript.
 
-Adapted from AI Inventor's ``terminal_claude_agent/cost_to_emit.py``.
+Adapted from AI Inventor.
 """
 
 from __future__ import annotations

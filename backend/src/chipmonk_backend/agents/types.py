@@ -4,8 +4,8 @@
 
 Every type round-trips through ``to_dict``/``from_dict`` as plain JSON, because
 On Demand mode ships a spec to a RunPod worker pod and streams events and the
-result back over HTTP. Adapted from AI Inventor's ``AgentOptions`` and
-``AgentResponse``, cut to the fields a Chipmonk agent needs.
+result back over HTTP. Adapted from AI Inventor, cut to the fields a Chipmonk
+agent needs.
 """
 
 from __future__ import annotations
@@ -130,6 +130,9 @@ class AgentResult:
     cost_usd: float = 0.0
     duration_s: float = 0.0
     files: list[str] = field(default_factory=list)  # files written, relative to workdir
+    #: Written after the run (``chipmonk_backend.llm.summarise``): ``{"run": ...,
+    #: "output_label": ...}``, each a ``Summary.to_dict()`` with its own cost.
+    summary: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Plain JSON-ready dict."""

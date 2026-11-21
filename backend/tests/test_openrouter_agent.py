@@ -6,6 +6,7 @@ so these tests run without the ``openhands`` extra; the live test needs it.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -128,6 +129,42 @@ async def test_run_without_a_key_is_a_setup_error(config: BackendConfig, tmp_pat
 class _NullSink:
     def emit(self, event: Any) -> None:
         return None
+
+
+FAKE_KEY = "fake-openrouter-key-for-the-leak-test"
+
+
+async def test_faked_run_never_writes_the_key(
+    config: BackendConfig, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A whole run on a scripted model: it finishes, and the key appears in no workspace file."""
+    pytest.importorskip("openhands.sdk")
+    from openhands.sdk.llm import Message as SdkMessage
+    from openhands.sdk.llm import MessageToolCall
+    from openhands.sdk.llm import TextContent as SdkText
+    from openhands.sdk.testing import TestLLM
+    from pydantic import SecretStr
+
+    from chipmonk_backend.agents.openrouter_agent import OpenRouterAgentBackend
+
+    def scripted_llm(self: Any, model: str, key: str, *, usage_id: str, fallback: Any = None) -> Any:
+        finish = MessageToolCall(
+            id="call_1", name="finish", arguments=json.dumps({"message": "all done"}), origin="completion"
+        )
+        reply = SdkMessage(role="assistant", content=[SdkText(text="")], tool_calls=[finish])
+        return TestLLM.from_messages([reply], usage_id=usage_id, api_key=SecretStr(key))
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", FAKE_KEY)
+    monkeypatch.setattr(OpenRouterAgentBackend, "_build_llm", scripted_llm)
+    workdir = tmp_path / "work"
+    spec = AgentSpec(name="a", prompts=["say done"], workdir=workdir, timeout_s=60)
+    result = await backend_for("openrouter", config.agents).run(spec, _NullSink())
+
+    assert not result.failed, result.error
+    assert result.final_text == "all done"
+    leaked = [p for p in workdir.rglob("*") if p.is_file() and FAKE_KEY.encode() in p.read_bytes()]
+    assert leaked == []
+    assert not (workdir / ".chipmonk" / "openhands").exists()
 
 
 @pytest.mark.live

@@ -58,11 +58,32 @@ def _mock_client(
         (_status_error(402), (False, None)),
         (httpx.ConnectError("refused"), (True, None)),
         (httpx.ReadTimeout("slow"), (False, None)),
+        (httpx.ReadError("reset"), (False, None)),
+        (httpx.RemoteProtocolError("closed mid-answer"), (False, None)),
         (ValueError("bug"), (False, None)),
     ],
 )
 def test_is_retryable(err: BaseException, expected: tuple[bool, float | None]) -> None:
     assert is_retryable(err) == expected
+
+
+def test_after_send_errors_retry_only_when_idempotent() -> None:
+    for err in (httpx.ReadError("x"), httpx.RemoteProtocolError("x"), httpx.ReadTimeout("x")):
+        assert is_retryable(err, idempotent=True) == (True, None)
+
+
+async def test_chat_is_not_resent_after_the_connection_drops(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        raise httpx.RemoteProtocolError("server closed the connection", request=request)
+
+    async with _mock_client(monkeypatch, handler) as client:
+        with pytest.raises(httpx.RemoteProtocolError):
+            await client.chat([{"role": "user", "content": "ping"}], model="openai/gpt-5-nano")
+    assert calls == 1
 
 
 async def test_retry_paid_call_retries_transient_then_succeeds() -> None:

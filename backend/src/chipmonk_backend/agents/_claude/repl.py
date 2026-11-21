@@ -1,8 +1,7 @@
 """One ``claude`` REPL session under a PTY: spawn, type a turn, tail the transcript.
 
-Adapted from AI Inventor's ``terminal_claude_agent/repl_driver.py`` and its
-``_repl_driver`` parts (records, pty writes, cost dialog). Synchronous on
-purpose: ``pexpect`` is blocking, so the backend runs this in a worker thread.
+Adapted from AI Inventor's Claude CLI driver (records, PTY writes, cost
+dialog). Synchronous on purpose: ``pexpect`` is blocking, so the backend runs this in a worker thread.
 
 A turn is typed as one bracketed paste and ends at the transcript's
 ``system/turn_duration`` record, or at an API-error record (the CLI writes no
@@ -27,7 +26,7 @@ import psutil
 from loguru import logger
 
 from chipmonk_backend.agents._claude.background import BackgroundWork
-from chipmonk_backend.agents._claude.config_dir import pretrust, project_slug
+from chipmonk_backend.agents._claude.config_dir import TrustGrant, pretrust, project_slug, revoke_trust
 from chipmonk_backend.agents._claude.delivery import (
     PromptNotDeliveredError,
     bracketed_paste,
@@ -152,6 +151,7 @@ class ReplSession:
         self._background = BackgroundWork()
         self._first_turn = True
         self.last_delivered = False
+        self._trust: TrustGrant | None = None
 
     # ---- transcript ----
 
@@ -239,7 +239,8 @@ class ReplSession:
             self._first_turn = True
         else:
             self._fast_forward()
-        pretrust(self.cwd, self._configured_dir)
+        if self._trust is None:
+            self._trust = pretrust(self.cwd, self._configured_dir)
         self._log_path.parent.mkdir(parents=True, exist_ok=True)
         argv = self._argv_for(self.session_id, resume)
         self._child = pexpect.spawn(
@@ -495,19 +496,24 @@ class ReplSession:
                 continue
 
     def close(self) -> None:
-        """Quit the CLI politely (``/quit``), then make sure the whole tree is gone."""
-        if self._child is None:
-            return
-        descendants = self._descendants()
+        """Quit the CLI politely (``/quit``), make sure the whole tree is gone, then
+        withdraw the folder trust :meth:`start` granted. Idempotent."""
         try:
-            self._write(CLEAR_INPUT, deadline=time.monotonic() + SHORT_WRITE_S)
-            self._write("/quit", deadline=time.monotonic() + SHORT_WRITE_S)
-            time.sleep(0.3)
-            self._write("\r", deadline=time.monotonic() + SHORT_WRITE_S)
-            self._child.expect(pexpect.EOF, timeout=5)
-        except (TimeoutError, pexpect.TIMEOUT, pexpect.EOF):
-            pass  # a CLI that will not quit is killed below
-        self.kill(descendants)
+            if self._child is not None:
+                descendants = self._descendants()
+                try:
+                    self._write(CLEAR_INPUT, deadline=time.monotonic() + SHORT_WRITE_S)
+                    self._write("/quit", deadline=time.monotonic() + SHORT_WRITE_S)
+                    time.sleep(0.3)
+                    self._write("\r", deadline=time.monotonic() + SHORT_WRITE_S)
+                    self._child.expect(pexpect.EOF, timeout=5)
+                except (TimeoutError, pexpect.TIMEOUT, pexpect.EOF):
+                    pass  # a CLI that will not quit is killed below
+                self.kill(descendants)
+        finally:
+            trust, self._trust = self._trust, None
+            if trust is not None:
+                revoke_trust(trust)
 
 
 __all__ = [

@@ -1,6 +1,6 @@
 """Background work a session still has running, read from its transcript records.
 
-Adapted from AI Inventor's ``_repl_driver/_background.py``. Claude Code lets a
+Adapted from AI Inventor. Claude Code lets a
 turn end while work it started still runs (a ``run_in_background`` Bash, a
 Monitor, an async Agent) and starts the next turn ITSELF when that work
 reports back through a ``<task-notification>`` user turn. A turn that ends

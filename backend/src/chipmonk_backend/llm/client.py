@@ -115,7 +115,7 @@ class OpenRouterClient:
             return response.json()
 
         try:
-            return await retry_paid_call(call, attempts=self.config.max_attempts)
+            return await retry_paid_call(call, attempts=self.config.max_attempts, idempotent=method == "GET")
         except httpx.HTTPStatusError as err:
             raise OpenRouterError(err.response.status_code, err.response.text) from err
 

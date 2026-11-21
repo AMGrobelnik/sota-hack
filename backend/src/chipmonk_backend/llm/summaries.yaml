@@ -1,0 +1,48 @@
+# Summaries: one OpenRouter model, walked provider by provider.
+#
+# Every summary this backend writes (the run summary in run.json, the one-line
+# label of a long agent answer) uses these settings, as in AI Inventor. Paid
+# OpenRouter endpoints only. Each tier pins exactly one provider (order + only,
+# allow_fallbacks: false); the next tier in the list is the fallback.
+
+model: "openai/gpt-oss-120b"
+# Low for the run summary; medium for the one-line label, which clipped more
+# often at low.
+reasoning_effort: "low"
+label_reasoning_effort: "medium"
+max_context_tokens: 131072
+# Per-attempt timeout, and one wall-clock budget for the whole walk.
+tier_timeout_s: 8.0
+walk_budget_s: 40.0
+# Floor on max_tokens: the model's reasoning counts against it, so an
+# answer-sized cap alone would starve it into empty replies.
+min_max_tokens: 4096
+
+# The label of a long agent answer, and the walk for it.
+providers:
+  - "cerebras/fp16"
+  - "groq"
+  - "sambanova"
+  - "amazon-bedrock"
+  - "crusoe/bf16"
+  - "baseten/fp4"
+  - "deepinfra/turbo"
+# The whole-run summary.
+background_providers:
+  - "coreweave/fp4"
+  - "near-ai/fp4"
+  - "cerebras/fp16"
+  - "sambanova"
+  - "groq"
+
+# Run summary shape: this many bullets, this many characters in total.
+summary_bullets: 3
+summary_max_chars: 300
+# An agent answer longer than this gets a one-line label in the run record.
+label_min_output_chars: 300
+# Label length window, and the clip on the text sent to label it.
+label_min_chars: 30
+label_max_chars: 50
+label_max_input_chars: 3000
+# Longest line one event contributes to the run digest.
+digest_line_chars: 300

@@ -12,7 +12,7 @@ import pytest
 
 from chipmonk_backend.agents import AgentEvent, AgentSpec, backend_for
 from chipmonk_backend.agents._claude.background import BackgroundWork
-from chipmonk_backend.agents._claude.config_dir import pretrust, project_slug
+from chipmonk_backend.agents._claude.config_dir import pretrust, project_slug, revoke_trust
 from chipmonk_backend.agents._claude.cost import TranscriptUsage, cost_from_state, parse_cost_output
 from chipmonk_backend.agents._claude.delivery import (
     PromptNotDeliveredError,
@@ -226,14 +226,44 @@ def test_background_work_holds_the_turn_until_notified() -> None:
     assert not work.holds_turn_open()
 
 
-def test_pretrust_marks_the_folder_trusted(tmp_path: Path) -> None:
+def test_pretrust_marks_the_folder_trusted_then_revokes(tmp_path: Path) -> None:
     config_dir = tmp_path / "cfg"
     (config_dir).mkdir()
-    (config_dir / ".claude.json").write_text(json.dumps({"keep": 1}))
-    pretrust(tmp_path, config_dir)
-    data = json.loads((config_dir / ".claude.json").read_text())
+    path = config_dir / ".claude.json"
+    path.write_text(json.dumps({"keep": 1, "projects": {"/other": {"hasTrustDialogAccepted": True}}}))
+    path.chmod(0o640)
+    inode = path.stat().st_ino
+    grant = pretrust(tmp_path, config_dir)
+    data = json.loads(path.read_text())
     assert data["keep"] == 1 and data["hasCompletedOnboarding"] is True
     assert data["projects"][str(tmp_path.resolve())]["hasTrustDialogAccepted"] is True
+    # Replaced by rename, never rewritten in place; mode kept; no temp file left.
+    assert path.stat().st_ino != inode and path.stat().st_mode & 0o777 == 0o640
+    assert sorted(p.name for p in config_dir.iterdir()) == [".claude.json", ".claude.json.chipmonk.lock"]
+    revoke_trust(grant)
+    data = json.loads(path.read_text())
+    assert data["projects"] == {"/other": {"hasTrustDialogAccepted": True}} and data["keep"] == 1
+
+
+def test_revoke_restores_an_entry_that_existed(tmp_path: Path) -> None:
+    path = tmp_path / ".claude.json"
+    cwd = str(tmp_path.resolve())
+    path.write_text(json.dumps({"projects": {cwd: {"allowedTools": ["x"]}}}))
+    grant = pretrust(tmp_path, tmp_path)
+    assert json.loads(path.read_text())["projects"][cwd]["hasTrustDialogAccepted"] is True
+    revoke_trust(grant)
+    assert json.loads(path.read_text())["projects"][cwd] == {"allowedTools": ["x"]}
+    # Trusted by the person already: nothing to undo.
+    path.write_text(json.dumps({"projects": {cwd: {"hasTrustDialogAccepted": True}}}))
+    revoke_trust(pretrust(tmp_path, tmp_path))
+    assert json.loads(path.read_text())["projects"][cwd] == {"hasTrustDialogAccepted": True}
+
+
+def test_pretrust_leaves_a_malformed_file_alone(tmp_path: Path) -> None:
+    path = tmp_path / ".claude.json"
+    path.write_text("{not json")
+    revoke_trust(pretrust(tmp_path, tmp_path))
+    assert path.read_text() == "{not json"
 
 
 def test_review_output_schema_then_files(tmp_path: Path) -> None:
@@ -301,8 +331,10 @@ async def test_run_against_fake_cli(config: BackendConfig, tmp_path: Path, fake_
     assert kinds.count("tool_call") == 2 and kinds.count("tool_result") == 2
     cost = sink.events[-2].data
     assert cost == {"usd": pytest.approx(0.0456), "input_tokens": 0, "output_tokens": 0}
+    # The run's folder was trusted only while it ran.
     trusted: dict[str, Any] = json.loads((tmp_path / "claude-config" / ".claude.json").read_text())
-    assert trusted["projects"][str(spec.workdir.resolve())]["hasTrustDialogAccepted"] is True
+    assert str(spec.workdir.resolve()) not in trusted["projects"]
+    assert trusted["hasCompletedOnboarding"] is True
 
 
 async def test_run_fails_cleanly_when_output_never_validates(

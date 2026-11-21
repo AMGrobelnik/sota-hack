@@ -1,7 +1,6 @@
 """Checking what an agent produced: the structured-output file and expected files.
 
-Shared by both agent backends, adapted from AI Inventor's
-``_shared/core/struct_out.py`` and ``expected_files.py``. The output FILE is
+Shared by both agent backends, adapted from AI Inventor. The output FILE is
 the source of truth: the agent writes its result as JSON to a file named in
 the last prompt, the backend validates it against ``spec.output_schema``, and
 on failure re-prompts the SAME session with every validation error. The wording
