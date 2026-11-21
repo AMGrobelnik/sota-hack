@@ -1,12 +1,18 @@
 """Fast golden proof for a chiplab design: gate netlist == independent golden model of the WHOLE IR, every input.
 
-usage: golden_proof.py <design_id> [--timeout S] [--out DIR] [--mutants] [--direct]
+usage: golden_proof.py <design_id> [--timeout S] [--out DIR] [--engines cec,bitwuzla] [--split] [--mutants] [--direct]
+  e.g. bash env.sh ../../../chiplab/.venv/bin/python golden_proof.py 765fa47586bd --split --mutants --out /tmp/g
 
-Default recipe ("chain", two whole-design proofs run in parallel, no range assumptions anywhere):
+Recipe ("chain", whole-design proofs all run in parallel, no range assumptions anywhere):
   P1  production RTL (design.v) == golden model of the whole IR (emit/golden.py), for all 2^n input values.
-      Both sides are lowered with `techmap` (no alumacc/maccmap), so each `a + b + c` stays a ripple-adder chain in
-      source order; the golden and the production emitter add the same terms in the same order, so the partial sums
-      are equal signals and ABC `&cec` (simulation + SAT sweeping) merges them one by one with tiny SAT calls.
+      Engines race on the same miter, first conclusive answer wins (--engines):
+      cec      both sides lowered with `techmap` (no alumacc/maccmap), so each `a + b + c` stays a ripple-adder chain
+               in source order; the golden and the production emitter add the same terms in the same order, so the
+               partial sums are equal signals and ABC `&cec` (simulation + SAT sweeping) merges them one by one.
+      iprove   the same techmapped miter, ABC `iprove` (rewriting, fraiging and SAT on the single miter output);
+               fastest on the 3-head chip, where &cec spends minutes on the 2-of-3 vote cone.
+      bitwuzla the miter as a SymbiYosys assertion, word-level SMT (smtbmc bitwuzla), BMC depth 1 (no state).
+      --split: one P1 miter per output port (that port's cone), all in parallel.
   P2  gate netlist (synth/gates.v) == production RTL: the lab's own proof B (verify/formal.py `_blif` + ABC `cec`).
   P1 and P2 together: gates == golden for every input (equality is transitive; both are full input-space proofs).
 --direct: also try the one-step miter golden vs gates.v (the lab's synthesis reshapes the adders, so this is
@@ -23,11 +29,14 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 import platform
 import re
+import signal
 import subprocess
+import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from chiplab import config
@@ -47,14 +56,47 @@ def golden_fixed(ir: dict, module: str, info: dict) -> str:
     return text
 
 
-def run(cmd: list[str], cwd: Path, timeout: int, log: str) -> tuple[int | None, str]:
-    try:
-        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
-        out, rc = p.stdout + p.stderr, p.returncode
-    except subprocess.TimeoutExpired:
-        out, rc = f"TIMEOUT after {timeout}s", None
-    (cwd / log).write_text(out)
-    return rc, out
+class Race:
+    """Processes of one portfolio check; the first conclusive engine stops (kills) the others."""
+
+    def __init__(self) -> None:
+        self.stop, self.procs, self.lock = threading.Event(), [], threading.Lock()
+
+    def run(self, cmd: list[str], cwd: Path, timeout: int, log: str) -> tuple[int | None, str]:
+        if self.stop.is_set():
+            return None, "stopped"
+        p = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                             start_new_session=True)
+        with self.lock:
+            self.procs.append(p)
+        try:
+            out, rc = p.communicate(timeout=timeout)[0], p.returncode
+        except subprocess.TimeoutExpired:
+            self.kill(p)
+            out, rc = f"TIMEOUT after {timeout}s", None
+        if self.stop.is_set() and rc != 0:
+            out, rc = out + "\nstopped: another engine finished first", None
+        (cwd / log).write_text(out)
+        return rc, out
+
+    @staticmethod
+    def kill(p: subprocess.Popen) -> None:
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+        p.wait()
+
+    def finish(self) -> None:
+        self.stop.set()
+        with self.lock:
+            for p in self.procs:
+                if p.poll() is None:
+                    self.kill(p)
+
+
+def run(cmd: list[str], cwd: Path, timeout: int, log: str, race: Race | None = None) -> tuple[int | None, str]:
+    return (race or Race()).run(cmd, cwd, timeout, log)
 
 
 def verdict(out: str) -> bool | None:
@@ -70,26 +112,72 @@ def verdict(out: str) -> bool | None:
     return None  # UNDECIDED
 
 
-def miter_cec(gold_v: str, impl: Path, gtop: str, itop: str, cwd: Path, timeout: int, prep: str = "techmap",
-              extra_v: str = "") -> dict:
-    """One whole-design miter gold vs impl, lowered by `prep`, checked by ABC &cec. Returns {proved, seconds, ...}."""
-    cwd.mkdir(parents=True, exist_ok=True)
-    (cwd / "gold.v").write_text(gold_v)
-    (cwd / "impl.v").write_text(impl.read_text() + extra_v)
+def iprove_verdict(out: str) -> bool | None:
+    """ABC iprove on a single-output miter: UNSATISFIABLE = the miter never fires = equivalent; SATISFIABLE = CEX."""
+    last = [ln.strip() for ln in out.splitlines() if "SATISFIABLE" in ln][-1:]
+    if not last:
+        return None
+    return True if last[0].startswith("UNSATISFIABLE") else (False if last[0].startswith("SATISFIABLE") else None)
+
+
+def eng_cec(cwd: Path, gtop: str, itop: str, timeout: int, race: Race, prep: str = "techmap",
+            abc: str = "cec") -> dict:
+    """Miter gold vs impl lowered by `prep` (techmap keeps adder chains in source order), then ABC on it:
+    abc='cec' runs `&cec -m` (SAT sweeping), abc='iprove' runs `iprove` (rewriting + fraiging + SAT on the miter)."""
     low = "techmap\nopt -fast\n" if prep == "techmap" else "synth -flatten -noabc -top miter\n"
-    (cwd / "miter.ys").write_text(
+    aig = f"miter_{abc}.aig"
+    (cwd / f"miter_{abc}.ys").write_text(
         f"read_verilog gold.v\nread_verilog impl.v\nproc\nopt_clean\nmiter -equiv -flatten {gtop} {itop} miter\n"
-        f"hierarchy -top miter\nflatten\n{low}aigmap\nopt_clean\nwrite_aiger -zinit miter.aig\n")
+        f"hierarchy -top miter\nflatten\n{low}aigmap\nopt_clean\nwrite_aiger -zinit {aig}\n")
     t0 = time.time()
-    rc, out = run([oss_bin("yosys"), "-q", "-s", "miter.ys"], cwd, timeout, "miter.log")
+    rc, out = race.run([oss_bin("yosys"), "-q", "-s", f"miter_{abc}.ys"], cwd, timeout, f"miter_{abc}.log")
     t_miter = time.time() - t0
     if rc != 0:
         return {"proved": None, "error": out[-400:], "seconds": round(t_miter, 2)}
     left = max(5, int(timeout - t_miter))
-    rc, out = run([oss_bin("yosys-abc"), "-c", "read_aiger miter.aig; print_stats; &get; &cec -m"], cwd, left, "abc.log")
-    return {"proved": verdict(out) if rc is not None else None, "seconds": round(time.time() - t0, 2),
-            "miter_s": round(t_miter, 2), "abc_s": round(time.time() - t0 - t_miter, 2),
-            **({"timeout": True} if rc is None else {})}
+    cmd = f"read_aiger {aig}; print_stats; " + ("&get; &cec -m" if abc == "cec" else "iprove")
+    rc, out = race.run([oss_bin("yosys-abc"), "-c", cmd], cwd, left, f"abc_{abc}.log")
+    v = (verdict(out) if abc == "cec" else iprove_verdict(out)) if rc is not None else None
+    return {"proved": v, "seconds": round(time.time() - t0, 2),
+            "miter_s": round(t_miter, 2), "abc_s": round(time.time() - t0 - t_miter, 2)}
+
+
+def eng_iprove(cwd: Path, gtop: str, itop: str, timeout: int, race: Race) -> dict:
+    return eng_cec(cwd, gtop, itop, timeout, race, abc="iprove")
+
+
+def eng_sby(cwd: Path, gtop: str, itop: str, timeout: int, race: Race, solver: str = "bitwuzla") -> dict:
+    """Same miter as a SymbiYosys assertion, word-level SMT (smtbmc) with `solver`; depth 1 = all inputs (no state)."""
+    (cwd / "eq.sby").write_text(
+        f"[options]\nmode bmc\ndepth 1\n\n[engines]\nsmtbmc {solver}\n\n[script]\nread_verilog gold.v\n"
+        f"read_verilog impl.v\nproc\nopt_clean\nmiter -equiv -flatten -make_assert {gtop} {itop} miter\n"
+        f"hierarchy -top miter\nflatten\nopt -fast\n\n[files]\ngold.v\nimpl.v\n")
+    t0 = time.time()
+    rc, out = race.run([oss_bin("sby"), "-f", "-d", f"sby_{solver}", "eq.sby"], cwd, timeout, f"sby_{solver}.log")
+    v = True if "DONE (PASS" in out else (False if "DONE (FAIL" in out else None)
+    return {"proved": v if rc is not None or v is not None else None, "seconds": round(time.time() - t0, 2)}
+
+
+ENGINES = {"cec": eng_cec, "iprove": eng_iprove, "bitwuzla": eng_sby}
+
+
+def miter_cec(gold_v: str, impl: Path, gtop: str, itop: str, cwd: Path, timeout: int, extra_v: str = "",
+              engines: tuple[str, ...] = ("cec",)) -> dict:
+    """gold vs impl on every input. Several engines race in parallel; the first conclusive answer wins."""
+    cwd.mkdir(parents=True, exist_ok=True)
+    (cwd / "gold.v").write_text(gold_v)
+    (cwd / "impl.v").write_text(impl.read_text() + extra_v)
+    race, t0 = Race(), time.time()
+    with ThreadPoolExecutor(max_workers=len(engines)) as ex:
+        futs = {ex.submit(ENGINES[e], cwd, gtop, itop, timeout, race): e for e in engines}
+        res = {}
+        for f in as_completed(futs):
+            res[futs[f]] = f.result()
+            if res[futs[f]]["proved"] is not None:
+                race.finish()
+    win = next((e for e in engines if res[e]["proved"] is not None), None)
+    return {"proved": res[win]["proved"] if win else None, "engine": win, "seconds": round(time.time() - t0, 2),
+            "engines": res}
 
 
 def proof_b(rtl: Path, gate: Path, top: str, cwd: Path, timeout: int) -> dict:
@@ -123,12 +211,13 @@ def mutants(ir: dict) -> dict[str, dict]:
     return out
 
 
-def p1_jobs(ir: dict, info: dict, rtl: Path, base: Path, name: str, split: bool, timeout: int) -> dict:
+def p1_jobs(ir: dict, info: dict, rtl: Path, base: Path, name: str, split: bool, timeout: int,
+            engines: tuple[str, ...]) -> dict:
     """P1 (RTL == golden of `ir`) as one whole miter, or one miter per output port (its cone) when split."""
     top = info["top"]
     if not split:
         return {name: lambda: miter_cec(golden_fixed(ir, "gold_top", info), rtl, "gold_top", top,
-                                        base / name.lower(), timeout)}
+                                        base / name.lower(), timeout, engines=engines)}
     jobs = {}
     for o in info["outputs"]:
         ir1 = dict(ir, outputs=[x for x in ir["outputs"] if x["name"] == o["name"]])
@@ -140,7 +229,7 @@ def p1_jobs(ir: dict, info: dict, rtl: Path, base: Path, name: str, split: bool,
                 f"  {top} u ({', '.join(conns)});\nendmodule\n")
         jobs[f"{name}[{o['name']}]"] = (lambda ir1=ir1, info1=info1, wrap=wrap, o=o: miter_cec(
             golden_fixed(ir1, "gold_top", info1), rtl, "gold_top", "wrap_top", base / f"{name.lower()}_{o['name']}",
-            timeout, extra_v=wrap))
+            timeout, extra_v=wrap, engines=engines))
     return jobs
 
 
@@ -151,6 +240,7 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=Path("golden_runs"))
     ap.add_argument("--mutants", action="store_true")
     ap.add_argument("--direct", action="store_true")
+    ap.add_argument("--engines", default="cec,bitwuzla", help="comma list from: " + ",".join(ENGINES))
     ap.add_argument("--split", action="store_true", help="one P1 miter per output port (cone), all in parallel")
     a = ap.parse_args()
     d = config.HOME / "designs" / a.design
@@ -160,15 +250,16 @@ def main() -> None:
     rtl, top = d / "design.v", info["top"]
     base = a.out / a.design
     gold_all = golden_fixed(ir, "gold_top", info)
+    eng = tuple(a.engines.split(","))
     jobs = {"P2_gates_eq_rtl": lambda: proof_b(rtl, gate, top, base / "p2_gates_rtl", a.timeout)}
-    jobs.update(p1_jobs(ir, info, rtl, base, "P1_rtl_eq_golden", a.split, a.timeout))
+    jobs.update(p1_jobs(ir, info, rtl, base, "P1_rtl_eq_golden", a.split, a.timeout, eng))
     if a.direct:
         jobs["direct_gates_eq_golden"] = lambda: miter_cec(gold_all, gate, "gold_top", top,
-                                                           base / "direct_gates_golden", a.timeout)
+                                                           base / "direct_gates_golden", a.timeout, engines=eng)
     if a.mutants:
         for name, mir in mutants(ir).items():
             # the production RTL stays the real one; only the golden model is mutated
-            jobs.update(p1_jobs(mir, info, rtl, base, f"mutant_{name}", a.split, a.timeout))
+            jobs.update(p1_jobs(mir, info, rtl, base, f"mutant_{name}", a.split, a.timeout, eng))
     t0 = time.time()
     with ThreadPoolExecutor(max_workers=len(jobs)) as ex:
         futs = {k: ex.submit(f) for k, f in jobs.items()}
