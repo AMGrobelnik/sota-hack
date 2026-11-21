@@ -14,8 +14,8 @@
   #bar button:focus-visible, #bar a:focus-visible { outline: 2px solid #6aa9ff; outline-offset: 2px; }
   #label { min-width: 0; flex: 1; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
   #label b { font-weight: 600; margin-right: 8px; color: #9aa4b2; }
-  #alone { color: #8ab4ff; text-decoration: none; white-space: nowrap; }
-  #alone:hover { text-decoration: underline; }
+  #bar a { color: #8ab4ff; text-decoration: none; white-space: nowrap; }
+  #bar a:hover { text-decoration: underline; }
   #stage { position: fixed; inset: var(--bar) 0 0 0; }
   iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; }
 </style>
@@ -26,6 +26,7 @@
   <div id="label" aria-live="polite"></div>
   <button id="next" aria-label="Next variant" aria-keyshortcuts="ArrowRight">&#8594;</button>
   <a id="alone" target="_blank" rel="noopener">open alone</a>
+  <a id="other" href="waitlist/">waitlist versions</a>
 </div>
 <div id="stage"><iframe id="frame" title="Variant"></iframe></div>
 <script>
@@ -37,10 +38,11 @@
     { key: "v4", name: "Thousands at once" },
     { key: "v5", name: "All of Cam, with a chip" }
   ];
-  var DASH = "../dashboard/";
+  var TOP_LINKS = /^(\.\.\/dashboard\/|(\.\.\/waitlist\/)?join\.html)/;
   var frame = document.getElementById("frame");
   var label = document.getElementById("label");
   var alone = document.getElementById("alone");
+  var other = document.getElementById("other");
   var idx = 0;
 
   function fromHash() {
@@ -55,6 +57,7 @@
     label.appendChild(b);
     label.appendChild(document.createTextNode(v.name));
     alone.href = url;
+    other.href = "waitlist/#" + (idx + 1);
     document.title = (idx + 1) + " " + v.name + " - Landing page variants";
     if (frame.getAttribute("src") !== url) frame.src = url;
   }
@@ -82,8 +85,7 @@
       doc.addEventListener("keydown", onKey);
       var links = doc.querySelectorAll("a[href]");
       for (var i = 0; i < links.length; i++) {
-        var h = links[i].getAttribute("href");
-        if (h && h.indexOf("../dashboard/") === 0) links[i].target = "_top";
+        if (TOP_LINKS.test(links[i].getAttribute("href") || "")) links[i].target = "_top";
       }
     } catch (err) { /* cross-origin: leave the variant alone */ }
   }
