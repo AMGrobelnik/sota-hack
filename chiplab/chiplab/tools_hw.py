@@ -10,20 +10,22 @@ from chiplab.tools import _design_dir, _ensure_synth, tool
 
 @tool("Verification level 2: prove the gate netlist equals the model for every possible input (ABC equivalence "
       "check against an independent golden model of the IR; falls back to proving synthesis if inconclusive).",
-      {"design_id": "str", "timeout": "int seconds per proof attempt (600)"})
-def prove_equivalence(design_id: str, timeout: int = 600) -> dict:
+      {"design_id": "str", "timeout": "int seconds per proof attempt (600)",
+       "golden": "bool — also try the proof against the independent golden model (small chips; slow on large ones)"},
+      lane="cpu", cacheable=True)
+def prove_equivalence(design_id: str, timeout: int = 600, golden: bool = False) -> dict:
     from chiplab.verify.formal import prove
     d = _design_dir(design_id)
     syn = _ensure_synth(design_id)
     ir = json.loads((d / "ir.json").read_text()); info = json.loads((d / "port.json").read_text())
-    r = prove(ir, info, __import__("pathlib").Path(syn["gate_verilog"]), d / "design.v", d / "formal", timeout)
+    r = prove(ir, info, __import__("pathlib").Path(syn["gate_verilog"]), d / "design.v", d / "formal", timeout, golden=golden)
     (d / "formal.json").write_text(json.dumps(r))
     log.event("check", design_id=design_id, formal=r["proved"], against=r["against"])
     return {"design_id": design_id, **r}
 
 
 @tool("Map a design onto a real process's standard cells: area in µm², gate-equivalents (area / NAND2), cell "
-      "counts and an estimate of Tiny Tapeout tiles.", {"design_id": "str", "pdk": "str — sky130|gf180|ihp"})
+      "counts and an estimate of Tiny Tapeout tiles.", {"design_id": "str", "pdk": "str — sky130|gf180|ihp"}, lane="cpu", cacheable=True)
 def map_to_process(design_id: str, pdk: str = "sky130") -> dict:
     from chiplab.hw.pdk import map_to_process as _map
     d = _design_dir(design_id)

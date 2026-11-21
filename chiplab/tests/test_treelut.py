@@ -2,7 +2,10 @@
 import numpy as np
 import pytest
 
-xgb = pytest.importorskip("xgboost")
+try:  # on macOS xgboost needs the OpenMP runtime (brew install libomp); skip cleanly if it can't load
+    import xgboost as xgb
+except Exception as e:  # ImportError, or XGBoostError when libomp is missing
+    pytest.skip(f"xgboost not loadable: {e}", allow_module_level=True)
 
 from chiplab.emit.verilog import emit  # noqa: E402
 from chiplab.hw.yosys import synth_generic  # noqa: E402

@@ -102,7 +102,6 @@ def rtl_simulate(ir: dict, workdir: Path, X: dict | None = None, n: int = 1000, 
     reference: another chipir/1 whose interpreter gives the expected outputs (default: ir itself).
     expected:  the scientist's expected outputs {output name: int [N, lanes]} instead of an interpreter.
     """
-    from cocotb_tools.runner import get_runner
     workdir = Path(workdir); workdir.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
     text, info = emit_stream(ir, tt=tt)
@@ -122,22 +121,7 @@ def rtl_simulate(ir: dict, workdir: Path, X: dict | None = None, n: int = 1000, 
     (workdir / "chiplab_stream_tb.py").write_text(_TB)
     if resp.exists():
         resp.unlink()
-    old_path = os.environ.get("PATH", "")
-    venv_bin = str(Path(os.sys.executable).parent)
-    os.environ["PATH"] = f"{venv_bin}:{OSS / 'bin'}:{old_path}"
-    try:
-        runner = get_runner("icarus")
-        runner.build(sources=[vpath], hdl_toplevel=info["top"], build_dir=workdir / "sim_build", always=True,
-                     timescale=("1ns", "1ps"), log_file=workdir / "build.log")
-        runner.test(hdl_toplevel=info["top"], test_module="chiplab_stream_tb", test_dir=workdir,
-                    build_dir=workdir / "sim_build", extra_env={"CHIPLAB_TB_JSON": str(cfgp)},
-                    log_file=workdir / "sim.log")
-    except BaseException as e:  # cocotb's runner raises SystemExit on a failing test; results file decides
-        err = f"{type(e).__name__}: {e}"
-    else:
-        err = None
-    finally:
-        os.environ["PATH"] = old_path
+    err = _run_cocotb(vpath, info["top"], workdir, cfgp, timeout)
     res = json.loads(resp.read_text()) if resp.exists() else {"vectors": N, "mismatches": None, "first_mismatches": []}
     passed = res.get("mismatches") == 0 and res.get("vectors") == N
     return {"passed": bool(passed), "vectors": res.get("vectors"), "mismatches": res.get("mismatches"),
@@ -145,4 +129,80 @@ def rtl_simulate(ir: dict, workdir: Path, X: dict | None = None, n: int = 1000, 
             "transfers_per_frame": info["transfers_per_frame"], "visible_output_bits": info["visible_output_bits"],
             "truncated": info["truncated"], "verilog": str(vpath), "error": err,
             "verification_level": 3 if passed and li["ok"] else None, "seconds": round(time.time() - t0, 1),
-            "simulator": "icarus (OSS CAD Suite) via cocotb runner"}
+            "simulator": "icarus via cocotb runner" + (" (OSS CAD Suite python)" if _oss_python() else " (lab venv)")}
+
+
+_RUNNER = r'''
+import sys
+from pathlib import Path
+from cocotb_tools.runner import get_runner
+vpath, top, workdir, cfgp = sys.argv[1:5]
+w = Path(workdir)
+r = get_runner("icarus")
+r.build(sources=[vpath], hdl_toplevel=top, build_dir=w / "sim_build", always=True, timescale=("1ns", "1ps"),
+        log_file=w / "build.log")
+r.test(hdl_toplevel=top, test_module="chiplab_stream_tb", test_dir=w, build_dir=w / "sim_build",
+       extra_env={"CHIPLAB_TB_JSON": cfgp}, log_file=w / "sim.log")
+'''
+
+
+def _oss_python() -> str | None:
+    """OSS CAD Suite ships its own Python with cocotb and a shared libpython (needed by Icarus' VPI), so it works
+    even where the lab's Python is a static build (e.g. uv-managed Python on a fresh machine)."""
+    from chiplab.config import find_bin
+    roots = [Path(OSS)]
+    iv = find_bin("iverilog")
+    if iv:
+        roots.append(Path(iv).resolve().parent.parent)
+    for root in roots:
+        for rel in ("py3bin/python3", "bin/python3"):
+            p = root / rel
+            if p.exists() and (root / "bin" / "cocotb-config").exists():
+                return str(p)
+    return None
+
+
+def _run_cocotb(vpath: Path, top: str, workdir: Path, cfgp: Path, timeout: int) -> str | None:
+    import subprocess
+    py = _oss_python()
+    if py:
+        (workdir / "run_tb.py").write_text(_RUNNER)
+        env = {k: v for k, v in os.environ.items() if k not in ("VIRTUAL_ENV", "PYTHONPATH", "PYTHONHOME")}
+        env["PATH"] = f"{Path(py).parent.parent / 'bin'}:{env.get('PATH', '')}"
+        try:
+            p = subprocess.run([py, str(workdir / "run_tb.py"), str(vpath), top, str(workdir), str(cfgp)], cwd=workdir,
+                               env=env, capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return f"timed out after {timeout}s"
+        (workdir / "runner.log").write_text(p.stdout + p.stderr)
+        return None if p.returncode == 0 else f"runner exit {p.returncode}: {(p.stderr or p.stdout)[-400:]}"
+    from cocotb_tools.runner import get_runner  # fallback: the lab's own Python
+    old_path = os.environ.get("PATH", "")
+    os.environ["PATH"] = f"{Path(os.sys.executable).parent}:{old_path}"
+    try:
+        r = get_runner("icarus")
+        r.build(sources=[vpath], hdl_toplevel=top, build_dir=workdir / "sim_build", always=True, timescale=("1ns", "1ps"),
+                log_file=workdir / "build.log")
+        r.test(hdl_toplevel=top, test_module="chiplab_stream_tb", test_dir=workdir, build_dir=workdir / "sim_build",
+               extra_env={"CHIPLAB_TB_JSON": str(cfgp)}, log_file=workdir / "sim.log")
+    except BaseException as e:  # cocotb's runner raises SystemExit on a failing test; the results file decides
+        return f"{type(e).__name__}: {e}"
+    finally:
+        os.environ["PATH"] = old_path
+    return None
+
+
+def tt_project_test() -> str:
+    """The streaming testbench as a Tiny Tapeout project test (test/test.py reading test/vectors.json)."""
+    return _TB.replace('cfg = json.load(open(os.environ["CHIPLAB_TB_JSON"]))',
+                       'from pathlib import Path\n    _here = Path(__file__).parent\n    cfg = json.load(open(_here / "vectors.json"))\n'
+                       '    cfg["result"] = str(_here / "tb_result.json")')
+
+
+def tt_vectors(ir: dict, n: int = 64, seed: int = 0, X: dict | None = None) -> dict:
+    """Vectors for the TT project test: input words per frame and the expected visible outputs (integer model)."""
+    from chiplab.emit.stream import emit_stream
+    _, info = emit_stream(ir, tt=True)
+    X = X or random_inputs(ir, n, seed)
+    return {"tt": True, "words": frame_words(info["core"], X).tolist(),
+            "expected": [int(e) for e in packed_outputs(info["core"], interp(ir, X), info["visible_output_bits"])]}

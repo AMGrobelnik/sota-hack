@@ -49,6 +49,12 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 uv --version
 
+if [ "$(uname -s)" = Darwin ]; then
+  # XGBoost (tree models) needs the OpenMP runtime on macOS
+  if command -v brew >/dev/null 2>&1; then brew list libomp >/dev/null 2>&1 || brew install libomp
+  else echo "note: Homebrew not found; tree-model ingest needs libomp (install Homebrew, then: brew install libomp)"; fi
+fi
+
 say "2/6 Python environment ($EXTRAS)"
 ( cd "$HERE" && uv sync $EXTRAS )
 "$HERE/.venv/bin/python" -c "import torch; d='cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu'); print('torch', torch.__version__, 'device', d)"

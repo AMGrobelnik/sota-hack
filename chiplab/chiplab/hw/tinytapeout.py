@@ -191,7 +191,7 @@ def pick_tiles(rtl_files: list[Path], top_module: str, workdir: Path, pdk: str =
 
 def tt_package(rtl_files: list[Path], top_module: str, workdir: Path, design_meta: dict, tiles: str = "auto",
                harden: bool = False, pdk: str = "sky130A", vectors: dict | None = None, clock_hz: int = 25_000_000,
-               timeout: int = 5400) -> dict:
+               timeout: int = 5400, test_py: str | None = None) -> dict:
     """Create a TT project folder (and optionally harden it). vectors: {"bits", "out_bits", "vectors": [{lanes, expect}]}
     from the integer model; they drive the RTL test (level 3) and the gate-level test (level 4)."""
     t0 = time.time()
@@ -231,7 +231,7 @@ def tt_package(rtl_files: list[Path], top_module: str, workdir: Path, design_met
     (proj / "test" / "tb.v").write_text(tb)
     mk = (TT_TEMPLATE / "test" / "Makefile").read_text().replace("PROJECT_SOURCES = project.v", "PROJECT_SOURCES = " + " ".join(sources))
     (proj / "test" / "Makefile").write_text(mk)
-    (proj / "test" / "test.py").write_text(_TEST_PY)
+    (proj / "test" / "test.py").write_text(test_py or _TEST_PY)
     if vectors:
         (proj / "test" / "vectors.json").write_text(json.dumps(vectors))
     # tt-support-tools expects ./tt inside the project (FP_DEF_TEMPLATE is dir::../tt/tech/...)

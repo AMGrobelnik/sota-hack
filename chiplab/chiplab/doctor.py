@@ -46,7 +46,10 @@ def run() -> dict:
             add(f"python:{mod}", True, getattr(m, "__version__", "ok"), required=req)
         except Exception as e:
             extra = {"cocotb": "sim", "torchlogix": "ingest", "alkaid": "ingest", "mcp": "mcp"}.get(mod)
-            add(f"python:{mod}", False, str(e)[:120], f"uv sync --extra {extra}" if extra else "uv sync", required=req)
+            fix = f"uv sync --extra {extra}" if extra else "uv sync"
+            if mod == "xgboost" and platform.system() == "Darwin":
+                fix = "brew install libomp   (XGBoost needs the OpenMP runtime on macOS)"
+            add(f"python:{mod}", False, str(e)[:160], fix, required=req)
     from chiplab.device import describe
     dev = describe()
     add("compute", True, dev, required=False)
