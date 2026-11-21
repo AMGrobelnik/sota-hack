@@ -22,7 +22,15 @@ module to port.
 | `claude_cli` backend         | stub    |
 | `openrouter` agent backend   | stub    |
 | OpenRouter chat client       | stub    |
-| RunPod runner and worker     | stub    |
+| RunPod runner and worker     | dry run |
+
+The RunPod runner, worker, client and reaper are built and tested against a
+fake control plane with real local workers. Against RunPod itself only
+read-only calls and dry runs have been made; no pod has been created yet.
+`python -m chipmonk_backend.compute.runpod check` lists pods and prices,
+`dry-run --tier gpu_basic` prints each mode's create request, and `reap`
+lists leftover `chipmonk_worker_*` pods (`--delete` terminates them).
+`Dockerfile.worker` builds the worker image.
 
 ## Layout
 
