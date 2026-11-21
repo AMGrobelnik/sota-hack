@@ -55,5 +55,6 @@ on Adrian's Mac. The checked evidence will be in `docs/evidence.md`.
 - `BUILT-TODAY.md`: what was brought in and what was built at the event.
 - `docs/event.md`: dates, venue, rules, judging, prizes.
 - `docs/idea.md`: the idea in full, with cautions and open questions.
+- `docs/environment.md`: the design environment: stages, views, first run.
 - `docs/evidence.md`: checked evidence on prior work, data and tools.
 - `context/`: raw context: transcripts, Granola notes, the judging slide, research notes.

@@ -56,6 +56,11 @@ line and the point where they cross.
 The visual: the gate circuit lighting up on a heartbeat, plus the
 curve.
 
+The stages, views and first run are in `docs/environment.md`. The
+comparison target is a published AF design (arXiv 2605.29994) on the
+same database. We plan to compare on patients the model never saw,
+with a full curve of accuracy against size.
+
 ## Mapping to the judging slide
 
 - **Correctness and assumptions**: the circuit matches the model bit

@@ -138,3 +138,79 @@ absent.
 - Q5b FDA locked wording.
 - Tooling note: its not-found items sit in a structured output that is not in the source
   files, so none are listed here.
+
+## Closest published results, read in full
+
+Three papers were read in full (PDF text), and a second reader
+checked each claim. Where the check disagreed, its verdict is used.
+
+- **LUT-based 1D-CNN for AF**,
+  [arXiv 2605.29994](https://arxiv.org/abs/2605.29994). MIT-BIH
+  atrial fibrillation database: 16 of 25 records, about 13,800
+  windows of about 42 s, channel 1 only; which 16 is not stated.
+  Input is 12-bit, every second sample, 125 Hz. BIG: accuracy 95.8,
+  F1 95.6; SMALL: 88.4 and 87.4. Size: 2,844 LUTs, 0 DSP, 871 FF on
+  a Spartan-7 S15. Caveats: the train and test split is not stated.
+  The 51 us is listed for both designs; the measured 50.88 us was on
+  a depthwise-separable model not stated to be BIG. Power, 42 to
+  65 mW, is a Vivado estimate. The abstract says no BRAM, but
+  Section IV.C has a BRAM input buffer. Search: 73 configurations
+  (115 with the first block free), 6 runs of 400 epochs, about 13
+  minutes a run on an RTX 8000. This corrects the "F1 up to 95%"
+  line above: the abstract says 95.6%.
+- **LGN and LUTN for heartbeats**,
+  [arXiv 2609.32854](https://arxiv.org/abs/2609.32854). Not an AF
+  task: four heartbeat classes on the MIT-BIH Arrhythmia Database,
+  48 records, split by patient (DS1 train, DS2 test). Classifier
+  3,223 LUTs and 0.46 nJ; preprocessing 17,064 LUTs and 8.25 uJ.
+  Caveats: hardware figures are vectorless Vivado estimates at an
+  assumed 1 MHz. Each accuracy in Table 4 is the best across depths,
+  so one row is not one model. The abstract's 94.41% and jk 0.683
+  come from different models. The 1-layer 6-LUTN built in hardware
+  scores 94.04 and jk 0.651. Per-class sensitivity of the 6-LUTN: N
+  0.998, S 0.007, V 0.869, F 0.003. Depth and temperature appear
+  chosen on the test set. This corrects the 94.41% and 0.683 line
+  above.
+- **AF patch on an FPGA**,
+  [arXiv 2508.13181](https://arxiv.org/abs/2508.13181). Own dataset,
+  30 people, about 98K samples of 120 s, split 70, 15 and 15
+  percent; a split by person is not stated. 7,328 parameters, 14.6
+  KByte, iCE40 UltraPlus; sensitivity 0.938 and specificity 0.981
+  for the chosen model. Search: 190 generations, 8 offspring each, 30
+  epochs per candidate, 220 Pareto individuals; search time is not
+  stated. Caveats: 3.81 mW was measured for the whole platform,
+  without Bluetooth or storage. No absolute LUT count, latency or
+  energy per inference is given. The abstract's "95% accuracy" has no
+  source number in any table; Table III's 95.8% and 95.8% equal the
+  MIT-BIH column of Table II.
+- **Clinical bar, partly confirmed.** AAFP review of a handheld ECG:
+  sensitivity 92% and specificity 95% for AF, 233 patients at one
+  outpatient clinic, against a 12-lead read by a cardiologist
+  ([AAFP](https://www.aafp.org/pubs/afp/issues/2020/1101/p562.html)).
+  Other cohorts on that page: 100% and 97% (n=55, AF or flutter);
+  94.6% and 92.9% (n=42), a reading within 30 s.
+- **Microcontroller candidate.** ESP32-S3, about 180 KB, 9 ms
+  latency, binary normal against abnormal, not AF, no Cortex-M, no
+  energy figure
+  ([arXiv 2606.02256](https://arxiv.org/abs/2606.02256)).
+- **FDA wording.** The page says some AI-enabled devices "may also
+  adapt over time as new data, information, or experience becomes
+  available". It has no "locked" wording
+  ([FDA](https://www.fda.gov/medical-devices/software-medical-device-samd/artificial-intelligence-software-medical-device)).
+
+### Not found
+
+- The clinical accuracy bar: the ESC 2020 30 s rule, NICE MTG64 and
+  a PubMed entry were only seen as search snippets; the pages were
+  not opened (fetch blocked).
+- A Sensors 2025 microcontroller figure (3532 uJ, 143 ms): search
+  snippet only; the page was blocked.
+- A microcontroller or Cortex-M baseline for AF with inference time
+  and energy.
+- Code for the AF model of 2605.29994 (the generator tool is open
+  source; whether the model is in it is not stated), and any code
+  link for 2609.32854 or 2508.13181.
+- The 16 records used by 2605.29994, and its train and test split.
+- A per-class or sensitivity figure for the headline 95% of
+  2508.13181.
+- Q4 items of the clinical-bar search were not attempted.
