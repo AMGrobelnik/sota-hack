@@ -149,3 +149,128 @@ def rtl_simulate(design_id: str, n: int = 1000, vectors: dict | None = None, exp
     (d / "rtlsim.json").write_text(json.dumps(r, default=str))
     return {"design_id": design_id, **{k: v for k, v in r.items() if k != "first_mismatches"},
             "first_mismatches": r.get("first_mismatches", [])[:5]}
+
+
+# ------------------------------------------------------------------------------------------------ outputs (data only)
+
+@tool("Manufacturing routes for a design (iCE40 FPGA, Tiny Tapeout sky130/GF180, wafer.space GF180, Pragmatic "
+      "FlexIC): fits or not, cost, deadline, and the basis of each number.", {"design_id": "str"}, lane="inline")
+def estimate_cost(design_id: str) -> dict:
+    from chiplab.hw.cost import estimate
+    d = _design_dir(design_id)
+    rd = lambda f: json.loads((d / f).read_text()) if (d / f).exists() else {}
+    syn, sky, ice = rd("synth.json"), rd("pdk_sky130.json"), rd("luts_ice40.json")
+    tt = rd("tt.json").get("tiles_used") if (d / "tt.json").exists() else None
+    r = estimate(syn.get("gates"), sky.get("area_um2"), tt, ice.get("luts"))
+    (d / "cost.json").write_text(json.dumps(r))
+    return {"design_id": design_id, **r}
+
+
+@tool("Compare a design with published hardware from the lab's registry. Only entries with the same task, "
+      "dataset and protocol (as you declare them) count as comparable; others are shown for context only.",
+      {"design_id": "str", "task": "str — e.g. af_vs_normal (optional)", "dataset": "str — what the model was "
+       "tested on (optional)", "protocol": "str — e.g. 'record-level, split by patient' (optional)"}, lane="inline")
+def compare_hw_baseline(design_id: str, task: str | None = None, dataset: str | None = None, protocol: str | None = None) -> dict:
+    import yaml
+    from chiplab.config import PKG_DIR
+    d = _design_dir(design_id)
+    reg = yaml.safe_load((PKG_DIR / "hw" / "baselines.yaml").read_text())
+    rd = lambda f: json.loads((d / f).read_text()) if (d / f).exists() else {}
+    ours = {"gate_equivalents": rd("pdk_sky130.json").get("gate_equivalents"), "luts_xc7": rd("luts_xc7.json").get("luts"),
+            "gates": rd("synth.json").get("gates")}
+    out = []
+    for b in reg:
+        same = bool(task and dataset and protocol and b["task"] == task and dataset.lower() in b["dataset"].lower()
+                    and protocol.lower() == str(b["protocol"]).lower())
+        common = {k: {"ours": ours[k], "theirs": b["metrics"][k], "unit": b["units"].get(k)}
+                  for k in ("gate_equivalents", "luts_xc7") if k in b["metrics"] and ours.get(k) is not None}
+        out.append({**b, "common_metrics": common,
+                    "comparable": "comparable (same task, dataset and protocol)" if same else
+                                  "context only: task, dataset or protocol differ, not a like-for-like comparison"})
+    return {"design_id": design_id, "ours": ours, "baselines": out}
+
+
+@tool("Gate activity as raw numbers: run the scientist's input sequence (or random vectors) through the gate "
+      "netlist and return, per net, how often it switches (toggle rate) and how often it is 1. Optionally writes a "
+      "VCD of the ports. Data for power estimates and for whoever draws the 'chip lighting up' view.",
+      {"design_id": "str", "vectors": "dict — port -> [[lane ints]] in time order (optional)", "n": "int — random vectors if none (2000)",
+       "vcd": "bool — also write ports.vcd (false)", "top": "int — how many most active nets to return inline (50)"},
+      lane="cpu", cacheable=True)
+def gate_activity(design_id: str, vectors: dict | None = None, n: int = 2000, vcd: bool = False, top: int = 50, seed: int = 0) -> dict:
+    import numpy as np
+    from chiplab.verify.netlist_eval import Netlist, lanes_to_bits
+    d = _design_dir(design_id)
+    syn = _ensure_synth(design_id)
+    info = json.loads((d / "port.json").read_text())
+    if vectors:
+        X = {k: np.asarray(v, dtype=np.int64) for k, v in vectors.items()}
+    else:
+        rng = np.random.default_rng(seed); X = {}
+        for p in info["inputs"]:
+            lo, hi = (-(1 << (p["bits"] - 1)), 1 << (p["bits"] - 1)) if p["signed"] else (0, 1 << p["bits"])
+            X[p["name"]] = rng.integers(lo, hi, size=(n, p["lanes"]))
+    net = Netlist(syn["netlist_json"], info["top"])
+    bits = {p["name"]: lanes_to_bits(X[p["name"]], p["bits"]) for p in info["inputs"]}
+    act = net.activity(bits)
+    full = {"design_id": design_id, "steps": act["steps"], "source": "scientist vectors" if vectors else f"{n} random vectors",
+            "toggle_rate": {str(k): round(v, 5) for k, v in act["toggle_rate"].items()},
+            "ones": {str(k): round(v, 5) for k, v in act["ones"].items()},
+            "cells": [{"type": t, "inputs": [str(i) for i in ins if i is not None], "output": str(y)} for t, ins, y in net.order]}
+    (d / "gate_activity.json").write_text(json.dumps(full))
+    rates = sorted(full["toggle_rate"].items(), key=lambda kv: -kv[1])
+    files = [str(d / "gate_activity.json")]
+    if vcd:
+        from vcd import VCDWriter
+        outs = net.evaluate(bits)
+        with open(d / "ports.vcd", "w") as f, VCDWriter(f, timescale="1 ns", date="today") as w:
+            vs = {p: w.register_var(info["top"], p, "wire", size=bits[p].shape[1]) for p in bits}
+            vs.update({p: w.register_var(info["top"], p, "wire", size=outs[p].shape[1]) for p in outs if not p.startswith("_")})
+            for t in range(next(iter(bits.values())).shape[0]):
+                for p, b in list(bits.items()) + [(k, v) for k, v in outs.items() if not k.startswith("_")]:
+                    w.change(vs[p], t, int("".join("1" if x else "0" for x in b[t][::-1]), 2))
+        files.append(str(d / "ports.vcd"))
+    mean = float(np.mean(list(full["toggle_rate"].values()))) if full["toggle_rate"] else 0.0
+    return {"design_id": design_id, "steps": act["steps"], "nets": len(rates), "mean_toggle_rate": round(mean, 4),
+            "wire_toggle_top": dict(rates[:top]), "files": files,
+            "note": "net ids are Yosys netlist bit ids (see netlist JSON); toggle rates use the vectors' order as time"}
+
+
+@tool("One-page chip report (markdown text): ports, hardware numbers with their basis, verification level and "
+      "evidence, manufacturing routes and cost, published hardware for context, artefact paths.",
+      {"design_id": "str", "name": "str — a readable name (optional)"}, lane="inline")
+def chip_report(design_id: str, name: str | None = None) -> dict:
+    import hashlib
+    import time
+    import jinja2
+    from chiplab.config import PKG_DIR
+    d = _design_dir(design_id)
+    rd = lambda f: json.loads((d / f).read_text()) if (d / f).exists() else None
+    ir = rd("ir.json"); meta = rd("meta.json") or {}
+    try:
+        from chiplab.verify.ladder import stamp
+        lad = stamp(d)
+    except Exception as e:
+        lad = {"verification_level": 0, "evidence": [f"ladder not available: {e}"]}
+    lad.setdefault("label", {0: "not verified", 1: "bit-exact simulation", 2: "formal proof", 3: "streaming RTL simulation",
+                             4: "gate-level test after layout", 5: "running on hardware"}.get(lad.get("verification_level", 0), ""))
+    cost = rd("cost.json") or estimate_cost.__wrapped__(design_id=design_id)
+    base = compare_hw_baseline.__wrapped__(design_id=design_id)["baselines"]
+    pdks = {p: rd(f"pdk_{p}.json") for p in ("sky130", "gf180", "ihp") if rd(f"pdk_{p}.json")}
+    layouts = {}
+    for p in ("sky130A", "gf180mcuD", "ihp-sg13g2"):
+        m = rd(f"layout_{p}.json")
+        if m:
+            layouts[p] = {"summary": ", ".join(f"{k}={m[k]}" for k in ("area_um2", "die_mm2", "timing_ws_ns", "power_uw") if m.get(k) is not None),
+                          "basis": m.get("basis", "")}
+    luts = {f: rd(f"luts_{f}.json") for f in ("xc7", "ice40") if rd(f"luts_{f}.json")}
+    arte = {f.name: str(f) for f in sorted(d.glob("*")) if f.suffix in (".v", ".json", ".gds", ".png", ".bin", ".vcd")}
+    tpl = jinja2.Template((PKG_DIR / "report_template.md.j2").read_text(), trim_blocks=False)
+    md = tpl.render(name=name or meta.get("name") or ir.get("name"), design_id=design_id, when=time.strftime("%Y-%m-%d %H:%M"),
+                    ladder=lad, ports=rd("port.json"), source=meta.get("ingested_from") or ("training batch " + str(meta.get("batch_id")) if meta.get("batch_id") else "chipir"),
+                    ops=sorted({n["op"] for n in ir["nodes"]}), synth=rd("synth.json"), luts=luts, pdks=pdks, layouts=layouts,
+                    fpga=rd("bitstream.json"), cost=cost, baselines=base, artefacts=arte)
+    (d / "report.md").write_text(md)
+    return {"design_id": design_id, "report_md": md, "digest": hashlib.sha256(md.encode()).hexdigest()[:12],
+            "files": [str(d / "report.md")], "verilog_url": f"/files/{design_id}/design.v",
+            "netlist_json_url": f"/files/{design_id}/synth/net.json",
+            "layout_png_url": next((f"/files/{design_id}/{p.relative_to(d)}" for p in d.rglob("*.png")), None)}

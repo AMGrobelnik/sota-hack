@@ -49,8 +49,9 @@ class Netlist:
         self.order = order
         self.n_cells = len(cells)
 
-    def evaluate(self, inputs: dict[str, np.ndarray], device: str = "numpy") -> dict[str, np.ndarray]:
-        """inputs: {port: uint8/bool array [N, port_width]} (bit j = port bit j). Returns {output port: bool [N, width]}."""
+    def evaluate(self, inputs: dict[str, np.ndarray], device: str = "numpy", keep_nets: bool = False) -> dict[str, np.ndarray]:
+        """inputs: {port: uint8/bool array [N, port_width]} (bit j = port bit j). Returns {output port: bool [N, width]}.
+        keep_nets=True also returns "_nets": {bit id: packed words} for activity analysis (numpy only)."""
         N = next(iter(inputs.values())).shape[0]
         nw = (N + 63) // 64
         if device == "numpy":
@@ -104,7 +105,22 @@ class Netlist:
                 w = w.cpu().numpy().view(np.uint64) if device != "numpy" else w
                 cols.append(_unpack_np(w, N))
             out[p] = np.stack(cols, axis=1)
+        if keep_nets:
+            out["_nets"] = {k: v for k, v in V.items() if not isinstance(k, str)} if device == "numpy" else {}
+            out["_n"] = N
         return out
+
+    def activity(self, inputs: dict[str, np.ndarray]) -> dict:
+        """Per-net switching between consecutive input vectors (the given order is treated as time):
+        toggle_rate = fraction of steps where the net changes; ones = fraction of vectors where it is 1."""
+        r = self.evaluate(inputs, keep_nets=True)
+        N = r["_n"]
+        tog, ones = {}, {}
+        for b, w in r["_nets"].items():
+            bits = _unpack_np(w, N)
+            ones[b] = float(bits.mean())
+            tog[b] = float((bits[1:] != bits[:-1]).mean()) if N > 1 else 0.0
+        return {"toggle_rate": tog, "ones": ones, "steps": N - 1}
 
 
 def _pack_np(col: np.ndarray, nw: int) -> np.ndarray:
