@@ -1,0 +1,1505 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chipwright run view (variant 1, Template)</title>
+<style>
+:root{
+  --i50:#fafaf9;--i100:#f3f3f6;--i150:#e8e8ec;--i200:#d4d4dc;--i300:#b0b0be;--i350:#9a9aa8;--i400:#8a8a99;--i500:#6c6c85;--i550:#666676;--i600:#5a5a6a;--i700:#4a4a5a;--i800:#3a3a4a;--i900:#1a1a2e;
+  --pri:#3b82f6;--az6:#2563eb;--az7:#1d4ed8;--sky:#e8f3fb;
+  --t50:#f0f7f6;--t600:#0d9488;--t900:#134e4a;
+  --vi:#a78bfa;--bl:#60a5fa;--or:#fb923c;
+  --e50:#ecfdf5;--e100:#d1fae5;--e500:#10b981;--e600:#059669;--e700:#047857;
+  --r50:#fef2f2;--r100:#fee2e2;--r500:#ef4444;--r600:#dc2626;--r700:#b91c1c;
+  --a50:#fffbeb;--a100:#fef3c7;--a500:#f59e0b;--a700:#b45309;
+  --moss:#5b8a5b;
+  --sans:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --serif:"Source Serif 4","Iowan Old Style",Charter,Georgia,serif;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sh-xs:0 1px 3px rgb(0 0 0/.04);--sh-sm:0 2px 8px rgb(0 0 0/.08);--sh-md:0 4px 12px rgb(0 0 0/.08);
+  --sh-lg:0 4px 20px rgb(0 0 0/.1),0 2px 4px rgb(0 0 0/.04);--sh-2xl:0 8px 40px rgb(0 0 0/.12),0 2px 8px rgb(0 0 0/.06);
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:14px/1.5 var(--sans);color:var(--i900);background:#fff;-webkit-font-smoothing:antialiased;overflow-wrap:break-word}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0;padding:0}
+:focus-visible{outline:2px solid var(--az6);outline-offset:2px;border-radius:6px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--i500)}
+.hide{display:none!important}
+svg.ic{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+svg.ic.s{width:13px;height:13px}
+
+/* shell */
+#app{display:flex;height:100vh;height:100dvh;overflow:hidden}
+.sb{width:232px;flex:none;background:oklch(.98 0 0);border-right:1px solid var(--i150);display:flex;flex-direction:column;min-height:0}
+.sb-top{display:flex;align-items:center;gap:9px;padding:16px 16px 12px}
+.logo{width:26px;height:26px;border-radius:7px;background:var(--i900);display:grid;place-items:center;flex:none}
+.brand{font:600 17px/1 var(--serif);letter-spacing:-.01em}
+.sb-new{margin:4px 12px 10px;height:34px;border:1px solid var(--i150);border-radius:10px;background:#fff;display:flex;align-items:center;gap:8px;padding:0 11px;font-size:12.5px;font-weight:500;box-shadow:var(--sh-xs)}
+.sb-new:hover{background:var(--i50)}
+.sb-nav{padding:0 8px;display:flex;flex-direction:column;gap:1px}
+.sb-nav button{display:flex;align-items:center;gap:9px;height:30px;padding:0 9px;border-radius:7px;font-size:12.5px;color:var(--i700);text-align:left}
+.sb-nav button:hover{background:var(--i100)}
+.sb-sec{font-size:11px;color:var(--i400);padding:16px 18px 6px;font-weight:500}
+.runs{flex:1;overflow:auto;padding:0 8px;min-height:0}
+.run-i{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border-radius:7px;font-size:12.5px;text-align:left;color:var(--i700)}
+.run-i:hover{background:var(--i100)}
+.run-i.on{background:#fff;box-shadow:var(--sh-xs),0 0 0 1px var(--i150);color:var(--i900);font-weight:500}
+.run-i .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.run-i .acts{display:none;gap:2px;color:var(--i400)}
+.run-i:hover .acts{display:flex}
+.st-dot{width:14px;height:14px;flex:none;display:grid;place-items:center}
+.acct{border-top:1px solid var(--i150);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.acct .row{display:flex;align-items:center;gap:9px;font-size:12.5px}
+.avatar{width:26px;height:26px;border-radius:50%;background:var(--t50);color:var(--t600);display:grid;place-items:center;font-weight:600;font-size:11px;border:1px solid #cfe7e3}
+.meter{height:4px;border-radius:4px;background:var(--i100);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--pri);border-radius:4px}
+
+.main{flex:1;min-width:0;display:flex;flex-direction:column;position:relative;container-type:inline-size;container-name:main}
+.mhead{display:none}
+section.screen{flex:1;min-height:0;display:flex;flex-direction:column}
+
+/* helper panel */
+.helper{width:360px;flex:none;border-left:1px solid var(--i150);display:none;flex-direction:column;background:#fff;min-height:0;position:relative}
+.helper.open{display:flex}
+.h-head{display:flex;align-items:center;gap:8px;height:52px;padding:0 14px;border-bottom:1px solid var(--i150)}
+.h-head b{font:600 15px var(--serif)}
+.h-state{margin:12px 14px 0;padding:9px 11px;border-radius:10px;background:var(--i50);border:1px solid var(--i150);font-size:12.5px;color:var(--i600);display:flex;gap:8px;align-items:flex-start}
+.h-state.paused{background:var(--a50);border-color:#fde68a;color:var(--a700)}
+.h-msgs{flex:1;overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-height:0}
+.bub{max-width:92%;padding:9px 12px;border-radius:14px;font-size:13px;line-height:1.5}
+.bub.me{align-self:flex-end;background:var(--t50);border:1px solid #d5ebe7;color:var(--t900);border-bottom-right-radius:5px}
+.bub.ai{align-self:flex-start;background:#fff;border:1px solid var(--i150);border-bottom-left-radius:5px}
+.bub .who{display:block;font-size:11px;color:var(--i500);margin-bottom:2px;font-weight:500}
+.typing i{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--i400);margin-right:3px;animation:aii-blink 1s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+.h-sugg{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 10px}
+.chipbtn{border:1px solid var(--i150);background:#fff;border-radius:999px;padding:4px 10px;font-size:11.5px;color:var(--i700)}
+.chipbtn:hover{background:var(--i50);border-color:var(--i200)}
+.composer{margin:0 12px 12px;border:1px solid var(--i150);border-radius:16px;background:#fff;box-shadow:var(--sh-sm);padding:8px 8px 8px 12px}
+.composer textarea{width:100%;border:0;resize:none;outline:none;font-size:13.5px;min-height:44px;max-height:120px;line-height:1.45;background:none}
+.comp-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 9px;border-radius:999px;border:1px solid var(--i150);background:#fff;font-size:11.5px;color:var(--i700);white-space:nowrap}
+.pill:hover{background:var(--i50)}
+.pill.teal{background:var(--t50);border-color:#cfe7e3;color:var(--t900)}
+.send{margin-left:auto;width:30px;height:30px;border-radius:50%;background:var(--i900);color:#fff;display:grid;place-items:center}
+.send:disabled{background:var(--i200);cursor:default}
+
+/* run chrome */
+.topbar{height:52px;flex:none;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--i150);background:#fff}
+.title{font-weight:600;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;outline:none;border-radius:5px;padding:2px 4px;margin-left:-4px}
+.title:hover{background:var(--i100)}
+.seg{display:inline-flex;background:var(--i100);border-radius:9px;padding:2px;gap:2px;flex:none}
+.seg button{height:26px;padding:0 11px;border-radius:7px;font-size:12.5px;color:var(--i600);font-weight:500;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.seg button.on{background:#fff;color:var(--i900);box-shadow:var(--sh-xs),0 0 0 1px rgb(0 0 0/.04)}
+.seg.sm button{height:24px;padding:0 9px;font-size:11.5px}
+.tb-sp{flex:1}
+.demo{font-size:11px;color:var(--a700);background:var(--a50);border:1px solid #fde68a;border-radius:999px;padding:2px 9px;white-space:nowrap}
+.btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border-radius:8px;border:1px solid var(--i150);background:#fff;font-size:12.5px;font-weight:500;white-space:nowrap}
+.btn:hover{background:var(--i50)}
+.btn.pri{background:var(--i900);color:#fff;border-color:var(--i900)}
+.btn.pri:hover{background:var(--i800)}
+.btn.amber{background:var(--a50);border-color:#fcd34d;color:var(--a700)}
+.btn:disabled{opacity:.5;cursor:default}
+.ib{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--i700)}
+.ib:hover{background:var(--i100)}
+
+.strip{flex:none;display:flex;align-items:center;gap:12px;padding:7px 16px;border-bottom:1px solid var(--i150);background:var(--i50);min-height:46px;flex-wrap:nowrap}
+.tracker{display:flex;align-items:center;gap:4px;flex:none}
+.tk{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 7px;border-radius:999px;font-size:11.5px;color:var(--i500);border:1px solid transparent;white-space:nowrap}
+.tk:hover{background:#fff;border-color:var(--i150)}
+.tk .d{width:7px;height:7px;border-radius:50%;background:var(--i200);flex:none}
+.tk.done{color:var(--i700)} .tk.done .d{background:var(--i500)}
+.tk.run{color:var(--i900);background:#fff;border-color:var(--i150);box-shadow:var(--sh-xs);font-weight:600}
+.tk.run .d{background:var(--pri);box-shadow:0 0 0 3px rgb(59 130 246/.18)}
+.tk.paused .d{background:var(--a500);box-shadow:0 0 0 3px rgb(245 158 11/.2)}
+.loop{display:inline-flex;align-items:center;gap:2px;border:1px dashed var(--i200);border-radius:999px;padding:1px 3px 1px 2px;position:relative}
+.loop .rb{font-size:10px;font-weight:600;color:var(--az7);background:var(--sky);border-radius:999px;padding:1px 7px;margin-left:3px;white-space:nowrap}
+.sbest{display:flex;align-items:center;gap:8px;font-size:12.5px;min-width:0;flex:1;white-space:nowrap;overflow:hidden}
+.sbest .lbl{color:var(--i500)}
+.sbest b{font-weight:600}
+.tag{display:inline-flex;align-items:center;gap:4px;height:19px;padding:0 7px;border-radius:999px;font-size:10.5px;font-weight:600;white-space:nowrap}
+.tag.ok{background:var(--e50);color:var(--e700)} .tag.warn{background:var(--a50);color:var(--a700)} .tag.bad{background:var(--r50);color:var(--r700)} .tag.n{background:var(--i100);color:var(--i600)} .tag.b{background:var(--sky);color:var(--az7)}
+.pb{display:flex;align-items:center;gap:4px;flex:none}
+.live{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.06em;color:#fff;background:var(--r500);cursor:pointer;border:0}
+.live i{width:6px;height:6px;border-radius:50%;background:#fff;animation:aii-blink 1.2s infinite}
+.live.dim{background:var(--r100);color:var(--r700)} .live.dim i{background:var(--r500);animation:none}
+.live.pz{background:var(--a100);color:var(--a700)} .live.pz i{background:var(--a500);animation:none}
+.live.end{background:var(--i150);color:var(--i600)} .live.end i{background:var(--i400);animation:none}
+.clock{font:500 11.5px var(--mono);color:var(--i600);min-width:84px;text-align:right}
+select.sel{height:28px;border:1px solid var(--i150);border-radius:8px;background:#fff;font-size:12px;padding:0 6px}
+.scrub{height:4px;flex:none;position:relative;background:var(--i100)}
+.scrub .fill{position:absolute;left:0;top:0;bottom:0;background:var(--pri);opacity:.75}
+.scrub .lv{position:absolute;left:0;top:0;bottom:0;background:var(--i200)}
+.scrub .mk{position:absolute;top:0;bottom:0;width:1px;background:#fff}
+.scrub input{position:absolute;inset:-6px 0;width:100%;opacity:0;cursor:pointer;margin:0}
+.scrub:hover{height:6px}
+
+.vp{flex:1;min-height:0;overflow:auto;position:relative;background:#fff}
+.pad{padding:18px 20px 40px;max-width:1500px}
+.rail{display:flex;align-items:center;gap:10px;padding:12px 20px 0;flex-wrap:wrap}
+.rail .seg button{height:28px}
+
+/* cards */
+.card{background:#fff;border:1px solid rgb(0 0 0/.07);border-radius:10px;box-shadow:var(--sh-xs);min-width:0}
+.ch{display:flex;align-items:center;gap:8px;padding:12px 14px 0;min-height:36px}
+.ch h3{margin:0;font-size:13px;font-weight:600}
+.ch .sub{font-size:11.5px;color:var(--i500)}
+.ch .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.cb{padding:10px 14px 14px}
+.lnk{color:var(--az6);font-size:12px;font-weight:500;display:inline-flex;align-items:center;gap:3px}
+.lnk:hover{text-decoration:underline}
+.facts{display:flex;gap:26px;flex-wrap:wrap;margin:0 0 14px}
+.fact{display:flex;flex-direction:column}
+.fact .k{font-size:11px;color:var(--i500)}
+.fact .v{font:600 18px/1.2 var(--sans);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.fact .v small{font-size:12px;color:var(--i500);font-weight:500}
+
+/* module cards */
+.cards3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
+.mc{position:relative;overflow:hidden;border-radius:10px;border:1px solid rgb(0 0 0/.06);background:#fff;box-shadow:var(--sh-sm);padding:14px 16px 8px;text-align:left;width:100%;display:block;transition:transform .25s cubic-bezier(.4,0,.2,1),box-shadow .25s}
+.mc:hover{transform:translateY(-1px);box-shadow:var(--sh-md)}
+.mc.dimmed>.mi{opacity:.55}
+.mc.running::after{content:"";position:absolute;top:0;bottom:0;left:-120%;width:60%;background:linear-gradient(100deg,transparent,rgb(255 255 255/.75),transparent);animation:shimmer-sweep 3.5s ease-in-out infinite;pointer-events:none}
+.mc-h{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.tile{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;flex:none}
+.mc-t{flex:1}
+.mc-t b{display:block;font-size:15.5px;line-height:1.25}
+.mc-t span{font-size:10.5px;color:var(--i500);font-weight:500}
+.ring{position:relative;width:44px;height:44px;flex:none}
+.ring .rs{width:44px;height:44px}
+.ring.spin .rs{animation:ring-spin 4s ease-in-out infinite}
+.ring .lb{position:absolute;inset:0;display:grid;place-items:center;font:600 10.5px var(--sans);color:var(--i700)}
+.spark{display:block;width:100%;height:30px;margin-bottom:8px}
+.bar{height:5px;border-radius:5px;background:var(--i100);overflow:hidden;margin-bottom:9px}
+.bar i{display:block;height:100%;border-radius:5px;transition:width .3s}
+.mc-s{display:flex;align-items:center;font-size:11.5px;color:var(--i500);gap:10px}
+.mc-s .c{margin-left:auto;font-weight:600}
+.mc-m{font-size:11.5px;color:var(--i700);margin:6px 0 2px;display:flex;gap:6px;align-items:center;min-height:19px;flex-wrap:wrap}
+.chev{display:flex;justify-content:center;opacity:.3;padding-top:2px}
+.chev svg{transition:transform .2s}
+.mc.open .chev svg{transform:rotate(180deg)}
+.tree{margin-top:8px;border:1px solid var(--i150);border-radius:10px;background:#fff;padding:6px;font-size:12px}
+.tn{display:flex;align-items:center;gap:7px;padding:4px 6px;border-radius:6px;width:100%;text-align:left;color:var(--i700)}
+.tn:hover{background:var(--i100)}
+.tn .m{margin-left:auto;font-size:11px;color:var(--i500)}
+.tn.grp{font-weight:600;color:var(--i900)}
+.tn.leaf{padding-left:22px}
+.gl{width:13px;height:13px;flex:none;display:grid;place-items:center}
+.spn{width:11px;height:11px;border-radius:50%;border:1.6px solid var(--i150);border-top-color:var(--pri);animation:spin .9s linear infinite}
+
+.ovg{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:14px;margin-top:14px}
+.ovg2{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:14px;margin-top:14px;align-items:start}
+.bestbox{display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:12px;padding:6px 14px 14px}
+.bestbox canvas{width:100%;height:230px;display:block}
+.kv{display:flex;flex-direction:column;gap:9px}
+.kv .r{display:flex;flex-direction:column;border-bottom:1px solid var(--i100);padding-bottom:7px}
+.kv .r:last-child{border:0}
+.kv .k{font-size:11px;color:var(--i500)}
+.kv .v{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+.kv .v small{font-size:11px;font-weight:500;color:var(--i500)}
+canvas.curve{width:100%;display:block;cursor:crosshair}
+.summary{font:15px/1.7 var(--serif);color:var(--i800)}
+.summary p{margin:0 0 8px}
+.ver{font:500 10.5px var(--mono);color:var(--i500);background:var(--i100);border-radius:5px;padding:1px 6px}
+.now{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--i700);background:var(--sky);border-radius:8px;padding:7px 10px;margin-bottom:10px}
+table.t{width:100%;border-collapse:collapse;font-size:12px}
+table.t th{font-weight:500;color:var(--i500);text-align:left;padding:6px 8px;border-bottom:1px solid var(--i150);white-space:nowrap;font-size:11px}
+table.t td{padding:7px 8px;border-bottom:1px solid var(--i100);vertical-align:top}
+table.t td.n,table.t th.n{text-align:right;font-variant-numeric:tabular-nums}
+table.t tr.cl{cursor:pointer}
+table.t tr.cl:hover td{background:var(--i50)}
+table.t tr.hl td{background:#f5f9ff}
+table.t tr.fut td{color:var(--i350)}
+.af{display:flex;flex-direction:column}
+.af-r{display:flex;gap:9px;padding:8px 0;border-bottom:1px solid var(--i100);font-size:12.5px;line-height:1.45}
+.af-r:last-child{border:0}
+.af-r .tm{font:11px var(--mono);color:var(--i400);width:46px;flex:none;padding-top:1px}
+.av{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font-size:10px;font-weight:700;flex:none}
+.fresh{animation:glow 1.6s ease-out}
+
+/* agents view */
+.agv{display:grid;grid-template-columns:minmax(0,1fr) 320px;height:100%;min-height:0}
+.feedcol{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--i150)}
+.feedbar{display:flex;align-items:center;gap:6px;padding:10px 16px;border-bottom:1px solid var(--i150);flex-wrap:wrap}
+.fpill{height:26px;padding:0 10px;border-radius:999px;border:1px solid var(--i150);font-size:11.5px;color:var(--i700);display:inline-flex;align-items:center;gap:6px;background:#fff}
+.fpill.on{background:var(--i900);color:#fff;border-color:var(--i900)}
+.fpill .cnt{font-size:10px;opacity:.7}
+.search{margin-left:auto;display:flex;align-items:center;gap:6px;height:28px;border:1px solid var(--i150);border-radius:8px;padding:0 8px;color:var(--i500);background:#fff}
+.search input{border:0;outline:none;font-size:12px;width:140px;background:none}
+.feed{flex:1;overflow:auto;padding:8px 18px 18px;min-height:0}
+.fe{max-width:860px}
+.dv{display:flex;align-items:center;gap:10px;margin:18px 0 8px;font-size:11px;font-weight:600}
+.dv::before,.dv::after{content:"";height:1px;background:var(--i150);flex:1}
+.dv span{padding:2px 9px;border-radius:999px;border:1px solid}
+.dv.flash span{animation:flash 1.6s}
+.msg{display:flex;gap:10px;padding:7px 0}
+.msg .body{font-size:13.5px;line-height:1.6;color:var(--i800);min-width:0}
+.msg .who{font-size:11.5px;font-weight:600;color:var(--i900);margin-bottom:1px;display:flex;gap:8px;align-items:center}
+.msg .who .tm{font:400 10.5px var(--mono);color:var(--i400)}
+.hum{display:flex;justify-content:flex-end;padding:8px 0}
+.hum .bub{max-width:70%}
+.tool{border:1px solid var(--i150);border-radius:10px;margin:6px 0 6px 30px;background:#fff;overflow:hidden}
+.tool .th{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;text-align:left;font-size:12px}
+.tool .th:hover{background:var(--i50)}
+.tool .tn2{font:600 12px var(--mono);color:var(--i900)}
+.tool .ta{font:11px var(--mono);color:var(--i500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+.tool .tr{font-size:11.5px;color:var(--i600);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40%}
+.tool .tb{display:none;border-top:1px solid var(--i150);background:var(--i50)}
+.tool.open .tb{display:block}
+.tool.open .th .cv{transform:rotate(180deg)}
+.tool.err{border-color:#fecaca}
+pre.log{margin:0;padding:9px 12px;font:11.5px/1.6 var(--mono);color:var(--i700);white-space:pre-wrap;max-height:220px;overflow:auto}
+pre.log .w{color:var(--a700);background:var(--a50)} pre.log .e{color:var(--r700);background:var(--r50)} pre.log .o{color:var(--e700)}
+.tres{padding:10px 12px;border-top:1px dashed var(--i150);background:#fff;font-size:12px}
+.thumbs{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap}
+.thumb{border:1px solid var(--i150);border-radius:8px;overflow:hidden;background:#fff;cursor:pointer}
+.thumb canvas{display:block;width:230px;height:120px}
+.thumb .cap{font-size:10.5px;color:var(--i500);padding:3px 8px;border-top:1px solid var(--i100)}
+.subag{border:1px solid #e3dcfd;border-radius:10px;margin:6px 0 6px 30px;background:#fcfbff}
+.subag .sh{display:flex;align-items:center;gap:8px;padding:7px 10px;width:100%;text-align:left;font-size:12px;font-weight:600;color:#5b21b6}
+.subag .sbd{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:0 10px 10px}
+.subag.closed .sbd{display:none}
+.sa{background:#fff;border:1px solid var(--i150);border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.5}
+.sa b{display:flex;align-items:center;gap:6px;font-size:11.5px;margin-bottom:3px}
+.agside{overflow:auto;padding:14px;display:flex;flex-direction:column;gap:14px;background:var(--i50);min-height:0}
+.agside .card .cb{padding-top:6px}
+.ros{display:flex;flex-direction:column;gap:2px}
+.ro{display:flex;gap:9px;padding:7px 0;border-bottom:1px solid var(--i100);font-size:12px}
+.ro:last-child{border:0}
+.ro .meta{font-size:10.5px;color:var(--i500)}
+.ro .last{color:var(--i700);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.plan{list-style:none;margin:0;padding:0;font-size:12px;display:flex;flex-direction:column;gap:7px}
+.plan li{display:flex;gap:8px;align-items:flex-start}
+.plan .gl{margin-top:2px}
+.dlog{font-size:12px;display:flex;flex-direction:column;gap:8px}
+.dlog .e{border-left:2px solid var(--i200);padding-left:8px}
+.dlog .e.u{border-color:var(--t600)}
+.dlog .tm{font:10.5px var(--mono);color:var(--i400)}
+.fc-bot{border-top:1px solid var(--i150);padding:10px 16px 12px;background:#fff}
+.fc-bot .composer{margin:0;max-width:860px}
+
+/* design space */
+.dsg{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--i600);align-items:center}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+.legend i.ln{width:14px;height:0;border-top:2px dashed var(--e500);border-radius:0}
+.legend i.fr{width:14px;height:0;border-top:2px solid var(--i700);border-radius:0}
+canvas.grid{width:100%;display:block;image-rendering:pixelated}
+.bstat{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.tip{position:fixed;z-index:60;pointer-events:none;background:#fff;border:1px solid var(--i150);border-radius:10px;box-shadow:var(--sh-lg);padding:8px 10px;font-size:12px;min-width:170px;display:none}
+.tip b{font-family:var(--mono);font-size:12px}
+.tip .g{display:grid;grid-template-columns:auto auto;gap:1px 12px;margin-top:4px;color:var(--i600)}
+.tip .g span:nth-child(even){text-align:right;color:var(--i900);font-variant-numeric:tabular-nums}
+
+/* chip */
+.chipg{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:14px}
+.cmpg{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 260px;gap:14px;align-items:stretch}
+.cmpc canvas{width:100%;height:210px;display:block}
+.mix{display:flex;height:8px;border-radius:6px;overflow:hidden;margin:6px 0}
+.mixl{display:grid;grid-template-columns:auto 1fr auto;gap:2px 8px;font-size:11.5px;color:var(--i600)}
+.mixl i{width:8px;height:8px;border-radius:2px;display:inline-block;margin-top:4px}
+.dl{color:var(--e700);font-weight:600} .dl.up{color:var(--r700)}
+.ovl{position:absolute;left:14px;top:46px;display:flex;gap:18px;pointer-events:none}
+.ovl .fact .v{font-size:20px}
+
+/* signal */
+.sg2{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:14px;margin-top:14px;align-items:start}
+.bit{display:flex;flex-direction:column;gap:10px}
+.big{font:600 34px/1.1 var(--serif);letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.big small{font:500 14px var(--sans);color:var(--i500)}
+.prog{height:8px;border-radius:6px;background:var(--i100);overflow:hidden}
+.prog i{display:block;height:100%;background:var(--e500);border-radius:6px}
+.circs{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:5px}
+.circ{border:1px solid var(--i150);border-radius:7px;padding:5px 6px;font:10px var(--mono);text-align:center;color:var(--i500);background:#fff}
+.circ.ok{border-color:#a7f3d0;background:var(--e50);color:var(--e700)}
+.circ.bad{border-color:#fecaca;background:var(--r50);color:var(--r700)}
+.circ.run{border-color:#bfdbfe;background:var(--sky);color:var(--az7)}
+.ck{color:var(--moss)}
+.xk{color:var(--r600)}
+
+/* cost */
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.kpi{padding:12px 14px}
+.kpi .k{font-size:11.5px;color:var(--i500);display:flex;align-items:center;gap:6px}
+.kpi .v{font:600 24px/1.2 var(--sans);letter-spacing:-.015em;font-variant-numeric:tabular-nums;margin-top:2px}
+.kpi .s{font-size:11.5px;color:var(--i500)}
+.cg{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:14px;margin-top:14px;align-items:start}
+.hb{display:grid;grid-template-columns:86px 1fr 62px;gap:6px 10px;align-items:center;font-size:12px}
+.hb .tr{height:12px;background:var(--i100);border-radius:3px;overflow:hidden;display:flex}
+.hb .tr i{display:block;height:100%}
+.ladder{display:flex;flex-direction:column;gap:6px}
+.rung{display:flex;align-items:center;gap:10px;border:1px solid var(--i150);border-radius:9px;padding:8px 10px;font-size:12px;text-align:left;width:100%;background:#fff}
+.rung.on{border-color:var(--pri);box-shadow:0 0 0 1px var(--pri);background:#f7fbff}
+.rung .p{margin-left:auto;font-weight:600;font-variant-numeric:tabular-nums}
+.rung small{display:block;color:var(--i500);font-size:11px}
+
+/* report */
+.paper{max-width:780px;margin:0 auto;padding:30px 28px 60px;font:16px/1.75 var(--serif);color:var(--i800)}
+.paper h1{font:600 32px/1.12 var(--serif);letter-spacing:-.015em;color:var(--i900);margin:8px 0 10px}
+.paper h2{font:600 20px/1.3 var(--serif);color:var(--i900);margin:30px 0 8px}
+.paper p{margin:0 0 12px}
+.paper .lede{font-size:17.5px;color:var(--i700)}
+.paper table.t{font-family:var(--sans);font-size:12.5px;margin:6px 0 10px}
+.draft{font:12.5px/1.5 var(--sans);background:var(--sky);color:var(--az7);border-radius:10px;padding:9px 12px;display:flex;gap:8px;align-items:center}
+.review{font-family:var(--sans);border:1px solid var(--i150);border-radius:12px;padding:14px 16px;background:var(--i50);font-size:13px;line-height:1.55}
+.review li{margin:3px 0}
+.files{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;font-family:var(--sans)}
+.file{border:1px solid var(--i150);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:3px;text-align:left;background:#fff;font-size:12.5px}
+.file:hover:not(:disabled){border-color:var(--i200);box-shadow:var(--sh-sm)}
+.file:disabled{opacity:.55;cursor:default}
+.file small{color:var(--i500);font-size:11px}
+.lg-bar{height:8px;border-radius:4px;background:var(--pri);display:block;min-width:2px}
+
+/* start */
+.start{flex:1;overflow:auto}
+.st-in{max-width:820px;margin:0 auto;padding:64px 24px 60px}
+.greet{font:500 38px/1.08 var(--serif);letter-spacing:-.02em;margin:0 0 10px;color:var(--i900)}
+.st-sub{font-size:15px;color:var(--i500);margin:0 0 26px;max-width:640px}
+.bigcomp{border:1px solid var(--i150);border-radius:16px;background:#fff;box-shadow:var(--sh-lg);padding:14px 14px 10px 16px}
+.bigcomp textarea{width:100%;border:0;outline:none;resize:none;font-size:15px;line-height:1.55;min-height:96px;background:none}
+.bc-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px}
+.bc-row .pill{height:30px;font-size:12px;padding:0 11px}
+.startbtn{margin-left:auto;height:34px;padding:0 14px;border-radius:999px;background:var(--i900);color:#fff;font-weight:600;font-size:13px;display:inline-flex;align-items:center;gap:7px}
+.startbtn:hover{background:var(--i800)}
+.presets{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+.preset{text-align:left;border:1px solid var(--i150);border-radius:12px;padding:12px 14px;background:#fff;display:flex;gap:12px;align-items:flex-start}
+.preset:hover{border-color:var(--i200);box-shadow:var(--sh-sm)}
+.preset.on{border-color:var(--pri);box-shadow:0 0 0 1px var(--pri)}
+.preset b{font-size:13.5px}
+.preset p{margin:2px 0 0;font-size:12px;color:var(--i500);line-height:1.45}
+.st-h{font:600 18px var(--serif);margin:40px 0 10px;display:flex;align-items:center;gap:10px}
+.prov{border:1px solid var(--i150);border-radius:16px;background:#fff;box-shadow:var(--sh-lg);padding:22px 22px}
+.prov h4{margin:0 0 12px;font:600 18px var(--serif)}
+.prov .ps{display:flex;gap:10px;align-items:center;font-size:13px;padding:5px 0;color:var(--i600)}
+.prov .ps.done{color:var(--i900)}
+
+/* popover, toasts */
+.pop{position:fixed;z-index:70;background:#fff;border:1px solid var(--i150);border-radius:12px;box-shadow:var(--sh-2xl);padding:10px;min-width:240px;max-width:min(420px,calc(100vw - 16px));font-size:12.5px;display:none}
+.pop h5{margin:2px 4px 8px;font-size:12px;font-weight:600}
+.pop .opt{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:7px 8px;border-radius:8px}
+.pop .opt:hover{background:var(--i100)}
+.pop .opt.on{background:#f5f9ff}
+.pop .opt small{display:block;color:var(--i500);font-size:11px}
+.pop .opt .r{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--i700);font-weight:500;white-space:nowrap}
+.pop .note{font-size:11px;color:var(--i500);padding:6px 8px 2px;border-top:1px solid var(--i100);margin-top:6px}
+.pop .fr{display:grid;grid-template-columns:90px 1fr 92px;gap:6px;align-items:center;padding:4px}
+.pop input[type=number]{width:80px;height:28px;border:1px solid var(--i150);border-radius:7px;padding:0 7px}
+.toasts{position:fixed;right:16px;transition:right .2s;bottom:16px;z-index:80;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.toast{background:#fff;border:1px solid var(--i150);border-radius:10px;box-shadow:var(--sh-lg);padding:10px 14px;font-size:12.5px;display:flex;gap:9px;align-items:center;max-width:360px;animation:tin .25s ease-out}
+
+@keyframes aii-blink{0%,100%{opacity:1}50%{opacity:.2}}
+@keyframes ring-spin{0%{transform:rotate(0)}16%{transform:rotate(360deg)}33%{transform:rotate(720deg)}50%,100%{transform:rotate(1080deg)}}
+@keyframes shimmer-sweep{0%{left:-120%}50%,100%{left:170%}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes glow{0%{background:#eef5ff}100%{background:transparent}}
+@keyframes flash{0%,40%{box-shadow:0 0 0 4px rgb(59 130 246/.3)}100%{box-shadow:none}}
+@keyframes tin{from{transform:translateY(6px);opacity:0}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:1ms!important;animation-iteration-count:1!important;transition-duration:1ms!important}}
+
+@container main (max-width:1320px){
+  .clock{display:none}
+  .sbest .xtra,.sbest .tag{display:none}
+}
+@container main (max-width:1180px){
+  .sbest .lbl{display:none}
+  .dsg{grid-template-columns:minmax(0,1fr) 290px}
+}
+@container main (max-width:1000px){
+  .strip{flex-wrap:wrap;row-gap:6px}
+  .tracker{order:1;width:100%;overflow-x:auto}
+  .sbest{order:2}
+  .pb{order:3}
+  #bRedirect{order:4}
+  .ovg,.ovg2,.dsg,.chipg,.cg,.sg2{grid-template-columns:minmax(0,1fr)}
+  .cmpg{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .cmpg>:last-child{grid-column:1/-1}
+  .agv{grid-template-columns:minmax(0,1fr)}
+  .agside{display:none}
+  .demo .lg{display:none}
+  .title{max-width:130px}
+  #devSeg .lbx,#bShare .lbx{display:none}
+  .topbar{gap:8px}
+}
+@container main (max-width:760px){
+  .cards3,.kpis{grid-template-columns:minmax(0,1fr)}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .bestbox{grid-template-columns:minmax(0,1fr)}
+  .cmpg{grid-template-columns:minmax(0,1fr)}
+  .topbar{height:auto;flex-wrap:wrap;padding:8px 12px;row-gap:6px}
+  .sbest{flex-basis:100%}
+  .tb-sp{display:none}
+  .pad{padding:14px 12px 40px}
+  .subag .sbd{grid-template-columns:minmax(0,1fr)}
+  .files{grid-template-columns:minmax(0,1fr)}
+  .presets{grid-template-columns:minmax(0,1fr)}
+  .greet{font-size:30px}
+  .st-in{padding:28px 16px 40px}
+  .tool,.subag{margin-left:0}
+  table.t .opt{display:none}
+  .paper{padding:20px 16px 40px}
+  .paper h1{font-size:26px}
+}
+body.hopen .toasts{right:376px}
+@media (max-width:1200px){
+  body.hopen .toasts{right:16px}
+  .helper.open{position:absolute;right:0;top:0;bottom:0;z-index:50;box-shadow:var(--sh-2xl)}
+  #app{position:relative}
+}
+@media (max-width:1100px){
+  .sb{width:64px}
+  .sb .brand,.sb-new span,.sb-nav span,.sb-sec,.run-i .nm,.run-i .acts,.acct .tx,.acct .meter,.acct .ux{display:none!important}
+  .sb-new{justify-content:center;padding:0}
+  .sb-nav button,.run-i{justify-content:center}
+}
+@media (max-width:760px){
+  .sb{display:none;position:fixed;z-index:60;left:0;top:0;bottom:0;width:240px;box-shadow:var(--sh-2xl)}
+  .sb.mopen{display:flex}
+  .sb.mopen .brand,.sb.mopen .sb-new span,.sb.mopen .sb-nav span,.sb.mopen .sb-sec,.sb.mopen .run-i .nm,.sb.mopen .acct .tx{display:revert!important}
+  .mhead{display:flex;align-items:center;gap:10px;height:48px;padding:0 12px;border-bottom:1px solid var(--i150);flex:none}
+  .helper.open{width:100%}
+  .search input{width:90px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside class="sb" id="sb">
+    <div class="sb-top">
+      <div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/><path d="M10 12h4" stroke="#60a5fa"/></svg></div>
+      <span class="brand">Chipwright</span>
+    </div>
+    <button class="sb-new" id="sbNew" title="New design"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></svg><span>New design</span></button>
+    <nav class="sb-nav">
+      <button data-nav="designs" title="Designs"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"/></svg><span>Designs</span></button>
+      <button data-nav="gallery" title="Gallery"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Gallery</span></button>
+      <button data-nav="usage" title="Usage"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg><span>Usage</span></button>
+      <button data-nav="settings" title="Settings"><svg class="ic" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg><span>Settings</span></button>
+    </nav>
+    <div class="sb-sec">Runs</div>
+    <div class="runs" id="runs"></div>
+    <div class="acct">
+      <div class="row"><span class="avatar">YO</span><span class="tx">Your workspace</span></div>
+      <div class="ux" style="font-size:11px;color:var(--i500);display:flex;justify-content:space-between"><span>This month</span><span class="num" id="acctUse">$41.20 of $150</span></div>
+      <div class="meter"><i id="acctBar" style="width:27%"></i></div>
+    </div>
+  </aside>
+
+  <div class="main" id="main">
+    <div class="mhead"><button class="ib" id="mMenu" aria-label="Menu"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><span class="brand" style="font:600 16px var(--serif)">Chipwright</span></div>
+
+    <section class="screen" id="startScr">
+      <div class="start" id="startBody"></div>
+    </section>
+
+    <section class="screen hide" id="runScr">
+      <header class="topbar">
+        <span class="title" id="runTitle" contenteditable="true" spellcheck="false" title="Rename"></span>
+        <div class="seg sm" id="devSeg" role="group" aria-label="Device">
+          <button data-dev="eeg"><svg class="ic s" viewBox="0 0 24 24"><path d="M2 12h3l2-6 3 12 3-9 2 5 2-2h5"/></svg><span class="lbx">EEG seizure</span></button>
+          <button data-dev="nirs"><svg class="ic s" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><span class="lbx">Brain oxygen</span></button>
+        </div>
+        <div class="tb-sp"></div>
+        <div class="seg" id="tabs" role="tablist">
+          <button data-tab="overview">Overview</button>
+          <button data-tab="agents">Agents</button>
+          <button data-tab="views">Views</button>
+          <button data-tab="report">Report</button>
+        </div>
+        <div class="tb-sp"></div>
+        <span class="demo" title="All numbers on this screen are invented for the mock-up"><span class="lg">Simulated run, </span>demo data</span>
+        <button class="btn" id="bShare"><svg class="ic s" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg><span class="lbx">Share</span></button>
+        <button class="btn" id="bOut">Outputs<svg class="ic s" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+        <button class="ib" id="bHelper" title="Steer panel"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/></svg></button>
+      </header>
+      <div class="strip" id="strip">
+        <div class="tracker" id="tracker"></div>
+        <div class="sbest" id="sBest"></div>
+        <div class="pb">
+          <button class="ib" id="bPlay" title="Pause"></button>
+          <button class="ib" id="bRestart" title="Restart run"><svg class="ic" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button>
+          <select class="sel" id="speed" aria-label="Playback speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
+          <button class="live" id="live" title="Jump to live"><i></i><span>LIVE</span></button>
+          <span class="clock" id="clock"></span>
+        </div>
+        <button class="btn amber" id="bRedirect"><svg class="ic s" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Pause and redirect</button>
+      </div>
+      <div class="scrub" id="scrub"><div class="lv" id="scrubLive"></div><div class="fill" id="scrubFill"></div><div id="scrubMarks"></div><input type="range" id="scrubIn" min="0" max="88" step="0.1" value="0" aria-label="Scrub run history"></div>
+      <div class="vp" id="vp"></div>
+    </section>
+  </div>
+
+  <aside class="helper" id="helper">
+    <div class="h-head"><svg class="ic" viewBox="0 0 24 24" style="color:var(--t600)"><path d="M12 3l1.9 5.8L20 10.7l-6.1 1.9L12 18.5l-1.9-5.9L4 10.7l6.1-1.9Z"/></svg><b id="hTitle">Steer this run</b><span style="flex:1"></span><button class="ib" id="hClose" aria-label="Close panel"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="h-state" id="hState"></div>
+    <div class="h-msgs" id="hMsgs"></div>
+    <div class="h-sugg" id="hSugg"></div>
+    <div class="composer" id="hComp">
+      <textarea id="hIn" rows="2" placeholder="Tell the agents what to change"></textarea>
+      <div class="comp-row">
+        <button class="pill teal" id="hMode">Chat<svg class="ic s" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+        <button class="pill" id="hMod">Design loop<svg class="ic s" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+        <button class="send" id="hSend" aria-label="Send"><svg class="ic s" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+      </div>
+    </div>
+  </aside>
+</div>
+<div class="pop" id="pop"></div>
+<div class="tip" id="tip"></div>
+<div class="toasts" id="toasts"></div>
+
+<script>
+'use strict';
+/* ---------- utils ---------- */
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const fi=n=>Math.round(n).toLocaleString('en-US');
+const usd=n=>'$'+(n<10?n.toFixed(2):n.toFixed(2));
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function hashStr(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const rngFor=s=>mulberry(hashStr(s));
+function gauss(r){let u=0;while(!u)u=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*r())}
+const h01=n=>{let x=Math.imul((n|0)^0x9e3779b9,0x85ebca6b);x^=x>>>13;x=Math.imul(x,0xc2b2ae35);x^=x>>>16;return(x>>>0)/4294967296};
+const IC={
+ play:'<polygon points="7 4 19 12 7 20 7 4"/>',
+ pause:'<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
+ check:'<path d="M20 6 9 17l-5-5"/>',x:'<path d="M18 6 6 18M6 6l12 12"/>',
+ chev:'<path d="m6 9 6 6 6-6"/>',right:'<path d="m9 18 6-6-6-6"/>',
+ target:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
+ cpu:'<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"/>',
+ file:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h6M8 13h8M8 17h5"/>',
+ alert:'<path d="m21.7 18-8-14a2 2 0 0 0-3.5 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3"/><path d="M12 9v4M12 17h.01"/>',
+ dl:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/>',
+ search:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+ pen:'<path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
+ trash:'<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+ share:'<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>',
+ spark:'<path d="M12 3l1.9 5.8L20 10.7l-6.1 1.9L12 18.5l-1.9-5.9L4 10.7l6.1-1.9Z"/>',
+ wave:'<path d="M2 12h3l2-6 3 12 3-9 2 5 2-2h5"/>',
+ sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+ fork:'<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M6 9v6M18 9a9 9 0 0 1-9 9"/>',
+ up:'<path d="M12 19V5M5 12l7-7 7 7"/>',
+ clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+ coins:'<circle cx="8" cy="8" r="6"/><path d="M18.1 10.4A6 6 0 1 1 10.3 18M7 6h1v4"/>',
+ gpu:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="9" cy="12" r="2.5"/><circle cx="16" cy="12" r="2.5"/>',
+ layers:'<path d="m12 2 10 5-10 5L2 7Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/>'
+};
+const ic=(n,c='ic s',st='')=>`<svg class="${c}" viewBox="0 0 24 24" ${st?`style="${st}"`:''}>${IC[n]}</svg>`;
+const spn=()=>`<span class="spn" style="animation-delay:-${(performance.now()%900).toFixed(0)}ms"></span>`;
+
+/* ---------- domain data (invented for the mock-up) ---------- */
+const EEG_CH=['Fp1-F7','F7-T3','T3-T5','T5-O1','Fp2-F8','F8-T4','T4-T6','T6-O2','Fp1-F3','F3-C3','C3-P3','P3-O1','Fp2-F4','F4-C4','C4-P4','P4-O2','Fz-Cz','Cz-Pz'];
+const NIRS_CH=['730 nm near','770 nm near','810 nm near','850 nm near','730 nm far','770 nm far','810 nm far','850 nm far'];
+const DEV={
+ eeg:{key:'eeg',name:'Newborn EEG seizure monitor',short:'EEG seizure monitor',title:'Seizure flag chip under 5k gates',icon:'wave',
+  prompt:'Design the chip for a newborn EEG seizure monitor. It reads 18 scalp channels and flags seizure activity in every 4-second window. On unseen patients, each patient needs sensitivity of at least 90% and specificity of at least 95%. Keep the circuit under 5,000 gates.',
+  signal:'18 scalp EEG channels, 256 samples a second',inputs:18,ch:EEG_CH,inBits:'18 channels × 4 band-power features',out:'SEIZURE',outD:'1-bit seizure flag per 4 s window',
+  sensLine:90,specLine:95,budget:5000,patients:12,windows:3880,train:38,gR:[200,50000],yR:[66,100],
+  bests:[[11920,23,92.4,96.1],[5870,19,91.8,95.9],[3214,16,91.1,95.7],[2406,14,90.7,95.4]],
+  fams:[['LUT net, 6-input','Adder tree on band power','Pruned binary MLP'],['LUT net, 6-input','LUT net, 5-input','Adder tree on band power'],['LUT net, 3-bit weak channels','LUT net, 5-input','Adder tree, 3-bit'],['Shared first layer, channel pairs','LUT net, 3-bit weak channels','Shared first layer, 4-input']],
+  notes:['dropping the pruned MLP, which trailed by about 3 points at every size','cutting the weakest channels to 3-bit inputs','sharing the first layer across left and right channel pairs'],
+  ref:{sens:94.1,spec:96.8,params:'1.2M parameters'},unit:'window',decision:'seizure flag'},
+ nirs:{key:'nirs',name:'Newborn brain-oxygen sensor',short:'Brain-oxygen sensor',title:'Brain-oxygen chip under 1.5k gates',icon:'sun',
+  prompt:'Design the chip for a newborn brain-oxygen sensor. Near-infrared light passes through the head at four wavelengths and two distances; the chip only combines those 8 readings into a brain-oxygen value and raises an alarm when it drops below 55%. On unseen patients, each patient needs sensitivity and specificity of at least 90% for the alarm. Keep it under 1,500 gates.',
+  signal:'8 near-infrared light readings (4 wavelengths, 2 distances)',inputs:8,ch:NIRS_CH,inBits:'8 readings × 10 bit',out:'rSO2 + ALARM',outD:'7-bit oxygen value and a 1-bit alarm',
+  sensLine:90,specLine:90,budget:1500,patients:9,windows:4608,train:27,gR:[60,15000],yR:[66,100],
+  bests:[[3480,18,93.0,94.2],[1640,15,92.6,93.8],[912,12,91.9,93.1],[688,11,91.2,92.7]],
+  fams:[['Ratio and lookup','Fixed-point linear fit','LUT net, 4-input'],['Fixed-point linear fit','LUT net, 4-input','Ratio and lookup, coarse'],['Linear fit, 8-bit coefficients','LUT net, 4-input','Linear fit, 6-bit'],['Ratio folded into layer 1','Linear fit, 8-bit coefficients','Ratio folded, 6-bit']],
+  notes:['dropping the coarse lookup above 2k gates','moving the fit to 8-bit coefficients','folding the light ratio into the first layer'],
+  ref:{sens:94.6,spec:95.2,params:'180k parameters'},unit:'window',decision:'low-oxygen alarm'}
+};
+const MODES={Lite:{batch:512,llm:.55,d:'Smaller batches, lighter models'},Pro:{batch:2048,llm:1,d:'Balanced default'},Max:{batch:4096,llm:1.6,d:'Larger batches, stronger reviewer'},Ultra:{batch:8192,llm:2.4,d:'Largest batches, strongest models'}};
+const COMPUTE=[{k:'cpu1',n:'CPU Basic',d:'4 cores, 16 GB',p:.06},{k:'cpu2',n:'CPU Plus',d:'16 cores, 64 GB',p:.19},{k:'gpu1',n:'GPU Basic',d:'16 GB+ VRAM',p:.79},{k:'gpu2',n:'GPU Plus',d:'40 GB+ VRAM',p:2.4}];
+const AG={Architect:{c:'#6d28d9',bg:'#f5f3ff',role:'Proposes designs, plans each round'},Trainer:{c:'#1d4ed8',bg:'#eff6ff',role:'Runs the GPU training batch'},Compiler:{c:'#0369a1',bg:'#f0f9ff',role:'Turns models into gate circuits'},Verifier:{c:'#047857',bg:'#ecfdf5',role:'Bit-for-bit and per-patient checks'},Reviewer:{c:'#c2410c',bg:'#fff7ed',role:'Checks claims, writes the report'}};
+const MODELS=['Opus','Sonnet','Haiku'], EFFORT=['low','medium','high'];
+const STG=[{k:'spec',n:'Spec',d:'Turns the prompt into a checkable spec: inputs, output, clinical line, gate budget.'},{k:'reference',n:'Reference',d:'Splits patients so the test patients stay unseen, and trains a full-precision reference model that sets the ceiling.'},{k:'propose',n:'Propose',d:'Architect agents propose families of small networks that can become circuits.'},{k:'train',n:'Train',d:'Trains every candidate at once as one GPU batch.'},{k:'compile',n:'Compile',d:'Compiles the best 8 candidates into logic gates with the weights wired in.'},{k:'verify',n:'Verify',d:'Checks each circuit bit for bit against its model on unseen patients, then scores it per patient.'},{k:'report',n:'Report',d:'Picks the chosen chip and writes its datasheet, limits and files.'}];
+const ROUND_C=['#93c5fd','#60a5fa','#2563eb','#1e3a8a'];
+const END=88, SC=96; // 1 simulated second = 96 seconds of run time
+const RB=r=>10+16*r;
+const IV=(()=>{const a=[{s:'spec',r:-1,a:0,b:4},{s:'reference',r:-1,a:4,b:10}];for(let r=0;r<4;r++){const b=RB(r);a.push({s:'propose',r,a:b,b:b+3},{s:'train',r,a:b+3,b:b+10},{s:'compile',r,a:b+10,b:b+13},{s:'verify',r,a:b+13,b:b+16})}a.push({s:'report',r:4,a:74,b:END});return a})();
+function stageAt(t){if(t>=END)return{s:'done',r:4,i:IV.length,p:1};for(let i=0;i<IV.length;i++){const v=IV[i];if(t<v.b)return{s:v.s,r:v.r,i,p:(t-v.a)/(v.b-v.a)}}}
+const LLM_RATE={spec:.14,reference:.06,propose:.26,train:.05,compile:.12,verify:.09,report:.22};
+const AG_SPLIT={spec:{Architect:.7,Reviewer:.3},reference:{Trainer:.6,Architect:.4},propose:{Architect:1},train:{Trainer:1},compile:{Compiler:1},verify:{Verifier:.8,Reviewer:.2},report:{Reviewer:.8,Architect:.2}};
+
+/* ---------- state ---------- */
+const S={screen:'start',device:'eeg',mode:'Pro',compute:'gpu1',backend:'Claude',
+ roles:{Architect:['Opus','high'],Trainer:['Haiku','low'],Compiler:['Sonnet','medium'],Verifier:['Sonnet','medium'],Reviewer:['Opus','high']},
+ line:{eeg:{s:90,p:95,b:5000},nirs:{s:90,p:90,b:1500}},
+ t:0,live:0,playing:true,speed:1,view:'overview',lastViews:'design',selId:null,cmpId:null,redirects:[],sim:null,
+ helper:false,helperMode:'steer',sendMode:'Chat',feedAg:'all',feedQ:'',open:new Set(),closedSub:new Set(),patient:-1,dsFilter:'pass',openCards:new Set(),
+ lastBest:null,chipAnim:0,hover:null,pending:[],launching:false,prompt:null};
+
+/* ---------- simulation ---------- */
+function curLine(){const d=DEV[S.device],l=S.line[S.device];return{sens:l.s,spec:l.p,budget:l.b}}
+function build(){
+ const d=DEV[S.device], m=MODES[S.mode], L=curLine();
+ const rounds=[]; let mods={g:1,s:0,dp:0}; const used=new Set();
+ for(let r=0;r<4;r++){
+  const ts=RB(r)+3; const nr=S.redirects.filter(x=>x.t<ts&&!used.has(x)&&x.fx);
+  nr.forEach(x=>{used.add(x);mods={g:mods.g*x.fx.g,s:mods.s+x.fx.s,dp:mods.dp+x.fx.dp}});
+  const [g0,d0,s0,p0]=d.bests[r];
+  const bg=Math.round(g0*mods.g/2)*2, bs=+Math.max(L.sens+.2,s0+mods.s).toFixed(1), bp=+Math.max(L.spec+.1,p0+mods.s*.35).toFixed(1);
+  const bd=Math.max(6,d0+mods.dp+Math.round(Math.log2(mods.g)*2));
+  const n=r===0?m.batch/2:m.batch;
+  const R={r,n,bg,bs,bp,bd,redirects:nr,mods:{...mods},fams:d.fams[r]};
+  genCands(d,R,L); rounds.push(R);
+ }
+ const all=rounds.flatMap(R=>R.cands).sort((a,b)=>a.tf-b.tf);
+ const byG=[...all].sort((a,b)=>a.g-b.g);
+ const idx={}; all.forEach(c=>idx[c.id]=c);
+ // windows per patient
+ const rw=rngFor(d.key+'pw'); let ws=Array.from({length:d.patients},()=>.7+rw()*.6); const sw=ws.reduce((a,b)=>a+b,0); ws=ws.map(w=>Math.round(w/sw*d.windows)); ws[ws.length-1]+=d.windows-ws.reduce((a,b)=>a+b,0);
+ S.sim={d,L,rounds,all,byG,idx,pw:ws};
+ S.sim.events=buildEvents();
+ S.sim.decisions=buildDecisions();
+}
+function genCands(d,R,L){
+ const rng=rngFor(d.key+S.mode+':'+R.r+':'+R.bg+':'+R.bs+':'+R.bd);
+ const lb=Math.log10(R.bg), mu=lb+(R.r===0?.5:.2), sd=R.r===0?.42:.26;
+ const lo=Math.log10(d.gR[0]*1.2), hi=Math.log10(d.gR[1]*.85);
+ const ts=RB(R.r)+3, dur=7, Smax=R.bs+4, out=[];
+ const bi=Math.floor(R.n*(.35+rng()*.35));
+ for(let i=0;i<R.n;i++){
+  let lg=mu+sd*gauss(rng);for(let k=0;k<8&&(lg<lo||lg>hi);k++)lg=mu+sd*gauss(rng);lg=clamp(lg,lo,hi);const g=Math.round(10**lg);
+  const fam=Math.floor(rng()*3), pen=(fam===2&&R.r===0)?2.8:fam===2?.8:0;
+  let sens=Smax-3.6*Math.exp(-1.8*(lg-lb))-Math.abs(gauss(rng))*1.6-pen-(rng()<.12?rng()*14:0);
+  let spec=R.bp+.3+1.4*(1-Math.exp(-1.2*(lg-lb)))-Math.abs(gauss(rng))*1.1-(rng()<.08?rng()*8:0);
+  sens=+clamp(sens,58,99.4).toFixed(1); spec=+clamp(spec,72,99.6).toFixed(1);
+  if(g<=R.bg&&sens>=L.sens&&spec>=L.spec) sens=+(L.sens-.2-rng()*2.4).toFixed(1);
+  const dp=Math.max(5,Math.round(R.bd+(lg-lb)*7+gauss(rng)*1.2));
+  out.push({id:'',r:R.r,g,sens:+sens.toFixed(1),spec:+spec.toFixed(1),dp,fam,tf:ts+.15+(i/R.n)*dur*.92+rng()*.25});
+ }
+ const b=out[bi]; Object.assign(b,{g:R.bg,sens:R.bs,spec:R.bp,dp:R.bd,fam:0,best:true});
+ out.forEach((c,k)=>c.id=`R${R.r+1}-${String(k+1).padStart(4,'0')}`);
+ const pass=out.filter(c=>c!==b&&c.sens>=L.sens&&c.spec>=L.spec).sort((x,y)=>x.g-y.g).slice(0,7);
+ let comp=[b,...pass]; if(comp.length<8) comp=comp.concat(out.filter(c=>!comp.includes(c)).sort((x,y)=>y.sens-x.sens).slice(0,8-comp.length));
+ comp.forEach((c,k)=>{c.comp=true;c.ck=k});
+ R.cands=out; R.best=b; R.compiled=comp; R.leaderFam=R.fams[0];
+ R.gLo=Math.round(10**(mu-1.5*sd)); R.gHi=Math.round(10**(mu+1.5*sd));
+}
+function arch(c){
+ if(c._a) return c._a; const d=S.sim.d, rng=rngFor(c.id+d.key+c.g);
+ const nL=c.g>9000?4:c.g>2400?3:2, k=c.g>6000?6:c.g>1200?5:4, gpn={4:14,5:26,6:46}[k];
+ const dec=Math.max(20,Math.round(c.g*(.05+rng()*.04)));
+ const sh=[[.68,.32],[.56,.3,.14],[.48,.27,.16,.09]][nL-2];
+ const lg=sh.map(s=>Math.round((c.g-dec)*s)); const decG=c.g-lg.reduce((a,b)=>a+b,0);
+ const ws=lg.map(g=>Math.max(2,Math.round(g/gpn)));
+ const bits=d.key==='eeg'?(c.r>=2?3:4):(c.r>=2?8:10);
+ const inBits=d.key==='eeg'?(c.r>=2?18*4*3+6*4:18*4*4):(8*bits);
+ let mix=[.33,.21,.18,.15,.13].map(v=>v*(.8+rng()*.4)); const ms=mix.reduce((a,b)=>a+b,0); mix=mix.map(v=>v/ms);
+ const mixG=mix.map(v=>Math.round(v*c.g)); mixG[0]+=c.g-mixG.reduce((a,b)=>a+b,0);
+ return c._a={nL,k,ws,lg,decG,bits,inBits,mixG};
+}
+function pm(c){
+ if(c._pm) return c._pm; const d=S.sim.d,L=S.sim.L, rng=rngFor('pm'+c.id+d.key);
+ const ws=Math.floor(rng()*d.patients), wp=Math.floor(rng()*d.patients);
+ return c._pm=S.sim.pw.map((w,i)=>{const s=i===ws?c.sens:Math.min(100,+(c.sens+rng()*(100-c.sens)*.75).toFixed(1));const p=i===wp?c.spec:Math.min(100,+(c.spec+rng()*(100-c.spec)*.7).toFixed(1));return{p:'P'+String(i+1).padStart(2,'0'),w,sens:s,spec:p,ok:s>=L.sens&&p>=L.spec}});
+}
+const fam=c=>S.sim.rounds[c.r].fams[c.fam];
+function mismatchCand(){const R=S.sim.rounds[1];return R.compiled[3]}
+
+/* events (agent feed) */
+function buildEvents(){
+ const {d,L,rounds}=S.sim; const ev=[]; let id=0; const E=o=>{o.id=id++;ev.push(o);return o};
+ const P=d.patients, W=d.windows, m=MODES[S.mode];
+ E({t:.05,type:'div',label:'Spec',s:'spec',r:-1});
+ E({t:.3,type:'msg',ag:'Architect',text:`Reading the brief. Device: ${d.name.replace('Newborn','newborn')}. The chip's job: ${d.key==='eeg'?'flag seizure activity in each 4-second window from 18 channels':'combine 8 light readings into a brain-oxygen value and alarm below 55%'}. Clinical line, on every unseen patient: sensitivity at least ${L.sens}%, specificity at least ${L.spec}%. Gate budget ${fi(L.budget)}.`});
+ E({t:1,t2:2.7,type:'tool',ag:'Architect',name:'write_spec',args:`device=${d.key} budget=${L.budget}`,
+  log:['I parsing prompt',`I inputs: ${d.inBits}`,`I output: ${d.outD}`,`I clinical line per patient: sens>=${L.sens} spec>=${L.spec}`,`I gate budget: ${L.budget}`,'W latency target not given; assuming one decision per window','I wrote spec.yaml (11 fields)'],
+  sum:'spec.yaml, 11 fields',kind:'spec'});
+ E({t:3.1,type:'msg',ag:'Reviewer',text:'Spec matches the brief. One assumption noted: no latency target was given, so the chip makes one decision per window.'});
+ E({t:4.02,type:'div',label:'Reference',s:'reference',r:-1});
+ E({t:4.3,t2:5.6,type:'tool',ag:'Trainer',name:'split_patients',args:`seed=7 held_out=${P}`,
+  log:[`I ${d.train+P} patients in the demo set`,`I training: ${d.train} patients`,`I held out: ${P} patients, ${fi(W)} windows, never seen until Verify`,'I no patient appears on both sides'],sum:`${d.train} train, ${P} held out`});
+ E({t:5.8,t2:9.3,type:'tool',ag:'Trainer',name:'train_reference',args:`model=float precision=fp32 gpu=${cname()}`,
+  log:['I epoch 1/30 loss 0.612','I epoch 10/30 loss 0.244','I epoch 20/30 loss 0.181','W epoch 24 plateau, lowering learning rate','I epoch 30/30 loss 0.163',`I worst-patient sensitivity ${d.ref.sens}%, specificity ${d.ref.spec}% (validation)`],
+  sum:`ceiling: sens ${d.ref.sens}%, spec ${d.ref.spec}%`,cost:1});
+ E({t:9.5,type:'msg',ag:'Architect',text:`The reference model (${d.ref.params}) sets the ceiling at ${d.ref.sens}% worst-patient sensitivity. It is far too big for a chip; the search starts from here.`});
+ rounds.forEach((R,r)=>{
+  const b=RB(r), prev=r?rounds[r-1]:null;
+  E({t:b+.02,type:'div',label:`Round ${r+1}: Propose`,s:'propose',r});
+  R.redirects.forEach(x=>{ if(x.t>=b-16||r===0) {} });
+  let txt;
+  if(!prev) txt=`Round 1 starts wide: three families, ${fi(R.n)} candidates, ${fi(R.gLo)} to ${fi(R.gHi)} gates. The aim is to find where accuracy falls off, not yet to hit the budget.`;
+  else { const pb=prev.best, over=pb.g>L.budget;
+   txt=`Round ${r} chose ${pb.id} at ${fi(pb.g)} gates (worst-patient sensitivity ${pb.sens}%). ${over?`That is ${fi(pb.g-L.budget)} gates over budget.`:`That is ${fi(L.budget-pb.g)} under budget.`} Next batch: ${fi(R.gLo)} to ${fi(R.gHi)} gates, ${d.notes[r-1]}.`;
+   if(R.redirects.length) txt+=` Applying your redirect: ${R.redirects.map(x=>x.short).join('; ')}.`; }
+  E({t:b+.25,type:'msg',ag:'Architect',text:txt,r});
+  E({t:b+.6,t2:b+2.5,type:'sub',ag:'Architect',label:`3 parallel proposals for round ${r+1}`,items:R.fams.map((f,k)=>({n:f,t2:b+1.4+k*.5,text:propText(d,R,k)}))});
+  E({t:b+2.7,type:'msg',ag:'Architect',text:`Batch plan: ${fi(R.n)} candidates across ${R.fams.length} families, each trained for 40 epochs on the ${d.train} training patients.`});
+  E({t:b+3.02,type:'div',label:`Round ${r+1}: Train`,s:'train',r});
+  const tr=R.best;
+  E({t:b+3.1,t2:b+9.9,type:'tool',ag:'Trainer',name:'train_batch',args:`candidates=${R.n} families=3 epochs=40 gpu=${cname()}`,
+   log:[`I packing ${fi(R.n)} candidates into one batch`,'I 25% trained','I 50% trained', r===2?'W 6 candidates diverged (lr too high for 3-bit inputs), dropped':'I 0 diverged','I 75% trained',`I done: ${fi(R.n)} trained in ${durTxt(6.8)}`],
+   sum:`${fi(R.n)} trained, leader ${tr.id}`,thumb:{k:'curve'},cost:1,r});
+  E({t:b+10.02,type:'div',label:`Round ${r+1}: Compile`,s:'compile',r});
+  E({t:b+10.1,t2:b+12.7,type:'tool',ag:'Compiler',name:'compile_to_gates',args:`top=8 lut=k-input target=gates`,
+   log:[`I compiling 8 candidates (smallest that meet the line in training)`,`W ${fi(R.bg*0.11)} constant gates folded away in ${tr.id}`,`I ${tr.id}: ${fi(tr.g)} gates, longest path ${tr.dp} gates`,'I wrote 8 netlists'],
+   sum:`8 circuits, smallest ${fi(R.compiled.reduce((a,c)=>Math.min(a,c.g),1e9))} gates`,thumb:{k:'chip',id:tr.id},table:R.compiled.slice(0,8),cost:1,r});
+  E({t:b+13.02,type:'div',label:`Round ${r+1}: Verify`,s:'verify',r});
+  if(r===1){
+   const mc=mismatchCand();
+   E({t:b+13.1,t2:b+14,type:'tool',ag:'Verifier',name:'verify_bitwise',args:`circuits=8 patients=${P} windows=${W}`,err:true,
+    log:[`I running 8 circuits against their models on ${fi(W)} unseen windows`,`I 7 of 8 circuits identical on ${fi(W)} of ${fi(W)} windows`,`E ${mc.id}: 19 of ${fi(W)} windows differ from the model`,`E first difference at window 1,204: circuit 0, model 1`],sum:`${mc.id} differs on 19 windows`,cost:1,r});
+   E({t:b+14.1,type:'msg',ag:'Compiler',text:`Found it: the final adder tree in ${mc.id} truncated where the model rounds half up. Recompiled with matching rounding.`});
+   E({t:b+14.3,t2:b+15,type:'tool',ag:'Verifier',name:'verify_bitwise',args:`circuits=${mc.id} patients=${P}`,log:[`I ${mc.id} recompiled`,`I ${fi(W)} of ${fi(W)} windows identical`],sum:'identical after fix',cost:1,r});
+  } else {
+   E({t:b+13.1,t2:b+14.9,type:'tool',ag:'Verifier',name:'verify_bitwise',args:`circuits=8 patients=${P} windows=${W}`,
+    log:[`I running 8 circuits against their models on ${fi(W)} unseen windows`,'I comparing every output bit',`I 8 of 8 circuits identical on ${fi(W)} of ${fi(W)} windows`],sum:`8 of 8 identical, ${fi(W)} windows each`,cost:1,r});
+  }
+  E({t:b+15,t2:b+15.7,type:'tool',ag:'Verifier',name:'score_patients',args:`circuit=${tr.id} line=sens>=${L.sens},spec>=${L.spec}`,
+   log:[`I scoring ${tr.id} per patient`,`I worst-patient sensitivity ${tr.sens}%`,`I worst-patient specificity ${tr.spec}%`,`I meets the line on ${pm(tr).filter(x=>x.ok).length} of ${P} patients`],sum:`${pm(tr).filter(x=>x.ok).length} of ${P} patients meet the line`,r});
+  E({t:b+15.85,type:'msg',ag:'Reviewer',text:`Round ${r+1} choice: ${tr.id}, ${fi(tr.g)} gates, longest path ${tr.dp}. Meets the line on all ${P} unseen patients (worst sensitivity ${tr.sens}%, worst specificity ${tr.spec}%). ${tr.g>L.budget?`Still ${fi(tr.g-L.budget)} gates over budget.`:`Under budget by ${fi(L.budget-tr.g)} gates.`}`,r,best:tr.id});
+ });
+ const fb=rounds[3].best;
+ E({t:74.02,type:'div',label:'Report',s:'report',r:4});
+ E({t:74.3,type:'msg',ag:'Reviewer',text:`Choosing ${fb.id}: the ${rounds[3].redirects.some(x=>x.k==='margin')?'design with the extra margin you asked for':'smallest verified circuit that meets the line on every unseen patient'}.`});
+ E({t:75,t2:80.5,type:'tool',ag:'Reviewer',name:'write_datasheet',args:`circuit=${fb.id}`,log:['I numbers table','I per-patient table','I limits section','I how it was found (4 rounds)','I wrote datasheet.md'],sum:'datasheet written'});
+ E({t:80.8,t2:82.6,type:'tool',ag:'Compiler',name:'export_circuit',args:`circuit=${fb.id} format=verilog`,log:[`I ${fb.id}.v written (${fi(fb.g)} gates)`,'I netlist.json written','I verification log attached'],sum:'3 files'});
+ E({t:83,t2:86.5,type:'tool',ag:'Reviewer',name:'final_review',args:'checks=6',log:['I bit-for-bit check present for the chosen circuit','I every number traced to a log','I test patients never used in training','W one assumption carried: one decision per window','I limits stated'],sum:'6 of 6 checks pass, 1 note'});
+ E({t:87,type:'msg',ag:'Reviewer',text:`Run complete. ${fb.id} is ${fi(fb.g)} gates with a longest path of ${fb.dp}. It is checked against data, not validated in a clinic; the datasheet lists its limits.`});
+ S.redirects.forEach(x=>{E({t:x.t,type:'human',text:x.text,rid:x.id});E({t:x.t+.001,type:'msg',ag:'Architect',text:x.reply,rid:x.id})});
+ ev.sort((a,b)=>a.t-b.t||a.id-b.id);
+ return ev;
+}
+function propText(d,R,k){const r=R.r;const sz=[1,.6,1.6][k];return `${fi(Math.round(R.n*[.42,.33,.25][k]))} variants, ${fi(Math.round(R.gLo*sz))} to ${fi(Math.round(R.gHi*sz*.8))} gates. ${['Keeps what worked last round.','Tests a cheaper first layer.','A contrast family to check the trend.'][k]}`}
+function buildDecisions(){
+ const {d,L,rounds}=S.sim; const out=[{t:3.1,text:'Assume one decision per window (no latency given).'},{t:9.5,text:`Hold out ${d.patients} patients for Verify; never trained on.`}];
+ rounds.forEach((R,r)=>{const b=RB(r);out.push({t:b+15.85,text:`Round ${r+1}: choose ${R.best.id} (${fi(R.best.g)} gates).`+(r<3?` Next: ${d.notes[r]}.`:'')})});
+ S.redirects.forEach(x=>out.push({t:x.t,text:`Redirect: ${x.short}.`,u:true}));
+ return out.sort((a,b)=>a.t-b.t);
+}
+function cname(){return COMPUTE.find(c=>c.k===S.compute).n.replace(' ','_')}
+function durTxt(simS){const s=Math.round(simS*SC);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),ss=s%60;return h?`${h}h ${m}m`:m?`${m}m ${String(ss).padStart(2,'0')}s`:`${ss}s`}
+
+/* derived state at time t */
+function nVis(t){const a=S.sim.all;let lo=0,hi=a.length;while(lo<hi){const m=(lo+hi)>>1;if(a[m].tf<=t)lo=m+1;else hi=m}return lo}
+function bestAt(t){let b=null,ri=-1;S.sim.rounds.forEach((R,r)=>{if(t>=RB(r)+16){b=R.best;ri=r}});return{b,ri}}
+function costAt(t){
+ const m=MODES[S.mode], cp=COMPUTE.find(c=>c.k===S.compute).p, cpu=COMPUTE[1].p;
+ const o={llm:0,cmp:0,st:{},ag:{},gpuH:0,cpuH:0};
+ for(const v of IV){const dt=clamp(t-v.a,0,v.b-v.a);if(!dt)continue;
+  const l=LLM_RATE[v.s]*dt*m.llm; o.llm+=l; o.st[v.s]=(o.st[v.s]||{llm:0,cmp:0}); o.st[v.s].llm+=l;
+  for(const[a,f] of Object.entries(AG_SPLIT[v.s])) o.ag[a]=(o.ag[a]||0)+l*f;
+  let gh=0,ch=0; const hrs=dt*SC/3600;
+  if(v.s==='reference') gh=hrs; if(v.s==='train') gh=hrs*m.batch/2048*(v.r===0?.5:1); if(v.s==='compile'||v.s==='verify') ch=hrs*8;
+  const c=gh*cp+ch*cpu; o.cmp+=c; o.st[v.s].cmp+=c; o.gpuH+=gh; o.cpuH+=ch;}
+ o.total=o.llm+o.cmp; o.tokens=o.llm/7.2*1e6; return o;
+}
+function D(){
+ const t=S.t, st=stageAt(t), n=nVis(t), {b,ri}=bestAt(t);
+ const r=st.r>=0&&st.r<4?st.r:(st.s==='report'||st.s==='done'?3:-1);
+ return{t,st,n,best:b,bestRound:ri,r,cost:costAt(t),paused:!S.playing&&t<END,ended:t>=END};
+}
+function leaderOf(R,t){let L=null;const line=S.sim.L;for(const c of R.cands){if(c.tf<=t&&c.sens>=line.sens&&c.spec>=line.spec&&(!L||c.g<L.g))L=c}return L}
+
+/* ---------- helpers for UI ---------- */
+function toast(html,icon='spark',col='var(--az6)'){const e=document.createElement('div');e.className='toast';e.innerHTML=`<span style="color:${col}">${ic(icon,'ic')}</span><span>${html}</span>`;$('#toasts').appendChild(e);setTimeout(()=>{e.style.transition='opacity .3s';e.style.opacity=0;setTimeout(()=>e.remove(),300)},3200)}
+function fit(cv){const r=cv.getBoundingClientRect();const dpr=Math.min(2,window.devicePixelRatio||1);const w=Math.max(1,Math.round(r.width*dpr)),h=Math.max(1,Math.round(r.height*dpr));if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h}const ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);return{ctx,w:r.width,h:r.height}}
+let popClose=null;
+function openPop(anchor,html,onMount){const p=$('#pop');p.innerHTML=html;p.style.display='block';const r=anchor.getBoundingClientRect();const pw=p.offsetWidth,ph=p.offsetHeight;let x=Math.min(r.left,innerWidth-pw-8),y=r.bottom+6;if(y+ph>innerHeight-8)y=Math.max(8,r.top-ph-6);p.style.left=Math.max(8,x)+'px';p.style.top=y+'px';onMount&&onMount(p);setTimeout(()=>{popClose=e=>{if(!p.contains(e.target)){closePop()}};document.addEventListener('mousedown',popClose)},0)}
+function closePop(){$('#pop').style.display='none';if(popClose)document.removeEventListener('mousedown',popClose);popClose=null}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closePop()}});
+function agAv(a,sz=20){const g=AG[a];return`<span class="av" style="width:${sz}px;height:${sz}px;background:${g.bg};color:${g.c}">${a[0]}</span>`}
+function fmtRun(simT){const s=Math.round(simT*SC);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return`${h}:${String(m).padStart(2,'0')}`}
+function stageName(k){return STG.find(s=>s.k===k)?.n||k}
+function groupOf(s){return s==='spec'||s==='reference'?0:s==='report'?2:1}
+const GC=['#a78bfa','#60a5fa','#fb923c'], GBG=['#f5f3ff','#eff6ff','#fff7ed'];
+
+/* ---------- sidebar runs ---------- */
+function renderRuns(){
+ const cur=S.screen==='run';const d=DEV[S.device];
+ const past=[{n:'Brain-oxygen chip under 1.5k gates',dev:'nirs',st:'done'},{n:'Seizure flag, 18 channels, first try',dev:'eeg',st:'done'},{n:'Apnoea alarm from chest belt',st:'done'},{n:'Jaundice flag from skin colour',st:'failed'}].filter(p=>!(cur&&p.n===d.title));
+ const icon=s=>s==='run'?spn():s==='failed'?`<span style="color:var(--r600)">${ic('x','ic s')}</span>`:`<span style="color:var(--e600)">${ic('check','ic s')}</span>`;
+ $('#runs').innerHTML=(cur?`<button class="run-i on" title="${esc(d.title)}"><span class="st-dot">${S.t<END?spn():icon('done')}</span><span class="nm">${esc($('#runTitle').textContent||d.title)}</span><span class="acts">${ic('pen')}${ic('share')}${ic('trash')}</span></button>`:'')+
+  past.map((p,i)=>`<button class="run-i" data-past="${i}" data-dev="${p.dev||''}" title="${esc(p.n)}"><span class="st-dot">${icon(p.st)}</span><span class="nm">${esc(p.n)}</span><span class="acts">${ic('pen')}${ic('share')}${ic('trash')}</span></button>`).join('');
+ $$('#runs [data-past]').forEach(b=>b.onclick=()=>{const dv=b.dataset.dev;if(dv&&dv!==S.device&&S.screen==='run'){switchDevice(dv)}else if(dv&&S.screen==='start'){S.device=dv;startRun()}else toast('Earlier runs open in the full app; this mock-up replays the two demo devices.','alert','var(--i500)')});
+}
+
+/* ---------- start screen ---------- */
+function renderStart(){
+ const d=DEV[S.device], L=S.line[S.device], cp=COMPUTE.find(c=>c.k===S.compute);
+ if(S.prompt==null) S.prompt=d.prompt;
+ $('#startBody').innerHTML=`<div class="st-in">
+  <h1 class="greet">What should the chip do?</h1>
+  <p class="st-sub">Name the device and its job. Agents propose designs, train thousands at once, compile the best into logic gates, check them bit for bit on unseen patients, and return the smallest chip that meets your clinical line.</p>
+  <div id="compWrap">
+  <div class="bigcomp">
+   <textarea id="stPrompt" aria-label="Device and job" rows="4">${esc(S.prompt)}</textarea>
+   <div class="bc-row">
+    <button class="pill" id="pDev">${ic(d.icon)} ${d.short}${ic('chev')}</button>
+    <button class="pill" id="pLine">Line: sens ≥${L.s}%, spec ≥${L.p}%${ic('chev')}</button>
+    <button class="pill" id="pBud">≤ ${fi(L.b)} gates${ic('chev')}</button>
+    <button class="pill" id="pMode">${S.mode}${ic('chev')}</button>
+    <button class="pill" id="pComp">${ic('gpu')} ${cp.n}${ic('chev')}</button>
+    <button class="pill" id="pAg">${ic('layers')} Agents: ${S.backend}${ic('chev')}</button>
+    <button class="pill teal" id="pGuide">${ic('spark')} Guide me</button>
+    <button class="startbtn" id="stGo">Start design ${ic('up')}</button>
+   </div>
+  </div>
+  <div class="presets">${Object.values(DEV).map(x=>`<button class="preset ${x.key===S.device?'on':''}" data-dev="${x.key}"><span class="tile" style="background:${x.key==='eeg'?'#eff6ff':'#fff7ed'};color:${x.key==='eeg'?'#2563eb':'#c2410c'}">${ic(x.icon,'ic')}</span><span><b>${x.name}</b><p>${x.signal}. The chip ${x.key==='eeg'?'flags seizure activity in each window':'turns the light readings into an oxygen value and alarms below 55%'}. Default budget ${fi(x.budget)} gates.</p></span></button>`).join('')}</div>
+  </div>
+  <div class="st-h">Recent designs</div>
+  <div class="card"><table class="t"><thead><tr><th>Design</th><th class="opt">Device</th><th class="n">Chosen chip</th><th class="n opt">Candidates</th><th>Status</th></tr></thead><tbody>
+   <tr><td>Brain-oxygen chip under 1.5k gates</td><td class="opt">Brain oxygen</td><td class="n">688 gates</td><td class="n opt">7,168</td><td><span class="tag ok">Done</span></td></tr>
+   <tr><td>Seizure flag, 18 channels, first try</td><td class="opt">EEG seizure</td><td class="n">3,980 gates</td><td class="n opt">3,584</td><td><span class="tag ok">Done</span></td></tr>
+   <tr><td>Apnoea alarm from chest belt</td><td class="opt">Breathing belt</td><td class="n">274 gates</td><td class="n opt">2,560</td><td><span class="tag ok">Done</span></td></tr>
+   <tr><td>Jaundice flag from skin colour</td><td class="opt">Skin colour</td><td class="n muted">none met the line</td><td class="n opt">1,536</td><td><span class="tag bad">Stopped</span></td></tr>
+  </tbody></table></div>
+  <div class="st-h">Gates per diagnosis</div>
+  ${ledgerHTML(false)}
+ </div>`;
+ const ta=$('#stPrompt'); ta.oninput=()=>S.prompt=ta.value;
+ $$('.preset').forEach(b=>b.onclick=()=>{S.device=b.dataset.dev;S.prompt=DEV[S.device].prompt;renderStart()});
+ $('#pDev').onclick=e=>openPop(e.currentTarget,`<h5>Device</h5>${Object.values(DEV).map(x=>`<button class="opt ${x.key===S.device?'on':''}" data-d="${x.key}">${ic(x.icon,'ic')}<span>${x.name}<small>${x.signal}</small></span></button>`).join('')}<div class="note">Describe any other device in the prompt; these two are the demo presets.</div>`,p=>$$('[data-d]',p).forEach(b=>b.onclick=()=>{S.device=b.dataset.d;S.prompt=DEV[S.device].prompt;closePop();renderStart()}));
+ $('#pLine').onclick=e=>openPop(e.currentTarget,`<h5>Clinical line, per unseen patient</h5><div class="fr"><span>Sensitivity</span><input type="number" id="lS" min="50" max="99" value="${L.s}"><span class="muted">% or higher</span></div><div class="fr"><span>Specificity</span><input type="number" id="lP" min="50" max="99" value="${L.p}"><span class="muted">% or higher</span></div><div class="note">Every held-out patient has to clear both, not just the average.</div>`,p=>{$('#lS',p).onchange=x=>{L.s=clamp(+x.target.value||90,50,99);renderStart()};$('#lP',p).onchange=x=>{L.p=clamp(+x.target.value||90,50,99);renderStart()}});
+ $('#pBud').onclick=e=>openPop(e.currentTarget,`<h5>Gate budget</h5><div class="fr"><span>At most</span><input type="number" id="lB" step="100" min="100" value="${L.b}"><span class="muted">gates</span></div><div class="note">Designs above the budget are still shown, marked over budget.</div>`,p=>{$('#lB',p).onchange=x=>{L.b=Math.max(100,+x.target.value||L.b);renderStart()}});
+ $('#pMode').onclick=e=>openPop(e.currentTarget,`<h5>Mode</h5>${Object.entries(MODES).map(([k,v])=>`<button class="opt ${k===S.mode?'on':''}" data-m="${k}"><span>${k}<small>${v.d}; ${fi(v.batch)} candidates a batch, 4 rounds</small></span><span class="r">~${usd(12*v.llm+1)}</span></button>`).join('')}`,p=>$$('[data-m]',p).forEach(b=>b.onclick=()=>{S.mode=b.dataset.m;closePop();renderStart()}));
+ $('#pComp').onclick=e=>openPop(e.currentTarget,computeHTML(),p=>$$('[data-c]',p).forEach(b=>b.onclick=()=>{S.compute=b.dataset.c;closePop();renderStart()}));
+ $('#pAg').onclick=e=>openPop(e.currentTarget,agentsHTML(),p=>{$$('[data-be]',p).forEach(b=>b.onclick=()=>{S.backend=b.dataset.be;closePop();renderStart()});$$('select[data-role]',p).forEach(s=>s.onchange=()=>{S.roles[s.dataset.role][+s.dataset.i]=s.value})});
+ $('#pGuide').onclick=()=>{S.helperMode='guide';openHelper()};
+ $('#stGo').onclick=startRun;
+}
+function computeHTML(){return`<h5>Compute</h5><div class="ladder">${[...COMPUTE].reverse().map(c=>`<button class="opt ${c.k===S.compute?'on':''}" data-c="${c.k}">${ic(c.k.startsWith('g')?'gpu':'cpu','ic')}<span>${c.n}<small>${c.d}${c.k!=='cpu1'?', includes the rungs below':''}</small></span><span class="r">$${c.p.toFixed(2)}/h</span></button>`).join('')}</div><div class="note">Each training batch, compile and check gets its own machine. Training thousands of candidates at once needs a GPU rung.</div>`}
+function agentsHTML(){return`<h5>Agents</h5><div class="seg sm" style="margin:0 4px 8px">${['Claude','OpenHands','OpenHands (free)'].map(b=>`<button data-be="${b}" class="${b===S.backend?'on':''}">${b}</button>`).join('')}</div>${Object.keys(AG).map(a=>`<div class="fr" style="grid-template-columns:22px 82px 1fr 1fr">${agAv(a)}<span>${a}</span><select class="sel" data-role="${a}" data-i="0">${MODELS.map(m=>`<option ${S.roles[a][0]===m?'selected':''}>${m}</option>`).join('')}</select><select class="sel" data-role="${a}" data-i="1">${EFFORT.map(m=>`<option ${S.roles[a][1]===m?'selected':''}>${m}</option>`).join('')}</select></div>`).join('')}<div class="note">Model and effort per role. The Architect and Reviewer carry the judgement; the Trainer mostly launches jobs.</div>`}
+function ledgerHTML(live){
+ const rows=[];const d=S.sim&&live?S.sim.d:null;
+ const cur=d?bestAt(S.t).b:null;
+ const base=[{n:'Newborn EEG seizure monitor',dev:'eeg',g:3980,src:'earlier run'},{n:'Newborn brain-oxygen sensor',dev:'nirs',g:688,src:'earlier run'},{n:'Newborn apnoea alarm (chest belt)',g:274,src:'earlier run'}];
+ base.forEach(b=>{if(d&&b.dev===d.key){rows.push({n:b.n,g:cur?cur.g:null,src:cur?(S.t>=END?'this run':'this run, so far'):'this run, no verified chip yet'})}else rows.push(b)});
+ const mx=Math.log10(20000);
+ return`<div class="card"><table class="t"><thead><tr><th>Diagnosis</th><th class="n">Gates</th><th style="width:38%">Size (log scale)</th><th class="opt">Source</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.n}</td><td class="n">${r.g?fi(r.g):'–'}</td><td>${r.g?`<span class="lg-bar" style="width:${(Math.log10(r.g)/mx*100).toFixed(0)}%;background:${r.src.startsWith('this')?'var(--pri)':'var(--i300)'}"></span>`:''}</td><td class="opt muted">${r.src}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function startRun(){
+ if(S.launching)return; S.launching=true;
+ const cp=COMPUTE.find(c=>c.k===S.compute), d=DEV[S.device];
+ const steps=[`Reserving ${cp.n} for the training batches`,`Loading the demo recordings (${d.train+d.patients} patients)`,'Starting five agents'];
+ const w=$('#compWrap');
+ if(!w){launch();return}
+ w.innerHTML=`<div class="prov"><h4>Launching ${esc(d.title.toLowerCase())}</h4>${steps.map((s,i)=>`<div class="ps" data-i="${i}"><span class="gl">${spn()}</span>${s}</div>`).join('')}</div>`;
+ steps.forEach((_,i)=>setTimeout(()=>{const e=$(`.ps[data-i="${i}"]`);if(e){e.classList.add('done');e.querySelector('.gl').innerHTML=`<span style="color:var(--e600)">${ic('check')}</span>`}},450+i*420));
+ setTimeout(launch,1500);
+}
+function launch(){S.launching=false;S.screen='run';S.redirects=[];S.t=0;S.live=0;S.playing=true;S.selId=null;S.cmpId=null;S.lastBest=null;S.open.clear();S.helperMode='steer';closeHelper();build();$('#runTitle').textContent=S.sim.d.title;showScreen();setView(S.view&&S.view!=='start'?S.view:'overview')}
+
+/* ---------- run chrome ---------- */
+function showScreen(){$('#startScr').classList.toggle('hide',S.screen!=='start');$('#runScr').classList.toggle('hide',S.screen!=='run');if(S.screen==='start'){renderStart();setHash('start')}renderRuns()}
+const VIEWS={overview:'overview',agents:'agents',design:'views/design-space',chip:'views/chip',signal:'views/signal-and-check',cost:'views/cost',report:'report'};
+function setHash(h){try{history.replaceState(null,'','#'+h)}catch(e){location.hash=h}}
+function setView(v){if(!VIEWS[v])v='overview';S.view=v;if(['design','chip','signal','cost'].includes(v))S.lastViews=v;setHash(VIEWS[v]);mountView();}
+function readHash(){const h=location.hash.replace(/^#\/?/,'');if(!h)return null;if(h==='start')return'start';const k=Object.keys(VIEWS).find(k=>VIEWS[k]===h);return k||null}
+$$('#tabs button').forEach(b=>b.onclick=()=>{const t=b.dataset.tab;setView(t==='views'?S.lastViews:t)});
+$$('#devSeg button').forEach(b=>b.onclick=()=>{if(b.dataset.dev!==S.device)switchDevice(b.dataset.dev)});
+function switchDevice(dv){S.device=dv;S.redirects=[];S.t=0;S.live=0;S.playing=true;S.selId=null;S.cmpId=null;S.lastBest=null;S.open.clear();S.patient=-1;build();$('#runTitle').textContent=S.sim.d.title;renderRuns();mountView();renderHelper();toast(`Replaying the run for the ${S.sim.d.name.replace('Newborn','newborn')}`,S.sim.d.icon)}
+$('#bPlay').onclick=()=>{if(S.t>=END){restart();return}S.playing=!S.playing;if(!S.playing){toast('Run paused. Type a redirect in the steer panel, or resume.','pause','var(--a700)')}renderHelper()};
+$('#bRestart').onclick=()=>restart();
+function restart(){S.t=0;S.live=0;S.redirects=[];S.playing=true;S.selId=null;S.lastBest=null;build();mountView();renderHelper()}
+$('#speed').onchange=e=>S.speed=+e.target.value;
+$('#live').onclick=()=>{S.t=S.live;if(S.t<END)S.playing=true};
+$('#bRedirect').onclick=()=>{if(S.t<END)S.playing=false;S.helperMode='steer';openHelper();setTimeout(()=>$('#hIn').focus(),30)};
+$('#bHelper').onclick=()=>{S.helper?closeHelper():(S.helperMode='steer',openHelper())};
+$('#scrubIn').oninput=e=>{S.t=Math.min(+e.target.value,S.live);};
+$('#bShare').onclick=()=>{try{navigator.clipboard&&navigator.clipboard.writeText(location.href).catch(()=>{})}catch(e){}toast('Share link copied. Anyone with it can replay this run.','share')};
+$('#bOut').onclick=e=>{const fin=S.t>=END;openPop(e.currentTarget,`<h5>Outputs</h5><button class="opt" data-o="report">${ic('file','ic')}<span>Datasheet<small>${fin?'Final':'Draft, updates until the run ends'}</small></span></button><button class="opt" data-o="v" ${fin?'':'disabled style="opacity:.5"'}>${ic('cpu','ic')}<span>Circuit (Verilog)<small>${fin?'Chosen chip, gate-level':'Available when the run finishes'}</small></span></button><button class="opt" data-o="log" ${fin?'':'disabled style="opacity:.5"'}>${ic('check','ic')}<span>Verification log<small>Bit-for-bit and per-patient results</small></span></button>`,p=>{$$('[data-o]',p).forEach(b=>b.onclick=()=>{closePop();const o=b.dataset.o;if(o==='report')setView('report');else download(o)})})};
+$('#runTitle').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();e.target.blur()}});
+$('#runTitle').addEventListener('blur',()=>{renderRuns();toast('Run renamed','pen')});
+$('#sbNew').onclick=()=>{S.screen='start';S.playing=false;S.prompt=null;closeHelper();showScreen()};
+$$('.sb-nav button').forEach(b=>b.onclick=()=>{if(b.dataset.nav==='designs'){S.screen='start';S.playing=false;showScreen()}else toast(`${b.textContent.trim()} is part of the full app shell, not this mock-up.`,'alert','var(--i500)');$('#sb').classList.remove('mopen')});
+$('#mMenu').onclick=()=>$('#sb').classList.toggle('mopen');
+
+function renderTracker(d){
+ const st=d.st, cur=st.s; const ri=STG.findIndex(s=>s.k===cur);
+ const cls=k=>{const i=STG.findIndex(s=>s.k===k);if(cur==='done')return'done';const loopStage=['propose','train','compile','verify'].includes(k);
+  if(k===cur)return d.paused?'run paused':'run';
+  if(cur==='report'||cur==='done')return'done';
+  if(loopStage&&['propose','train','compile','verify'].includes(cur)){return i<ri||st.r>0?'done':''}
+  return i<ri?'done':''};
+ const chip=k=>`<button class="tk ${cls(k)}" data-stage="${k}"><span class="d"></span>${stageName(k)}</button>`;
+ const rl=st.r>=0&&st.r<4?`Round ${st.r+1} of 4`:st.s==='spec'||st.s==='reference'?'4 rounds':'4 of 4';
+ const html=chip('spec')+chip('reference')+`<span class="loop">${chip('propose')}${chip('train')}${chip('compile')}${chip('verify')}<span class="rb">${rl}</span></span>`+chip('report');
+ if(html!==renderTracker._h){$('#tracker').innerHTML=html;renderTracker._h=html;$$('#tracker .tk').forEach(b=>b.onclick=()=>stagePop(b))}
+}
+function stagePop(b){
+ const k=b.dataset.stage, s=STG.find(x=>x.k===k), ivs=IV.filter(v=>v.s===k), d=D();
+ const rows=ivs.map(v=>{const done=S.t>=v.b, run=S.t>=v.a&&S.t<v.b;return`<div class="fr" style="grid-template-columns:auto 1fr auto"><span class="gl">${done?`<span style="color:var(--e600)">${ic('check')}</span>`:run?spn():'<span class="muted">○</span>'}</span><span>${v.r>=0&&v.r<4?`Round ${v.r+1}`:s.n}</span><span class="muted num">${fmtRun(v.a)} to ${fmtRun(v.b)}</span></div>`}).join('');
+ let extra='';
+ if(k==='train'&&d.r>=0&&d.r<4){const R=S.sim.rounds[d.r];extra=`<div class="note">Round ${d.r+1} batch: ${fi(R.n)} candidates, ${fi(R.gLo)} to ${fi(R.gHi)} gates.</div>`}
+ if(k==='verify'&&d.best){extra=`<div class="note">Current chip ${d.best.id}: ${fi(S.sim.d.windows)} of ${fi(S.sim.d.windows)} windows identical.</div>`}
+ openPop(b,`<h5>${s.n}</h5><p style="margin:0 6px 8px;color:var(--i600);line-height:1.5">${s.d}</p>${rows}${extra}<div style="display:flex;gap:6px;padding:8px 4px 2px"><button class="btn" id="spFeed">Open in Agents</button>${{train:'<button class="btn" data-go="design">Design space</button>',compile:'<button class="btn" data-go="chip">Chip</button>',verify:'<button class="btn" data-go="signal">Signal and check</button>',report:'<button class="btn" data-go="report">Report</button>'}[k]||''}</div>`,p=>{$('#spFeed',p).onclick=()=>{closePop();focusFeed(k,ivs.filter(v=>S.t>=v.a).pop()?.r??ivs[0].r)};$$('[data-go]',p).forEach(x=>x.onclick=()=>{closePop();setView(x.dataset.go)})});
+}
+function renderStrip(d){
+ renderTracker(d);
+ const b=d.best, L=S.sim.L;
+ let bh;
+ if(!b){const R=d.r>=0&&d.r<4?S.sim.rounds[d.r]:null;const ld=R&&d.st.s!=='propose'?leaderOf(R,d.t):null;bh=`<span class="lbl">Best</span><span class="muted">${ld?`training leader ${ld.id}, ${fi(ld.g)} gates, not yet verified`:'no verified chip yet'}</span>`}
+ else bh=`<span class="lbl">Best</span><button class="lnk mono" data-cand="${b.id}" style="color:var(--i900);font-weight:600">${b.id}</button><b class="num" style="color:${b.g>L.budget?'var(--a700)':'var(--e700)'}">${fi(b.g)} gates</b><span class="num xtra">sens ${b.sens}%, spec ${b.spec}%</span>${b.g>L.budget?'<span class="tag warn">over budget</span>':'<span class="tag ok">meets line, in budget</span>'}`;
+ if(bh!==renderStrip._b){$('#sBest').innerHTML=bh;renderStrip._b=bh;const x=$('#sBest [data-cand]');if(x)x.onclick=()=>openCand(x.dataset.cand)}
+ const pl=S.t>=END?'rotate':S.playing?'pause':'play';
+ if(renderStrip._p!==pl){$('#bPlay').innerHTML=pl==='rotate'?`<svg class="ic" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`:ic(pl,'ic');$('#bPlay').title=pl==='pause'?'Pause':pl==='play'?'Resume':'Replay';renderStrip._p=pl}
+ const lv=$('#live'); const rep=S.t<S.live-.05;
+ const ls=d.ended?['end','FINISHED']:d.paused&&!rep?['pz','PAUSED']:rep?['dim','REPLAY']:['','LIVE'];
+ lv.className='live '+ls[0]; lv.querySelector('span').textContent=ls[1];
+ $('#clock').textContent=`${fmtRun(S.t)} / ${fmtRun(END)}`;
+ $('#scrubFill').style.width=(S.t/END*100)+'%'; $('#scrubLive').style.width=(S.live/END*100)+'%';
+ const si=$('#scrubIn'); if(document.activeElement!==si) si.value=S.t;
+ $('#bRestart').style.display=d.ended?'none':'';const rb=$('#bRedirect'); rb.innerHTML=d.ended?`${ic('fork')}Fork with a note`:S.playing?`${ic('pause')}Pause and redirect`:`${ic('play')}Resume`;
+ rb.onclick=S.playing||d.ended?()=>{if(S.t<END)S.playing=false;S.helperMode='steer';openHelper();setTimeout(()=>$('#hIn').focus(),30)}:()=>{S.playing=true;renderHelper()};
+ $$('#tabs button').forEach(x=>x.classList.toggle('on',x.dataset.tab===(['design','chip','signal','cost'].includes(S.view)?'views':S.view)));
+ $$('#devSeg button').forEach(x=>x.classList.toggle('on',x.dataset.dev===S.device));
+}
+(function marks(){$('#scrubMarks').innerHTML=IV.filter(v=>v.s==='propose'||v.s==='report').map(v=>`<span class="mk" style="left:${v.a/END*100}%"></span>`).join('')})();
+
+function openCand(id){S.selId=id;setView('chip')}
+function focusFeed(s,r){S.feedAg='all';S.feedQ='';S.focus={s,r};setView('agents')}
+
+/* ---------- view mounting ---------- */
+let V=null;
+function mountView(){
+ if(!S.sim)return; const vp=$('#vp'); vp.scrollTop=0; closePop(); $('#tip').style.display='none';
+ const def=VIEW_DEFS[S.view]; vp.innerHTML=(['design','chip','signal','cost'].includes(S.view)?railHTML():'')+def.html();
+ vp.style.overflow=S.view==='agents'?'hidden':'auto';
+ V=def; def.mount&&def.mount(vp); $$('.rail [data-v]',vp).forEach(b=>b.onclick=()=>setView(b.dataset.v));
+ V._sig={}; tickUI(true);
+}
+function railHTML(){return`<div class="rail"><div class="seg">${[['design','Design space'],['chip','Chip'],['signal','Signal and check'],['cost','Cost and compute']].map(([k,n])=>`<button data-v="${k}" class="${S.view===k?'on':''}">${n}</button>`).join('')}</div></div>`}
+function sig(k,v){if(V._sig[k]===v)return false;V._sig[k]=v;return true}
+
+/* module cards */
+const MODS=[{n:'Set up',sub:'Spec, Reference',icon:'target',ivs:v=>v.s==='spec'||v.s==='reference'},{n:'Design loop',sub:'Propose to Verify, 4 rounds',icon:'cpu',ivs:v=>v.r>=0&&v.r<4},{n:'Report',sub:'Datasheet, review, files',icon:'file',ivs:v=>v.s==='report'}];
+function modState(i,d){const iv=IV.filter(MODS[i].ivs);const a=iv[0].a,b=iv[iv.length-1].b;const p=clamp((d.t-a)/(b-a),0,1);const st=d.t>=b?'done':d.t<a?'pending':d.paused?'paused':'running';
+ let cost=0;for(const v of iv){const s=d.cost.st[v.s];} // per-stage costs are aggregated below
+ const c=costAt(Math.min(d.t,b)).total-costAt(Math.min(d.t,a)).total;
+ return{p,st,a,b,cost:c,mins:Math.max(0,Math.min(d.t,b)-a)*SC/60}}
+function cardsHTML(){return MODS.map((m,i)=>`<div><button class="mc" data-mc="${i}"><div class="mi mc-h"><span class="tile" style="background:${GBG[i]};color:${GC[i]}">${ic(m.icon,'ic','width:18px;height:18px;stroke-width:1.8')}</span><span class="mc-t"><b>${m.n}</b><span class="tg">${m.sub}</span></span><span class="ring"><svg class="rs" viewBox="0 0 44 44"><circle cx="22" cy="22" r="19" fill="none" stroke="#f3f3f6" stroke-width="3"/><circle class="arc" cx="22" cy="22" r="19" fill="none" stroke="${GC[i]}" stroke-width="3" stroke-linecap="round" stroke-dasharray="119.4" stroke-dashoffset="119.4" transform="rotate(-90 22 22)"/></svg><span class="lb"></span></span></div><canvas class="mi spark"></canvas><div class="mi bar"><i style="background:linear-gradient(90deg,${GC[i]},${GC[i]}80)"></i></div><div class="mi mc-m"></div><div class="mi mc-s"><span class="du"></span><span class="tk2"></span><span class="c"></span></div><div class="chev"><svg width="12" height="6" viewBox="0 0 12 6"><path d="M1 .5 6 5.5 11 .5" fill="none" stroke="#1a1a2e" stroke-width="1.4" stroke-linecap="round"/></svg></div></button><div class="tree hide" data-tree="${i}"></div></div>`).join('')}
+function mountCards(root){$$('.mc',root).forEach(b=>b.onclick=()=>{const i=+b.dataset.mc;S.openCards.has(i)?S.openCards.delete(i):S.openCards.add(i);V._sig={};tickUI(true)})}
+function updateCards(root,d){
+ MODS.forEach((m,i)=>{const el=$(`.mc[data-mc="${i}"]`,root);if(!el)return;const s=modState(i,d);
+  const k=`${s.st}|${Math.round(s.p*100)}|${s.cost.toFixed(2)}|${d.best?.id}|${d.st.s}|${S.openCards.has(i)}|${i===1?d.n:''}`;
+  if(!sig('mc'+i,k))return;
+  el.classList.toggle('running',s.st==='running');el.classList.toggle('dimmed',s.st==='pending'||s.st==='done');el.classList.toggle('open',S.openCards.has(i));
+  el.style.borderColor=s.st==='running'?GC[i]+'59':'';el.style.boxShadow=s.st==='running'?`0 0 0 1px ${GC[i]}1a, var(--sh-sm)`:'';
+  const ring=$('.ring',el);ring.classList.toggle('spin',s.st==='running');$('.rs',ring).style.animationDelay=`-${performance.now()%4000}ms`;
+  const arcP=s.st==='running'?Math.max(.06,s.p):s.p; $('.arc',el).setAttribute('stroke-dashoffset',(119.4*(1-arcP)).toFixed(1));
+  $('.lb',ring).innerHTML=s.st==='done'?`<span style="color:${GC[i]}">${ic('check','ic')}</span>`:s.st==='paused'?`<span class="muted">${ic('pause','ic s')}</span>`:`${Math.round(s.p*100)}%`;
+  $('.tg',el).textContent=s.st==='paused'?'paused':m.sub;
+  $('.bar i',el).style.width=(s.p*100)+'%';
+  $('.du',el).textContent=s.mins>0?durTxt(s.mins*60/SC):' ';
+  $('.tk2',el).textContent=s.cost>0?`${fi(s.cost/MODES[S.mode].llm/7.2*1e6*.9/1000)}k tokens`:'';
+  $('.c',el).textContent=s.st==='pending'?' ':usd(s.cost);
+  const L=S.sim.L; let met='';
+  if(i===0) met=`<span class="tag n">sens ≥${L.sens}%</span><span class="tag n">spec ≥${L.spec}%</span><span class="tag n">≤${fi(L.budget)} gates</span>`;
+  if(i===1) met=d.best?`<span class="tag b">best ${fi(d.best.g)} gates</span><span class="tag n">path ${d.best.dp}</span><span class="tag ${d.best.g>L.budget?'warn':'ok'}">sens ${d.best.sens}%</span>`:(s.st==='pending'?'<span class="muted">Waits for the reference</span>':`<span class="tag n">${fi(d.n)} trained</span>`);
+  if(i===2) met=s.st==='pending'?'<span class="muted">Starts after round 4</span>':s.st==='done'?'<span class="tag ok">datasheet and 3 files</span>':'<span class="tag n">writing datasheet</span>';
+  $('.mc-m',el).innerHTML=met;
+  drawSpark($('canvas.spark',el),i,d);
+  const tr=$(`[data-tree="${i}"]`,root); tr.classList.toggle('hide',!S.openCards.has(i)); if(S.openCards.has(i)) tr.innerHTML=treeHTML(i,d), $$('[data-leaf]',tr).forEach(x=>x.onclick=()=>{const[s,r]=x.dataset.leaf.split(':');focusFeed(s,+r)});
+ });
+}
+function treeHTML(i,d){
+ const gl=(a,b)=>d.t>=b?`<span class="gl" style="color:var(--e600)">${ic('check')}</span>`:d.t>=a?`<span class="gl">${d.paused?`<span style="color:var(--a700)">${ic('pause')}</span>`:spn()}</span>`:`<span class="gl" style="color:var(--i300)">○</span>`;
+ const leaf=v=>`<button class="tn leaf" data-leaf="${v.s}:${v.r}">${gl(v.a,v.b)}${stageName(v.s)}<span class="m">${d.t>=v.a?durTxt(Math.min(d.t,v.b)-v.a):''}</span></button>`;
+ if(i===1) return S.sim.rounds.map((R,r)=>{const iv=IV.filter(v=>v.r===r);const a=iv[0].a,b=iv[3].b;const done=d.t>=b;return`<div class="tn grp">${gl(a,b)}Round ${r+1}<span class="m">${done?`${R.best.id}, ${fi(R.best.g)} gates`:d.t>=a?'running':''}</span></div>${d.t>=a&&d.t<b?iv.map(leaf).join(''):''}`}).join('');
+ if(i===0) return IV.filter(v=>v.s==='spec'||v.s==='reference').map(leaf).join('');
+ const v=IV.find(v=>v.s==='report');return[['Datasheet',75,80.5],['Export files',80.8,82.6],['Final review',83,86.5]].map(([n,a,b])=>`<button class="tn leaf" data-leaf="report:4">${gl(a,b)}${n}</button>`).join('');
+}
+function drawSpark(cv,i,d){const{ctx,w,h}=fit(cv);ctx.clearRect(0,0,w,h);const iv=IV.filter(MODS[i].ivs);const a=iv[0].a,b=iv[iv.length-1].b;const N=40;const pts=[];
+ for(let k=0;k<N;k++){const tt=a+(b-a)*k/(N-1);if(tt>d.t)break;const st=stageAt(tt);pts.push((LLM_RATE[st.s]||0)*(.7+.6*h01(k*7+i*101))) }
+ if(pts.length<2){ctx.strokeStyle='#e8e8ec';ctx.beginPath();ctx.moveTo(0,h-2);ctx.lineTo(w,h-2);ctx.stroke();return}
+ const mx=.32;ctx.beginPath();pts.forEach((v,k)=>{const x=k/(N-1)*w,y=h-2-(v/mx)*(h-4);k?ctx.lineTo(x,y):ctx.moveTo(x,y)});
+ ctx.strokeStyle=GC[i];ctx.lineWidth=1.5;ctx.stroke();ctx.lineTo((pts.length-1)/(N-1)*w,h);ctx.lineTo(0,h);ctx.fillStyle=GC[i]+'22';ctx.fill()}
+
+/* ---------- drawing: design-space curve ---------- */
+function curveGeom(w,h,mini){const d=S.sim.d;const pad=mini?{l:30,r:8,t:8,b:18}:{l:50,r:16,t:14,b:36};const x0=Math.log10(d.gR[0]),x1=Math.log10(d.gR[1]),y0=d.yR[0],y1=d.yR[1];
+ return{pad,X:g=>pad.l+(Math.log10(g)-x0)/(x1-x0)*(w-pad.l-pad.r),Y:s=>pad.t+(1-(clamp(s,y0,y1)-y0)/(y1-y0))*(h-pad.t-pad.b),x0,x1,y0,y1}}
+function drawCurve(cv,opt={}){
+ const{ctx,w,h}=fit(cv);const mini=!!opt.mini;const tMax=opt.tMax??S.t;const L=S.sim.L;const G=curveGeom(w,h,mini);const{X,Y,pad}=G;
+ ctx.clearRect(0,0,w,h);ctx.font=`${mini?9:10.5}px ${getComputedStyle(document.body).fontFamily}`;
+ // grid
+ ctx.strokeStyle='#f0f0f3';ctx.lineWidth=1;ctx.fillStyle='#8a8a99';
+ const ticks=[50,100,200,500,1000,2000,5000,10000,20000,50000].filter(g=>Math.log10(g)>=G.x0&&Math.log10(g)<=G.x1);
+ ticks.forEach(g=>{const x=Math.round(X(g))+.5;ctx.beginPath();ctx.moveTo(x,pad.t);ctx.lineTo(x,h-pad.b);ctx.stroke();if(!mini||[100,1000,10000].includes(g)){ctx.textAlign='center';ctx.fillText(g>=1000?(g/1000)+'k':g,x,h-pad.b+(mini?11:15))}});
+ for(let s=70;s<=100;s+=mini?10:5){const y=Math.round(Y(s))+.5;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y);ctx.stroke();ctx.textAlign='right';ctx.fillText(s+'%',pad.l-5,y+3)}
+ if(!mini){ctx.fillStyle='#6c6c85';ctx.textAlign='center';ctx.fillText('Chip size, logic gates (log scale)',pad.l+(w-pad.l-pad.r)/2,h-4);ctx.save();ctx.translate(12,pad.t+(h-pad.t-pad.b)/2);ctx.rotate(-Math.PI/2);ctx.fillText('Worst-patient sensitivity',0,0);ctx.restore()}
+ // budget region
+ const bx=X(L.budget);ctx.fillStyle='rgba(245,158,11,.05)';ctx.fillRect(bx,pad.t,w-pad.r-bx,h-pad.t-pad.b);
+ ctx.setLineDash([4,4]);ctx.strokeStyle='#f59e0b';ctx.beginPath();ctx.moveTo(bx,pad.t);ctx.lineTo(bx,h-pad.b);ctx.stroke();
+ ctx.strokeStyle='#10b981';ctx.lineWidth=1.5;const ly=Y(L.sens);ctx.beginPath();ctx.moveTo(pad.l,ly);ctx.lineTo(w-pad.r,ly);ctx.stroke();ctx.setLineDash([]);ctx.lineWidth=1;
+ if(!mini){ctx.fillStyle='#047857';ctx.textAlign='left';ctx.fillText(`Clinical line, sensitivity ${L.sens}% on every patient`,pad.l+6,ly-5);ctx.fillStyle='#b45309';ctx.textAlign='left';ctx.fillText(`Gate budget ${fi(L.budget)}`,bx+5,pad.t+11)}
+ // dots
+ const all=S.sim.all;const n=opt.tMax!=null?nVis(tMax):nVis(S.t);const sz=mini?1.6:2.4;
+ for(let i=0;i<n;i++){const c=all[i];const passS=c.spec>=L.spec;ctx.fillStyle=passS?ROUND_C[c.r]:'#cfd0da';ctx.globalAlpha=passS?(mini?.55:.6):.6;const x=X(c.g),y=Y(c.sens);ctx.fillRect(x-sz/2,y-sz/2,sz,sz)}
+ ctx.globalAlpha=1;
+ if(!mini){for(let i=Math.max(0,n-60);i<n;i++){const c=all[i];const age=tMax-c.tf;if(age<.5){ctx.strokeStyle=ROUND_C[c.r];ctx.globalAlpha=1-age/.5;ctx.beginPath();ctx.arc(X(c.g),Y(c.sens),2+age*14,0,7);ctx.stroke()}}ctx.globalAlpha=1}
+ // frontier (staircase, max sens among visible meeting spec, by gates)
+ const fr=[];let mx=-1;for(const c of S.sim.byG){if(c.tf>tMax||c.spec<L.spec)continue;if(c.sens>mx){mx=c.sens;fr.push(c)}}
+ if(fr.length>1){ctx.strokeStyle='#4a4a5a';ctx.lineWidth=mini?1:1.4;ctx.beginPath();fr.forEach((c,k)=>{const x=X(c.g),y=Y(c.sens);if(!k)ctx.moveTo(x,y);else{ctx.lineTo(x,Y(fr[k-1].sens));ctx.lineTo(x,y)}});ctx.lineTo(w-pad.r,Y(mx));ctx.stroke();ctx.lineWidth=1}
+ // compiled marks
+ if(!mini) S.sim.rounds.forEach((R,r)=>{if(tMax<RB(r)+10.1)return;R.compiled.forEach(c=>{ctx.strokeStyle='#1a1a2e';ctx.globalAlpha=.7;ctx.strokeRect(X(c.g)-3.5,Y(c.sens)-3.5,7,7)});ctx.globalAlpha=1});
+ // round bests history
+ const{b}=bestAt(tMax);
+ S.sim.rounds.forEach((R,r)=>{if(tMax<RB(r)+16||R.best===b)return;ctx.fillStyle='#fff';ctx.strokeStyle=ROUND_C[r];ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(X(R.best.g),Y(R.best.sens),mini?2.5:4,0,7);ctx.fill();ctx.stroke()});
+ // training leader
+ const st=stageAt(tMax);if(!mini&&st.s==='train'){const ld=leaderOf(S.sim.rounds[st.r],tMax);if(ld){ctx.setLineDash([3,3]);ctx.strokeStyle='#2563eb';ctx.beginPath();ctx.arc(X(ld.g),Y(ld.sens),8,0,7);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#1d4ed8';ctx.textAlign='left';ctx.strokeStyle='#fff';ctx.lineWidth=3;ctx.strokeText('training leader',X(ld.g)+11,Y(ld.sens)+16);ctx.lineWidth=1;ctx.fillText('training leader',X(ld.g)+11,Y(ld.sens)+16)}}
+ if(b){const x=X(b.g),y=Y(b.sens);ctx.fillStyle='#fb923c';ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,mini?4:6.5,0,7);ctx.fill();ctx.stroke();ctx.strokeStyle='#ea580c';ctx.lineWidth=1.2;ctx.beginPath();ctx.arc(x,y,mini?6.5:10,0,7);ctx.stroke();ctx.lineWidth=1;
+  if(!mini){ctx.fillStyle='#1a1a2e';ctx.font=`600 11.5px ${getComputedStyle(document.body).fontFamily}`;ctx.textAlign='left';const lab=`${b.id}, ${fi(b.g)} gates`;const tx=x+14+ctx.measureText(lab).width>w-pad.r?x-14-ctx.measureText(lab).width:x+14;ctx.strokeStyle='#fff';ctx.lineWidth=3;ctx.lineJoin='round';ctx.strokeText(lab,tx,y-10);ctx.lineWidth=1;ctx.fillText(lab,tx,y-10)}}
+ const sel=S.hoverId?S.sim.idx[S.hoverId]:null; if(sel&&!mini){ctx.strokeStyle='#1a1a2e';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(X(sel.g),Y(sel.sens),7,0,7);ctx.stroke();ctx.lineWidth=1}
+ cv._G=G;cv._n=n;
+}
+function curveHit(cv,e){const r=cv.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;const G=cv._G;if(!G)return null;let best=null,bd=64;const all=S.sim.all;for(let i=0;i<cv._n;i++){const c=all[i];const dx=G.X(c.g)-mx,dy=G.Y(c.sens)-my;const dd=dx*dx+dy*dy;if(dd<bd||(dd<=bd+4&&best&&c.comp&&!best.comp)){bd=dd;best=c}}return best}
+function candTip(c,e){const t=$('#tip');const L=S.sim.L;const ok=c.sens>=L.sens&&c.spec>=L.spec;t.innerHTML=`<b>${c.id}</b> <span class="tag ${c.best?'b':ok?'ok':'n'}" style="margin-left:4px">${c.best?'round choice':ok?'meets line':'below line'}</span><div class="muted" style="font-size:11px;margin-top:2px">${esc(fam(c))}</div><div class="g"><span>Gates</span><span>${fi(c.g)}</span><span>Longest path</span><span>${c.dp}</span><span>Worst sensitivity</span><span>${c.sens}%</span><span>Worst specificity</span><span>${c.spec}%</span><span>Status</span><span>${c.comp&&S.t>=RB(c.r)+15?'compiled, verified':c.comp&&S.t>=RB(c.r)+10.1?'compiled':'trained'}</span></div><div class="muted" style="font-size:10.5px;margin-top:5px">Click to open in Chip</div>`;t.style.display='block';const x=Math.min(e.clientX+14,innerWidth-t.offsetWidth-8),y=Math.min(e.clientY+14,innerHeight-t.offsetHeight-8);t.style.left=x+'px';t.style.top=y+'px'}
+function bindCurve(cv){cv.onmousemove=e=>{const c=curveHit(cv,e);S.hoverId=c?c.id:null;if(c)candTip(c,e);else $('#tip').style.display='none'};cv.onmouseleave=()=>{S.hoverId=null;$('#tip').style.display='none'};cv.onclick=e=>{const c=curveHit(cv,e);$('#tip').style.display='none';if(c)openCand(c.id)}}
+
+/* ---------- drawing: chip sketch ---------- */
+function drawChip(cv,c,opt={}){
+ const{ctx,w,h}=fit(cv);ctx.clearRect(0,0,w,h);const d=S.sim.d;const mini=!!opt.mini;const ff=getComputedStyle(document.body).fontFamily;const mono=getComputedStyle(document.documentElement).getPropertyValue('--mono');
+ const p=opt.anim!=null?clamp(opt.anim,0,1):1;
+ const padT=mini?12:opt.top??30,padB=mini?16:46;const pinGap=(h-padT-padB)/d.inputs;const padL=mini?34:pinGap>=11?92:30,padR=mini?40:96+(d.out.length>8?34:0);
+ if(!c){ctx.strokeStyle='#d4d4dc';ctx.setLineDash([5,5]);ctx.strokeRect(padL,padT,w-padL-padR,h-padT-padB);ctx.setLineDash([]);ctx.fillStyle='#8a8a99';ctx.font=`12px ${ff}`;ctx.textAlign='center';ctx.fillText(opt.empty||'No circuit yet',w/2,h/2);drawPins(ctx,d,padL,padT,h-padB,mini,mono);return}
+ const A=arch(c);const rng=rngFor(c.id+'draw');const cols=A.ws.length+1;
+ const xs=[];for(let k=0;k<=cols;k++)xs.push(padL+(w-padL-padR)*k/cols);
+ const yIn=drawPins(ctx,d,padL,padT,h-padB,mini,mono);const tight=(w-padL-padR)/cols<120;
+ const maxV=mini?9:20;const nodes=[yIn.map(y=>({x:padL,y}))];
+ A.ws.forEach((wd,l)=>{const v=Math.min(wd,maxV);const x=xs[l+1];const gap=(h-padT-padB)/v;const arr=[];for(let k=0;k<v;k++)arr.push({x,y:padT+gap*(k+.5)});nodes.push(arr)});
+ const decX=xs[cols],decY=(padT+h-padB)/2;nodes.push([{x:decX,y:decY}]);
+ // wires
+ const wires=[];for(let l=1;l<nodes.length;l++){for(const n of nodes[l]){const fan=l===nodes.length-1?nodes[l-1].length:Math.min(A.k,nodes[l-1].length);const src=[...nodes[l-1]];for(let f=0;f<fan;f++){const s=src.splice(Math.floor(rng()*src.length),1)[0];if(s)wires.push([s,n,l])}}}
+ const nw=Math.floor(wires.length*p);ctx.lineWidth=mini?.6:.8;
+ for(let i=0;i<nw;i++){const[s,n]=wires[i];ctx.strokeStyle='rgba(74,74,90,.16)';ctx.beginPath();ctx.moveTo(s.x+(mini?4:9),s.y);const mxp=(s.x+n.x)/2;ctx.bezierCurveTo(mxp,s.y,mxp,n.y,n.x-(mini?4:9),n.y);ctx.stroke()}
+ // longest path
+ const path=nodes.map((arr,l)=>arr[Math.floor(h01(hashStr(c.id)+l*31)*arr.length)]);
+ if(p>.6){ctx.globalAlpha=(p-.6)/.4;ctx.strokeStyle='#2563eb';ctx.lineWidth=mini?1.4:2.2;ctx.beginPath();path.forEach((n,k)=>{if(!k){ctx.moveTo(n.x,n.y);return}const s=path[k-1];const mxp=(s.x+n.x)/2;ctx.bezierCurveTo(mxp,s.y,mxp,n.y,n.x,n.y)});ctx.lineTo(w-padR+(mini?20:44),decY);ctx.stroke();ctx.globalAlpha=1;ctx.lineWidth=1}
+ // neurons
+ const bw=mini?8:18;
+ nodes.slice(1,-1).forEach((arr,l)=>{const bh=Math.max(3,Math.min(mini?6:13,(h-padT-padB)/arr.length*.62));arr.forEach((n,k)=>{const on=path[l+1]===n;ctx.fillStyle=on?'#dbeafe':'#f5f9ff';ctx.strokeStyle=on?'#2563eb':'#93c5fd';ctx.lineWidth=on?1.4:1;roundRect(ctx,n.x-bw/2,n.y-bh/2,bw,bh,2);ctx.fill();ctx.stroke()});
+  if(!mini){const wd=A.ws[l];ctx.fillStyle='#4a4a5a';ctx.font=`600 11px ${ff}`;ctx.textAlign='center';ctx.fillText(tight?`L${l+1}`:`Layer ${l+1}`,arr[0].x,h-padB+16);ctx.font=`10.5px ${ff}`;ctx.fillStyle='#6c6c85';if(tight){ctx.fillText(fi(A.lg[l]),arr[0].x,h-padB+29)}else{ctx.fillText(`${fi(wd)} × LUT-${A.k}${wd>maxV?' (20 shown)':''}`,arr[0].x,h-padB+29);ctx.fillText(`${fi(A.lg[l])} gates`,arr[0].x,h-padB+41)}}});
+ // decision block
+ const dw=mini?14:34,dh=mini?26:74;ctx.fillStyle='#fff7ed';ctx.strokeStyle='#fb923c';ctx.lineWidth=1.4;roundRect(ctx,decX-dw/2,decY-dh/2,dw,dh,4);ctx.fill();ctx.stroke();
+ if(!mini){ctx.fillStyle='#9a3412';ctx.font=`600 10px ${mono}`;ctx.textAlign='center';ctx.fillText(d.key==='eeg'?'Σ>θ':'7-bit',decX,decY+3);ctx.fillStyle='#4a4a5a';ctx.font=`600 11px ${ff}`;ctx.fillText(tight?'Dec.':'Decision',decX,h-padB+16);ctx.font=`10.5px ${ff}`;ctx.fillStyle='#6c6c85';ctx.fillText(tight?fi(A.decG):`${fi(A.decG)} gates`,decX,h-padB+29)}
+ // output pin
+ const ox=w-padR+(mini?20:44);ctx.strokeStyle='#1a1a2e';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(decX+dw/2,decY);ctx.lineTo(ox-5,decY);ctx.stroke();ctx.fillStyle='#1a1a2e';ctx.beginPath();ctx.arc(ox,decY,mini?3:5,0,7);ctx.fill();
+ if(!mini){ctx.font=`600 11px ${mono}`;ctx.textAlign='right';ctx.fillText(d.out,w-8,decY-12);ctx.font=`10.5px ${ff}`;ctx.fillStyle='#6c6c85';ctx.fillText('answer pin',w-8,decY+20)}
+ // path label
+ if(!mini&&p>=1){ctx.fillStyle='#1d4ed8';ctx.font=`600 11px ${ff}`;ctx.textAlign='right';ctx.fillText(`Longest path: ${c.dp} gates`,w-12,padT-12)}
+}
+function drawPins(ctx,d,x,top,bot,mini,mono){const n=d.inputs;const gap=(bot-top)/n;const ys=[];ctx.font=`${mini?8:10}px ${mono}`;for(let k=0;k<n;k++){const y=top+gap*(k+.5);ys.push(y);ctx.fillStyle='#1a1a2e';ctx.fillRect(x-(mini?3:4),y-(mini?1.5:2),mini?6:8,mini?3:4);if(!mini&&gap>=11){ctx.fillStyle='#6c6c85';ctx.textAlign='right';ctx.fillText(d.ch[k],x-8,y+3.5)}}return ys}
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+
+/* ---------- drawing: batch grid ---------- */
+function drawBatch(cv,d){
+ const{ctx,w,h}=fit(cv);ctx.clearRect(0,0,w,h);let r=d.r;if(r<0){ctx.fillStyle='#8a8a99';ctx.font=`12px ${getComputedStyle(document.body).fontFamily}`;ctx.textAlign='center';ctx.fillText('First batch starts after the reference model',w/2,h/2);return}
+ if(d.st.s==='propose'&&r>0&&d.t<RB(r)+3)r=r-1; r=Math.min(r,3);
+ const R=S.sim.rounds[r],L=S.sim.L;const cells=Math.min(R.n,2048);const per=R.n/cells;const cols=64,rows=Math.ceil(cells/cols);const cw=w/cols,chh=cw;const wantH=Math.round(rows*chh)+'px';if(cv.style.height!==wantH){cv.style.height=wantH;return drawBatch(cv,d)}
+ for(let i=0;i<cells;i++){const c=R.cands[Math.floor(i*per)];const x=(i%cols)*cw,y=Math.floor(i/cols)*chh;let col='#f3f3f6';
+  if(c.tf<=d.t){const ok=c.sens>=L.sens&&c.spec>=L.spec;if(ok)col=c.best?'#fb923c':'#10b981';else{const v=clamp((c.sens-70)/25,0,1);col=`rgb(${Math.round(219-170*v)},${Math.round(234-140*v)},${Math.round(254-30*v)})`}}
+  ctx.fillStyle=col;ctx.fillRect(x+.5,y+.5,cw-1,chh-1)}
+}
+
+/* ---------- drawing: signal strip ---------- */
+function drawSignal(cv,d,opt={}){
+ const{ctx,w,h}=fit(cv);ctx.clearRect(0,0,w,h);const dv=S.sim.d;const ff=getComputedStyle(document.body).fontFamily;const mono=getComputedStyle(document.documentElement).getPropertyValue('--mono');
+ const c=d.best;const pmRows=c?pm(c):null;const pi=S.patient>=0?S.patient:0;const pr=pmRows?pmRows[pi]:null;
+ const span=24, rt=S.t*4+pi*137+30, t0=rt-span; const padL=104,padR=12;const X=tt=>padL+(tt-t0)/span*(w-padL-padR);
+ const rowsH=58;const top=8;const sigH=h-rowsH-top-18;
+ const evt=tt=>{const per=dv.key==='eeg'?36:30;const ph=(tt+pi*13)%per;return ph>12&&ph<(dv.key==='eeg'?28:24)};
+ // window grid + truth shading
+ const w0=Math.floor(t0/4);for(let wi=w0;wi<=w0+7;wi++){const xa=X(wi*4),xb=X(wi*4+4);if(xb<padL)continue;const truth=evt(wi*4+2);if(truth){ctx.fillStyle='rgba(239,68,68,.05)';ctx.fillRect(Math.max(padL,xa),top,xb-Math.max(padL,xa),sigH)}ctx.strokeStyle='#f0f0f3';ctx.beginPath();ctx.moveTo(Math.round(xa)+.5,top);ctx.lineTo(Math.round(xa)+.5,h-18);ctx.stroke()}
+ ctx.font=`10px ${mono}`;
+ if(dv.key==='eeg'){
+  const chs=[0,1,2,3,4,5,6,7,9,13];const gap=sigH/chs.length;
+  chs.forEach((ch,k)=>{const yc=top+gap*(k+.5);ctx.fillStyle='#6c6c85';ctx.textAlign='right';ctx.fillText(EEG_CH[ch],padL-8,yc+3);ctx.strokeStyle=ch<4?'#3a3a4a':'#5a5a6a';ctx.lineWidth=.9;ctx.beginPath();
+   const ph1=ch*1.7,ph2=ch*2.9;for(let x=padL;x<=w-padR;x+=1){const tt=t0+(x-padL)/(w-padL-padR)*span;let v=.45*Math.sin(2*Math.PI*.9*tt+ph1)+.3*Math.sin(2*Math.PI*2.3*tt+ph2)+.18*Math.sin(2*Math.PI*6.1*tt+ch)+.35*(h01(Math.floor(tt*60)+ch*9973)-.5);
+    if(evt(tt)&&ch<6){const ph=((tt+pi*13)%36-12)/16;const amp=Math.sin(Math.PI*clamp(ph,0,1))*(ch<4?2.2:1.1);const s=Math.sin(2*Math.PI*2.6*tt);v+=amp*Math.sign(s)*Math.pow(Math.abs(s),.35)}
+    const y=yc-v*gap*.32;x===padL?ctx.moveTo(x,y):ctx.lineTo(x,y)}ctx.stroke()});
+ } else {
+  const sat=tt=>{let v=68+4*Math.sin(tt*.05+pi);if(evt(tt)){const ph=((tt+pi*13)%30-14)/10;v-=18*Math.sin(Math.PI*clamp(ph,0,1))}return v};
+  const half=sigH*.52;const lam=[730,770,810,850];const g4=half/4;
+  lam.forEach((l,k)=>{const yc=top+g4*(k+.5);ctx.fillStyle='#6c6c85';ctx.textAlign='right';ctx.fillText(`${l} nm far`,padL-8,yc+3);ctx.strokeStyle=['#7c3aed','#2563eb','#0d9488','#c2410c'][k];ctx.lineWidth=1;ctx.beginPath();
+   for(let x=padL;x<=w-padR;x+=1){const tt=t0+(x-padL)/(w-padL-padR)*span;const s=sat(tt);const v=(k<2?-1:1)*(s-62)/12*(1.1+k*.15)+.14*Math.sin(2*Math.PI*2.2*tt+k)+.1*(h01(Math.floor(tt*40)+k*733)-.5);const y=yc-v*g4*.36;x===padL?ctx.moveTo(x,y):ctx.lineTo(x,y)}ctx.stroke()});
+  const yT=top+half+10,yB=top+sigH;const Ys=v=>yB-(v-40)/40*(yB-yT);
+  ctx.fillStyle='#6c6c85';ctx.textAlign='right';ctx.fillText('rSO2 %',padL-8,(yT+yB)/2+3);
+  ctx.setLineDash([3,3]);ctx.strokeStyle='#ef4444';ctx.beginPath();ctx.moveTo(padL,Ys(55));ctx.lineTo(w-padR,Ys(55));ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#b91c1c';ctx.textAlign='left';ctx.fillText('alarm below 55%',padL+4,Ys(55)-4);
+  ctx.strokeStyle='#9a9aa8';ctx.setLineDash([2,3]);ctx.beginPath();for(let x=padL;x<=w-padR;x+=2){const tt=t0+(x-padL)/(w-padL-padR)*span;const y=Ys(sat(tt));x===padL?ctx.moveTo(x,y):ctx.lineTo(x,y)}ctx.stroke();ctx.setLineDash([]);
+  if(c){ctx.strokeStyle='#1d4ed8';ctx.lineWidth=1.6;ctx.beginPath();for(let x=padL;x<=w-padR;x+=1){const tt=t0+(x-padL)/(w-padL-padR)*span;const q=Math.round(sat(Math.floor(tt*2)/2)+(h01(Math.floor(tt*2)+7)-.5)*1.2);const y=Ys(q);x===padL?ctx.moveTo(x,y):ctx.lineTo(x,y)}ctx.stroke();ctx.lineWidth=1}
+ }
+ // rows
+ const yr1=h-18-rowsH+10,yr2=yr1+24;ctx.font=`11px ${ff}`;ctx.textAlign='right';ctx.fillStyle='#4a4a5a';ctx.fillText(dv.key==='eeg'?'Clinician mark':'Reference alarm',padL-8,yr1+12);ctx.fillText('Chip decision',padL-8,yr2+12);
+ for(let wi=w0;wi<=w0+7;wi++){const xa=Math.max(padL,X(wi*4)),xb=Math.min(w-padR,X(wi*4+4));if(xb<=xa)continue;const truth=evt(wi*4+2);
+  if(truth){ctx.fillStyle='#ef4444';ctx.fillRect(xa+1,yr1+3,xb-xa-2,14)}else{ctx.fillStyle='#f3f3f6';ctx.fillRect(xa+1,yr1+3,xb-xa-2,14)}
+  if(!c){ctx.fillStyle='#fafaf9';ctx.strokeStyle='#e8e8ec';ctx.strokeRect(xa+1.5,yr2+3.5,xb-xa-3,13);continue}
+  const hv=h01(wi*7919+pi*31+hashStr(c.id)%1000);const flag=truth?hv<pr.sens/100+.04:hv>pr.spec/100+.02;
+  if(flag&&truth){ctx.fillStyle='#10b981';ctx.fillRect(xa+1,yr2+3,xb-xa-2,14)}else if(flag){ctx.fillStyle='#f59e0b';ctx.fillRect(xa+1,yr2+3,xb-xa-2,14)}else if(truth){ctx.strokeStyle='#ef4444';ctx.lineWidth=1.5;ctx.strokeRect(xa+1.5,yr2+3.5,xb-xa-3,13);ctx.lineWidth=1}else{ctx.fillStyle='#f3f3f6';ctx.fillRect(xa+1,yr2+3,xb-xa-2,14)}}
+ if(!c){ctx.fillStyle='#8a8a99';ctx.textAlign='left';ctx.fillText('No verified circuit yet; decisions start after round 1 is verified',padL+8,yr2+14)}
+ // time axis
+ ctx.fillStyle='#8a8a99';ctx.font=`10px ${mono}`;ctx.textAlign='center';for(let s=Math.ceil(t0/4)*4;s<=rt;s+=4){const x=X(s);if(x<padL+10)continue;const mm=Math.floor(s/60),ss=Math.floor(s%60);ctx.fillText(`${mm}:${String(ss).padStart(2,'0')}`,x,h-4)}
+}
+
+/* ---------- views ---------- */
+const VIEW_DEFS={};
+VIEW_DEFS.overview={
+ html:()=>`<div class="pad">
+  <div class="facts" id="ovFacts"></div>
+  <div class="cards3" id="ovCards">${cardsHTML()}</div>
+  <div class="ovg">
+   <section class="card"><div class="ch"><h3>Current best chip</h3><span class="sub" id="ovBestSub"></span><span class="r"><button class="lnk" data-go="chip">Open in Chip ${ic('right')}</button></span></div><div class="bestbox"><canvas id="ovChip"></canvas><div class="kv" id="ovBestKv"></div></div></section>
+   <section class="card"><div class="ch"><h3>Design space</h3><span class="sub" id="ovDsSub"></span><span class="r"><button class="lnk" data-go="design">Open ${ic('right')}</button></span></div><div class="cb"><canvas class="curve" id="ovCurve" style="height:230px"></canvas></div></section>
+  </div>
+  <div class="ovg2">
+   <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+    <section class="card"><div class="ch"><h3>Summary</h3><span class="ver" id="ovVer"></span><span class="r sub">Rewritten at each stage</span></div><div class="cb"><div class="now" id="ovNow"></div><div class="summary" id="ovSum"></div></div></section>
+    <section class="card"><div class="ch"><h3>Rounds</h3><span class="sub">Each round's choice and what the agents changed</span></div><div class="cb" style="padding-top:4px"><table class="t" id="ovRounds"></table></div></section>
+   </div>
+   <section class="card"><div class="ch"><h3>Activity</h3><span class="r"><button class="lnk" data-go="agents">All agent output ${ic('right')}</button></span></div><div class="cb af" id="ovAct"></div></section>
+  </div></div>`,
+ mount(vp){mountCards(vp);$$('[data-go]',vp).forEach(b=>b.onclick=()=>setView(b.dataset.go));bindCurve($('#ovCurve'));$('#ovChip').onclick=()=>{const b=D().best;if(b)openCand(b.id)};$('#ovChip').style.cursor='pointer'},
+ update(d){
+  updateCards($('#vp'),d);
+  const L=S.sim.L;
+  if(sig('facts',`${d.n}|${d.cost.total.toFixed(2)}|${Math.round(d.t)}`))$('#ovFacts').innerHTML=[['Candidates evaluated',fi(d.n)],['Compiled and verified',fi(S.sim.rounds.filter((R,r)=>d.t>=RB(r)+15.7).length*8)],['Spend',usd(d.cost.total)+` <small>of $25 cap</small>`],['GPU hours',d.cost.gpuH.toFixed(2)],['Elapsed',durTxt(Math.min(d.t,END))]].map(([k,v])=>`<div class="fact"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('');
+  const b=d.best;
+  if(sig('best',`${b?.id}|${b?'':cur().c?.id}`)){
+   const lc=b?null:cur().c;$('#ovBestSub').textContent=b?`${b.id}, ${fam(b)}`:lc?`training leader ${lc.id}, not yet compiled`:'none verified yet';
+   $('#ovBestKv').innerHTML=b?[['Gates',`${fi(b.g)} <small>${b.g>L.budget?`${fi(b.g-L.budget)} over budget`:`${fi(L.budget-b.g)} under budget`}</small>`],['Longest path',`${b.dp} <small>gates</small>`],['Worst-patient sensitivity',`${b.sens}% <small>line ${L.sens}%</small>`],['Worst-patient specificity',`${b.spec}% <small>line ${L.spec}%</small>`],['Bit-for-bit check',`<span style="color:var(--e700)">${fi(S.sim.d.windows)} of ${fi(S.sim.d.windows)}</span> <small>windows identical</small>`]].map(([k,v])=>`<div class="r"><span class="k">${k}</span><span class="v">${v}</span></div>`).join(''):`<div class="r"><span class="k">Status</span><span class="v" style="font-size:13px;font-weight:500">The first circuit is verified at ${fmtRun(RB(0)+16)}.</span></div><div class="r"><span class="k">Gate budget</span><span class="v">${fi(L.budget)}</span></div><div class="r"><span class="k">Clinical line</span><span class="v" style="font-size:13px">sens ≥${L.sens}%, spec ≥${L.spec}% per patient</span></div>`;
+  }
+  $('#ovDsSub').textContent=`${fi(d.n)} candidates`;
+  const sm=summary(d);if(sig('sum',sm.v+'|'+sm.now))[$('#ovVer').textContent,$('#ovNow').innerHTML,$('#ovSum').innerHTML]=[`v${sm.v}`,sm.now,sm.html];
+  if(sig('rounds',`${d.bestRound}|${d.r}|${S.redirects.length}`))$('#ovRounds').innerHTML=roundsTable(d);
+  const vis=S.sim.events.filter(e=>e.t<=d.t&&e.type!=='div');
+  if(sig('act',vis.length+'|'+vis.filter(e=>e.t2&&e.t2<=d.t).length))$('#ovAct').innerHTML=vis.slice(-7).reverse().map((e,k)=>`<div class="af-r ${k===0?'fresh':''}"><span class="tm">${fmtRun(e.t)}</span>${e.type==='human'?`<span class="av" style="background:var(--t50);color:var(--t600)">Y</span>`:agAv(e.ag)}<span style="min-width:0">${actText(e,d)}</span></div>`).join('');
+ },
+ frame(d,now){
+  const b=d.best;const an=S.chipAnim?(now-S.chipAnim)/900:1;
+  const lc=b?null:cur().c;if(sig('ovchip',`${b?.id}|${lc?.id}|${an<1.05?Math.round(an*30):'x'}|${$('#ovChip').clientWidth}`))drawChip($('#ovChip'),b||lc,{mini:false,top:22,anim:b?an:1,empty:'The first candidates train from '+fmtRun(13)});
+  if(sig('ovcurve',`${d.n}|${b?.id}|${S.hoverId}|${$('#ovCurve').clientWidth}|${d.st.s}`))drawCurve($('#ovCurve'),{});
+ }
+};
+function actText(e,d){if(e.type==='human')return`<b>You:</b> ${esc(e.text)}`;if(e.type==='msg')return esc(e.text.length>150?e.text.slice(0,148)+'…':e.text);if(e.type==='sub')return`${e.label}: ${e.items.map(x=>esc(x.n)).join(', ')}`;if(e.type==='tool'){const run=d.t<e.t2;return`<span class="mono" style="font-size:11.5px">${e.name}</span> ${run?'<span class="muted">running</span>':`<span class="muted">${esc(e.sum||'')}</span>`}`}return''}
+function roundsTable(d){const L=S.sim.L;return`<thead><tr><th>Round</th><th class="n">Candidates</th><th>Choice</th><th class="n">Gates</th><th class="n opt">Sens</th><th class="opt">Change into next round</th></tr></thead><tbody>${S.sim.rounds.map((R,r)=>{const done=d.t>=RB(r)+16,on=d.r===r&&!done;return`<tr class="${done?'cl':on?'hl':'fut'}" data-c="${done?R.best.id:''}"><td>${r+1}${on?' '+spn():''}</td><td class="n">${d.t>=RB(r)+3?fi(Math.min(R.n,R.cands.filter(c=>c.tf<=d.t).length)):'–'}</td><td class="mono">${done?R.best.id:on?'running':'–'}</td><td class="n">${done?fi(R.best.g):'–'}</td><td class="n opt">${done?R.best.sens+'%':'–'}</td><td class="opt" style="color:var(--i600)">${r<3?(d.t>=RB(r)+15.85?esc(S.sim.d.notes[r]):''):(done?'Chosen for the report':'')}${R.redirects.length&&d.t>=RB(r)?` <span class="tag" style="background:var(--t50);color:var(--t600)">your redirect</span>`:''}</td></tr>`}).join('')}</tbody>`}
+function summary(d){
+ const{d:dv,L,rounds}=S.sim;const st=d.st;const b=d.best;let v=st.i+1;let now='',p=[];
+ const ev=S.sim.events.filter(e=>e.t<=d.t&&(e.type==='tool'||e.type==='sub')).pop();
+ const curTool=ev&&ev.t2>d.t?ev:null;
+ now=`${d.paused?ic('pause'):spn()}<span>${d.ended?'Run finished. The datasheet and files are ready.':d.paused?`Paused at ${stageName(st.s)}${st.r>=0&&st.r<4?`, round ${st.r+1}`:''}. Agents are waiting for you.`:curTool?`${curTool.ag||'Architect'} is running <span class="mono">${curTool.name||'proposals'}</span>${st.r>=0&&st.r<4?` in round ${st.r+1}`:''}.`:`${stageName(st.s)}${st.r>=0&&st.r<4?`, round ${st.r+1}`:''}: agents are writing up the step.`}</span>`;
+ if(d.ended)now=`<span style="color:var(--e600)">${ic('check')}</span><span>Run finished. The datasheet and files are ready.</span>`;
+ p.push(`The task is a chip for the ${dv.name.replace('Newborn','newborn')} that meets sensitivity ${L.sens}% and specificity ${L.spec}% on every unseen patient, within ${fi(L.budget)} gates.`);
+ if(st.s==='spec')p.push('The agents are turning the prompt into a spec they can check against.');
+ else if(st.s==='reference')p.push(`They split off ${dv.patients} patients the chip will never train on and are training a full-precision reference to see how good a large model can be.`);
+ else{
+  p.push(`${fi(d.n)} candidate designs have been trained so far across ${Math.min(4,(d.r<0?0:d.r+1))} round${d.r===0?'':'s'}.`);
+  if(b){const R0=rounds[0].best;p.push(`The current chip is ${b.id}: ${fi(b.g)} gates, longest path ${b.dp}, worst-patient sensitivity ${b.sens}%. ${b.g>L.budget?`It is still ${fi(b.g-L.budget)} gates over budget.`:`It fits the budget with ${fi(L.budget-b.g)} gates to spare.`}${d.bestRound>0?` That is ${Math.round((1-b.g/R0.g)*100)}% smaller than round 1's choice.`:''}`)}
+  else p.push('No circuit has been verified yet; round 1 is mapping where accuracy falls off with size.');
+  if(S.redirects.some(x=>x.t<=d.t))p.push(`You redirected the run ${S.redirects.filter(x=>x.t<=d.t).length===1?'once':S.redirects.filter(x=>x.t<=d.t).length+' times'}; the latest instruction: “${esc(S.redirects.filter(x=>x.t<=d.t).pop().text)}”.`);
+ }
+ return{v,now,html:p.map(x=>`<p>${x}</p>`).join('')};
+}
+
+VIEW_DEFS.agents={
+ html:()=>`<div class="agv"><div class="feedcol"><div class="feedbar" id="fBar"></div><div class="feed" id="feed"><div class="fe" id="feedIn"></div></div>
+  <div class="fc-bot"><div class="composer"><textarea id="fIn" rows="1" placeholder="Steer a live step, or fork from a finished one"></textarea><div class="comp-row"><button class="pill teal" id="fMode">${S.sendMode}${ic('chev')}</button><button class="pill" id="fMod">Design loop${ic('chev')}</button><span class="muted" style="font-size:11px">Sending pauses the run until the agents reply</span><button class="send" id="fSend" aria-label="Send">${ic('up')}</button></div></div></div></div>
+  <aside class="agside"><section class="card"><div class="ch"><h3>Agents</h3><span class="r sub">live output</span></div><div class="cb ros" id="agRos"></div></section>
+  <section class="card"><div class="ch"><h3>Plan</h3><span class="r sub" id="agPlanTag"></span></div><div class="cb"><ul class="plan" id="agPlan"></ul></div></section>
+  <section class="card"><div class="ch"><h3>Decision log</h3></div><div class="cb dlog" id="agDec"></div></section>
+  <section class="card"><div class="ch"><h3>Failing checks</h3></div><div class="cb" id="agErr" style="font-size:12px"></div></section>
+  <section class="card"><div class="ch"><h3>Steering history</h3></div><div class="cb" id="agSteer" style="font-size:12px"></div></section></aside></div>`,
+ mount(vp){
+  const fb=$('#fBar');const rr=()=>{fb.innerHTML=['all',...Object.keys(AG)].map(a=>`<button class="fpill ${S.feedAg===a?'on':''}" data-a="${a}">${a==='all'?'All agents':a}</button>`).join('')+`<label class="search">${ic('search')}<input id="fQ" placeholder="Search output" value="${esc(S.feedQ)}"></label>`;$$('[data-a]',fb).forEach(b=>b.onclick=()=>{S.feedAg=b.dataset.a;rr();V._sig.feed=null});$('#fQ').oninput=e=>{S.feedQ=e.target.value;V._sig.feed=null}};rr();
+  $('#fSend').onclick=()=>{const v=$('#fIn').value.trim();if(v){$('#fIn').value='';sendRedirect(v)}};
+  $('#fIn').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#fSend').click()}};
+  $('#fMode').onclick=e=>modePop(e.currentTarget,()=>{$('#fMode').innerHTML=S.sendMode+ic('chev')});
+  $('#fMod').onclick=e=>openPop(e.currentTarget,`<h5>Send to</h5>${MODS.map((m,i)=>`<button class="opt ${i===1?'on':''}">${ic(m.icon,'ic')}<span>${m.n}<small>${i===1?'The live step; applies from the next batch':i===0?'Finished; fork from here to change the spec':'Not started'}</small></span></button>`).join('')}`);
+  const feed=$('#feed');feed.addEventListener('scroll',()=>{S.stick=feed.scrollHeight-feed.scrollTop-feed.clientHeight<60});S.stick=true;
+  feed.addEventListener('click',e=>{const th=e.target.closest('.th');if(th){const t=th.parentElement;const id=+t.dataset.id;S.open.has(id)?S.open.delete(id):S.open.add(id);t.classList.toggle('open');drawThumbs(t);return}const sh=e.target.closest('.sh');if(sh){const id=+sh.parentElement.dataset.id;S.closedSub.has(id)?S.closedSub.delete(id):S.closedSub.add(id);sh.parentElement.classList.toggle('closed');return}const th2=e.target.closest('[data-thumb]');if(th2){const k=th2.dataset.thumb;if(k==='curve')setView('design');else openCand(k)}});
+ },
+ update(d){
+  const ev=S.sim.events.filter(e=>e.t<=d.t);const q=S.feedQ.toLowerCase();
+  const vis=ev.filter(e=>(S.feedAg==='all'||e.type==='div'||e.ag===S.feedAg||(e.type==='human'&&S.feedAg==='Architect'))&&(!q||e.type==='div'||JSON.stringify([e.text,e.name,e.log,e.sum,e.label,e.items]).toLowerCase().includes(q)));
+  const running=vis.filter(e=>e.t2&&e.t2>d.t).map(e=>e.id+':'+Math.floor((d.t-e.t)/(e.t2-e.t)*(e.log?e.log.length:3))).join(',');
+  const pend=S.pending.length;
+  if(sig('feed',`${vis.length}|${running}|${S.feedAg}|${q}|${pend}`)){
+   const feed=$('#feed');const st=S.stick;
+   $('#feedIn').innerHTML=(vis.length?'':'<p class="muted" style="padding:20px 0">Nothing matches that search.</p>')+vis.map(e=>feedRow(e,d)).join('')+(pend?`<div class="msg">${agAv('Architect')}<div class="body"><div class="who">Architect</div><span class="typing"><i></i><i></i><i></i></span></div></div>`:'');
+   $$('.tool.open',$('#feedIn')).forEach(drawThumbs);
+   if(S.focus){const el=$(`.dv[data-k="${S.focus.s}:${S.focus.r}"]`);if(el){el.scrollIntoView({block:'start'});feed.scrollTop-=8;el.classList.add('flash');S.stick=false}S.focus=null}
+   else if(st)feed.scrollTop=feed.scrollHeight;
+  }
+  if(sig('side',`${Math.floor(d.t*2)}|${S.redirects.length}|${pend}`)){
+   $('#agRos').innerHTML=Object.keys(AG).map(a=>{const last=ev.filter(e=>e.ag===a).pop();const busy=last&&last.t2&&last.t2>d.t;return`<div class="ro">${agAv(a,24)}<div style="min-width:0;flex:1"><div style="display:flex;gap:6px;align-items:center"><b style="font-size:12px">${a}</b><span class="meta">${S.roles[a][0]}, ${S.roles[a][1]}</span><span style="margin-left:auto">${busy?(d.paused?'<span class="tag warn">paused</span>':'<span class="tag b">working</span>'):'<span class="tag n">idle</span>'}</span></div><div class="last">${last?esc(last.type==='tool'?`${last.name}: ${busy?'running…':last.sum}`:last.type==='sub'?last.label:last.text):AG[a].role}</div></div></div>`}).join('');
+   const R=S.sim.rounds;$('#agPlan').innerHTML=[['Spec and reference',0,10]].concat(R.map((x,r)=>[`Round ${r+1}: ${fi(x.n)} candidates, ${fi(x.gLo)} to ${fi(x.gHi)} gates${x.redirects.length?' (revised after your redirect)':''}`,RB(r),RB(r)+16])).concat([['Datasheet, files and final review',74,END]]).map(([n,a,b])=>`<li><span class="gl">${d.t>=b?`<span style="color:var(--e600)">${ic('check')}</span>`:d.t>=a?(d.paused?`<span style="color:var(--a700)">${ic('pause')}</span>`:spn()):'<span style="color:var(--i300)">○</span>'}</span><span style="${d.t<a?'color:var(--i500)':''}">${n}</span></li>`).join('');
+   $('#agPlanTag').textContent=S.redirects.length?`v${1+S.redirects.length}, revised`:'v1';
+   $('#agDec').innerHTML=S.sim.decisions.filter(x=>x.t<=d.t).slice(-6).reverse().map(x=>`<div class="e ${x.u?'u':''}"><div class="tm">${fmtRun(x.t)}</div>${esc(x.text)}</div>`).join('')||'<span class="muted">The first decision is logged at the end of Spec.</span>';
+   const L=S.sim.L;const errs=[];R.forEach((x,r)=>{if(d.t>=RB(r)+15.85&&x.best.g>L.budget)errs.push([`Round ${r+1} choice over gate budget by ${fi(x.best.g-L.budget)}`,'warn','next round targets smaller sizes'])});if(d.t>=RB(1)+14)errs.push([`${mismatchCand().id}: 19 windows differed from the model`,'bad',d.t>=RB(1)+15?'fixed: rounding, recompiled':'compiler is fixing']);if(d.t>=RB(2)+9.9)errs.push(['6 candidates diverged in round 3','warn','dropped from the batch']);
+   $('#agErr').innerHTML=errs.length?errs.map(([a,c,b])=>`<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid var(--i100)"><span class="tag ${c}">${c==='bad'?'fail':'warn'}</span><span>${esc(a)}<br><span class="muted">${esc(b)}</span></span></div>`).join(''):'<span class="muted">No failing checks so far.</span>';
+   $('#agSteer').innerHTML=S.redirects.length?S.redirects.map(x=>`<div style="padding:5px 0;border-bottom:1px solid var(--i100)"><div class="bub me" style="max-width:100%;margin-bottom:4px">${esc(x.text)}</div><span class="muted">${fmtRun(x.t)}, ${x.fx?`applies from round ${x.from+1}`:'noted, no round left to change'}</span></div>`).join(''):'<span class="muted">No redirects yet. Pause the run and tell the agents what to change.</span>';
+  }
+ }
+};
+function feedRow(e,d){
+ if(e.type==='div'){const g=groupOf(e.s);return`<div class="dv" data-k="${e.s}:${e.r}"><span style="color:${['#6d28d9','#1d4ed8','#c2410c'][g]};border-color:${GC[g]}55;background:${GBG[g]}">${esc(e.label)}</span></div>`}
+ if(e.type==='human')return`<div class="hum"><div class="bub me"><span class="who" style="color:var(--t600)">You, ${fmtRun(e.t)}</span>${esc(e.text)}</div></div>`;
+ if(e.type==='msg'){if(e.rid!=null&&S.pending.includes(e.rid))return'';return`<div class="msg">${agAv(e.ag,22)}<div class="body"><div class="who">${e.ag}<span class="tm">${fmtRun(e.t)}</span></div>${esc(e.text)}${e.best?` <button class="lnk mono" data-thumb="${e.best}">open ${e.best}</button>`:''}</div></div>`}
+ if(e.type==='sub'){const closed=S.closedSub.has(e.id);return`<div class="subag ${closed?'closed':''}" data-id="${e.id}"><button class="sh">${ic('layers')}${esc(e.label)}<span style="margin-left:auto;font-weight:400;color:var(--i500)">${e.items.filter(x=>x.t2<=d.t).length} of 3 done</span></button><div class="sbd">${e.items.map(x=>`<div class="sa"><b>${x.t2<=d.t?`<span style="color:var(--e600)">${ic('check')}</span>`:spn()}${esc(x.n)}</b>${x.t2<=d.t?esc(x.text):'<span class="muted">proposing…</span>'}</div>`).join('')}</div></div>`}
+ if(e.type==='tool'){
+  const run=d.t<e.t2;const open=run||S.open.has(e.id);const nl=run?Math.max(1,Math.ceil((d.t-e.t)/(e.t2-e.t)*e.log.length)):e.log.length;
+  const lines=e.log.slice(0,nl).map(l=>{const k=l[0],tx=esc(l.slice(2));return k==='W'?`<span class="w">warn  ${tx}</span>`:k==='E'?`<span class="e">error ${tx}</span>`:`<span>${tx}</span>`}).join('\n');
+  let res='';if(!run){
+   if(e.table)res=`<table class="t"><thead><tr><th>Circuit</th><th class="n">Gates</th><th class="n">Longest path</th><th class="n">Sens</th><th class="n">Spec</th></tr></thead><tbody>${e.table.map(c=>`<tr class="cl" data-thumb="${c.id}"><td class="mono">${c.id}${c.best?' <span class="tag b">choice</span>':''}</td><td class="n">${fi(c.g)}</td><td class="n">${c.dp}</td><td class="n">${c.sens}%</td><td class="n">${c.spec}%</td></tr>`).join('')}</tbody></table>`;
+   else res=`<span style="color:${e.err?'var(--r700)':'var(--e700)'}">${esc(e.sum)}</span>`;
+   if(e.thumb)res+=`<div class="thumbs"><div class="thumb" data-thumb="${e.thumb.k==='curve'?'curve':e.thumb.id}"><canvas data-k="${e.thumb.k}" data-id="${e.thumb.id||''}" data-t="${e.t2}"></canvas><div class="cap">${e.thumb.k==='curve'?`Design space after round ${e.r+1}`:`${e.thumb.id}, gate sketch`}</div></div></div>`;
+  }
+  return`<div class="tool ${open?'open':''} ${e.err?'err':''}" data-id="${e.id}"><button class="th"><span class="gl">${run?(d.paused?`<span style="color:var(--a700)">${ic('pause')}</span>`:spn()):e.err?`<span style="color:var(--r600)">${ic('alert')}</span>`:`<span style="color:var(--e600)">${ic('check')}</span>`}</span><span class="tn2">${e.name}</span><span class="ta">${esc(e.args)}</span>${run?'':`<span class="tr">${esc(e.sum)}</span>`}<span class="muted" style="font-size:11px">${durTxt((run?d.t:e.t2)-e.t)}</span><svg class="ic s cv" viewBox="0 0 24 24" style="transition:transform .2s">${IC.chev}</svg></button><div class="tb"><pre class="log">${lines}</pre>${res?`<div class="tres">${res}</div>`:''}</div></div>`;
+ }
+ return'';
+}
+function drawThumbs(el){$$('canvas[data-k]',el).forEach(cv=>{if(cv.data_done)return;if(cv.dataset.k==='curve')drawCurve(cv,{mini:true,tMax:+cv.dataset.t});else drawChip(cv,S.sim.idx[cv.dataset.id],{mini:true});cv.data_done=1})}
+
+VIEW_DEFS.design={
+ html:()=>`<div class="pad"><div class="dsg">
+  <section class="card" style="position:relative"><div class="ch"><h3>Accuracy against chip size</h3><span class="sub" id="dsSub"></span><span class="r legend"><span><i style="background:${ROUND_C[0]}"></i>R1</span><span><i style="background:${ROUND_C[1]}"></i>R2</span><span><i style="background:${ROUND_C[2]}"></i>R3</span><span><i style="background:${ROUND_C[3]}"></i>R4</span><span><i style="background:#cfd0da"></i>below spec line</span><span><i class="fr"></i>frontier</span><span><i style="background:#fb923c"></i>current chip</span></span></div><div class="cb"><canvas class="curve" id="dsCurve" style="height:440px"></canvas></div></section>
+  <section class="card"><div class="ch"><h3>Batch monitor</h3><span class="r" id="bmTag"></span></div><div class="cb"><canvas class="grid" id="bmGrid" style="height:200px"></canvas><div class="legend" style="margin-top:8px"><span><i style="background:#f3f3f6;border:1px solid #e8e8ec"></i>queued</span><span><i style="background:#93c5fd"></i>trained, below line</span><span><i style="background:#10b981"></i>meets line</span><span><i style="background:#fb923c"></i>round choice</span></div><div class="bstat" id="bmStat"></div></div></section>
+ </div>
+ <section class="card" style="margin-top:14px"><div class="ch"><h3>Candidates</h3><span class="sub" id="ctSub"></span><span class="r"><div class="seg sm" id="ctF"><button data-f="pass">Meet the line</button><button data-f="comp">Compiled</button><button data-f="all">All, by sensitivity</button></div></span></div><div class="cb" style="padding-top:6px"><table class="t" id="ctT"></table></div></section></div>`,
+ mount(){bindCurve($('#dsCurve'));$$('#ctF button').forEach(b=>b.onclick=()=>{S.dsFilter=b.dataset.f;V._sig.ct=null})},
+ update(d){
+  const L=S.sim.L;const passN=S.sim.all.slice(0,d.n).filter(c=>c.sens>=L.sens&&c.spec>=L.spec).length;
+  $('#dsSub').textContent=`${fi(d.n)} trained, ${fi(passN)} meet the line`;
+  let r=d.r;if(d.st.s==='propose'&&r>0)r=r-1;
+  const R=r>=0?S.sim.rounds[Math.min(r,3)]:null;const trained=R?R.cands.filter(c=>c.tf<=d.t).length:0;const training=d.st.s==='train'&&!d.paused;
+  $('#bmTag').innerHTML=R?`<span class="tag ${training?'b':'n'}">Round ${R.r+1}${training?', training':d.paused&&d.st.s==='train'?', paused':', done'}</span>`:'<span class="tag n">waiting</span>';
+  const rate=R?R.n/(7*SC/60):0;
+  if(sig('bm',`${trained}|${R?.r}|${d.paused}`))$('#bmStat').innerHTML=R?[['Trained',`${fi(trained)} <small>of ${fi(R.n)}</small>`],['Speed',training?`${fi(rate)} <small>per minute</small>`:`<small>${d.paused&&d.st.s==='train'?'paused':'idle until the next batch'}</small>`],['Meet the line',fi(R.cands.filter(c=>c.tf<=d.t&&c.sens>=L.sens&&c.spec>=L.spec).length)],['All rounds',`${fi(d.n)} <small>candidates</small>`]].map(([k,v])=>`<div class="fact"><span class="k">${k}</span><span class="v" style="font-size:16px">${v}</span></div>`).join(''):'';
+  if(sig('ct',`${d.n}|${S.dsFilter}|${d.bestRound}|${Math.floor(d.t)}`)){
+   $$('#ctF button').forEach(b=>b.classList.toggle('on',b.dataset.f===S.dsFilter));
+   let list=S.sim.all.slice(0,d.n);if(S.dsFilter==='pass')list=list.filter(c=>c.sens>=L.sens&&c.spec>=L.spec).sort((a,b)=>a.g-b.g);else if(S.dsFilter==='comp')list=list.filter(c=>c.comp&&d.t>=RB(c.r)+10.1).sort((a,b)=>a.g-b.g);else list=list.sort((a,b)=>b.sens-a.sens);
+   $('#ctSub').textContent=`showing ${Math.min(12,list.length)} of ${fi(list.length)}`;
+   const status=c=>c===d.best?'<span class="tag b">current chip</span>':c.best&&d.t>=RB(c.r)+16?'<span class="tag n">round choice</span>':c.comp&&d.t>=RB(c.r)+15?'<span class="tag ok">verified</span>':c.comp&&d.t>=RB(c.r)+10.1?'<span class="tag n">compiled</span>':'<span class="muted">trained</span>';
+   $('#ctT').innerHTML=`<thead><tr><th>Candidate</th><th class="n">Round</th><th class="opt">Family</th><th class="n">Gates</th><th class="n">Longest path</th><th class="n">Worst sens</th><th class="n">Worst spec</th><th>Status</th></tr></thead><tbody>${list.slice(0,12).map(c=>`<tr class="cl ${c===d.best?'hl':''}" data-c="${c.id}"><td class="mono">${c.id}</td><td class="n">${c.r+1}</td><td class="opt">${esc(fam(c))}</td><td class="n">${fi(c.g)}${c.g>L.budget?' <span style="color:var(--a700)">●</span>':''}</td><td class="n">${c.dp}</td><td class="n">${c.sens}%</td><td class="n">${c.spec}%</td><td>${status(c)}</td></tr>`).join('')||`<tr><td colspan="8" class="muted">No candidate meets the line yet. Round 1 is still mapping the space; try "All, by sensitivity".</td></tr>`}</tbody>`;
+   $$('#ctT tr[data-c]').forEach(tr=>tr.onclick=()=>openCand(tr.dataset.c));
+  }
+ },
+ frame(d){const cv=$('#dsCurve');if(sig('dsc',`${d.n}|${d.best?.id}|${S.hoverId}|${cv.clientWidth}|${d.st.s}|${Math.floor(d.t*8)}`))drawCurve(cv,{});const g=$('#bmGrid');if(sig('bmg',`${d.n}|${d.r}|${g.clientWidth}|${d.st.s}`))drawBatch(g,d)}
+};
+
+VIEW_DEFS.chip={
+ html:()=>`<div class="pad">
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px"><h2 style="margin:0;font:600 22px var(--serif)" id="cpTitle"></h2><span id="cpTags" style="display:flex;gap:6px;flex-wrap:wrap"></span><span style="flex:1"></span><button class="btn" id="cpCurve">Show on the curve</button><button class="btn" id="cpBack">Back to current chip</button></div>
+  <div class="chipg"><section class="card" style="position:relative"><div class="ch"><h3>Circuit</h3><span class="sub" id="cpSub"></span><span class="r legend"><span><i style="background:#f5f9ff;border:1px solid #93c5fd;border-radius:2px"></i>LUT neuron, weights wired in</span><span><i style="background:#2563eb;height:3px;border-radius:0;width:14px"></i>longest path</span></span></div><div class="cb"><canvas id="cpBig" style="width:100%;height:430px;display:block"></canvas></div></section>
+  <section class="card"><div class="ch"><h3>Numbers</h3></div><div class="cb kv" id="cpNums"></div></section></div>
+  <section class="card" style="margin-top:14px"><div class="ch"><h3>Compare</h3><span class="sub">two candidates side by side</span><span class="r"><select class="sel" id="cpB" aria-label="Compare with"></select></span></div><div class="cb cmpg"><div class="cmpc"><div style="font-size:12px;font-weight:600;margin-bottom:4px" id="cpAL"></div><canvas id="cpA"></canvas></div><div class="cmpc"><div style="font-size:12px;font-weight:600;margin-bottom:4px" id="cpBL"></div><canvas id="cpBc"></canvas></div><div id="cpDelta"></div></div></section></div>`,
+ mount(){$('#cpBack').onclick=()=>{S.selId=null;V._sig={};};$('#cpCurve').onclick=()=>{S.hoverId=cur().c?.id;setView('design')};$('#cpB').onchange=e=>{S.cmpId=e.target.value;V._sig.cmp=null}},
+ update(d){
+  const{c,isSel}=cur();const L=S.sim.L;
+  $('#cpBack').style.display=isSel?'':'none';
+  if(sig('cphead',`${c?.id}|${d.bestRound}|${Math.floor(d.t)}`)){
+   if(!c){$('#cpTitle').textContent='No candidate yet';$('#cpTags').innerHTML='<span class="tag n">The first batch trains from '+fmtRun(13)+'</span>';$('#cpSub').textContent='';$('#cpNums').innerHTML=`<div class="r"><span class="k">Inputs</span><span class="v" style="font-size:13px">${S.sim.d.inBits}</span></div><div class="r"><span class="k">Output</span><span class="v" style="font-size:13px">${S.sim.d.outD}</span></div><div class="r"><span class="k">Gate budget</span><span class="v">${fi(L.budget)}</span></div>`;}
+   else{const A=arch(c);const ver=c.comp&&d.t>=RB(c.r)+15;const comp=c.comp&&d.t>=RB(c.r)+10.1;const ok=c.sens>=L.sens&&c.spec>=L.spec;const pr=pm(c);
+    $('#cpTitle').innerHTML=`<span class="mono" style="font-size:19px">${c.id}</span> <span style="font-weight:400;color:var(--i500);font-size:16px">${esc(fam(c))}</span>`;
+    $('#cpTags').innerHTML=(c===d.best?'<span class="tag b">current chip</span>':'')+(ver?'<span class="tag ok">verified bit for bit</span>':comp?'<span class="tag n">compiled, not yet verified</span>':'<span class="tag n">trained model, sketch is an estimate</span>')+(ok?'<span class="tag ok">meets the line</span>':'<span class="tag bad">below the line</span>')+(c.g>L.budget?'<span class="tag warn">over budget</span>':'<span class="tag ok">in budget</span>');
+    $('#cpSub').textContent=`${A.ws.length} layers, LUT-${A.k}, inputs at ${A.bits} bit`;
+    const mixN=['AND','OR','XOR','NOT','MUX'],mixC=['#1d4ed8','#3b82f6','#93c5fd','#9a9aa8','#d4d4dc'];
+    $('#cpNums').innerHTML=[['Gates',`${fi(c.g)} <small>budget ${fi(L.budget)}</small>`],['Longest path',`${c.dp} <small>gates, input to answer</small>`],['Input bits',`${fi(A.inBits)}`],['Worst-patient sensitivity',`${c.sens}% <small>line ${L.sens}%</small>`],['Worst-patient specificity',`${c.spec}% <small>line ${L.spec}%</small>`],['Patients meeting the line',`${pr.filter(x=>x.ok).length} <small>of ${pr.length}</small>`]].map(([k,v])=>`<div class="r"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('')+`<div class="r"><span class="k">Gate mix</span><div class="mix">${A.mixG.map((g,k)=>`<i style="width:${g/c.g*100}%;background:${mixC[k]}"></i>`).join('')}</div><div class="mixl">${A.mixG.map((g,k)=>`<i style="background:${mixC[k]}"></i><span>${mixN[k]}</span><span class="num">${fi(g)}</span>`).join('')}</div></div>`;}
+  }
+  // compare options
+  const opts=S.sim.rounds.filter((R,r)=>d.t>=RB(r)+16).map(R=>R.best);if(S.selId&&!opts.includes(S.sim.idx[S.selId]))opts.push(S.sim.idx[S.selId]);
+  if(c&&!opts.includes(c))opts.push(c);
+  let B=S.cmpId&&S.sim.idx[S.cmpId];if(!B||B===c){const prev=opts.filter(x=>x!==c);B=prev.length?prev[prev.length-1]:null}
+  if(sig('cmp',`${c?.id}|${B?.id}|${opts.length}`)){
+   $('#cpB').innerHTML=opts.filter(x=>x!==c).map(x=>`<option value="${x.id}" ${x===B?'selected':''}>Compare with ${x.id} (round ${x.r+1})</option>`).join('')||'<option>No other verified chip yet</option>';
+   $('#cpAL').innerHTML=c?`A: <span class="mono">${c.id}</span>`:'A';$('#cpBL').innerHTML=B?`B: <span class="mono">${B.id}</span>`:'B: none yet';
+   const row=(k,a,b,lowGood,f=fi,u='')=>{if(!a||!b)return`<tr><td>${k}</td><td class="n">${a?f(a)+u:'–'}</td><td class="n">${b?f(b)+u:'–'}</td><td class="n">–</td></tr>`;const dd=a-b;const good=lowGood?dd<0:dd>0;return`<tr><td>${k}</td><td class="n">${f(a)}${u}</td><td class="n">${f(b)}${u}</td><td class="n"><span class="dl ${dd===0?'':good?'':'up'}">${dd>0?'+':''}${f===fi?fi(dd):dd.toFixed(1)}${u}</span></td></tr>`};
+   const f1=x=>x.toFixed(1);
+   $('#cpDelta').innerHTML=`<table class="t"><thead><tr><th></th><th class="n">A</th><th class="n">B</th><th class="n">A − B</th></tr></thead><tbody>${row('Gates',c?.g,B?.g,true)}${row('Longest path',c?.dp,B?.dp,true)}${row('Worst sens',c?.sens,B?.sens,false,f1,'%')}${row('Worst spec',c?.spec,B?.spec,false,f1,'%')}${row('Layers',c?arch(c).ws.length:0,B?arch(B).ws.length:0,true)}</tbody></table><p class="muted" style="font-size:11.5px;margin:8px 0 0">${c&&B?`A is ${c.g<B.g?Math.round((1-c.g/B.g)*100)+'% smaller':Math.round((c.g/B.g-1)*100)+'% larger'} than B.`:'A second verified chip appears after round 2.'}</p>`;
+   V._cmp=[c,B];V._sig.cmpd=null;
+  }
+ },
+ frame(d,now){const{c}=cur();const an=(c===d.best&&S.chipAnim)?(now-S.chipAnim)/900:1;const cv=$('#cpBig');
+  if(sig('big',`${c?.id}|${an<1.05?Math.round(an*40):'x'}|${cv.clientWidth}`))drawChip(cv,c,{anim:an,empty:'The first candidates train from '+fmtRun(13)});
+  const[A,B]=V._cmp||[];if(sig('cmpd',`${A?.id}|${B?.id}|${$('#cpA').clientWidth}`)){drawChip($('#cpA'),A,{mini:true,empty:'–'});drawChip($('#cpBc'),B,{mini:true,empty:'No second chip yet'})}}
+};
+function cur(){const d=D();if(S.selId&&S.sim.idx[S.selId]&&S.sim.idx[S.selId].tf<=S.t)return{c:S.sim.idx[S.selId],isSel:true};if(d.best)return{c:d.best,isSel:false};const R=d.r>=0&&d.r<4?S.sim.rounds[d.r]:null;return{c:R?leaderOf(R,d.t)||null:null,isSel:false}}
+
+VIEW_DEFS.signal={
+ html:()=>`<div class="pad">
+  <section class="card"><div class="ch"><h3>Signal strip</h3><span class="sub" id="sgSub"></span><span class="r legend"><span><i style="background:#ef4444;border-radius:2px"></i>${S.sim.d.key==='eeg'?'clinician-marked seizure':'reference alarm'}</span><span><i style="background:#10b981;border-radius:2px"></i>chip caught it</span><span><i style="background:#f59e0b;border-radius:2px"></i>false alarm</span><span><i style="border:1.5px solid #ef4444;background:#fff;border-radius:2px"></i>missed</span>${S.sim.d.key==='nirs'?'<span><i style="background:#1d4ed8;border-radius:0;height:2px;width:14px"></i>chip output</span><span><i style="border-top:2px dashed #9a9aa8;height:0;width:14px;border-radius:0"></i>reference</span>':''}</span></div><div class="cb"><canvas id="sgCv" style="width:100%;height:${S.sim.d.key==='eeg'?360:380}px;display:block"></canvas></div></section>
+  <div class="sg2"><section class="card"><div class="ch"><h3>Bit-for-bit check</h3><span class="sub">circuit against its model, on unseen patients</span></div><div class="cb bit" id="bitBox"></div></section>
+  <section class="card"><div class="ch"><h3>Per patient</h3><span class="sub" id="ppSub"></span></div><div class="cb" style="padding-top:4px"><table class="t" id="ppT"></table></div></section></div></div>`,
+ mount(){},
+ update(d){
+  const c=d.best;const dv=S.sim.d;const L=S.sim.L;const pi=S.patient>=0?S.patient:0;
+  $('#sgSub').textContent=`patient P${String(pi+1).padStart(2,'0')}, unseen during training, ${c?`decisions by ${c.id}`:'no verified chip yet'}`;
+  const vr=d.st.s==='verify'?d.st.r:-1;
+  if(sig('bit',`${c?.id}|${vr}|${vr>=0?Math.floor(d.st.p*40):''}`)){
+   let h='';
+   if(c)h+=`<div class="big">${fi(dv.windows)} <small>of</small> ${fi(dv.windows)}</div><div style="font-size:13px;color:var(--i700)">windows give identical output bits for the circuit and the model it was compiled from (<span class="mono">${c.id}</span>, ${dv.patients} unseen patients).</div><div class="prog"><i style="width:100%"></i></div>`;
+   else h+=`<div class="big" style="color:var(--i400)">0 <small>of</small> ${fi(dv.windows)}</div><div class="muted" style="font-size:13px">No circuit has been checked yet. Round 1 is verified at ${fmtRun(RB(0)+13)} to ${fmtRun(RB(0)+16)}.</div>`;
+   if(vr>=0){const R=S.sim.rounds[vr];const p=clamp((d.t-RB(vr)-13.1)/1.8,0,1);const k=Math.floor(p*8);const mc=vr===1?mismatchCand():null;
+    h+=`<div style="font-size:12px;font-weight:600;margin-top:4px">Round ${vr+1}: checking 8 compiled circuits ${d.paused?'<span class="tag warn">paused</span>':spn()}</div><div class="circs">${R.compiled.map((x,i)=>{const bad=mc===x&&d.t<RB(1)+15;return`<div class="circ ${i<k||(d.t>=RB(vr)+14.9)?(bad?'bad':'ok'):i===k?'run':''}" title="${x.id}">${x.id.slice(3)}<br>${i<k||d.t>=RB(vr)+14.9?(bad?'19 diff':'match'):i===k?fi(Math.floor((p*8-k)*dv.windows))+'…':'queued'}</div>`}).join('')}</div>`}
+   else if(c)h+=`<div class="circs">${S.sim.rounds[d.bestRound].compiled.map(x=>`<div class="circ ok" title="${x.id}">${x.id.slice(3)}<br>match</div>`).join('')}</div><div class="muted" style="font-size:11.5px">All 8 circuits compiled in round ${d.bestRound+1} matched their models on every window${d.bestRound>=1?`; in round 2, ${mismatchCand().id} first differed on 19 windows (a rounding mismatch) and matched after recompiling`:''}.</div>`;
+   $('#bitBox').innerHTML=h;
+  }
+  if(sig('pp',`${c?.id}|${pi}`)){
+   if(!c){$('#ppSub').textContent='';$('#ppT').innerHTML=`<thead><tr><th>Patient</th><th class="n">Windows</th><th class="n">Sensitivity</th><th class="n">Specificity</th><th>Line</th></tr></thead><tbody>${S.sim.pw.map((w,i)=>`<tr class="cl ${i===pi?'hl':''}" data-p="${i}"><td>P${String(i+1).padStart(2,'0')}</td><td class="n">${fi(w)}</td><td class="n muted">–</td><td class="n muted">–</td><td class="muted">waiting</td></tr>`).join('')}</tbody>`}
+   else{const pr=pm(c);$('#ppSub').textContent=`${c.id}: ${pr.filter(x=>x.ok).length} of ${pr.length} patients meet the line`;
+    $('#ppT').innerHTML=`<thead><tr><th>Patient</th><th class="n">Windows</th><th class="n">Identical</th><th class="n">Sensitivity</th><th class="n">Specificity</th><th>Line</th></tr></thead><tbody>${pr.map((x,i)=>`<tr class="cl ${i===pi?'hl':''}" data-p="${i}"><td>${x.p}</td><td class="n">${fi(x.w)}</td><td class="n">${fi(x.w)}</td><td class="n" ${x.sens===c.sens?'style="font-weight:600"':''}>${x.sens.toFixed(1)}%</td><td class="n" ${x.spec===c.spec?'style="font-weight:600"':''}>${x.spec.toFixed(1)}%</td><td>${x.ok?`<span class="ck">${ic('check')}</span>`:`<span class="xk">${ic('x')}</span>`}</td></tr>`).join('')}<tr><td><b>All</b></td><td class="n"><b>${fi(dv.windows)}</b></td><td class="n"><b>${fi(dv.windows)}</b></td><td class="n">worst ${c.sens}%</td><td class="n">worst ${c.spec}%</td><td></td></tr></tbody>`}
+   $$('#ppT tr[data-p]').forEach(tr=>tr.onclick=()=>{S.patient=+tr.dataset.p;V._sig.pp=null});
+  }
+ },
+ frame(d){drawSignal($('#sgCv'),d)}
+};
+
+VIEW_DEFS.cost={
+ html:()=>`<div class="pad"><div class="kpis" id="coK"></div>
+  <div class="cg"><section class="card"><div class="ch"><h3>Spend over time</h3><span class="r legend"><span><i style="background:#3b82f6;border-radius:2px"></i>agents (tokens)</span><span><i style="background:#1e3a8a;border-radius:2px"></i>compute</span><span><i class="ln" style="border-color:#ef4444"></i>spend cap</span></span></div><div class="cb"><canvas id="coBurn" style="width:100%;height:260px;display:block"></canvas></div></section>
+  <section class="card"><div class="ch"><h3>By stage</h3><span class="r sub">tokens and compute</span></div><div class="cb hb" id="coSt"></div></section></div>
+  <div class="cg"><section class="card"><div class="ch"><h3>Per task</h3><span class="sub" id="coLs"></span></div><div class="cb" style="padding-top:4px;max-height:330px;overflow:auto"><table class="t" id="coL"></table></div></section>
+  <div style="display:flex;flex-direction:column;gap:14px;min-width:0"><section class="card"><div class="ch"><h3>By agent and model</h3></div><div class="cb" style="padding-top:4px"><table class="t" id="coA"></table></div></section>
+  <section class="card"><div class="ch"><h3>Compute</h3><span class="r sub">each batch gets its own machine</span></div><div class="cb ladder" id="coC"></div></section></div></div></div>`,
+ mount(){},
+ update(d){
+  const c=d.cost;const cap=25;const fin=costAt(END);
+  if(sig('k',`${c.total.toFixed(2)}|${d.n}`)){
+   $('#coK').innerHTML=[['coins','Spend',usd(c.total),`of ${usd(cap)} cap, about ${usd(fin.total)} at finish`],['spark','Agent tokens',`${(c.tokens/1e6).toFixed(2)}M`,`${usd(c.llm)} across 5 agents`],['gpu','GPU hours',c.gpuH.toFixed(2),`${usd(c.cmp)} compute incl. ${c.cpuH.toFixed(2)} CPU hours`],['cpu','Candidates evaluated',fi(d.n),d.n?`${usd(c.total/d.n*1000)} per thousand`:'first batch at '+fmtRun(13)]].map(([i,k,v,s])=>`<div class="card kpi"><div class="k">${ic(i)}${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
+   const mx=Math.max(...STG.map(s=>(fin.st[s.k]?.llm||0)+(fin.st[s.k]?.cmp||0)));
+   $('#coSt').innerHTML=STG.map(s=>{const v=c.st[s.k]||{llm:0,cmp:0};return`<span>${s.n}</span><span class="tr"><i style="width:${v.llm/mx*100}%;background:#3b82f6"></i><i style="width:${v.cmp/mx*100}%;background:#1e3a8a"></i></span><span class="num" style="text-align:right">${usd(v.llm+v.cmp)}</span>`}).join('')+`<span class="muted" style="grid-column:1/-1;font-size:11px;margin-top:6px">Propose costs the most: four rounds of Architect reasoning. Training is cheap because thousands of candidates share one GPU batch.</span>`;
+   $('#coA').innerHTML=`<thead><tr><th>Agent</th><th>Model</th><th class="n">Tokens</th><th class="n">Cost</th></tr></thead><tbody>${Object.keys(AG).map(a=>{const v=c.ag[a]||0;return`<tr><td style="display:flex;gap:6px;align-items:center">${agAv(a,18)}${a}</td><td class="muted">${S.roles[a][0]}, ${S.roles[a][1]}</td><td class="n">${fi(v/7.2*1e6/1000)}k</td><td class="n">${usd(v)}</td></tr>`}).join('')}</tbody>`;
+   const tasks=S.sim.events.filter(e=>e.type==='tool'&&e.t<=d.t);let sum=0;
+   const rows=tasks.map(e=>{const a=e.t,b=Math.min(d.t,e.t2);const st=stageAt(a).s;const m=MODES[S.mode];const llm=LLM_RATE[st]*(b-a)*m.llm*.8;const cp=COMPUTE.find(x=>x.k===S.compute).p;const hrs=(b-a)*SC/3600;const cmp=st==='train'?hrs*m.batch/2048*cp:e.name==='train_reference'?hrs*cp:(st==='compile'||st==='verify')?hrs*8*COMPUTE[1].p:0;sum+=llm+cmp;return{e,llm,cmp}});
+   $('#coL').innerHTML=`<thead><tr><th>Time</th><th>Task</th><th class="opt">Agent</th><th class="n">Tokens</th><th class="n">Compute</th><th class="n">Total</th></tr></thead><tbody>${rows.slice().reverse().map(x=>`<tr><td class="mono muted" style="font-size:11px">${fmtRun(x.e.t)}</td><td><span class="mono" style="font-size:11.5px">${x.e.name}</span>${x.e.t2>d.t?' '+spn():''}</td><td class="opt">${x.e.ag}</td><td class="n">${usd(x.llm)}</td><td class="n">${x.cmp?usd(x.cmp):'–'}</td><td class="n">${usd(x.llm+x.cmp)}</td></tr>`).join('')}<tr><td></td><td class="muted">Other agent work (planning, messages)</td><td class="opt"></td><td class="n">${usd(Math.max(0,c.total-sum))}</td><td class="n">–</td><td class="n">${usd(Math.max(0,c.total-sum))}</td></tr></tbody>`;
+   $('#coLs').textContent=`${tasks.length} tool runs, ${usd(c.total)} total`;
+   $('#coC').innerHTML=[...COMPUTE].reverse().map(x=>`<div class="rung ${x.k===S.compute?'on':''}">${ic(x.k.startsWith('g')?'gpu':'cpu','ic')}<span>${x.n}<small>${x.d}${x.k===S.compute?', used for training':x.k==='cpu2'?', used for compile and verify':''}</small></span><span class="p">$${x.p.toFixed(2)}/h</span></div>`).join('');
+  }
+ },
+ frame(d){const cv=$('#coBurn');if(!sig('burn',`${Math.floor(d.t*4)}|${cv.clientWidth}`))return;const{ctx,w,h}=fit(cv);ctx.clearRect(0,0,w,h);const ff=getComputedStyle(document.body).fontFamily;ctx.font=`10.5px ${ff}`;
+  const pad={l:44,r:12,t:10,b:24};const cap=25;const ymax=cap*1.12;const X=t=>pad.l+t/END*(w-pad.l-pad.r);const Y=v=>pad.t+(1-v/ymax)*(h-pad.t-pad.b);
+  ctx.strokeStyle='#f0f0f3';ctx.fillStyle='#8a8a99';for(let v=0;v<=25;v+=5){const y=Math.round(Y(v))+.5;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y);ctx.stroke();ctx.textAlign='right';ctx.fillText('$'+v,pad.l-6,y+3)}
+  ctx.textAlign='center';for(let t=0;t<=END;t+=END/6){ctx.fillText(fmtRun(t),X(t),h-6)}
+  const N=120,pts=[];for(let k=0;k<=N;k++){const t=Math.min(d.t,k/N*END);pts.push([t,costAt(t)]);if(k/N*END>d.t)break}
+  ctx.beginPath();ctx.moveTo(X(0),Y(0));pts.forEach(([t,c])=>ctx.lineTo(X(t),Y(c.cmp)));ctx.lineTo(X(pts[pts.length-1][0]),Y(0));ctx.fillStyle='#1e3a8a';ctx.fill();
+  ctx.beginPath();pts.forEach(([t,c],k)=>k?ctx.lineTo(X(t),Y(c.total)):ctx.moveTo(X(t),Y(c.total)));for(let k=pts.length-1;k>=0;k--)ctx.lineTo(X(pts[k][0]),Y(pts[k][1].cmp));ctx.fillStyle='rgba(59,130,246,.55)';ctx.fill();
+  ctx.strokeStyle='#2563eb';ctx.lineWidth=1.5;ctx.beginPath();pts.forEach(([t,c],k)=>k?ctx.lineTo(X(t),Y(c.total)):ctx.moveTo(X(t),Y(c.total)));ctx.stroke();ctx.lineWidth=1;
+  if(d.t<END){ctx.setLineDash([3,4]);ctx.strokeStyle='#9a9aa8';ctx.beginPath();ctx.moveTo(X(d.t),Y(d.cost.total));for(let t=d.t;t<=END;t+=2)ctx.lineTo(X(t),Y(costAt(t).total));ctx.lineTo(X(END),Y(costAt(END).total));ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#6c6c85';ctx.textAlign='right';ctx.fillText(`forecast ${usd(costAt(END).total)}`,X(END),Y(costAt(END).total)-6)}
+  ctx.setLineDash([5,4]);ctx.strokeStyle='#ef4444';ctx.beginPath();ctx.moveTo(pad.l,Y(cap));ctx.lineTo(w-pad.r,Y(cap));ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#b91c1c';ctx.textAlign='left';ctx.fillText('Spend cap $25: the run wraps up if it gets here',pad.l+6,Y(cap)-5);
+ }
+};
+
+VIEW_DEFS.report={
+ html:()=>`<div class="paper" id="rp"></div>`,
+ mount(){},
+ update(d){
+  const fin=d.t>=END;const k=`${fin}|${d.bestRound}|${d.st.s}|${S.redirects.length}`;if(!sig('rp',k))return;
+  const{d:dv,L,rounds}=S.sim;const c=d.best;const rp=$('#rp');
+  if(!c){rp.innerHTML=`<div class="draft">${ic('file')}The datasheet starts once round 1 has a verified chip, at ${fmtRun(RB(0)+16)}. Until then this page shows the spec it will be checked against.</div><h1>Datasheet: ${esc(dv.name.replace('Newborn','newborn'))} chip</h1><p class="lede">${esc(S.prompt&&S.screen?dv.prompt:dv.prompt)}</p><h2>Spec</h2><table class="t"><tbody><tr><td>Inputs</td><td>${dv.inBits}</td></tr><tr><td>Output</td><td>${dv.outD}</td></tr><tr><td>Clinical line</td><td>Sensitivity ≥${L.sens}% and specificity ≥${L.spec}% on every one of ${dv.patients} unseen patients</td></tr><tr><td>Gate budget</td><td>${fi(L.budget)} gates</td></tr></tbody></table><h2>Gates per diagnosis</h2>${ledgerHTML(true)}`;return}
+  const pr=pm(c),A=arch(c);
+  rp.innerHTML=`${fin?'':`<div class="draft">${spn()}Draft. The Reviewer rewrites this page until the run finishes; numbers below are for the current chip.</div>`}
+  <div style="font:12px var(--sans);color:var(--i500);margin-top:14px">Design report, ${esc(dv.name)}</div>
+  <h1>${c.id}: a ${fi(c.g)}-gate ${dv.decision} for the ${esc(dv.name.replace('Newborn','newborn'))}</h1>
+  <p class="lede">The chip reads ${dv.inBits.toLowerCase()} and ${dv.key==='eeg'?'decides, for every 4-second window, whether it shows seizure activity':'turns them into a brain-oxygen value and an alarm below 55%'}. On ${dv.patients} patients it never trained on, its worst patient reaches ${c.sens}% sensitivity and ${c.spec}% specificity, against a line of ${L.sens}% and ${L.spec}%. The circuit gives the same output bits as its model on all ${fi(dv.windows)} test windows.</p>
+  <h2>Numbers</h2><table class="t"><tbody><tr><td>Gates</td><td class="n">${fi(c.g)}</td><td class="muted">budget ${fi(L.budget)}${c.g>L.budget?', over':''}</td></tr><tr><td>Longest path</td><td class="n">${c.dp} gates</td><td class="muted">input pin to answer pin</td></tr><tr><td>Structure</td><td class="n">${A.ws.map(fi).join(' / ')}</td><td class="muted">LUT-${A.k} neurons per layer, then a ${fi(A.decG)}-gate decision block</td></tr><tr><td>Input bits</td><td class="n">${fi(A.inBits)}</td><td class="muted">${A.bits}-bit features</td></tr><tr><td>Bit-for-bit check</td><td class="n">${fi(dv.windows)} / ${fi(dv.windows)}</td><td class="muted">circuit against model, identical outputs</td></tr><tr><td>Patients meeting the line</td><td class="n">${pr.filter(x=>x.ok).length} / ${pr.length}</td><td class="muted">every patient checked on its own</td></tr></tbody></table>
+  <h2>Per patient</h2><table class="t"><thead><tr><th>Patient</th><th class="n">Windows</th><th class="n">Sensitivity</th><th class="n">Specificity</th></tr></thead><tbody>${pr.map(x=>`<tr><td>${x.p}</td><td class="n">${fi(x.w)}</td><td class="n">${x.sens.toFixed(1)}%</td><td class="n">${x.spec.toFixed(1)}%</td></tr>`).join('')}</tbody></table>
+  <h2>How it was found</h2><p>Four rounds of propose, train, compile and verify, ${fi(rounds.reduce((a,R)=>a+R.n,0))} candidates in all. Each round the agents kept the family that held accuracy at the smallest size and changed one thing.</p>
+  <table class="t"><thead><tr><th>Round</th><th>Choice</th><th class="n">Gates</th><th class="n">Sens</th><th>What changed next</th></tr></thead><tbody>${rounds.map((R,r)=>d.t>=RB(r)+16?`<tr><td>${r+1}</td><td class="mono">${R.best.id}</td><td class="n">${fi(R.best.g)}</td><td class="n">${R.best.sens}%</td><td>${r<3?esc(dv.notes[r]):'chosen'}${R.redirects.length?` (your redirect: ${esc(R.redirects.map(x=>x.short).join('; '))})`:''}</td></tr>`:'').join('')}</tbody></table>
+  <h2>Limits</h2><p>Tested against recorded data from a demo set of ${dv.train+dv.patients} patients, ${dv.patients} of them held out. This is a design and a data check, not a clinical validation: it has not been tested on a device, in a ward, or on patients from other sites. ${dv.key==='eeg'?'The chip expects band-power features from an analogue front end that is not part of this design. ':'The chip assumes calibrated light readings; skin tone, probe placement and ambient light were not varied. '}One decision per window is assumed because the brief set no latency target.</p>
+  <h2>Final review</h2><div class="review">${fin?`<b style="color:var(--moss)">${ic('check')} 6 of 6 checks pass</b>, one note carried forward.`:`<b>${spn()} In progress</b>, the Reviewer signs off at the end of the run.`}<ul><li>Bit-for-bit check present for the chosen circuit</li><li>Every number above traced to the log that produced it</li><li>Held-out patients never used in training or selection</li><li>Each patient clears the line, not only the average</li><li>Limits stated</li><li>Note: the one-decision-per-window assumption should be confirmed</li></ul></div>
+  <h2>Files</h2><div class="files"><button class="file" data-f="v" ${fin?'':'disabled'}>${ic('cpu','ic')}<b>${c.id}.v</b><small>${fin?'Gate-level Verilog':'Ready when the run finishes'}</small></button><button class="file" data-f="report" ${fin?'':'disabled'}>${ic('file','ic')}<b>datasheet.md</b><small>${fin?'This report as text':'Ready when the run finishes'}</small></button><button class="file" data-f="log" ${fin?'':'disabled'}>${ic('check','ic')}<b>verification.csv</b><small>${fin?'Per-patient results':'Ready when the run finishes'}</small></button></div>
+  <h2>Gates per diagnosis</h2>${ledgerHTML(true)}`;
+  $$('[data-f]',rp).forEach(b=>b.onclick=()=>download(b.dataset.f));
+ }
+};
+
+function download(kind){
+ const d=D();const c=d.best;if(!c)return;const dv=S.sim.d;let name,txt;
+ if(kind==='v'){name=c.id+'.v';const A=arch(c);txt=`// ${c.id}: ${dv.name}, ${c.g} gates, longest path ${c.dp}\n// Mock-up output with invented values. Not a real netlist.\nmodule chip_${c.id.replace('-','_')} (\n  input  wire [${A.inBits-1}:0] x,\n  output wire ${dv.key==='eeg'?'seizure':'[6:0] rso2,\n  output wire alarm'}\n);\n  // layer widths: ${A.ws.join(', ')} LUT-${A.k} neurons; decision ${A.decG} gates\n  // ... ${c.g} gate instances omitted in the demo ...\nendmodule\n`}
+ else if(kind==='log'){name='verification.csv';txt='patient,windows,identical,sensitivity,specificity\n'+pm(c).map(x=>`${x.p},${x.w},${x.w},${x.sens},${x.spec}`).join('\n')+'\n'}
+ else{name='datasheet.md';txt=`# ${c.id}\n\n${dv.name}. ${c.g} gates, longest path ${c.dp}. Worst-patient sensitivity ${c.sens}%, specificity ${c.spec}%.\nDemo data, not clinically validated.\n`}
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'text/plain'}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);toast(`Downloaded ${name}`,'dl');
+}
+
+/* ---------- helper (steer) panel ---------- */
+function openHelper(){S.helper=true;$('#helper').classList.add('open');document.body.classList.add('hopen');renderHelper();setTimeout(()=>{V&&(V._sig={})},0)}
+function closeHelper(){S.helper=false;$('#helper').classList.remove('open');document.body.classList.remove('hopen');V&&(V._sig={})}
+$('#hClose').onclick=closeHelper;
+function modePop(anchor,cb){openPop(anchor,`<h5>Send as</h5><button class="opt ${S.sendMode==='Chat'?'on':''}" data-m="Chat">${ic('spark','ic')}<span>Chat<small>Steer this run from the next batch</small></span></button><button class="opt ${S.sendMode==='Fork'?'on':''}" data-m="Fork">${ic('fork','ic')}<span>Fork<small>Copy the run up to here and apply the note there</small></span></button>`,p=>$$('[data-m]',p).forEach(b=>b.onclick=()=>{S.sendMode=b.dataset.m;closePop();cb&&cb();renderHelper()}))}
+$('#hMode').onclick=e=>modePop(e.currentTarget);
+$('#hMod').onclick=e=>openPop(e.currentTarget,`<h5>Send to</h5>${MODS.map((m,i)=>`<button class="opt ${i===1?'on':''}">${ic(m.icon,'ic')}<span>${m.n}</span></button>`).join('')}`);
+$('#hSend').onclick=()=>{const v=$('#hIn').value.trim();if(!v)return;$('#hIn').value='';if(S.helperMode==='guide')guideReply(v);else sendRedirect(v)};
+$('#hIn').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#hSend').click()}};
+let guideMsgs=[];
+function renderHelper(){
+ if(!S.helper)return;const g=S.helperMode==='guide';
+ $('#hTitle').textContent=g?'Guide me':'Steer this run';
+ $('#hMode').style.display=g?'none':'';$('#hMod').style.display=g?'none':'';$('#hMode').innerHTML=S.sendMode+ic('chev');
+ const hs=$('#hState');
+ if(g){hs.className='h-state';hs.innerHTML=`${ic('spark')}<span>Tell me about the device. I will write the prompt and set the line, budget, compute and agents for you.</span>`;
+  $('#hMsgs').innerHTML=[{ai:1,t:'What does the device measure, and what should it decide? For example: "a newborn EEG monitor that flags seizures".'},...guideMsgs].map(m=>`<div class="bub ${m.ai?'ai':'me'}">${m.ai?'<span class="who">Guide</span>':''}${esc(m.t)}</div>`).join('');
+  $('#hSugg').innerHTML=['A newborn EEG monitor that flags seizures','A brain-oxygen sensor for newborns'].map(s=>`<button class="chipbtn">${s}</button>`).join('');$$('#hSugg button').forEach(b=>b.onclick=()=>guideReply(b.textContent));return}
+ const d=S.sim?D():null;const paused=d&&d.paused;
+ hs.className='h-state'+(paused?' paused':'');
+ hs.innerHTML=!d?'':d.ended?`${ic('check')}<span>The run has finished. A note now would start a fork from Verify.</span>`:paused?`${ic('pause')}<span>Paused at ${stageName(d.st.s)}${d.st.r>=0&&d.st.r<4?`, round ${d.st.r+1}`:''}. Type a redirect; the agents answer and change the next round. Then resume.</span>`:`${spn()}<span>The run is live. A redirect pauses it while the agents answer, and applies from the next batch.</span>`;
+ const msgs=S.redirects.flatMap(x=>[`<div class="bub me">${esc(x.text)}</div>`,S.pending.includes(x.id)?`<div class="bub ai"><span class="who">Architect</span><span class="typing"><i></i><i></i><i></i></span></div>`:`<div class="bub ai"><span class="who">Architect</span>${esc(x.reply)}</div>`]);
+ $('#hMsgs').innerHTML=msgs.length?msgs.join(''):`<div class="bub ai"><span class="who">Architect</span>I'm working on ${d?stageName(d.st.s).toLowerCase():'the run'}${d&&d.st.r>=0&&d.st.r<4?` in round ${d.st.r+1}`:''}. You can change the gate target, the accuracy margin or the longest path; I'll say what it changes before the next batch.</div>`;
+ $('#hMsgs').scrollTop=1e6;
+ const sug=['Fewer gates, accept 2 points lower sensitivity','Keep more sensitivity margin','Keep the longest path under 12 gates'];
+ $('#hSugg').innerHTML=d&&!d.ended?sug.map(s=>`<button class="chipbtn">${s}</button>`).join(''):'';
+ $$('#hSugg button').forEach(b=>b.onclick=()=>{$('#hIn').value=b.textContent;$('#hIn').focus()});
+}
+function guideReply(v){guideMsgs.push({t:v});const eeg=/eeg|seiz|brain.?wave/i.test(v),nirs=/oxygen|nirs|infra|light/i.test(v);
+ if(eeg||nirs){S.device=eeg?'eeg':'nirs';S.prompt=DEV[S.device].prompt;guideMsgs.push({ai:1,t:`Set up the ${DEV[S.device].name.replace('Newborn','newborn')}: I wrote the prompt, set the line to sensitivity ${S.line[S.device].s}% and specificity ${S.line[S.device].p}% per patient, a ${fi(S.line[S.device].b)}-gate budget, GPU Basic for the training batches and Pro mode. Press Start design when it looks right.`});S.compute='gpu1';S.mode='Pro';renderStart()}
+ else guideMsgs.push({ai:1,t:'I can set up any sensing device, but this demo only has data for the newborn EEG seizure monitor and the brain-oxygen sensor. Which one is closer?'});
+ renderHelper()}
+function classify(text){const s=text.toLowerCase();
+ if(/fewer|smaller|less gate|cheaper|tiny|shrink|reduce|lower gate|under \d/.test(s))return{k:'smaller',fx:{g:.78,s:-1.1,dp:-1},short:'fewer gates, lower sensitivity margin accepted'};
+ if(/sensitiv|accura|margin|safer|miss/.test(s))return{k:'margin',fx:{g:1.24,s:1,dp:1},short:'more sensitivity margin, larger chip accepted'};
+ if(/depth|latency|path|shallow|faster|delay/.test(s))return{k:'shallow',fx:{g:1.06,s:-.2,dp:-3},short:'shorter longest path'};
+ return{k:'note',fx:{g:.96,s:-.1,dp:0},short:'soft preference: '+text.slice(0,50)};
+}
+let rid=0;
+function sendRedirect(text){
+ if(!S.sim)return;const t=S.live;const c=classify(text);let from=-1;for(let r=0;r<4;r++){if(RB(r)+3>t){from=r;break}}
+ const oldNext=from>=0?{...S.sim.rounds[from].best}:null;
+ const x={id:rid++,t,text,k:c.k,short:c.short,fx:from>=0?c.fx:null,from};S.redirects.push(x);
+ const wasPlaying=S.playing;S.playing=false;
+ build();
+ if(from>=0){const nb=S.sim.rounds[from].best,L=S.sim.L;
+  const pct=Math.round((1-nb.g/oldNext.g)*100);
+  x.reply={smaller:`Understood. From round ${from+1} I'll push the batch toward smaller designs: the projected choice drops from about ${fi(oldNext.g)} to ${fi(nb.g)} gates (${pct}% fewer), with worst-patient sensitivity near ${nb.sens}%. The clinical line of ${L.sens}% still holds on every patient; I won't trade below it.`,
+   margin:`Understood. From round ${from+1} I'll rank by sensitivity margin before size. Expect the choice to grow to about ${fi(nb.g)} gates (from ${fi(oldNext.g)}) with worst-patient sensitivity near ${nb.sens}%.`,
+   shallow:`Understood. From round ${from+1} I'll cap the longest path: about ${nb.dp} gates instead of ${oldNext.dp}, at roughly ${fi(nb.g)} gates in total. Shallower circuits need slightly more gates.`,
+   note:`Noted. I'll apply it as a soft preference from round ${from+1}; projected choice about ${fi(nb.g)} gates. If you meant a hard limit, say the number.`}[c.k];
+ } else x.reply=`Round 4's batch is already training, so this can't change this run. Fork from Verify to run a fifth round with this instruction; I've noted it in the report.`;
+ if(S.sendMode==='Fork')x.reply='Forked from here. '+x.reply;
+ S.sim.events=buildEvents();S.sim.decisions=buildDecisions();
+ S.pending.push(x.id);renderHelper();V&&(V._sig={});
+ setTimeout(()=>{S.pending=S.pending.filter(i=>i!==x.id);renderHelper();V&&(V._sig={});toast(from>=0?`Plan revised from round ${from+1}. Resume when ready.`:'Noted for a fork.','spark','var(--t600)')},1100);
+ if(!S.helper){S.helperMode='steer';openHelper()}
+}
+
+/* ---------- loop ---------- */
+let last=performance.now(),lastUI=0;
+function tickUI(force){if(S.screen!=='run'||!S.sim||!V)return;const d=D();renderStrip(d);V.update&&V.update(d);
+ if(S.helper&&S.helperMode==='steer'){const k=`${d.paused}|${d.st.s}|${d.st.r}|${d.ended}`;if(tickUI._h!==k){tickUI._h=k;renderHelper()}}
+ if(force||performance.now()-tickUI._r>2000){tickUI._r=performance.now();renderRuns()}}
+tickUI._r=0;
+function loop(now){
+ const dt=Math.min(.1,(now-last)/1000);last=now;
+ if(S.screen==='run'&&S.sim){
+  if(S.playing&&S.t<END){S.t=Math.min(END,S.t+dt*S.speed);if(S.t>S.live)S.live=S.t;if(S.t>=END){S.playing=false;toast('Run finished. The datasheet and files are ready.','check','var(--e600)')}}
+  const{b}=bestAt(S.t);
+  if(b&&b.id!==S.lastBest){if(S.lastBest!==null&&S.t>=S.live-.05){toast(`New chip: <b class="mono">${b.id}</b>, ${fi(b.g)} gates${b.g<=S.sim.L.budget?', in budget':''}`,'cpu')}S.chipAnim=now;S.lastBest=b.id}
+  if(!b&&S.lastBest)S.lastBest=null;
+  if(now-lastUI>110){lastUI=now;tickUI()}
+  if(V&&V.frame)V.frame(D(),now);
+ }
+ requestAnimationFrame(loop);
+}
+
+/* ---------- boot ---------- */
+window.addEventListener('hashchange',()=>{const h=readHash();if(!h)return;if(h==='start'){if(S.screen!=='start'){S.screen='start';S.playing=false;showScreen()}return}if(S.screen!=='run'){S.view=h;launch();return}if(h!==S.view)setView(h)});
+window.addEventListener('resize',()=>{if(V)V._sig={}});
+(function boot(){const h=readHash();if(h&&h!=='start'){S.view=h;launch()}else{showScreen()}requestAnimationFrame(loop)})();
+</script>
+</body>
+</html>

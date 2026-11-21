@@ -1,0 +1,1820 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Chipwright run</title>
+<style>
+:root{
+  --ink-50:#fafaf9;--ink-100:#f3f3f6;--ink-150:#e8e8ec;--ink-200:#d4d4dc;--ink-300:#b0b0be;--ink-350:#9a9aa8;--ink-400:#8a8a99;--ink-500:#6c6c85;--ink-600:#5a5a6a;--ink-700:#4a4a5a;--ink-800:#3a3a4a;--ink-900:#1a1a2e;
+  --azure:#3b82f6;--azure-600:#2563eb;--azure-700:#1d4ed8;--sky:#eef6fc;--sky-2:#dbeafe;
+  --teal-50:#f0f7f6;--teal-100:#d7ecea;--teal-600:#0d9488;--teal-900:#134e4a;
+  --violet:#a78bfa;--violet-ink:#6d4fc4;--blue:#60a5fa;--blue-ink:#2563eb;--orange:#fb923c;--orange-ink:#c2560c;
+  --moss:#5b8a5b;--ok:#10b981;--ok-50:#ecfdf5;--ok-700:#047857;--bad:#ef4444;--bad-50:#fef2f2;--bad-700:#b91c1c;--warn:#f59e0b;--warn-50:#fffbeb;--warn-700:#b45309;
+  --sidebar:#f9f9f9;
+  --sans:Inter,-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif;
+  --serif:"Source Serif 4","Source Serif Pro","Iowan Old Style","Charter","Palatino Linotype",Georgia,serif;
+  --mono:"JetBrains Mono","SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  --sh-xs:0 1px 2px rgba(26,26,46,.05);
+  --sh-sm:0 1px 3px rgba(26,26,46,.06),0 1px 2px rgba(26,26,46,.04);
+  --sh-md:0 4px 14px rgba(26,26,46,.07),0 1px 3px rgba(26,26,46,.05);
+  --sh-lg:0 12px 32px rgba(26,26,46,.12),0 2px 6px rgba(26,26,46,.06);
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%}
+body{font:14px/1.5 var(--sans);color:var(--ink-900);background:#fff;-webkit-font-smoothing:antialiased;color-scheme:light}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+input,textarea,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--azure);outline-offset:2px;border-radius:4px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-500)}
+.serif{font-family:var(--serif)}
+svg.i{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+svg.i.s12{width:12px;height:12px}svg.i.s14{width:14px;height:14px}svg.i.s16{width:16px;height:16px}svg.i.s18{width:18px;height:18px}
+
+/* app shell */
+#app{display:grid;grid-template-columns:212px minmax(0,1fr);height:100vh}
+.side{border-right:1px solid var(--ink-150);background:var(--sidebar);display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.brand{display:flex;align-items:center;gap:9px;height:48px;padding:0 14px;border-bottom:1px solid transparent}
+.brand-mark{width:24px;height:24px;border-radius:6px;background:var(--ink-900);display:grid;place-items:center;flex:none}
+.brand-name{font-family:var(--serif);font-size:17px;font-weight:600;letter-spacing:-.01em}
+.side-sec{padding:6px 8px}
+.side-h{font-size:11.5px;color:var(--ink-400);padding:10px 8px 4px;font-weight:500}
+.nav{display:flex;align-items:center;gap:9px;width:100%;padding:6px 8px;border-radius:6px;font-size:12.5px;color:var(--ink-700);text-align:left;position:relative;min-height:30px}
+.nav:hover{background:var(--ink-100)}
+.nav[aria-current="true"]{background:#fff;color:var(--ink-900);box-shadow:var(--sh-xs),0 0 0 1px var(--ink-150);font-weight:500}
+.nav .lbl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav .badge{font-family:var(--mono);font-size:10px;color:var(--ink-400);font-variant-numeric:tabular-nums}
+.nav .dot{width:6px;height:6px;border-radius:50%;background:var(--azure);flex:none}
+.nav .spin{width:12px;height:12px;border:1.5px solid var(--sky-2);border-top-color:var(--azure);border-radius:50%;animation:spin 1s linear infinite;flex:none}
+.side-foot{margin-top:auto;padding:10px;border-top:1px solid var(--ink-150);font-size:11.5px;color:var(--ink-500)}
+.usage-bar{height:4px;border-radius:9px;background:var(--ink-150);margin-top:6px;overflow:hidden}
+.usage-bar i{display:block;height:100%;background:var(--ink-700);border-radius:9px}
+.main{min-width:0;display:flex;flex-direction:column;height:100vh;overflow:hidden;position:relative}
+.screen[hidden]{display:none!important}
+
+/* start screen */
+#start{flex:1;overflow:auto}
+.start-wrap{max-width:820px;margin:0 auto;padding:64px 28px 60px}
+.greet{font-family:var(--serif);font-size:38px;line-height:1.08;font-weight:500;letter-spacing:-.015em;margin:0 0 10px}
+.greet-sub{color:var(--ink-500);font-size:14px;margin:0 0 26px;max-width:620px}
+.presets{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.preset{display:flex;gap:12px;align-items:flex-start;text-align:left;padding:14px;border:1px solid var(--ink-150);border-radius:10px;background:#fff;transition:border-color .15s,box-shadow .15s}
+.preset:hover{border-color:var(--ink-200)}
+.preset[aria-pressed="true"]{border-color:#9dc0fb;box-shadow:0 0 0 3px rgba(59,130,246,.12)}
+.preset-ico{width:40px;height:40px;border-radius:8px;background:var(--ink-50);border:1px solid var(--ink-150);display:grid;place-items:center;flex:none}
+.preset b{display:block;font-size:14px;font-weight:600}
+.preset span{display:block;font-size:12.5px;color:var(--ink-500);line-height:1.45;margin-top:2px}
+.composer{border:1px solid var(--ink-200);border-radius:16px;background:#fff;box-shadow:var(--sh-md);padding:14px 14px 10px}
+.composer textarea{width:100%;border:0;outline:0;resize:none;font-size:14px;line-height:1.6;min-height:88px;background:transparent}
+.pills{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.pill{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:999px;border:1px solid var(--ink-150);background:#fff;font-size:12px;color:var(--ink-700);white-space:nowrap}
+.pill:hover{background:var(--ink-50);border-color:var(--ink-200)}
+.pill .k{color:var(--ink-400)}
+.pill b{font-weight:600;color:var(--ink-900)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:32px;padding:0 13px;border-radius:8px;font-size:12.5px;font-weight:500;border:1px solid var(--ink-150);background:#fff;color:var(--ink-800);white-space:nowrap}
+.btn:hover{background:var(--ink-50);border-color:var(--ink-200)}
+.btn.primary{background:var(--ink-900);border-color:var(--ink-900);color:#fff}
+.btn.primary:hover{background:#2a2a40}
+.btn.blue{background:var(--azure-600);border-color:var(--azure-600);color:#fff}
+.btn.blue:hover{background:var(--azure-700)}
+.btn.sm{height:26px;padding:0 9px;font-size:11.5px;border-radius:6px}
+.btn.ghost{border-color:transparent;background:transparent}
+.btn.ghost:hover{background:var(--ink-100)}
+.btn[disabled]{opacity:.45;cursor:default}
+.start-row{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--ink-100)}
+.start-row .sp{flex:1}
+.launch{border:1px solid var(--ink-150);border-radius:16px;padding:22px 22px 18px;background:#fff;box-shadow:var(--sh-md)}
+.launch h3{font-family:var(--serif);font-weight:500;font-size:20px;margin:0 0 12px}
+.launch li{list-style:none;display:flex;gap:9px;align-items:center;font-size:13px;color:var(--ink-500);padding:4px 0}
+.launch li.on{color:var(--ink-900)}
+.launch li.done{color:var(--ink-700)}
+.launch ul{margin:0;padding:0}
+.sec-h{font-family:var(--serif);font-size:20px;font-weight:500;margin:44px 0 12px}
+.list{border:1px solid var(--ink-150);border-radius:10px;overflow:hidden}
+.list-row{display:grid;grid-template-columns:20px 1fr 120px 110px 90px;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--ink-150);font-size:12.5px}
+.list-row:first-child{border-top:0}
+.list-row.head{background:var(--ink-50);color:var(--ink-500);font-size:11.5px;padding:7px 14px}
+
+/* popover */
+#pop{position:fixed;z-index:60;background:#fff;border:1px solid var(--ink-150);border-radius:10px;box-shadow:var(--sh-lg);padding:6px;min-width:220px;max-width:380px}
+#pop[hidden]{display:none}
+.pop-h{font-size:11.5px;color:var(--ink-500);padding:6px 8px 4px}
+.opt{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;padding:8px;border-radius:6px}
+.opt:hover{background:var(--ink-100)}
+.opt[aria-checked="true"]{background:var(--sky)}
+.opt b{font-size:12.5px;font-weight:600;display:block}
+.opt span{font-size:11.5px;color:var(--ink-500);display:block}
+.opt .price{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink-600);white-space:nowrap}
+.agent-cfg{display:grid;grid-template-columns:24px 1fr auto auto;gap:8px;align-items:center;padding:6px 8px;font-size:12px}
+.sel{height:26px;border:1px solid var(--ink-150);border-radius:6px;background:#fff;font-size:11.5px;padding:0 4px}
+.field{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 8px;font-size:12.5px}
+.field input{width:84px;height:28px;border:1px solid var(--ink-150);border-radius:6px;padding:0 8px;font-family:var(--mono);font-size:12px;text-align:right}
+
+/* run screen */
+#run{display:flex;flex-direction:column;height:100%;min-height:0}
+.topbar{height:48px;display:flex;align-items:center;gap:10px;padding:0 14px 0 16px;border-bottom:1px solid var(--ink-150);flex:none;min-width:0}
+.run-title{font-family:var(--serif);font-size:17px;font-weight:500;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:60px;max-width:340px;padding:2px 4px;border-radius:4px;outline:0}
+.run-title:hover{background:var(--ink-50)}
+.run-title:focus{background:#fff;box-shadow:0 0 0 1px var(--ink-200)}
+.seg{display:inline-flex;padding:2px;background:var(--ink-100);border-radius:8px;gap:2px;flex:none}
+.seg button{height:26px;padding:0 10px;border-radius:6px;font-size:12px;color:var(--ink-600);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.seg button[aria-pressed="true"]{background:#fff;color:var(--ink-900);box-shadow:var(--sh-xs);font-weight:500}
+.tb-sp{flex:1;min-width:8px}
+.simlabel{font-size:11px;color:var(--warn-700);background:var(--warn-50);border:1px solid #fde7b0;border-radius:999px;padding:2px 9px;white-space:nowrap}
+.live{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;background:var(--bad-50);color:var(--bad-700);font-size:11px;font-weight:600;letter-spacing:.04em;border:1px solid #fecaca;white-space:nowrap}
+.live i{width:7px;height:7px;border-radius:50%;background:var(--bad);animation:blink 1.4s ease-in-out infinite}
+.live.dim{background:var(--ink-100);color:var(--ink-500);border-color:var(--ink-150)}
+.live.dim i{background:var(--ink-300);animation:none}
+.live.fin{background:var(--ok-50);color:var(--ok-700);border-color:#a7f3d0}
+.live.fin i{background:var(--ok);animation:none}
+.live.paused{background:var(--warn-50);color:var(--warn-700);border-color:#fde7b0}
+.live.paused i{background:var(--warn);animation:none}
+.iconbtn{width:30px;height:30px;border-radius:7px;display:inline-grid;place-items:center;color:var(--ink-600);flex:none}
+.iconbtn:hover{background:var(--ink-100);color:var(--ink-900)}
+.speed{height:28px;border:1px solid var(--ink-150);border-radius:7px;background:#fff;font-size:11.5px;padding:0 6px;font-family:var(--mono)}
+
+/* persistent strip */
+.strip{display:flex;align-items:stretch;gap:12px;padding:8px 14px 8px 16px;border-bottom:1px solid var(--ink-150);background:var(--ink-50);flex:none;min-width:0}
+.tracker{display:flex;align-items:stretch;gap:4px;flex:1;min-width:0}
+.stg{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:5px;padding:4px 8px;border-radius:7px;text-align:left;border:1px solid transparent}
+.stg:hover{background:#fff;border-color:var(--ink-150)}
+.stg .nm{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--ink-500);white-space:nowrap;overflow:hidden}
+.stg .nm svg{flex:none}
+.stg .bar{height:4px;border-radius:9px;background:var(--ink-150);overflow:hidden;position:relative}
+.stg .bar i{position:absolute;inset:0 auto 0 0;border-radius:9px;background:var(--acc,var(--azure))}
+.stg.run .nm{color:var(--ink-900);font-weight:600}
+.stg.done .nm{color:var(--ink-700)}
+.stg.run .bar i{background-image:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);background-size:60px 100%;background-repeat:no-repeat;animation:sweep 1.6s linear infinite;background-color:var(--acc)}
+.loop{display:flex;gap:2px;flex:4;min-width:0;border:1px dashed #b8d0f7;border-radius:9px;padding:0 2px 0 0;position:relative;background:rgba(96,165,250,.05)}
+.loop-tag{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 8px;font-size:11px;color:var(--blue-ink);border-right:1px dashed #b8d0f7;white-space:nowrap;line-height:1.2}
+.loop-tag b{font-size:13px;font-family:var(--mono)}
+.best-mini{display:flex;align-items:center;gap:10px;padding:4px 12px 4px 8px;border-radius:9px;border:1px solid var(--ink-150);background:#fff;min-width:0;text-align:left;flex:none}
+.best-mini:hover{border-color:var(--ink-200)}
+.best-mini .gl{width:34px;height:26px;flex:none}
+.best-mini .v{font-family:var(--mono);font-size:13px;font-weight:600;white-space:nowrap}
+.best-mini .s{font-size:11px;color:var(--ink-500);white-space:nowrap}
+.ctrl{display:flex;align-items:center;gap:6px;flex:none}
+.scrub{height:5px;position:relative;cursor:pointer;flex:none;background:var(--ink-100);border-bottom:1px solid var(--ink-150);transition:height .12s}
+.scrub:hover,.scrub.drag{height:9px}
+.scrub .trk{display:none}
+.scrub .live-edge{position:absolute;left:0;top:0;bottom:0;background:var(--ink-200)}
+.scrub .pos{position:absolute;left:0;top:0;bottom:0;background:var(--azure)}
+.scrub .knob{position:absolute;top:50%;width:11px;height:11px;margin:-5.5px 0 0 -5.5px;border-radius:50%;background:#fff;border:2px solid var(--azure);opacity:0;transition:opacity .15s}
+.scrub:hover .knob,.scrub.drag .knob{opacity:1}
+.scrub .tick{position:absolute;top:0;bottom:0;width:2px;background:#fff}
+
+.viewport{flex:1;min-height:0;overflow:auto;position:relative}
+.view{min-height:100%}
+.pad{padding:20px 22px 28px}
+.vh{display:flex;align-items:baseline;gap:12px;margin:0 0 14px}
+.vh h2{font-family:var(--serif);font-weight:500;font-size:26px;line-height:1.08;margin:0;letter-spacing:-.01em}
+.vh p{margin:0;color:var(--ink-500);font-size:12.5px}
+.panel{border:1px solid var(--ink-150);border-radius:10px;background:#fff;box-shadow:var(--sh-xs);min-width:0}
+.panel-h{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--ink-150);font-size:12.5px;font-weight:600}
+.panel-h .sub{font-weight:400;color:var(--ink-500);font-size:11.5px}
+.panel-h .sp{flex:1}
+.panel-b{padding:12px 14px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:12.5px}
+.kv dt{color:var(--ink-500)}
+.kv dd{margin:0;text-align:right;font-family:var(--mono);font-size:12px}
+.chipbtn{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:999px;border:1px solid var(--ink-150);font-size:11.5px;color:var(--ink-600);background:#fff;white-space:nowrap}
+.chipbtn:hover{border-color:var(--ink-200);color:var(--ink-900)}
+.chipbtn[aria-pressed="true"]{background:var(--ink-900);color:#fff;border-color:var(--ink-900)}
+.tag{display:inline-flex;align-items:center;gap:4px;height:19px;padding:0 7px;border-radius:999px;font-size:10.5px;font-weight:500;white-space:nowrap}
+.tag.ok{background:var(--ok-50);color:var(--ok-700)}
+.tag.bad{background:var(--bad-50);color:var(--bad-700)}
+.tag.warn{background:var(--warn-50);color:var(--warn-700)}
+.tag.blue{background:var(--sky);color:var(--azure-700)}
+.tag.ink{background:var(--ink-100);color:var(--ink-600)}
+.tag.teal{background:var(--teal-50);color:var(--teal-900)}
+.link{color:var(--azure-600);font-size:12px;display:inline-flex;align-items:center;gap:4px}
+.link:hover{text-decoration:underline}
+canvas{display:block;width:100%}
+
+/* conversation view */
+.conv{display:grid;grid-template-columns:minmax(0,1fr) 340px;height:100%}
+.stream-col{display:flex;flex-direction:column;min-height:0;min-width:0;position:relative}
+.stream{flex:1;overflow:auto;padding:22px 26px 10px;scroll-behavior:auto}
+.stream-in{max-width:780px;margin:0 auto}
+.msg{display:grid;grid-template-columns:30px minmax(0,1fr);gap:11px;margin:0 0 14px}
+.av{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-family:var(--serif);font-weight:600;font-size:14px;flex:none}
+.who{display:flex;align-items:baseline;gap:8px;font-size:12.5px;margin-bottom:2px}
+.who b{font-weight:600}
+.who .tm{font-family:var(--mono);font-size:10.5px;color:var(--ink-400)}
+.who .rl{font-size:11px;color:var(--ink-400)}
+.txt{font-size:14px;line-height:1.62;color:var(--ink-800)}
+.txt p{margin:0 0 6px}
+.txt b{color:var(--ink-900);font-weight:600}
+.caret{display:inline-block;width:6px;height:14px;background:var(--ink-400);vertical-align:-2px;margin-left:2px;animation:blink 1s steps(2) infinite}
+.human{display:flex;justify-content:flex-end;margin:0 0 16px}
+.bubble{max-width:78%;background:var(--teal-50);border:1px solid var(--teal-100);color:var(--teal-900);border-radius:14px 14px 4px 14px;padding:10px 14px;font-size:14px;line-height:1.55}
+.bubble .bh{display:flex;gap:8px;align-items:center;font-size:11px;color:var(--teal-600);margin-bottom:3px;font-weight:500}
+.divider{display:flex;align-items:center;gap:10px;margin:22px 0 14px;font-size:12px;color:var(--ink-500)}
+.divider .ln{flex:1;height:1px;background:var(--ink-150)}
+.divider .lb{display:inline-flex;align-items:center;gap:7px;font-weight:500;color:var(--ink-700)}
+.divider .sw{width:8px;height:8px;border-radius:3px}
+.card{border:1px solid var(--ink-150);border-radius:10px;background:#fff;box-shadow:var(--sh-xs);margin-top:8px;overflow:hidden}
+.card-h{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--ink-100);font-size:12.5px;font-weight:600}
+.card-h .sp{flex:1}
+.card-h .sub{font-weight:400;color:var(--ink-500);font-size:11.5px}
+.card-b{padding:12px}
+.card-f{display:flex;gap:10px;align-items:center;padding:8px 12px;border-top:1px solid var(--ink-100);background:var(--ink-50);font-size:11.5px;color:var(--ink-500)}
+.card-f .sp{flex:1}
+.card.glow{animation:glow 1.6s ease-out 1}
+.tool{border:1px solid var(--ink-150);border-radius:8px;margin-top:6px;background:var(--ink-50);overflow:hidden}
+.tool-h{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;font-size:12px;color:var(--ink-700);text-align:left}
+.tool-h .sp{flex:1}
+.tool-h .st{font-family:var(--mono);font-size:10.5px;color:var(--ink-400)}
+.tool-b{border-top:1px solid var(--ink-150);background:#fff;padding:8px 10px;font-family:var(--mono);font-size:11px;line-height:1.65;color:var(--ink-600);max-height:220px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+.tool-b .e{color:var(--bad-700);background:var(--bad-50);display:block;margin:0 -10px;padding:0 10px}
+.tool-b .w{color:var(--warn-700);background:var(--warn-50);display:block;margin:0 -10px;padding:0 10px}
+.tool-b .o{color:var(--ok-700)}
+.tool-b .c{color:var(--ink-900)}
+.mspin{width:12px;height:12px;border:1.5px solid var(--ink-200);border-top-color:var(--azure);border-radius:50%;animation:spin .9s linear infinite;flex:none}
+.plan li{display:flex;gap:9px;align-items:flex-start;padding:4px 0;font-size:13px;color:var(--ink-500);list-style:none}
+.plan li.done{color:var(--ink-700)}
+.plan li.on{color:var(--ink-900);font-weight:500}
+.plan li.rev{color:var(--teal-900)}
+.plan ul{margin:0;padding:0}
+.plan .bx{width:15px;height:15px;border-radius:4px;border:1.5px solid var(--ink-300);display:grid;place-items:center;flex:none;margin-top:2px}
+.plan li.done .bx{background:var(--moss);border-color:var(--moss);color:#fff}
+.plan li.on .bx{border-color:var(--azure)}
+.plan li.on .bx::after{content:"";width:5px;height:5px;border-radius:50%;background:var(--azure);animation:blink 1.4s infinite}
+.fam{display:grid;grid-template-columns:170px 1fr 54px;gap:10px;align-items:center;font-size:12px;padding:3px 0}
+.fam .b{height:8px;border-radius:9px;background:var(--ink-100);overflow:hidden}
+.fam .b i{display:block;height:100%;background:var(--blue);border-radius:9px}
+.fam .b i.off{background:var(--ink-300)}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--ink-150);border-top:1px solid var(--ink-150)}
+.stat{background:#fff;padding:8px 12px}
+.stat .l{font-size:11px;color:var(--ink-500)}
+.stat .v{font-family:var(--mono);font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+.stat .v small{font-size:11px;color:var(--ink-500);font-weight:400}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.gate-actions{display:flex;gap:8px;align-items:center}
+.composer-dock{border-top:1px solid var(--ink-150);padding:10px 26px 14px;background:#fff;flex:none}
+.dock-in{max-width:780px;margin:0 auto}
+.sugg{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.sugg button{font-size:11.5px;padding:4px 10px;border-radius:999px;border:1px solid var(--ink-150);color:var(--ink-600);background:#fff;white-space:nowrap}
+.sugg button:hover{border-color:var(--teal-600);color:var(--teal-900);background:var(--teal-50)}
+.cbox{border:1px solid var(--ink-200);border-radius:16px;padding:8px 8px 8px 14px;background:#fff;box-shadow:var(--sh-sm);display:flex;flex-direction:column;gap:6px}
+.cbox:focus-within{border-color:#9dc0fb;box-shadow:0 0 0 3px rgba(59,130,246,.12)}
+.cbox textarea{border:0;outline:0;resize:none;min-height:24px;max-height:120px;font-size:14px;line-height:1.5;padding:4px 0;background:transparent}
+.cbox-row{display:flex;align-items:center;gap:6px}
+.cbox-row .sp{flex:1}
+.hint{font-size:11px;color:var(--ink-400)}
+.paused-note{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--warn-700);background:var(--warn-50);border-radius:999px;padding:2px 9px}
+.jump{position:absolute;left:50%;transform:translateX(-50%);bottom:var(--jb,130px);z-index:5;box-shadow:var(--sh-md)}
+.summary{border-left:1px solid var(--ink-150);overflow:auto;background:#fff;padding:18px 18px 24px}
+.sum-h{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-500);margin-bottom:8px}
+.sum-h b{color:var(--ink-900);font-weight:600}
+.big{font-family:var(--serif);font-size:32px;line-height:1.08;font-weight:500;letter-spacing:-.01em}
+.big small{font-family:var(--sans);font-size:13px;color:var(--ink-500);font-weight:400;letter-spacing:0;margin-left:4px}
+.meter{margin-top:10px}
+.meter .row{display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px}
+.meter .row span:last-child{font-family:var(--mono);font-size:11.5px}
+.mtrack{position:relative;height:6px;border-radius:9px;background:var(--ink-100)}
+.mtrack i{position:absolute;left:0;top:0;bottom:0;border-radius:9px;background:var(--ink-800)}
+.mtrack .line{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--moss);border-radius:2px}
+.sum-sec{border-top:1px solid var(--ink-150);margin-top:16px;padding-top:14px}
+.sum-sec h4{font-size:12.5px;font-weight:600;margin:0 0 8px}
+.now{display:flex;gap:9px;align-items:flex-start;font-size:13px;line-height:1.5;color:var(--ink-800)}
+.rrow{display:grid;grid-template-columns:28px 1fr auto;gap:8px;align-items:center;font-size:12px;padding:5px 0;border-bottom:1px dashed var(--ink-150)}
+.rrow:last-child{border-bottom:0}
+.rrow .rn{font-family:var(--mono);color:var(--ink-500);font-size:11px}
+.rrow .g{font-family:var(--mono);font-weight:600}
+.rrow .d{font-family:var(--mono);font-size:11px;color:var(--ok-700)}
+
+/* design space */
+.ds{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:14px}
+.ds-bottom{display:grid;grid-template-columns:330px minmax(0,1fr);gap:14px;margin-top:14px}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:11.5px;color:var(--ink-500);align-items:center}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.legend i.ln{height:2px;width:14px;border-radius:0;vertical-align:3px}
+.tip{position:absolute;pointer-events:none;background:var(--ink-900);color:#fff;font-size:11.5px;padding:6px 9px;border-radius:7px;white-space:nowrap;z-index:9;box-shadow:var(--sh-md);font-family:var(--mono)}
+table.t{width:100%;border-collapse:collapse;font-size:12px}
+table.t th{text-align:left;font-weight:500;color:var(--ink-500);font-size:11.5px;padding:6px 8px;border-bottom:1px solid var(--ink-150);white-space:nowrap;background:var(--ink-50);position:sticky;top:0}
+table.t td{padding:6px 8px;border-bottom:1px solid var(--ink-100);white-space:nowrap}
+table.t td.n,table.t th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+table.t tr.click{cursor:pointer}
+table.t tr.click:hover td{background:var(--ink-50)}
+table.t tr.sel td{background:var(--sky)}
+table.t tr.best td{font-weight:600}
+
+/* chip view */
+.cmp{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+.chip-svg{width:100%;height:auto;display:block}
+.mix{display:flex;height:8px;border-radius:9px;overflow:hidden;margin:6px 0 4px}
+.mix i{display:block;height:100%}
+.delta-good{color:var(--ok-700)}.delta-bad{color:var(--bad-700)}
+
+/* signal view */
+.sig-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-top:14px}
+.pt-row{display:grid;grid-template-columns:44px 1fr 56px 1fr 56px;gap:8px;align-items:center;font-size:12px;padding:4px 0;border-bottom:1px solid var(--ink-100);cursor:pointer}
+.pt-row:hover{background:var(--ink-50)}
+.pt-row.sel{background:var(--sky)}
+.pt-row .n{font-family:var(--mono);font-size:11.5px;text-align:right}
+.hb{position:relative;height:7px;border-radius:9px;background:var(--ink-100)}
+.hb i{position:absolute;left:0;top:0;bottom:0;border-radius:9px;background:var(--ink-700)}
+.hb .ln{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--moss)}
+.hb.fail i{background:var(--bad)}
+.bigok{font-family:var(--serif);font-size:38px;line-height:1.08;font-weight:500}
+
+/* agents view */
+.ag{display:grid;grid-template-columns:270px minmax(0,1fr) 300px;gap:14px}
+.agents{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.agent{border:1px solid var(--ink-150);border-radius:10px;background:#fff;display:flex;flex-direction:column;min-height:180px}
+.agent-h{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--ink-100)}
+.agent-h b{font-size:13px}
+.agent-h .rl{font-size:11px;color:var(--ink-500)}
+.agent-b{padding:10px 12px;font-size:12.5px;line-height:1.55;color:var(--ink-700);flex:1}
+.agent-b .older{color:var(--ink-400);font-size:12px;margin-top:6px;border-top:1px dashed var(--ink-150);padding-top:6px}
+.agents .agent:last-child:nth-child(odd){grid-column:1 / -1;min-height:150px}
+.agent-f{display:flex;gap:8px;white-space:nowrap;overflow:hidden;padding:7px 12px;border-top:1px solid var(--ink-100);font-size:10.5px;color:var(--ink-500);font-family:var(--mono)}
+.agent.active{border-color:#b8d0f7;box-shadow:0 0 0 3px rgba(59,130,246,.08)}
+.log li{list-style:none;display:grid;grid-template-columns:52px 1fr;gap:8px;font-size:12px;padding:6px 0;border-bottom:1px solid var(--ink-100)}
+.log ul{margin:0;padding:0}
+.log .tm{font-family:var(--mono);font-size:10.5px;color:var(--ink-400);padding-top:2px}
+
+/* cost view */
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;background:var(--ink-150);border:1px solid var(--ink-150);border-radius:10px;overflow:hidden;margin-bottom:14px}
+.kpi{background:#fff;padding:12px 14px}
+.kpi .l{font-size:11.5px;color:var(--ink-500)}
+.kpi .v{font-family:var(--serif);font-size:26px;line-height:1.1;margin-top:2px}
+.kpi .s{font-size:11px;color:var(--ink-400);margin-top:2px}
+.cost-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:14px}
+.hbar{display:grid;grid-template-columns:96px 1fr 70px;gap:10px;align-items:center;font-size:12px;padding:4px 0}
+.hbar .t{height:10px;border-radius:9px;background:var(--ink-100);overflow:hidden}
+.hbar .t i{display:block;height:100%;border-radius:9px}
+
+/* report view */
+.report{max-width:900px;margin:0 auto;padding:30px 28px 50px}
+.report h1{font-family:var(--serif);font-weight:500;font-size:32px;line-height:1.08;margin:6px 0 8px;letter-spacing:-.01em}
+.report h3{font-family:var(--serif);font-weight:500;font-size:20px;margin:30px 0 10px}
+.report p{font-family:var(--serif);font-size:16px;line-height:1.75;color:var(--ink-800);margin:0 0 12px;max-width:70ch}
+.report .lede{font-size:17px}
+.ds-table{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--ink-150);border-radius:10px;overflow:hidden;gap:1px;background:var(--ink-150)}
+.ds-table > div{background:#fff;padding:10px 14px}
+.ds-table .l{font-size:11.5px;color:var(--ink-500)}
+.ds-table .v{font-family:var(--mono);font-size:15px;font-weight:600}
+.files{display:flex;flex-wrap:wrap;gap:8px}
+.limits li{font-family:var(--serif);font-size:15px;line-height:1.7;color:var(--ink-800);margin-bottom:4px}
+.draft{display:inline-flex;gap:6px;align-items:center;font-size:12px;color:var(--warn-700);background:var(--warn-50);border-radius:999px;padding:3px 10px}
+
+#toasts{position:fixed;right:16px;bottom:16px;z-index:70;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.toast{background:#fff;border:1px solid var(--ink-150);box-shadow:var(--sh-lg);border-radius:10px;padding:10px 12px;font-size:12.5px;display:flex;gap:10px;align-items:center;max-width:380px;animation:tin .25s ease-out}
+.toast .x{color:var(--ink-400)}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:var(--ink-500);font-size:13px;gap:8px;padding:40px 20px;min-height:180px}
+.empty b{font-family:var(--serif);font-weight:500;font-size:18px;color:var(--ink-800)}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+@keyframes sweep{0%{background-position:-60px 0}100%{background-position:calc(100% + 60px) 0}}
+@keyframes glow{0%{box-shadow:0 0 0 3px rgba(59,130,246,.22)}100%{box-shadow:var(--sh-xs)}}
+@keyframes tin{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:1ms!important;animation-iteration-count:1!important;transition-duration:1ms!important}}
+
+@media (max-width:1240px){
+  #app{grid-template-columns:58px minmax(0,1fr)}
+  .side .lbl,.side .badge,.side-h,.brand-name,.side-foot .ft{display:none}
+  .nav{justify-content:center;padding:8px}
+  .brand{justify-content:center;padding:0}
+  .side-foot{padding:8px 6px}
+  .conv{grid-template-columns:minmax(0,1fr) 300px}
+  .ag{grid-template-columns:240px minmax(0,1fr)}
+  .ag > .ag-right{grid-column:1 / -1}
+  .simlabel{font-size:10.5px}
+}
+@media (max-width:1100px){
+  .ds{grid-template-columns:minmax(0,1fr)}
+  .ds-bottom{grid-template-columns:minmax(0,1fr)}
+  .stg .nm span{overflow:hidden;text-overflow:ellipsis}
+  .best-mini .gl{display:none}
+  .kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .seg .full{display:none}
+}
+@media (max-width:760px){
+  html,body{height:auto}
+  #app{display:block;height:auto}
+  .side{position:sticky;top:0;z-index:20;flex-direction:row;align-items:center;border-right:0;border-bottom:1px solid var(--ink-150);overflow-x:auto;height:52px}
+  .side-sec{display:flex;padding:0 4px;gap:2px}
+  .side-h,.side-foot,.side .runs{display:none}
+  .nav{width:auto;flex:none}
+  .main{height:auto;overflow:visible}
+  #run{height:auto}
+  .topbar{flex-wrap:wrap;height:auto;padding:8px 12px;gap:8px}
+  .run-title{max-width:100%;flex:1 1 100%}
+  .strip{flex-wrap:wrap;padding:8px 12px}
+  .tracker{flex:1 1 100%;flex-wrap:wrap}
+  .stg{flex:1 1 30%}
+  .loop{flex:1 1 100%}
+  .viewport{overflow:visible}
+  .conv,.ds,.ds-bottom,.cmp,.sig-grid,.ag,.agents,.cost-grid,.two,.presets{grid-template-columns:minmax(0,1fr)}
+  .conv{height:auto}
+  .stream{max-height:none;overflow:visible;padding:16px 12px}
+  .summary{border-left:0;border-top:1px solid var(--ink-150)}
+  .composer-dock{padding:10px 12px;position:sticky;bottom:0}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ds-table{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .pad{padding:14px 12px}
+  .start-wrap{padding:30px 16px}
+  .greet{font-size:30px}
+  .list-row{grid-template-columns:20px 1fr 80px}
+  .list-row > :nth-child(4),.list-row > :nth-child(5){display:none}
+  .fam{grid-template-columns:120px 1fr 44px}
+  .bubble{max-width:92%}
+  .jump,.composer-dock .sugg,.cbox .hint{display:none}
+  [style*="grid-template-columns:200px"]{grid-template-columns:minmax(0,1fr)!important}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside class="side" id="side"></aside>
+  <div class="main">
+    <section id="start" class="screen"></section>
+    <section id="run" class="screen" hidden>
+      <header class="topbar" id="topbar"></header>
+      <div class="strip" id="strip"></div>
+      <div class="scrub" id="scrub" title="Scrub through the run"><div class="trk"></div><div class="live-edge"></div><div class="pos"></div><div class="knob"></div></div>
+      <div class="viewport" id="viewport"></div>
+    </section>
+  </div>
+</div>
+<div id="pop" hidden></div>
+<div id="toasts" aria-live="polite"></div>
+<script>
+(function(){
+'use strict';
+/* ---------- utilities ---------- */
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+const REAL = 110; // real seconds of run per simulated second
+const clamp = (x,a,b) => Math.max(a, Math.min(b, x));
+const fmt = n => Math.round(n).toLocaleString('en-US');
+const pct = x => x.toFixed(1) + '%';
+const money = x => '$' + x.toFixed(2);
+const pad2 = n => String(n).padStart(2,'0');
+function clock(t){ const s=Math.max(0,Math.round(t*REAL)); const h=Math.floor(s/3600), m=Math.floor(s%3600/60), ss=s%60; return h ? `${h}:${pad2(m)}:${pad2(ss)}` : `${m}:${pad2(ss)}`; }
+function dur(t){ const s=Math.round(t*REAL); const h=Math.floor(s/3600), m=Math.floor(s%3600/60); return h ? `${h} h ${pad2(m)} min` : `${m} min`; }
+function mulberry(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function hashStr(s){ let h=2166136261; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
+function gauss(r){ let u=0,v=0; while(!u) u=r(); while(!v) v=r(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function upper(arr, x){ let lo=0, hi=arr.length; while(lo<hi){ const m=(lo+hi)>>1; if(arr[m]<=x) lo=m+1; else hi=m; } return lo; }
+function fitCanvas(cv){ const r=cv.getBoundingClientRect(); const dpr=Math.min(2, window.devicePixelRatio||1); const w=Math.max(1,Math.round(r.width)), h=Math.max(1,Math.round(r.height)); if(cv.width!==w*dpr || cv.height!==h*dpr){ cv.width=w*dpr; cv.height=h*dpr; } const c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,w,h); return {c,w,h}; }
+
+const IP = {
+  play:'<polygon points="6 3 20 12 6 21 6 3"/>',
+  pause:'<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
+  restart:'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  share:'<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/>',
+  msg:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  scatter:'<path d="M3 3v16a2 2 0 0 0 2 2h16"/><circle cx="7.5" cy="14.5" r="1.5"/><circle cx="12" cy="9" r="1.5"/><circle cx="17" cy="12" r="1.5"/><circle cx="18.5" cy="6" r="1.5"/>',
+  cpu:'<rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"/>',
+  activity:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+  bot:'<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/>',
+  coins:'<circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/>',
+  file:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8M16 13H8M16 17H8"/>',
+  plus:'<path d="M5 12h14M12 5v14"/>',
+  down:'<path d="m6 9 6 6 6-6"/>',
+  right:'<path d="m9 18 6-6-6-6"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  x:'<path d="M18 6 6 18M6 6l12 12"/>',
+  alert:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/>',
+  send:'<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
+  download:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+  wrench:'<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+  shield:'<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  loop:'<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
+  grid:'<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+  link:'<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  list:'<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8M13 12h8M13 18h8"/>',
+  compare:'<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/>',
+  term:'<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>',
+  wave:'<path d="M2 12h3l2-6 3 12 3-9 2 5 2-2h5"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2"/>',
+  arrowdown:'<path d="M12 5v14M19 12l-7 7-7-7"/>',
+  hand:'<path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>',
+  question:'<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>',
+  history:'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+};
+const ic = (n, cls='') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${IP[n]||''}</svg>`;
+const BRAND = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5" fill="none" stroke="#fff" stroke-width="1.4"/><path d="M6 1v2.5M10 1v2.5M6 12.5V15M10 12.5V15M1 6h2.5M1 10h2.5M12.5 6H15M12.5 10H15" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/><rect x="6.3" y="6.3" width="3.4" height="3.4" fill="#93c5fd"/></svg>';
+
+/* ---------- product configuration ---------- */
+const COMPUTE = [
+  {k:'cpu1', name:'CPU Basic', spec:'Small CPU machines', price:0.12, batch:256},
+  {k:'cpu2', name:'CPU Plus', spec:'Larger CPU machines, faster compile', price:0.40, batch:512},
+  {k:'gpu1', name:'GPU Basic', spec:'16 GB+ GPU memory', price:1.10, batch:2048},
+  {k:'gpu2', name:'GPU Plus', spec:'40 GB+ GPU memory', price:2.90, batch:4096},
+];
+const MODES = {
+  Lite:{rounds:3, mult:.5, desc:'3 rounds, fast models'},
+  Pro:{rounds:4, mult:1, desc:'4 rounds, balanced models'},
+  Max:{rounds:4, mult:1.6, desc:'4 rounds, highest effort'},
+  Ultra:{rounds:5, mult:2.2, desc:'5 rounds, highest effort'},
+};
+const MODELS = ['Claude Opus','Claude Sonnet','Claude Haiku','Open model (free)'];
+const AGENTS = [
+  {k:'arch', name:'Architect', role:'Plans rounds and proposes chip designs', color:'#6d4fc4', tint:'#f3effd', model:'Claude Opus', effort:'High', g:'A'},
+  {k:'train', name:'Trainer', role:'Trains candidates as one GPU batch', color:'#2563eb', tint:'#eaf2fe', model:'Claude Sonnet', effort:'Medium', g:'T'},
+  {k:'comp', name:'Compiler', role:'Turns trained models into logic gates', color:'#0e7490', tint:'#e6f6f9', model:'Claude Sonnet', effort:'High', g:'C'},
+  {k:'ver', name:'Verifier', role:'Checks circuit against model, bit for bit', color:'#4d7c4d', tint:'#eef5ed', model:'Claude Sonnet', effort:'High', g:'V'},
+  {k:'rep', name:'Reporter', role:'Writes the datasheet and its limits', color:'#c2560c', tint:'#fff2e8', model:'Claude Haiku', effort:'Medium', g:'R'},
+];
+const AG = Object.fromEntries(AGENTS.map(a=>[a.k,a]));
+
+const DEV = {
+  eeg:{
+    key:'eeg', name:'Newborn EEG seizure monitor', short:'EEG seizure monitor', tab:'EEG seizure monitor', icon:'wave',
+    title:'Newborn seizure flag chip',
+    prompt:'A bedside monitor for newborns in intensive care. Eight EEG channels in, one flag out: seizure activity in the last 8 seconds. It has to catch seizures in every baby, not only on average, and fit in under 20,000 gates.',
+    blurb:'Flags seizure activity from eight brain-wave channels, one decision every 8 seconds.',
+    signal:'8-channel neonatal EEG, 256 Hz, 8-second windows',
+    inputs:['Fp1–C3','C3–O1','Fp2–C4','C4–O2','T3–C3','C3–Cz','Cz–C4','C4–T4'],
+    inputBits:'8 channels × 16 features × 4 bits', nInBits:512,
+    output:'SEIZURE', outputDesc:'1 bit per 8 s window',
+    metric:'Worst-patient sensitivity', metricShort:'sens.', line:{sens:90, spec:95}, budget:20000,
+    ref:{sens:95.4, spec:97.3, size:'1.9 M parameters', kind:'float convolutional network'},
+    targets:[{g:14820,s:90.9,sp:95.6,d:31},{g:9640,s:91.8,sp:95.9,d:27},{g:6180,s:92.4,sp:96.2,d:24},{g:4420,s:93.0,sp:96.4,d:22}],
+    xr:[1500,130000], yr:[58,99],
+    patients:12, windows:3880, unit:'windows', posWord:'seizure windows', decision:'seizure flag', who:'newborns',
+    data:'EEG from 79 newborns: 59 to train, 8 to tune, 12 held out unseen',
+    families:['Binarised MLP','Logic-gate net','Threshold-tree ensemble','Popcount classifier','LUT network'],
+    bestFam:[0,1,1,1,1,1],
+    changes:[
+      'Broad sweep across five families: binarised MLPs, logic-gate nets, threshold-tree ensembles, popcount classifiers and LUT networks, with 2 to 8 bit inputs.',
+      'Dropped threshold trees (none met the line under 30,000 gates). Narrowed to logic-gate nets and binarised MLPs and cut inputs from 6 to 4 bits.',
+      'Pruned 3 of 16 features per channel that carried almost no weight, and shared the first layer across mirrored channel pairs.',
+      'Squeezed gates at fixed accuracy: 3-bit inputs on the frontal channels, a sparser second layer, trained against the reference model\'s outputs.',
+      'Second squeeze: merged near-duplicate units and re-trained the thresholds.',
+      'Final squeeze: removed the least-used channel pair.'],
+    famWeights:[[1,1,1,1,1],[.8,1.4,0,.5,.6],[.5,1.8,0,.2,.4],[.3,2,0,0,.3],[.2,2,0,0,.2],[.2,2,0,0,.2]],
+  },
+  nirs:{
+    key:'nirs', name:'Newborn brain-oxygen sensor', short:'Brain oxygen sensor', tab:'Brain oxygen sensor', icon:'sun',
+    title:'Newborn brain-oxygen chip',
+    prompt:'A sensor that shines near-infrared light through a newborn\'s head. The chip only combines the light readings into one oxygen value and raises a flag when brain oxygen falls below 50%. It must catch every low-oxygen episode in each baby and fit in under 6,000 gates.',
+    blurb:'Combines eight near-infrared light readings into one brain-oxygen value and a low-oxygen flag.',
+    signal:'4 wavelengths × 2 detector distances, one reading every 10 s',
+    inputs:['730 near','730 far','760 near','760 far','810 near','810 far','850 near','850 far'],
+    inputBits:'8 light readings × 12 bits', nInBits:96,
+    output:'rSO₂ + LOW', outputDesc:'7-bit oxygen value and 1-bit flag',
+    metric:'Worst-patient sensitivity to low oxygen', metricShort:'sens.', line:{sens:92, spec:90}, budget:6000,
+    ref:{sens:96.1, spec:94.8, size:'240 k parameters', kind:'float regression network'},
+    targets:[{g:3960,s:92.6,sp:90.8,d:26},{g:2310,s:93.2,sp:91.3,d:23},{g:1540,s:93.9,sp:91.9,d:20},{g:1180,s:94.3,sp:92.2,d:18}],
+    xr:[400,32000], yr:[58,99],
+    patients:9, windows:12960, unit:'readings', posWord:'low-oxygen readings', decision:'low-oxygen flag', who:'newborns',
+    data:'Light readings from 52 newborns with a reference oximeter: 37 to train, 6 to tune, 9 held out unseen',
+    families:['Fixed-point Beer–Lambert','Piecewise-linear table','Binarised MLP','Shift-add network'],
+    bestFam:[0,3,3,3,3,3],
+    changes:[
+      'Broad sweep: fixed-point Beer–Lambert solvers, piecewise-linear lookup tables, binarised MLPs and shift-add networks, with 8 to 12 bit inputs.',
+      'Kept shift-add networks and lookup tables; dropped binarised MLPs, which were too coarse near 50% oxygen.',
+      'Used the far detector only for three wavelengths, keeping the near detector at 810 nm to correct for the scalp.',
+      'Replaced the last multipliers with shift-add constants and cut inputs to 10 bits.',
+      'Second squeeze: shared one shift-add tree across two wavelengths.',
+      'Final squeeze: 9-bit inputs on the near detector.'],
+    famWeights:[[1,1,1,1],[.6,1.2,0,1.6],[.3,.8,0,2],[.2,.5,0,2.2],[.1,.4,0,2.4],[.1,.4,0,2.4]],
+  }
+};
+
+/* ---------- state ---------- */
+const VIEWS = [
+  {k:'conversation', name:'Conversation', icon:'msg'},
+  {k:'design', name:'Design space', icon:'scatter'},
+  {k:'chip', name:'Chip', icon:'cpu'},
+  {k:'signal', name:'Signal and check', icon:'activity'},
+  {k:'agents', name:'Agents', icon:'bot'},
+  {k:'cost', name:'Cost and compute', icon:'coins'},
+  {k:'report', name:'Report', icon:'file'},
+];
+const S = {
+  screen:'start', view:'conversation', device:'eeg',
+  cfg:{compute:'gpu2', mode:'Pro', sens:90, spec:95, budget:20000, agents:AGENTS.map(a=>({k:a.k, model:a.model, effort:a.effort}))},
+  prompt:DEV.eeg.prompt,
+  run:null, t:0, liveT:0, playing:false, speed:1, follow:true,
+  steers:[], gate:{approved:false, held:false},
+  sel:null, chipA:null, chipB:null, dsRound:0, patient:null, sendMode:'redirect', typingPause:false,
+  title:null,
+};
+
+/* ---------- simulated run ---------- */
+function steerEffect(text){
+  const s = text.toLowerCase();
+  const m = s.match(/(\d+(?:\.\d+)?)\s*(?:points?|pts?|%)\s*(?:lower|less|of)/);
+  const pts = m ? parseFloat(m[1]) : null;
+  if(/fewer gates|smaller|less area|cheaper|fewer|shrink|reduce gates|gates/.test(s) && !/more gates/.test(s)){
+    const sd = pts!=null ? -Math.min(pts,4)*0.85 : -0.9;
+    const gm = pts!=null ? clamp(0.86 - pts*0.09, 0.55, 0.85) : 0.76;
+    return {kind:'gates', gm, sd, dm:.95, pts};
+  }
+  if(/sensitiv|accura|miss|safer|catch|recall/.test(s)) return {kind:'acc', gm:1.22, sd:+1.0, dm:1.04};
+  if(/path|latency|depth|shallow|faster|delay/.test(s)) return {kind:'depth', gm:1.06, sd:0, dm:.74};
+  if(/specific|false alarm|alarm/.test(s)) return {kind:'spec', gm:1.08, sd:-.2, dm:1, spd:+.8};
+  return {kind:'note', gm:1, sd:0, dm:1};
+}
+function targetFor(D, r, eff){
+  const T = D.targets; let base;
+  if(r <= T.length) base = Object.assign({}, T[r-1]);
+  else { const L=T[T.length-1], k=r-T.length; base = {g:Math.round(L.g*Math.pow(.86,k)), s:L.s+.2*k, sp:L.sp+.1*k, d:Math.max(10,L.d-2*k)}; }
+  base.g = Math.round(base.g*eff.gm); base.s += eff.sd; base.sp += (eff.spd||0); base.d = Math.max(9, Math.round(base.d*eff.dm));
+  base.s = clamp(base.s, D.line.sens+.35, D.ref.sens-.6); base.sp = clamp(base.sp, D.line.spec+.3, D.ref.spec-.3);
+  return base;
+}
+function genPatients(rng, D, s, sp){
+  const n=D.patients, list=[];
+  let rem=D.windows;
+  for(let i=0;i<n;i++){
+    const w = i===n-1 ? rem : Math.round(D.windows/n*(0.82+rng()*0.36));
+    rem -= w; list.push({id:'P'+pad2(i+1), win:w});
+  }
+  const worstS = Math.floor(rng()*n); let worstP = (worstS+3+Math.floor(rng()*(n-4)))%n;
+  for(let i=0;i<n;i++){
+    const p=list[i];
+    p.pos = D.key==='eeg' ? 18+Math.floor(rng()*40) : 70+Math.floor(rng()*120);
+    let target = i===worstS ? s : Math.min(100, s + .6 + rng()*6.2);
+    if(i===worstS){ // find a positive count that lands close to s
+      let bestP=p.pos, bestE=9;
+      for(let q=(D.key==='eeg'?24:60); q<=(D.key==='eeg'?72:200); q++){ const e=Math.abs(Math.round(s*q/100)/q*100 - s); if(e<bestE){bestE=e;bestP=q;} }
+      p.pos=bestP;
+    }
+    p.det = Math.min(p.pos, Math.round(target*p.pos/100));
+    if(i!==worstS && p.det/p.pos*100 < s+.3) p.det = Math.min(p.pos, p.det+1);
+    p.neg = p.win - p.pos;
+    let spT = i===worstP ? sp : Math.min(99.8, sp + .4 + rng()*3.2);
+    p.fa = Math.round((1-spT/100)*p.neg);
+    if(i!==worstP && (1-p.fa/p.neg)*100 < sp+.2) p.fa = Math.max(0,p.fa-1);
+    p.sens = p.det/p.pos*100; p.spec = (1-p.fa/p.neg)*100;
+  }
+  const sens = Math.min(...list.map(p=>p.sens)), spec = Math.min(...list.map(p=>p.spec));
+  return {list, sens, spec};
+}
+function layersFor(D, g, fam, rng){
+  if(D.key==='eeg'){ const h1 = clamp(Math.round(Math.sqrt(g)/2.1), 8, 72), h2 = clamp(Math.round(h1/2.3), 4, 28); return [h1, h2, 1]; }
+  const h1 = clamp(Math.round(Math.sqrt(g)/2.4), 6, 40), h2 = clamp(Math.round(h1/2), 4, 16); return [h1, h2, 8];
+}
+function genRound(D, cfg, r, b, N, T, applied){
+  const rng = mulberry(hashStr(D.key+'|'+r+'|'+N+'|'+Math.round(T.g)));
+  const pats = genPatients(mulberry(hashStr(D.key+'p'+r+'|'+Math.round(T.g))), D, T.s, T.sp);
+  const g=new Float32Array(N), a=new Float32Array(N), sp=new Float32Array(N), tf=new Float32Array(N), fam=new Uint8Array(N), dep=new Uint8Array(N);
+  const lo=Math.log(Math.max(D.xr[0]*1.05, T.g*.42)), hi=Math.log(Math.min(D.xr[1]*.97, T.g*7.5));
+  const fw = D.famWeights[Math.min(r-1, D.famWeights.length-1)]; const fws = fw.reduce((x,y)=>x+y,0);
+  const t0=b+3.3, t1=b+8.8;
+  for(let i=0;i<N;i++){
+    const lg = lo + Math.pow(rng(), .85)*(hi-lo); const gg=Math.exp(lg);
+    const F = gg>=T.g ? T.s + 1.45*Math.log(gg/T.g) : T.s + 9*Math.log(gg/T.g);
+    let aa = F - (Math.abs(gauss(rng))*1.6 + Math.pow(rng(),1.7)*20 + .25);
+    if(gg < T.g && aa >= D.line.sens) aa = D.line.sens - .3 - rng()*3;
+    aa = clamp(aa, D.yr[0]+.5, D.ref.sens-.25);
+    g[i]=gg; a[i]=aa; sp[i]=clamp(T.sp - 1.2 + gauss(rng)*1.4 - (T.s-aa)*.12, 70, D.ref.spec-.2);
+    let x=rng()*fws, f=0; while(f<fw.length-1 && x>fw[f]){ x-=fw[f]; f++; } fam[i]=f;
+    tf[i]= t0 + Math.pow(rng(), 1.15)*(t1-t0);
+    dep[i] = clamp(Math.round(T.d*Math.pow(gg/T.g,.22) + gauss(rng)*1.6), 6, 80);
+  }
+  const bi = Math.floor(rng()*N);
+  g[bi]=T.g; a[bi]=pats.sens; sp[bi]=pats.spec; fam[bi]=D.bestFam[Math.min(r-1,D.bestFam.length-1)]; dep[bi]=T.d; tf[bi]=t0+(t1-t0)*(.55+rng()*.35);
+  let rejIdx=-1;
+  if(r===2){ rejIdx=(bi+977)%N; g[rejIdx]=Math.round(T.g*.91); a[rejIdx]=T.s+.2; sp[rejIdx]=D.line.spec-.8; fam[rejIdx]=fam[bi]; dep[rejIdx]=T.d+1; }
+  // compiled set: smallest candidates meeting the line
+  const meetIdx=[]; for(let i=0;i<N;i++) if(a[i]>=D.line.sens && g[i]<=D.budget*1.0) meetIdx.push(i);
+  meetIdx.sort((x,y)=>g[x]-g[y]);
+  const compiled = meetIdx.slice(0, Math.min(24, meetIdx.length));
+  if(!compiled.includes(bi)) compiled.push(bi);
+  if(rejIdx>=0 && !compiled.includes(rejIdx)) compiled.unshift(rejIdx);
+  compiled.sort((x,y)=>g[x]-g[y]);
+  for(const i of compiled){ if(i!==rejIdx && i!==bi) sp[i] = Math.max(sp[i], D.line.spec + .2 + rng()*1.8); }
+  const tfs = Float32Array.from(tf).sort();
+  const meetCount = meetIdx.length;
+  const best = {r, i:bi, id:`R${r}-${String(bi).padStart(4,'0')}`, g:T.g, s:pats.sens, sp:pats.spec, d:T.d, fam:fam[bi], layers:layersFor(D,T.g,fam[bi]), patients:pats.list};
+  return {D, r, b, N, g, a, sp, tf, tfs, fam, dep, best, bestIdx:bi, rejIdx, compiled, meetCount, applied,
+    change:(applied.length? 'Following your note: '+applied.map(x=>'“'+x.text+'”').join(' and ')+'. ' : '') + (D.changes[r-1]||D.changes[D.changes.length-1]),
+    t:{propose:b, train:b+3, compile:b+9, verify:b+12, chosen:b+15.4, summary:b+16.2, end:b+17}};
+}
+function candOf(R, i){
+  const D=R.D;
+  if(i===R.bestIdx) return Object.assign({}, R.best, {status:'chosen'});
+  const ci = R.compiled.indexOf(i);
+  let status = 'trained';
+  if(ci>=0) status = i===R.rejIdx ? 'rejected' : (ci<6 ? 'verified' : 'compiled');
+  const g = Math.round(R.g[i]);
+  return {r:R.r, i, id:`R${R.r}-${String(i).padStart(4,'0')}`, g, s:R.a[i], sp:R.sp[i], d:R.dep[i], fam:R.fam[i], layers:layersFor(D,g,R.fam[i]), status};
+}
+
+function buildRun(dk, cfg, steers){
+  const D = DEV[dk];
+  const comp = COMPUTE.find(c=>c.k===cfg.compute);
+  const N = comp.batch;
+  const ev=[], stages=[], rounds=[];
+  const add=(t,kind,o)=>{ ev.push(Object.assign({t,kind,id:ev.length}, o||{})); };
+  const Dl = Object.assign({}, D, {line:{sens:cfg.sens??D.line.sens, spec:cfg.spec??D.line.spec}, budget:cfg.budget||D.budget});
+  stages.push({key:'spec', name:'Spec', t0:0, t1:5, agent:'arch'});
+  stages.push({key:'ref', name:'Reference', t0:5, t1:11, agent:'train'});
+  add(0,'human',{text:S.prompt});
+  add(.5,'text',{agent:'arch', html:`I read this as a ${Dl.decision} chip. Before proposing anything I'll pin down the inputs, the clinical line and the gate budget, then train a full-size reference model so we know how good a large model can get.`});
+  add(1.6,'plan',{});
+  add(3.0,'spec',{});
+  add(5,'stage',{stage:'ref', label:'Reference model'});
+  add(5.3,'text',{agent:'train', html:`Training a full-size ${Dl.ref.kind} on the training ${Dl.who}. It is too large for a chip, but it sets the ceiling the small designs are measured against.`});
+  add(5.8,'tool',{agent:'train', title:'Train reference model', t1:9.6, lines:refLines(Dl)});
+  add(10.2,'ref',{});
+  let eff={gm:1,sd:0,dm:1,spd:0};
+  const pend = steers.filter(s=>s.type==='redirect').map(s=>Object.assign({}, s, {used:false}));
+  let nR = MODES[cfg.mode].rounds, b=11, prev=null;
+  for(let r=1; r<=nR; r++){
+    const applied=[];
+    for(const s of pend){ if(!s.used && s.t <= b){ s.used=true; s.round=r; applied.push(s); const fx=steerEffect(s.text); eff={gm:eff.gm*fx.gm, sd:eff.sd+fx.sd, dm:eff.dm*fx.dm, spd:(eff.spd||0)+(fx.spd||0)}; } }
+    let T = targetFor(Dl, r, eff);
+    if(prev && eff.gm<=1 && T.g >= prev.g) T.g = Math.round(prev.g*.9);
+    const R = genRound(Dl, cfg, r, b, N, T, applied);
+    rounds.push(R);
+    for(const k of ['propose','train','compile','verify']){
+      const t0 = {propose:b, train:b+3, compile:b+9, verify:b+12}[k];
+      stages.push({key:k, name:{propose:'Propose',train:'Train',compile:'Compile',verify:'Verify'}[k], t0, t1:t0+({propose:3,train:6,compile:3,verify:5}[k]), round:r, agent:{propose:'arch',train:'train',compile:'comp',verify:'ver'}[k]});
+    }
+    roundEvents(add, Dl, R, prev, N);
+    prev = R.best;
+    b += 17;
+    if(r===nR && nR<6 && pend.some(s=>!s.used && s.t < b)) nR++;
+  }
+  const tR=b;
+  stages.push({key:'report', name:'Report', t0:tR, t1:tR+9, agent:'rep'});
+  const fin = rounds[rounds.length-1].best;
+  add(tR,'stage',{stage:'report', label:'Sign-off and report'});
+  add(tR+.3,'text',{agent:'rep', html:`All ${rounds.length} rounds are done. The chosen chip is <b>${fin.id}</b>: ${fmt(fin.g)} gates, worst-patient sensitivity ${pct(fin.s)}, specificity ${pct(fin.sp)}. It is waiting for your sign-off before I write the datasheet.`});
+  add(tR+.8,'gate',{t1:tR+4});
+  add(tR+4.3,'tool',{agent:'rep', title:'Write datasheet and limits', t1:tR+7.6, lines:reportLines(Dl, fin)});
+  add(tR+8.2,'report',{});
+  // human steering and side questions
+  for(const s of steers){
+    if(s.type==='ask'){ add(s.t,'ask',{text:s.text}); add(s.t+1.1,'answer',{agent:'arch', html:s.answer}); continue; }
+    const p = pend.find(x=>x.sid===s.sid);
+    add(s.t,'steer',{text:s.text, sid:s.sid});
+    add(s.t+1.3,'reply',{agent:'arch', html:replyText(Dl, s, p, rounds), sid:s.sid, round:p&&p.round});
+  }
+  ev.sort((x,y)=>x.t-y.t || x.id-y.id);
+  ev.forEach((e,i)=>e.n=i);
+  return {D:Dl, dk, cfg, N, comp, ev, stages, rounds, tR, end:tR+9, steers};
+}
+function refLines(D){
+  return [
+    {f:0, c:`$ train reference --data train(${D.key==='eeg'?59:37} ${D.who}) --tune(${D.key==='eeg'?8:6})`},
+    {f:.12, t:`model: ${D.ref.kind}, ${D.ref.size}`},
+    {f:.3, t:'epoch  4  loss 0.412  tune sens 88.1%'},
+    {f:.5, t:'epoch 12  loss 0.231  tune sens 93.0%'},
+    {f:.68, t:'epoch 20  loss 0.164  tune sens 94.9%'},
+    {f:.8, w:'warning: 2 tune recordings have a flat channel for > 40 min; masked'},
+    {f:.92, o:`done: worst-patient sens ${pct(D.ref.sens)}, spec ${pct(D.ref.spec)}`},
+  ];
+}
+function compileLines(D, R){
+  const c = R.compiled.slice(0,4).map(i=>candOf(R,i));
+  const L = [{f:0, c:`$ compile ${R.compiled.length} candidates --to gates --fold-weights`}];
+  L.push({f:.1, t:`reading weights: ${D.key==='eeg' ? (R.r<3?'4-bit':'3-bit')+' inputs, binarised layers' : (R.r<4?'12-bit':'10-bit')+' readings, fixed-point layers'}`});
+  L.push({f:.22, t:'folding scales and biases into thresholds'});
+  L.push({f:.34, t:'mapping to 2-input gates, wiring the weights in as constants'});
+  c.forEach((x,k)=>L.push({f:.45+k*.1, t:`${x.id}: ${fmt(x.g)} gates, longest path ${x.d} levels`}));
+  if(R.r%2===1) L.push({f:.86, w:`warning: ${candOf(R,R.compiled[Math.min(5,R.compiled.length-1)]).id} input ${D.inputs[R.r%8]} bit 0 never used; pruned`});
+  L.push({f:.95, o:`done: ${R.compiled.length} circuits, 0 errors`});
+  return L;
+}
+function verifyLines(D, R){
+  const B=R.best, W=D.windows, q=Math.round(W/4);
+  const L=[{f:0, c:`$ check ${B.id} --circuit vs model --unseen ${D.patients} ${D.who} (${fmt(W)} ${D.unit})`}];
+  if(R.r===1){
+    L.push({f:.14, t:`part 1/4: ${fmt(q)} of ${fmt(q)} identical`});
+    L.push({f:.26, e:`part 2/4: ${fmt(q-8)} of ${fmt(q)} identical. 8 ${D.unit} differ: adder overflow on input ${D.inputs[4]}`});
+    L.push({f:.42, t:'compiler patch: saturating adder in layer 1, re-running all parts'});
+    L.push({f:.6, t:`parts 1-4: ${fmt(W)} of ${fmt(W)} identical`});
+  } else {
+    for(let k=1;k<=4;k++) L.push({f:.1+k*.13, t:`part ${k}/4: ${fmt(k<4?q:W-3*q)} of ${fmt(k<4?q:W-3*q)} identical`});
+  }
+  if(R.rejIdx>=0){ const x=candOf(R,R.rejIdx); L.push({f:.74, w:`${x.id} (${fmt(x.g)} gates) rejected: specificity ${pct(x.sp)} on one newborn, line ${D.line.spec}%`}); }
+  L.push({f:.84, t:`sensitivity per patient: lowest ${pct(B.s)}, line ${D.line.sens}%`});
+  L.push({f:.92, o:`circuit equals model on ${fmt(W)} of ${fmt(W)} ${D.unit}; specificity lowest ${pct(B.sp)}`});
+  return L;
+}
+function reportLines(D, B){
+  return [
+    {f:0, c:`$ write datasheet ${B.id}`},
+    {f:.2, t:'collecting numbers from the verification logs'},
+    {f:.4, t:'drawing the circuit and the per-patient table'},
+    {f:.6, t:'listing limits: data source, montage, untested conditions'},
+    {f:.8, t:`exporting circuit netlist (${fmt(B.g)} gates) and test vectors`},
+    {f:.94, o:'done: datasheet, netlist, verification log'},
+  ];
+}
+function roundEvents(add, D, R, prev, N){
+  const b=R.b, r=R.r, B=R.best;
+  const fams = D.famWeights[Math.min(r-1, D.famWeights.length-1)];
+  add(b,'stage',{stage:'propose', r, label:`Round ${r}: propose`});
+  const kept = D.families.filter((f,k)=>fams[k]>0);
+  const prevTxt = prev ? ` Last round's best was ${fmt(prev.g)} gates; I want the same clinical line with fewer.` : '';
+  add(b+.3,'text',{agent:'arch', r, html:(R.applied.length?`<p>Taking your note into this round. </p>`:'') + `<p>${esc(R.change)}${prevTxt}</p>`, dec: r>1 ? (R.applied.length ? `Round ${r} re-aimed after your redirect` : `Round ${r}: ${R.change.split('.')[0]}`) : 'Round 1: broad sweep of '+D.families.length+' families'});
+  add(b+2.2,'propose',{r});
+  add(b+3,'stage',{stage:'train', r, label:`Round ${r}: train batch`});
+  add(b+3.2,'text',{agent:'train', r, html: r===1 ? `Training all ${fmt(N)} candidates at once as one GPU batch. Weak ones stop early, so the grid fills unevenly.` : `Round ${r} batch: ${fmt(N)} candidates centred on ${fmt(Math.round(B.g*1.3/100)*100)} gates, all trained at once on the GPU. Weak ones stop early.`});
+  add(b+3.4,'batch',{r});
+  add(b+8.95,'curve',{r});
+  add(b+9,'stage',{stage:'compile', r, label:`Round ${r}: compile`});
+  add(b+9.2,'text',{agent:'comp', r, html:`${fmt(R.meetCount)} candidates meet the line within the budget. Compiling the ${R.compiled.length} smallest into logic-gate circuits with the weights wired in.`});
+  add(b+9.4,'tool',{agent:'comp', r, title:`Compile ${R.compiled.length} candidates to gates`, t1:b+11.5, lines:compileLines(D,R)});
+  add(b+11.7,'chip',{r});
+  add(b+12,'stage',{stage:'verify', r, label:`Round ${r}: verify`});
+  add(b+12.2,'text',{agent:'ver', r, html:`Running ${B.id} as a circuit on ${fmt(D.windows)} ${D.unit} from ${D.patients} unseen ${D.who} and comparing every output bit with the trained model.`});
+  add(b+12.4,'tool',{agent:'ver', r, title:`Bit-for-bit check of ${B.id}`, t1:b+15.1, lines:verifyLines(D,R)});
+  if(r===1){
+    add(b+13.3,'text',{agent:'ver', r, warn:true, html:`8 ${D.unit} differ between circuit and model. The first-layer adder overflows on loud ${D.key==='eeg'?'artefacts':'readings'}.`, dec:'Found adder overflow in round 1 circuit'});
+    add(b+13.8,'text',{agent:'comp', r, html:`Patched: the first-layer adder now saturates instead of wrapping, which matches the model. Re-running the check.`, dec:'Compiler switched to saturating adders'});
+  }
+  if(R.rejIdx>=0){ const x=candOf(R,R.rejIdx); add(b+14.4,'text',{agent:'ver', r, warn:true, html:`${x.id} was smaller (${fmt(x.g)} gates) but its specificity on one newborn is ${pct(x.sp)}, under the ${D.line.spec}% line. Rejected; ${B.id} is this round's chip.`, dec:`Rejected ${x.id}: specificity ${pct(x.sp)} on one patient`}); }
+  add(b+15.4,'verify',{r, dec:`Chose ${B.id}: ${fmt(B.g)} gates, ${pct(B.s)} worst-patient sensitivity`});
+  add(b+16.2,'round',{r});
+}
+function replyText(D, s, p, rounds){
+  const fx = steerEffect(s.text);
+  if(!p || !p.used){
+    return `The rounds are finished and the run is in sign-off, so this can't change the chip. I've noted it; fork the run from the last round to try it.`;
+  }
+  const R = rounds.find(x=>x.r===p.round);
+  const extra = R && R.r > MODES[S.cfg.mode].rounds ? ' I added a round so the change has room to show.' : '';
+  const where = R ? `from round ${R.r}` : 'from the next round';
+  if(fx.kind==='gates') return `Understood. ${where[0].toUpperCase()+where.slice(1)} I'll trade accuracy for size: smaller first layers, coarser inputs and a gate penalty in the score.${fx.pts!=null?` I'll let worst-patient sensitivity drop by up to ${fx.pts} points but never below the ${D.line.sens}% line.`:` The ${D.line.sens}% line stays fixed.`} I'm aiming for about ${R?fmt(Math.round(R.best.g/100)*100):'fewer'} gates.${extra}`;
+  if(fx.kind==='acc') return `Understood. ${where[0].toUpperCase()+where.slice(1)} I'll favour sensitivity over size: wider first layers and more input bits. The chip will grow, to about ${R?fmt(Math.round(R.best.g/100)*100):'a few more'} gates, but worst-patient sensitivity should rise.${extra}`;
+  if(fx.kind==='depth') return `Understood. ${where[0].toUpperCase()+where.slice(1)} I'll score the longest path as well as size, so the circuits get shallower (about ${R?R.best.d:'fewer'} gate levels) at a small cost in gates.${extra}`;
+  if(fx.kind==='spec') return `Understood. ${where[0].toUpperCase()+where.slice(1)} I'll weight false alarms more heavily so specificity per patient rises, accepting slightly more gates.${extra}`;
+  return `Noted ${where}. It doesn't change the score I'm optimising, so I've added it to the plan as a constraint for the reviewers to check.${extra}`;
+}
+
+/* ---------- derived state ---------- */
+function snap(t){
+  const run=S.run; if(!run) return null;
+  let cur=null; for(const s of run.stages){ if(t>=s.t0 && t<s.t1){ cur=s; break; } }
+  const done = t>=run.end;
+  let round=null; for(const R of run.rounds) if(t>=R.t.propose) round=R;
+  let best=null, bestR=null, prevBest=null; for(const R of run.rounds) if(t>=R.t.chosen){ prevBest=best; best=R.best; bestR=R; }
+  let cands=0, meet=0; for(const R of run.rounds){ const k=upper(R.tfs, t); cands+=k; }
+  return {t, cur, done, round, best, bestR, prevBest, cands, cost:costAt(t)};
+}
+const RATES = {spec:{llm:.07}, ref:{llm:.03, gpu:1}, propose:{llm:.13}, train:{llm:.025, gpu:1}, compile:{llm:.06, cpu:1}, verify:{llm:.05, cpu:1}, report:{llm:.15}};
+function costAt(t){
+  const run=S.run; const comp=run.comp, gpuTier=comp.k.startsWith('gpu'); const mult=MODES[run.cfg.mode].mult;
+  const out={llm:0,gpu:0,cpu:0,gpuH:0,cpuH:0,byStage:{},byAgent:{}};
+  for(const s of run.stages){
+    const ov = clamp(t, s.t0, s.t1) - s.t0; if(ov<=0) continue;
+    const R = RATES[s.key];
+    const llm = R.llm*ov*mult;
+    const hours = ov*REAL/3600;
+    let gpu=0,cpu=0;
+    if(R.gpu){ if(gpuTier){ gpu = hours*comp.price; out.gpuH+=hours; } else { cpu=hours*comp.price*4; out.cpuH+=hours*4; } }
+    if(R.cpu){ cpu += hours*0.40; out.cpuH+=hours; }
+    out.llm+=llm; out.gpu+=gpu; out.cpu+=cpu;
+    const k=s.key; out.byStage[k]=out.byStage[k]||{llm:0,gpu:0,cpu:0,time:0}; out.byStage[k].llm+=llm; out.byStage[k].gpu+=gpu; out.byStage[k].cpu+=cpu; out.byStage[k].time+=ov;
+    out.byAgent[s.agent]=(out.byAgent[s.agent]||0)+llm;
+  }
+  out.total = out.llm+out.gpu+out.cpu;
+  out.tokens = out.llm/7.4*1e6;
+  return out;
+}
+
+/* ---------- drawing: design space ---------- */
+const RCOL = ['#c4b5fd','#93c5fd','#60a5fa','#3b82f6','#1d4ed8','#1e3a8a'];
+function geom(w,h,D,mini){
+  const p = mini ? {l:30,r:8,t:8,b:18} : {l:54,r:18,t:16,b:40};
+  const lx0=Math.log(D.xr[0]), lx1=Math.log(D.xr[1]);
+  return {p, X:g=>p.l+(Math.log(g)-lx0)/(lx1-lx0)*(w-p.l-p.r), Y:a=>p.t+(1-(a-D.yr[0])/(D.yr[1]-D.yr[0]))*(h-p.t-p.b), w, h};
+}
+const frontierCache = {};
+function drawScatter(cv, t, o={}){
+  const run=S.run, D=run.D; const {c,w,h}=fitCanvas(cv); const G=geom(w,h,D,o.mini); const {X,Y,p}=G;
+  c.font = `${o.mini?9:11}px ${getComputedStyle(document.body).fontFamily}`;
+  // budget zone
+  const bx = X(D.budget);
+  c.fillStyle='rgba(243,243,246,.8)'; c.fillRect(bx, p.t, w-p.r-bx, h-p.t-p.b);
+  // grid
+  c.strokeStyle='#eeeef2'; c.lineWidth=1; c.fillStyle='#8a8a99'; c.textAlign='right'; c.textBaseline='middle';
+  for(let y=Math.ceil(D.yr[0]/5)*5; y<=D.yr[1]; y+=5){ const yy=Math.round(Y(y))+.5; c.beginPath(); c.moveTo(p.l,yy); c.lineTo(w-p.r,yy); c.stroke(); if(!o.mini || y%10===0) c.fillText(y+'%', p.l-6, yy); }
+  c.textAlign='center'; c.textBaseline='top';
+  const ticks = D.key==='eeg' ? [2000,5000,10000,20000,50000,100000] : [500,1000,2000,5000,10000,20000];
+  for(const g of ticks){ const xx=Math.round(X(g))+.5; c.beginPath(); c.moveTo(xx,p.t); c.lineTo(xx,h-p.b); c.stroke(); c.fillText(g>=1000? (g/1000)+'k' : g, xx, h-p.b+5); }
+  if(!o.mini){ c.fillStyle='#6c6c85'; c.fillText('Chip size, logic gates (log scale)', p.l+(w-p.l-p.r)/2, h-16); c.save(); c.translate(14, p.t+(h-p.t-p.b)/2); c.rotate(-Math.PI/2); c.fillText(D.metric+' (%)', 0, -6); c.restore(); }
+  // points
+  const sz = o.mini ? 1.6 : 2.4; const focus = o.round||0;
+  for(const R of run.rounds){
+    if(t < R.t.train) continue;
+    const isCur = S.run.rounds.indexOf(R)===snapRoundIdx(t);
+    const fade = focus && focus!==R.r;
+    for(let i=0;i<R.N;i++){
+      if(R.tf[i]>t) continue;
+      const x=X(R.g[i]), y=Y(Math.max(R.a[i], D.yr[0]+.3));
+      const ok = R.a[i]>=D.line.sens && R.g[i]<=D.budget;
+      if(fade) c.fillStyle='rgba(176,176,190,.18)';
+      else if(isCur) c.fillStyle = ok ? 'rgba(29,78,216,.75)' : 'rgba(59,130,246,.32)';
+      else c.fillStyle = ok ? 'rgba(90,90,106,.45)' : 'rgba(154,154,168,.22)';
+      c.fillRect(x-sz/2, y-sz/2, sz, sz);
+    }
+  }
+  // reference line
+  c.setLineDash([2,3]); c.strokeStyle='#8a8a99'; c.beginPath(); c.moveTo(p.l,Y(D.ref.sens)); c.lineTo(w-p.r,Y(D.ref.sens)); c.stroke();
+  // clinical line
+  c.setLineDash([]); c.strokeStyle='#5b8a5b'; c.lineWidth=1.5; c.beginPath(); c.moveTo(p.l,Y(D.line.sens)); c.lineTo(w-p.r,Y(D.line.sens)); c.stroke(); c.lineWidth=1;
+  // budget line
+  c.setLineDash([4,3]); c.strokeStyle='#b0b0be'; c.beginPath(); c.moveTo(bx,p.t); c.lineTo(bx,h-p.b); c.stroke(); c.setLineDash([]);
+  if(!o.mini){
+    c.textAlign='left'; c.textBaseline='bottom';
+    c.fillStyle='#3f6b3f'; c.fillText(`Clinical line, ${D.line.sens}% in every patient`, p.l+6, Y(D.line.sens)-3);
+    c.fillStyle='#6c6c85'; c.fillText(`Reference model, ${D.ref.size} (${pct(D.ref.sens)})`, p.l+6, Y(D.ref.sens)-3);
+    c.textAlign='right'; c.fillText(`Budget ${fmt(D.budget)} gates`, bx-5, p.t+14);
+  }
+  // frontier among visible points
+  const fr = frontier(t);
+  if(fr.length>1){ c.strokeStyle='#1a1a2e'; c.lineWidth=o.mini?1:1.4; c.beginPath(); fr.forEach((q,k)=>{ const x=X(q[0]), y=Y(q[1]); if(k===0) c.moveTo(x,y); else { c.lineTo(x, Y(fr[k-1][1])); c.lineTo(x,y);} }); c.stroke(); c.lineWidth=1; }
+  // round bests
+  const sn = snap(t);
+  for(const R of run.rounds){
+    if(t < R.t.chosen) continue;
+    const B=R.best, x=X(B.g), y=Y(B.s); const isBest = sn.best && sn.best.id===B.id;
+    c.beginPath(); c.arc(x,y, isBest ? (o.mini?4.5:7) : (o.mini?3:5), 0, Math.PI*2);
+    c.fillStyle = isBest ? '#fb923c' : '#fff'; c.fill(); c.strokeStyle = isBest ? '#c2560c' : '#4a4a5a'; c.lineWidth=1.5; c.stroke(); c.lineWidth=1;
+    if(!o.mini || isBest){ c.fillStyle='#1a1a2e'; c.textAlign='left'; c.textBaseline='middle'; c.font=`${isBest?600:500} ${o.mini?9:11}px ${getComputedStyle(document.body).fontFamily}`; const lb = isBest&&!o.mini ? `R${R.r} best, ${fmt(B.g)} gates` : `R${R.r}`; const lx=x+(o.mini?6:10), ly=y-(o.mini?6:9); const tw=c.measureText(lb).width; c.fillStyle='rgba(255,255,255,.88)'; c.fillRect(lx-2, ly-(o.mini?6:8), tw+4, o.mini?12:16); c.fillStyle='#1a1a2e'; c.fillText(lb, lx, ly); }
+  }
+  // selection
+  if(o.sel){ const x=X(o.sel.g), y=Y(o.sel.s); c.strokeStyle='#1d4ed8'; c.lineWidth=1.5; c.beginPath(); c.arc(x,y,9,0,Math.PI*2); c.stroke(); c.beginPath(); c.moveTo(x-14,y); c.lineTo(x-10,y); c.moveTo(x+10,y); c.lineTo(x+14,y); c.moveTo(x,y-14); c.lineTo(x,y-10); c.moveTo(x,y+10); c.lineTo(x,y+14); c.stroke(); c.lineWidth=1; }
+  cv._geom = G;
+}
+function snapRoundIdx(t){ let k=-1; S.run.rounds.forEach((R,i)=>{ if(t>=R.t.propose) k=i; }); return k; }
+function frontier(t){
+  const run=S.run; let vis=0; for(const R of run.rounds) vis+=upper(R.tfs,t);
+  const key = run.dk+'|'+run.ev.length+'|'+vis+'|'+run.N;
+  if(frontierCache.key===key) return frontierCache.v;
+  const pts=[]; for(const R of run.rounds){ for(let i=0;i<R.N;i++) if(R.tf[i]<=t) pts.push([R.g[i], R.a[i]]); }
+  pts.sort((a,b)=>a[0]-b[0]); const fr=[]; let m=-1; for(const q of pts){ if(q[1]>m+.05){ fr.push(q); m=q[1]; } }
+  frontierCache.key=key; frontierCache.v=fr; return fr;
+}
+function nearestCand(cv, mx, my, t){
+  const G=cv._geom; if(!G) return null; let best=null, bd=10*10;
+  for(const R of S.run.rounds){ for(let i=0;i<R.N;i++){ if(R.tf[i]>t) continue; const dx=G.X(R.g[i])-mx, dy=G.Y(Math.max(R.a[i],S.run.D.yr[0]+.3))-my; const d=dx*dx+dy*dy; if(d<bd){ bd=d; best={R,i}; } } }
+  return best;
+}
+function drawBatch(cv, R, t, o={}){
+  const {c,w,h}=fitCanvas(cv); const N=R.N; const D=S.run.D;
+  const cols = N>=4096?64: N>=2048?64: N>=512?32:16; const rows=Math.ceil(N/cols);
+  const cs = Math.min(w/cols, h/rows); const ox=(w-cs*cols)/2, oy=(h-cs*rows)/2; const gap = cs>4?1:0.5;
+  for(let i=0;i<N;i++){
+    const x=ox+(i%cols)*cs, y=oy+Math.floor(i/cols)*cs;
+    if(R.tf[i]>t){ c.fillStyle='#f0f0f4'; }
+    else { const a=R.a[i]; const ok=a>=D.line.sens && R.g[i]<=D.budget; if(ok) c.fillStyle='#1d4ed8'; else { const q=clamp((a-D.yr[0])/(D.line.sens-D.yr[0]),0,1); c.fillStyle=`rgba(96,165,250,${(.12+q*.55).toFixed(2)})`; } }
+    c.fillRect(x, y, cs-gap, cs-gap);
+  }
+  if(t>=R.t.chosen){ const i=R.bestIdx; const x=ox+(i%cols)*cs, y=oy+Math.floor(i/cols)*cs; c.strokeStyle='#ea580c'; c.lineWidth=2; c.strokeRect(x-2,y-2,cs+3,cs+3); }
+}
+/* ---------- drawing: chip ---------- */
+function chipSVG(cand, o={}){
+  const D=S.run.D; const W=o.w||560, H=o.h||300, mini=!!o.mini;
+  const rng = mulberry(hashStr(cand.id));
+  const layers = cand.layers; const nIn = D.inputs.length;
+  const cols = [nIn, ...layers];
+  const cap = mini ? 6 : 12;
+  const disp = cols.map((n,k)=>k===0 ? n : Math.min(n, cap));
+  const pl = mini?16:(D.key==='eeg'?84:80), pr = mini?16:84, pt = mini?8:40, pb = mini?8:40;
+  const nc = cols.length; const xs = cols.map((_,k)=> pl + (W-pl-pr)*(k/(nc-1)));
+  const ys = disp.map(n=> Array.from({length:n},(_,i)=> pt + (H-pt-pb)*((i+.5)/n)));
+  const bw = mini?7:22, bh = mini? Math.max(3,Math.min(9,(H-pt-pb)/cap*.55)) : Math.max(6,Math.min(15,(H-pt-pb)/cap*.62));
+  let s = `<svg class="chip-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Circuit sketch of ${cand.id}">`;
+  // die
+  s += `<rect x="${mini?2:pl-36}" y="${mini?2:pt-26}" width="${mini?W-4:(W-pl-pr)+72}" height="${mini?H-4:(H-pt-pb)+52}" rx="${mini?6:10}" fill="#fcfcfd" stroke="#e8e8ec"/>`;
+  if(!mini){ const x0=pl-36, x1=pl-36+(W-pl-pr)+72, y0=pt-26, y1=pt-26+(H-pt-pb)+52; for(let x=x0+16;x<x1-8;x+=14){ s+=`<path d="M${x} ${y0} v-5 M${x} ${y1} v5" stroke="#d4d4dc"/>`; } }
+  // weights per layer
+  const wts = []; let tot=0; for(let k=1;k<nc;k++){ const v = (k===1? D.nInBits/4 : cols[k-1]) * cols[k]; wts.push(v); tot+=v; }
+  const gper = wts.map(v=>Math.round(cand.g*v/tot));
+  // edges
+  let edges=''; const conn=[];
+  for(let k=1;k<nc;k++){ conn[k]=[]; for(let j=0;j<disp[k];j++){ const fan = Math.min(disp[k-1], mini?2:3); const src=[]; for(let m=0;m<fan;m++){ src.push((j*5+m*3+k*7+Math.floor(rng()*disp[k-1]))%disp[k-1]); } conn[k][j]=src; for(const q of src) edges += `<path d="M${xs[k-1]+(k===1?6:bw/2)} ${ys[k-1][q]} L${xs[k]-bw/2} ${ys[k][j]}"/>`; } }
+  s += `<g stroke="#d4d4dc" stroke-width="${mini?.5:.7}" fill="none">${edges}</g>`;
+  // longest path
+  if(o.path!==false){ let j = Math.floor(disp[nc-1]/2); const chain=[[nc-1,j]]; for(let k=nc-1;k>=1;k--){ const q=conn[k][j][0]; chain.unshift([k-1,q]); j=q; }
+    let d=''; chain.forEach(([k,jj],m)=>{ const x = k===0 ? xs[0]+6 : xs[k]; d += (m?'L':'M')+x+' '+ys[k][jj]+' '; });
+    d += `L${W-(mini?6:pr-30)} ${ys[nc-1][chain[chain.length-1][1]]}`;
+    s += `<path d="${d}" stroke="#fb923c" stroke-width="${mini?1.4:2}" fill="none" stroke-linejoin="round"/>`; }
+  // inputs
+  for(let i=0;i<nIn;i++){ const y=ys[0][i]; s += `<rect x="${xs[0]-4}" y="${y-(mini?2:4)}" width="${mini?6:10}" height="${mini?4:8}" rx="1.5" fill="#1a1a2e"/>`; if(!mini) s += `<text x="${xs[0]-10}" y="${y+3.5}" text-anchor="end" font-size="10" fill="#5a5a6a" font-family="var(--mono)">${D.inputs[i]}</text>`; }
+  // layer blocks
+  for(let k=1;k<nc;k++){
+    const isOut = k===nc-1;
+    for(let j=0;j<disp[k];j++){ const y=ys[k][j]; s += `<rect x="${xs[k]-bw/2}" y="${y-bh/2}" width="${bw}" height="${bh}" rx="${mini?1:2.5}" fill="${isOut?'#fff4ec':'#eef4ff'}" stroke="${isOut?'#fb923c':'#93b4f5'}" stroke-width="${mini?.6:1}"/>`;
+      if(!mini && bh>=9){ for(let m=0;m<3;m++) s += `<rect x="${xs[k]-bw/2+3+m*6.2}" y="${y-1.5}" width="4" height="3" rx=".6" fill="${isOut?'#fdba74':'#93b4f5'}"/>`; } }
+    if(!mini){
+      s += `<text x="${xs[k]}" y="${pt-12}" text-anchor="middle" font-size="10.5" fill="#4a4a5a" font-weight="600">${isOut?(D.key==='eeg'?'Decision':'Output'):'Layer '+k}</text>`;
+      s += `<text x="${xs[k]}" y="${H-pb+18}" text-anchor="middle" font-size="10" fill="#6c6c85" font-family="var(--mono)">${fmt(gper[k-1])} gates</text>`;
+      if(cols[k]>disp[k]) s += `<text x="${xs[k]}" y="${H-pb+6}" text-anchor="middle" font-size="9.5" fill="#8a8a99">${cols[k]} units</text>`;
+    }
+  }
+  if(!mini) s += `<text x="${xs[0]-2}" y="${pt-12}" text-anchor="middle" font-size="10.5" fill="#4a4a5a" font-weight="600">Inputs</text>`;
+  // output pin
+  const oy = ys[nc-1][Math.floor(disp[nc-1]/2)];
+  s += `<path d="M${xs[nc-1]+bw/2} ${oy} H${W-(mini?6:pr-30)}" stroke="#1a1a2e" stroke-width="${mini?1:1.5}"/><rect x="${W-(mini?8:pr-30)}" y="${oy-(mini?3:5)}" width="${mini?6:10}" height="${mini?6:10}" rx="2" fill="#1a1a2e"/>`;
+  if(!mini) s += `<text x="${W-pr+44}" y="${oy-10}" text-anchor="middle" font-size="10.5" font-weight="600" fill="#1a1a2e" font-family="var(--mono)">${D.output}</text>`;
+  s += '</svg>';
+  return s;
+}
+function gateMix(cand){
+  const r=mulberry(hashStr(cand.id+'mix')); const base = S.run.D.key==='eeg' ? [.36,.24,.18,.12,.10] : [.30,.30,.16,.10,.14];
+  const v = base.map(x=>x*(.8+r()*.4)); const s=v.reduce((a,b)=>a+b,0); return ['AND','XOR','OR','NOT','MUX'].map((n,k)=>({n, f:v[k]/s}));
+}
+const MIXC = ['#1d4ed8','#60a5fa','#a78bfa','#b0b0be','#fb923c'];
+
+/* ---------- drawing: signal ---------- */
+function nz(seed, x){ const i=Math.floor(x), f=x-i; const a=Math.sin((i*127.1+seed*311.7))*43758.5453, b=Math.sin(((i+1)*127.1+seed*311.7))*43758.5453; const u=a-Math.floor(a), v=b-Math.floor(b); const s=f*f*(3-2*f); return (u+(v-u)*s)*2-1; }
+function seizAmp(s, ps){ const per=58, ph=((s+ps*13)%per+per)%per; if(ph<24||ph>42) return 0; const e=Math.min(ph-24, 42-ph); return Math.min(1, e/3); }
+function eegV(ch, s, ps){
+  let v = Math.sin(s*6.9+ch*1.7)*.28 + Math.sin(s*2.8+ch*.9)*.42 + Math.sin(s*23+ch*2.3)*.1 + nz(ch+ps*9, s*9)*.42 + nz(ch*3+1+ps, s*2.3)*.35;
+  const a = seizAmp(s, ps)*(ch>=4?1.15:.5);
+  if(a>0){ const ph=s*2*Math.PI*2.3; const spike = Math.pow(Math.abs(Math.sin(ph)), 6)*Math.sign(Math.sin(ph)); v += a*(1.3*spike + .5*Math.sin(ph*.5+ch)); }
+  return v;
+}
+function rso2(s, ps){ const per=74, ph=((s+ps*17)%per+per)%per; let v = 69 + 3.2*Math.sin(s/9+ps) + 1.6*Math.sin(s/3.1) + nz(ps+3, s*.8)*1.2; if(ph>28 && ph<56){ const e=Math.min(ph-28,56-ph); v -= Math.min(1,e/7)*24; } return v; }
+function drawSignal(cv, t, o={}){
+  const run=S.run, D=run.D; const {c,w,h}=fitCanvas(cv);
+  const sn=snap(t); const B=o.cand || sn.best; const ps = o.patient!=null ? o.patient : 2;
+  const span = o.mini ? 24 : 40; const s1 = 30 + t*2.2, s0 = s1-span;
+  const gut = o.mini ? 36 : 104;
+  const X = s => gut + (s-s0)/span*(w-gut);
+  const rowsH = o.mini ? 30 : 66; const top=4, plotH = h-rowsH-top-4;
+  c.font = `${o.mini?9:10.5}px ${getComputedStyle(document.body).fontFamily}`;
+  const winLen = D.key==='eeg'? 4 : 4;
+  const wins=[]; for(let ws=Math.floor(s0/winLen)*winLen; ws<s1; ws+=winLen){ let lab, circ;
+    if(D.key==='eeg'){ lab = seizAmp(ws+winLen/2, ps)>.3; } else { lab = rso2(ws+winLen/2, ps) < 50; }
+    const k=Math.floor(ws/winLen); const missFirst = lab && (D.key==='eeg' ? seizAmp(ws+winLen/2-winLen,ps)<=.3 : rso2(ws-winLen/2,ps)>=50) && (k%3===0);
+    circ = B ? (lab && !missFirst) : null; wins.push({ws, lab, circ}); }
+  // shade episodes
+  for(const W of wins) if(W.lab){ c.fillStyle='rgba(251,146,60,.08)'; { const x0=Math.max(gut,X(W.ws)); c.fillRect(x0, top, X(W.ws+winLen)-x0, plotH); }; }
+  if(D.key==='eeg'){
+    const n = o.mini? 4 : 8; const chs = o.mini ? [0,4,5,7] : [0,1,2,3,4,5,6,7]; const rh = plotH/n;
+    for(let k=0;k<n;k++){ const ch=chs[k]; const yc = top + rh*(k+.5);
+      c.strokeStyle = '#3a3a4a'; c.lineWidth = o.mini?.8:1; c.beginPath();
+      const step = o.mini? .06 : .03; for(let s=s0; s<=s1; s+=step){ const x=X(s), y=yc - eegV(ch,s,ps)*rh*.28; if(s===s0) c.moveTo(x,y); else c.lineTo(x,y); } c.stroke();
+      c.fillStyle='#6c6c85'; c.textAlign='left'; c.textBaseline='middle'; c.fillText(o.mini ? D.inputs[ch].split('–')[0] : D.inputs[ch], 4, yc);
+    }
+  } else {
+    const upH = plotH*.42; const lowTop = top+upH+6, lowH = plotH-upH-6;
+    const lam=[{k:-.9,col:'#a78bfa',n:'730 nm'},{k:-.55,col:'#60a5fa',n:'760 nm'},{k:.05,col:'#0e7490',n:'810 nm'},{k:.7,col:'#fb923c',n:'850 nm'}];
+    lam.forEach((L,j)=>{ c.strokeStyle=L.col; c.lineWidth=1; c.beginPath(); for(let s=s0;s<=s1;s+=.08){ const v = .5 + L.k*(rso2(s,ps)-69)/60 + nz(j+ps*4, s*4)*.04 + (j-1.5)*.13; const x=X(s), y=top+upH*(1-clamp(v,0,1)); if(s===s0) c.moveTo(x,y); else c.lineTo(x,y);} c.stroke();
+      if(!o.mini){ c.fillStyle=L.col; c.textAlign='left'; c.textBaseline='middle'; c.fillText(L.n, 4, top+10+j*14); } });
+    if(!o.mini){ c.fillStyle='#4a4a5a'; c.textAlign='left'; c.textBaseline='middle'; c.fillText('Oxygen %', 4, lowTop+lowH/2); }
+    const Y = v => lowTop + lowH*(1-(v-35)/(85-35));
+    c.strokeStyle='#5b8a5b'; c.setLineDash([4,3]); c.beginPath(); c.moveTo(gut,Y(50)); c.lineTo(w,Y(50)); c.stroke(); c.setLineDash([]);
+    c.strokeStyle='#9a9aa8'; c.setLineDash([2,2]); c.beginPath(); for(let s=s0;s<=s1;s+=.1){ const x=X(s), y=Y(rso2(s,ps)); if(s===s0) c.moveTo(x,y); else c.lineTo(x,y);} c.stroke(); c.setLineDash([]);
+    if(B){ c.strokeStyle='#1d4ed8'; c.lineWidth=1.6; c.beginPath(); let first=true; for(let s=s0;s<=s1;s+=.5){ const v=Math.round(rso2(Math.floor(s*2)/2,ps)+nz(ps,s)*.6); const x=X(s), y=Y(v); if(first){c.moveTo(x,y); first=false;} else { c.lineTo(x,c.__ly||y); c.lineTo(x,y);} c.__ly=y; } c.stroke(); c.lineWidth=1; }
+    if(!o.mini){ c.fillStyle='#3f6b3f'; c.textAlign='right'; c.textBaseline='bottom'; c.fillText('50% low-oxygen line', w-6, Y(50)-2); c.fillStyle='#1d4ed8'; c.textAlign='left'; c.fillText('Chip rSO₂ (solid), reference oximeter (dotted)', 6, lowTop+12); }
+  }
+  // decision rows
+  const rows = o.mini ? [['Label','lab'],['Chip','circ']] : [[D.key==='eeg'?'Clinician label':'Oximeter low','lab'],['Chip output','circ'],['Model output','circ']];
+  const ry0 = h-rowsH; const rh = rowsH/rows.length;
+  rows.forEach(([name,key],k)=>{ const y=ry0+k*rh; c.fillStyle='#fafaf9'; c.fillRect(0,y+1,w,rh-2);
+    for(const W of wins){ const v=W[key]; if(v==null) continue; if(v){ c.fillStyle = key==='lab' ? '#fb923c' : (k===1?'#1d4ed8':'#3b82f6'); { const x0=Math.max(gut,X(W.ws)+1); c.fillRect(x0, y+3, X(W.ws+winLen)-1-x0, rh-6); }; } }
+    if(!B && key==='circ'){ c.fillStyle='#8a8a99'; c.textAlign='left'; c.textBaseline='middle'; c.fillText('no chip yet', gut+6, y+rh/2); }
+    c.fillStyle='#4a4a5a'; c.textAlign='left'; c.textBaseline='middle'; c.fillStyle='rgba(250,250,249,.9)'; c.fillRect(0,y+1,gut-2,rh-2); c.fillStyle='#4a4a5a'; c.fillText(name, 4, y+rh/2);
+  });
+  // now cursor
+  c.strokeStyle='rgba(26,26,46,.35)'; c.beginPath(); c.moveTo(w-1.5,top); c.lineTo(w-1.5,h); c.stroke();
+}
+function drawBits(cv, t, R){
+  const {c,w,h}=fitCanvas(cv); const D=S.run.D; const N=D.windows;
+  const cols = Math.ceil(Math.sqrt(N*w/h)); const rows=Math.ceil(N/cols); const cs=Math.min(w/cols,h/rows);
+  const f = R ? clamp((t-R.t.verify-.4)/(R.t.chosen-.3-R.t.verify-.4),0,1) : 0; const doneN = Math.floor(N*f);
+  const mism = R && R.r===1 && f>.2 && f<.45;
+  for(let i=0;i<N;i++){ const x=(i%cols)*cs, y=Math.floor(i/cols)*cs; let col='#efeff3'; if(i<doneN){ col='#5b8a5b'; if(mism && i%((N/8)|0)===37) col='#ef4444'; } c.fillStyle=col; c.fillRect(x,y,Math.max(.6,cs-(cs>3?1:.3)),Math.max(.6,cs-(cs>3?1:.3))); }
+  return doneN;
+}
+function drawBurn(cv, t){
+  const run=S.run; const {c,w,h}=fitCanvas(cv); const p={l:48,r:16,t:14,b:30};
+  const cap = 25; const T1 = run.end; const final = costAt(T1).total; const ymax = Math.max(cap*1.08, final*1.1);
+  const X = x=>p.l+x/T1*(w-p.l-p.r), Y=v=>p.t+(1-v/ymax)*(h-p.t-p.b);
+  c.font=`10.5px ${getComputedStyle(document.body).fontFamily}`; c.strokeStyle='#eeeef2'; c.fillStyle='#8a8a99'; c.textAlign='right'; c.textBaseline='middle';
+  for(let v=0; v<=ymax; v+=5){ c.beginPath(); c.moveTo(p.l,Y(v)); c.lineTo(w-p.r,Y(v)); c.stroke(); c.fillText('$'+v, p.l-6, Y(v)); }
+  c.textAlign='center'; c.textBaseline='top'; for(const s of run.stages){ if(s.key==='propose'){ c.strokeStyle='#f3f3f6'; c.beginPath(); c.moveTo(X(s.t0),p.t); c.lineTo(X(s.t0),h-p.b); c.stroke(); c.fillText('R'+s.round, X(s.t0)+10, h-p.b+6);} }
+  c.fillText('Report', X(run.tR)+16, h-p.b+6);
+  const n=120; const pts=[]; for(let k=0;k<=n;k++){ const tt=T1*k/n; pts.push([tt, costAt(tt)]); }
+  const layers=[['llm','#a78bfa'],['gpu','#3b82f6'],['cpu','#0e7490']];
+  let base = pts.map(()=>0);
+  for(const [key,col] of layers){ c.beginPath(); pts.forEach(([tt,cs],k)=>{ if(tt>t) return; const y=Y(base[k]+cs[key]); if(k===0) c.moveTo(X(tt),y); else c.lineTo(X(tt),y); }); for(let k=pts.length-1;k>=0;k--){ const [tt]=pts[k]; if(tt>t) continue; c.lineTo(X(tt),Y(base[k])); } c.closePath(); c.fillStyle=col+'55'; c.fill(); pts.forEach(([tt,cs],k)=>{ base[k]+=cs[key]; }); }
+  c.strokeStyle='#1a1a2e'; c.lineWidth=1.5; c.beginPath(); let started=false; pts.forEach(([tt,cs])=>{ if(tt>t) return; if(!started){c.moveTo(X(tt),Y(cs.total)); started=true;} else c.lineTo(X(tt),Y(cs.total)); }); c.stroke();
+  c.setLineDash([3,3]); c.strokeStyle='#8a8a99'; c.beginPath(); c.moveTo(X(t),Y(costAt(t).total)); c.lineTo(X(T1),Y(final)); c.stroke();
+  c.strokeStyle='#ef4444'; c.beginPath(); c.moveTo(p.l,Y(cap)); c.lineTo(w-p.r,Y(cap)); c.stroke(); c.setLineDash([]); c.lineWidth=1;
+  c.fillStyle='#b91c1c'; c.textAlign='left'; c.textBaseline='bottom'; c.fillText('Budget cap $25.00, then wrap up', p.l+6, Y(cap)-3);
+  c.fillStyle='#6c6c85'; c.textAlign='right'; c.fillText('Projected '+money(final), X(T1)-2, Y(final)-5);
+}
+
+/* ---------- sidebar ---------- */
+function renderSide(){
+  const sn = S.run ? snap(S.t) : null; const run=S.run;
+  const badge = k => { if(!sn) return ''; if(k==='design') return fmt(sn.cands); if(k==='chip') return sn.best? fmt(sn.best.g): ''; if(k==='cost') return money(sn.cost.total); if(k==='signal') return sn.best? 'checked' : ''; if(k==='report') return sn.done? 'ready':'draft'; return ''; };
+  $('#side').innerHTML = `
+    <div class="brand"><span class="brand-mark">${BRAND}</span><span class="brand-name">Chipwright</span></div>
+    <div class="side-sec"><button class="nav" data-go="start" ${S.screen==='start'?'aria-current="true"':''} title="New run">${ic('plus','s16')}<span class="lbl">New run</span></button></div>
+    ${S.screen==='run' ? `<div class="side-h">This run</div><div class="side-sec" role="tablist" aria-label="Run views">${VIEWS.map(v=>`<button class="nav" role="tab" data-view="${v.k}" ${S.view===v.k?'aria-current="true" aria-selected="true"':'aria-selected="false"'} title="${v.name}">${ic(v.icon,'s16')}<span class="lbl">${v.name}</span><span class="badge" data-badge="${v.k}">${badge(v.k)}</span></button>`).join('')}</div>`:''}
+    <div class="side-h runs">Runs</div>
+    <div class="side-sec runs">
+      ${run ? `<button class="nav" data-go="run" title="${esc(runTitle())}">${!sn.done?'<span class="spin"></span>':ic('check','s14')}<span class="lbl">${esc(runTitle())}</span></button>`:''}
+      <button class="nav" data-old="nirs" title="Brain-oxygen chip, earlier run">${ic('check','s14')}<span class="lbl">Brain-oxygen chip, v1</span></button>
+      <button class="nav" data-old="eeg" title="Seizure flag, earlier run">${ic('check','s14')}<span class="lbl">Seizure flag, 4-channel</span></button>
+      <button class="nav" data-old="x" title="Apnoea flag, stopped">${ic('x','s14')}<span class="lbl">Apnoea flag, stopped</span></button>
+    </div>
+    <div class="side-foot"><div class="ft">This month: $41.80 of $150</div><div class="usage-bar"><i style="width:28%"></i></div></div>`;
+}
+function runTitle(){ return S.title || (S.run ? S.run.D.title : 'Run'); }
+
+/* ---------- start screen ---------- */
+function deviceGlyph(k){
+  if(k==='eeg') return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1a1a2e" stroke-width="1.5" stroke-linecap="round"><path d="M2 7h3l1.5-3 2 6 1.5-3H14"/><path d="M2 13h4l1-2 1.5 4 1.5-2h4" stroke="#60a5fa"/><path d="M2 19h2l2-4 2.5 7 2-5 1.5 2H22" stroke="#fb923c"/></svg>';
+  return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1a1a2e" stroke-width="1.5" stroke-linecap="round"><path d="M6 19c-2-2-3-4-3-7a9 9 0 0 1 18 0c0 3-1 5-3 7"/><path d="M8 17c1-4 3-7 4-7s3 3 4 7" stroke="#a78bfa" stroke-dasharray="2 2"/><circle cx="8" cy="18" r="1.4" fill="#fb923c" stroke="none"/><circle cx="16" cy="18" r="1.4" fill="#1a1a2e" stroke="none"/></svg>';
+}
+function renderStart(launching){
+  const D=DEV[S.device]; const comp=COMPUTE.find(c=>c.k===S.cfg.compute);
+  $('#start').innerHTML = `<div class="start-wrap">
+    <h1 class="greet">What should the chip do?</h1>
+    <p class="greet-sub">Name the device and its job. The AI scientists propose chip designs, train thousands at once, compile the best into logic gates and check them against unseen patients. You can pause and redirect them at any point.</p>
+    ${launching ? launchHTML() : `
+    <div class="presets" role="group" aria-label="Demo devices">
+      ${['eeg','nirs'].map(k=>`<button class="preset" data-preset="${k}" aria-pressed="${S.device===k}"><span class="preset-ico">${deviceGlyph(k)}</span><span><b>${DEV[k].name}</b><span>${DEV[k].blurb}</span></span></button>`).join('')}
+    </div>
+    <div class="composer">
+      <label for="prompt" class="hint" style="display:block;margin-bottom:2px">Device and its job</label>
+      <textarea id="prompt" rows="4">${esc(S.prompt)}</textarea>
+      <div class="pills" style="margin-top:6px">
+        <button class="pill" data-pop="line"><span class="k">Clinical line</span> <b>sens ≥ ${S.cfg.sens}%, spec ≥ ${S.cfg.spec}%</b> <span class="k">per patient</span></button>
+        <button class="pill" data-pop="budget"><span class="k">Gate budget</span> <b>${fmt(S.cfg.budget)}</b></button>
+        <button class="pill" data-pop="mode"><span class="k">Mode</span> <b>${S.cfg.mode}</b>${ic('down','s12')}</button>
+        <button class="pill" data-pop="compute">${ic('cpu','s14')} <b>${comp.name}</b> <span class="k">$${comp.price.toFixed(2)}/h</span>${ic('down','s12')}</button>
+        <button class="pill" data-pop="agents">${ic('bot','s14')} <b>5 agents</b> <span class="k">${S.cfg.agents[0].model.replace('Claude ','')} lead</span>${ic('down','s12')}</button>
+      </div>
+      <div class="start-row">
+        <span class="hint">Signal: ${D.signal}. ${D.data}.</span><span class="sp"></span>
+        <button class="btn primary" id="startBtn">Start run</button>
+      </div>
+    </div>`}
+    <h2 class="sec-h">Gates per diagnosis</h2>
+    <div class="list">${ledgerRows(true)}</div>
+    <h2 class="sec-h">Recent runs</h2>
+    <div class="list">
+      <div class="list-row head"><span></span><span>Run</span><span>Chip</span><span>Cost</span><span>Finished</span></div>
+      <div class="list-row"><span>${ic('check','s14')}</span><span>Brain-oxygen chip, v1</span><span class="mono">1,610 gates</span><span class="mono">$9.12</span><span class="muted">2 days ago</span></div>
+      <div class="list-row"><span>${ic('check','s14')}</span><span>Seizure flag, 4-channel</span><span class="mono">3,050 gates</span><span class="mono">$11.40</span><span class="muted">4 days ago</span></div>
+      <div class="list-row"><span>${ic('x','s14')}</span><span>Apnoea flag, stopped</span><span class="mono muted">no chip</span><span class="mono">$2.06</span><span class="muted">last week</span></div>
+    </div>
+  </div>`;
+}
+function ledgerRows(head){
+  const cur = S.run ? snap(S.t) : null;
+  const rows = [
+    {n:'Seizure flag, 8-channel EEG', g: S.run && S.run.dk==='eeg' && cur && cur.best ? cur.best.g : 4420, note: S.run && S.run.dk==='eeg' ? (cur&&cur.done?'this run':'this run, in progress') : 'demo run', line:'sens ≥ 90%, spec ≥ 95%'},
+    {n:'Brain oxygen value and low flag', g: S.run && S.run.dk==='nirs' && cur && cur.best ? cur.best.g : 1180, note: S.run && S.run.dk==='nirs' ? (cur&&cur.done?'this run':'this run, in progress') : 'demo run', line:'sens ≥ 92%, spec ≥ 90%'},
+    {n:'Seizure flag, 4-channel EEG', g:3050, note:'earlier run', line:'sens ≥ 88%, spec ≥ 95%'},
+    {n:'Apnoea flag, chest impedance', g:null, note:'stopped early', line:'sens ≥ 95%, spec ≥ 90%'},
+  ];
+  const max = 5000;
+  return `${head?'<div class="list-row head" style="grid-template-columns:1fr 200px 170px 130px"><span>Diagnosis</span><span>Gates</span><span>Clinical line</span><span>Source</span></div>':''}` + rows.map(r=>`<div class="list-row" style="grid-template-columns:1fr 200px 170px 130px"><span>${r.n}</span><span style="display:flex;gap:8px;align-items:center">${r.g?`<span class="mono" style="width:52px;text-align:right">${fmt(r.g)}</span><span class="hb" style="flex:1"><i style="width:${r.g/max*100}%;background:var(--ink-700)"></i></span>`:'<span class="muted">none</span>'}</span><span class="muted">${r.line}</span><span class="muted">${r.note}</span></div>`).join('');
+}
+const LAUNCH_STEPS = ['Reserving a GPU for the training batches','Loading recordings and holding out unseen patients','Starting the five agents','Writing the run plan'];
+function launchHTML(){ return `<div class="launch" id="launch"><h3>Starting your run</h3><ul>${LAUNCH_STEPS.map((s,k)=>`<li data-k="${k}"><span class="mspin" style="visibility:hidden"></span>${s}</li>`).join('')}</ul></div>`; }
+function launch(){
+  S.prompt = ($('#prompt')||{}).value || S.prompt;
+  renderStart(true);
+  let k=0; const step=()=>{ $$('#launch li').forEach((li,j)=>{ li.className = j<k?'done':(j===k?'on':''); li.firstElementChild.outerHTML; const sp=li.querySelector('.mspin, svg'); if(j<k){ if(sp) sp.outerHTML = ic('check','s14'); } else if(j===k && sp && sp.classList.contains('mspin')) sp.style.visibility='visible'; });
+    k++; if(k<=LAUNCH_STEPS.length) setTimeout(step, 380); else setTimeout(()=>startRun(S.device,'conversation'), 250); };
+  step();
+}
+
+/* ---------- popovers ---------- */
+let popAnchor=null;
+function openPop(anchor, html, setup){
+  const pop=$('#pop'); pop.innerHTML=html; pop.hidden=false; popAnchor=anchor;
+  const r=anchor.getBoundingClientRect(); const pw=pop.offsetWidth, ph=pop.offsetHeight;
+  let x=Math.min(r.left, window.innerWidth-pw-8); let y=r.bottom+6; if(y+ph>window.innerHeight-8) y=Math.max(8, r.top-ph-6);
+  pop.style.left=Math.max(8,x)+'px'; pop.style.top=y+'px';
+  if(setup) setup(pop);
+}
+function closePop(){ $('#pop').hidden=true; popAnchor=null; }
+document.addEventListener('pointerdown', e=>{ const pop=$('#pop'); if(!pop.hidden && !pop.contains(e.target) && !(popAnchor && popAnchor.contains(e.target))) closePop(); });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closePop(); });
+function startPop(kind, anchor){
+  if(kind==='compute') openPop(anchor, `<div class="pop-h">Compute. Each rung includes the ones below it.</div>${COMPUTE.slice().reverse().map(c=>`<button class="opt" data-c="${c.k}" aria-checked="${S.cfg.compute===c.k}">${ic(c.k.startsWith('gpu')?'cpu':'grid','s16')}<span><b>${c.name}</b><span>${c.spec}. ${fmt(c.batch)} candidates per batch</span></span><span class="price">$${c.price.toFixed(2)}/h</span></button>`).join('')}`, pop=>{ $$('[data-c]',pop).forEach(b=>b.onclick=()=>{ S.cfg.compute=b.dataset.c; closePop(); renderStart(); }); });
+  if(kind==='mode') openPop(anchor, `<div class="pop-h">Mode preset</div>${Object.entries(MODES).map(([k,m])=>`<button class="opt" data-m="${k}" aria-checked="${S.cfg.mode===k}"><span><b>${k}</b><span>${m.desc}</span></span></button>`).join('')}`, pop=>{ $$('[data-m]',pop).forEach(b=>b.onclick=()=>{ S.cfg.mode=b.dataset.m; closePop(); renderStart(); }); });
+  if(kind==='agents') openPop(anchor, `<div class="pop-h">Agents, model and effort per role</div>${AGENTS.map((a,k)=>`<div class="agent-cfg"><span class="av" style="width:22px;height:22px;font-size:12px;background:${a.tint};color:${a.color}">${a.g}</span><span><b style="font-size:12.5px">${a.name}</b><br><span class="muted" style="font-size:11px">${a.role}</span></span><select class="sel" data-am="${k}">${MODELS.map(m=>`<option ${S.cfg.agents[k].model===m?'selected':''}>${m}</option>`).join('')}</select><select class="sel" data-ae="${k}">${['Low','Medium','High'].map(m=>`<option ${S.cfg.agents[k].effort===m?'selected':''}>${m}</option>`).join('')}</select></div>`).join('')}`, pop=>{ $$('[data-am]',pop).forEach(s=>s.onchange=()=>{ S.cfg.agents[+s.dataset.am].model=s.value; }); $$('[data-ae]',pop).forEach(s=>s.onchange=()=>{ S.cfg.agents[+s.dataset.ae].effort=s.value; }); });
+  if(kind==='line') openPop(anchor, `<div class="pop-h">Clinical line, met in every unseen patient</div><label class="field">Sensitivity at least (%)<input id="fl-s" type="number" min="50" max="99" step=".5" value="${S.cfg.sens}"></label><label class="field">Specificity at least (%)<input id="fl-p" type="number" min="50" max="99" step=".5" value="${S.cfg.spec}"></label><div style="padding:6px 8px"><button class="btn sm primary" id="fl-ok">Set line</button></div>`, pop=>{ $('#fl-ok',pop).onclick=()=>{ S.cfg.sens=clamp(+$('#fl-s',pop).value||90,50,99); S.cfg.spec=clamp(+$('#fl-p',pop).value||95,50,99); closePop(); renderStart(); }; });
+  if(kind==='budget') openPop(anchor, `<div class="pop-h">Largest chip you will accept</div><label class="field">Gate budget<input id="fb" type="number" min="200" step="100" value="${S.cfg.budget}"></label><div style="padding:6px 8px"><button class="btn sm primary" id="fb-ok">Set budget</button></div>`, pop=>{ $('#fb-ok',pop).onclick=()=>{ S.cfg.budget=Math.max(200, +$('#fb',pop).value||S.cfg.budget); closePop(); renderStart(); }; });
+}
+function setDevice(k){ S.device=k; const D=DEV[k]; S.prompt=D.prompt; S.cfg.sens=D.line.sens; S.cfg.spec=D.line.spec; S.cfg.budget=D.budget; }
+
+/* ---------- run lifecycle ---------- */
+function startRun(dk, view){
+  if(S.device!==dk) setDevice(dk);
+  S.device=dk; S.steers=[]; S.gate={approved:false, held:false}; S.sel=null; S.chipA=null; S.chipB=null; S.patient=null; S.dsRound=0; S.title=null;
+  S.run = buildRun(dk, S.cfg, S.steers);
+  S.t=0; S.liveT=0; S.follow=true; S.playing=true; S.screen='run';
+  $('#start').hidden=true; $('#run').hidden=false;
+  renderChrome();
+  setView(view||'conversation', true);
+}
+function rebuild(){ const keepN = null; S.run = buildRun(S.run.dk, S.run.cfg, S.steers); frontierCache.key=null; }
+function setView(v, force){
+  if(!VIEWS.find(x=>x.k===v)) v='conversation';
+  const changed = S.view!==v; S.view=v;
+  try{ history.replaceState(null,'','#'+v); }catch(e){}
+  if(changed || force){ mountView(); }
+  $$('#side [data-view]').forEach(b=>{ const on=b.dataset.view===v; b.setAttribute('aria-current', on?'true':'false'); b.setAttribute('aria-selected', on); });
+}
+window.addEventListener('hashchange', ()=>{ const h=location.hash.slice(1); if(h==='start'){ goStart(); return; } if(VIEWS.find(x=>x.k===h)){ if(S.screen!=='run') startRun(S.device,h); else if(h!==S.view) setView(h); } });
+function goStart(){ S.screen='start'; S.playing=false; $('#run').hidden=true; $('#start').hidden=false; renderStart(); renderSide(); try{ history.replaceState(null,'','#start'); }catch(e){} }
+
+/* ---------- chrome: topbar + strip ---------- */
+function renderChrome(){
+  const D=S.run.D;
+  $('#topbar').innerHTML = `
+    <span class="run-title" id="runTitle" contenteditable="true" spellcheck="false" role="textbox" aria-label="Run title">${esc(runTitle())}</span>
+    <div class="seg" role="group" aria-label="Device">${['eeg','nirs'].map(k=>`<button data-dev="${k}" aria-pressed="${S.run.dk===k}">${ic(DEV[k].icon,'s14')}<span class="full">${DEV[k].tab}</span></button>`).join('')}</div>
+    <span class="tb-sp"></span>
+    <span class="simlabel" title="All numbers on this screen are invented for the mock-up">Simulated run, demo data</span>
+    <button class="live" id="live" title="Snap to the live edge"><i></i><span>LIVE</span></button>
+    <select class="speed" id="speed" aria-label="Playback speed">${[0.5,1,2,4].map(s=>`<option value="${s}" ${S.speed===s?'selected':''}>${s}×</option>`).join('')}</select>
+    <button class="iconbtn" id="restart" title="Restart the run">${ic('restart','s16')}</button>
+    <button class="iconbtn" id="outputs" title="Outputs">${ic('download','s16')}</button>
+    <button class="btn sm" id="share">${ic('share','s14')}Share</button>`;
+  $('#strip').innerHTML = `
+    <div class="tracker" id="tracker">
+      ${stgBtn('spec','Spec','#a78bfa')}${stgBtn('ref','Reference','#a78bfa')}
+      <div class="loop"><div class="loop-tag" title="Propose to Verify repeats in rounds">${ic('loop','s14')}<span>Round <b id="rnum">1</b>/<span id="rtot">${S.run.rounds.length}</span></span></div>
+        ${stgBtn('propose','Propose','#60a5fa')}${stgBtn('train','Train','#60a5fa')}${stgBtn('compile','Compile','#60a5fa')}${stgBtn('verify','Verify','#60a5fa')}
+      </div>
+      ${stgBtn('report','Report','#fb923c')}
+    </div>
+    <button class="best-mini" id="bestMini" title="Open the current best chip"><span class="gl" id="bestGl"></span><span><span class="v" id="bestV">No chip yet</span><br><span class="s" id="bestS">first chip in round 1</span></span></button>
+    <div class="ctrl">
+      <button class="btn" id="playBtn" style="min-width:92px"></button>
+      <button class="btn blue" id="redirBtn">${ic('msg','s14')}Redirect</button>
+    </div>`;
+  const ticks = S.run.rounds.map(R=>`<span class="tick" style="left:${R.t.propose/S.run.end*100}%"></span>`).join('') + `<span class="tick" style="left:${S.run.tR/S.run.end*100}%"></span>`;
+  $$('#scrub .tick').forEach(n=>n.remove()); $('#scrub').insertAdjacentHTML('beforeend', ticks);
+  bindChrome(); updateChrome(snap(S.t));
+}
+function stgBtn(k,name,acc){ return `<button class="stg" data-stg="${k}" style="--acc:${acc}"><span class="nm" data-nm="${name}"><span>${name}</span></span><span class="bar"><i style="width:0%"></i></span></button>`; }
+function bindChrome(){
+  $$('[data-dev]').forEach(b=>b.onclick=()=>{ if(b.dataset.dev===S.run.dk) return; const v=S.view; startRun(b.dataset.dev, v); toast(`Replaying the run for the ${DEV[b.dataset.dev].name.toLowerCase()}.`); });
+  $('#live').onclick=()=>{ S.follow=true; S.t=S.liveT; tick(true); };
+  $('#speed').onchange=e=>{ S.speed=+e.target.value; };
+  $('#restart').onclick=()=>{ S.steers=[]; S.gate={approved:false,held:false}; rebuild(); S.t=0; S.liveT=0; S.follow=true; S.playing=true; renderChrome(); mountView(); toast('Run restarted from the beginning.'); };
+  $('#share').onclick=()=>{ const u=location.href; (navigator.clipboard? navigator.clipboard.writeText(u):Promise.reject()).then(()=>toast('Public link copied.'),()=>toast('Public link ready: '+u.split('#')[0].split('/').pop()+'#'+S.view)); };
+  $('#outputs').onclick=e=>openOutputs(e.currentTarget);
+  $('#playBtn').onclick=togglePlay;
+  $('#redirBtn').onclick=e=>openRedirect(e.currentTarget);
+  $('#bestMini').onclick=()=>{ S.chipA=null; setView('chip'); };
+  $$('#tracker [data-stg]').forEach(b=>b.onclick=()=>stagePop(b));
+  const rt=$('#runTitle'); rt.onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); rt.blur(); } }; rt.onblur=()=>{ const v=rt.textContent.trim(); if(v){ S.title=v; renderSide(); toast('Run renamed.'); } else rt.textContent=runTitle(); };
+}
+function togglePlay(){
+  const sn=snap(S.liveT);
+  if(sn.done && !S.playing){ S.steers=[]; S.gate={approved:false,held:false}; rebuild(); S.t=0; S.liveT=0; S.follow=true; S.playing=true; renderChrome(); mountView(); return; }
+  S.playing=!S.playing; S.typingPause=false;
+  if(S.playing && S.gate.held){ S.gate.held=false; S.gate.approved=true; }
+  updateChrome(snap(S.t)); refreshComposerNote();
+}
+function setPlaying(p){ S.playing=p; updateChrome(snap(S.t)); refreshComposerNote(); }
+function stageState(sn, key){
+  const run=S.run, t=sn.t;
+  if(['spec','ref','report'].includes(key)){ const s=run.stages.find(x=>x.key===key); return {f:clamp((t-s.t0)/(s.t1-s.t0),0,1), s}; }
+  const R = sn.round; if(!R) return {f:0, s:null};
+  const s = run.stages.find(x=>x.key===key && x.round===R.r);
+  return {f:clamp((t-s.t0)/(s.t1-s.t0),0,1), s};
+}
+function updateChrome(sn){
+  if(!sn || !$('#rnum')) return; const run=S.run;
+  $$('#tracker [data-stg]').forEach(b=>{ const k=b.dataset.stg; const st=stageState(sn,k); const i=b.querySelector('.bar i'); i.style.width=(st.f*100)+'%';
+    const running = sn.cur && sn.cur.key===k; const allDone = ['propose','train','compile','verify'].includes(k) ? (t=>t>=run.tR)(sn.t) : st.f>=1;
+    b.classList.toggle('run', running); b.classList.toggle('done', !running && (st.f>=1)); const nm=b.querySelector('[data-nm]');
+    const want = (st.f>=1 && !running) ? 'done' : running ? 'run' : 'pend'; if(nm.dataset.st!==want){ nm.dataset.st=want; const label=nm.dataset.nm; nm.innerHTML = (want==='done'? ic('check','s12') : want==='run' ? '<span class="mspin" style="width:10px;height:10px"></span>' : '') + `<span>${label}</span>`; }
+  });
+  $('#rnum').textContent = sn.round ? sn.round.r : 0; $('#rtot').textContent = run.rounds.length;
+  if(sn.best){ $('#bestV').textContent = fmt(sn.best.g)+' gates'; $('#bestS').textContent = `${pct(sn.best.s)} ${run.D.metricShort}, round ${sn.best.r}`; const gl=$('#bestGl'); if(gl.dataset.id!==sn.best.id){ gl.dataset.id=sn.best.id; gl.innerHTML=chipSVG(sn.best,{w:68,h:52,mini:true}); } }
+  else { $('#bestV').textContent='No chip yet'; $('#bestS').textContent='first chip in round 1'; $('#bestGl').innerHTML=''; $('#bestGl').dataset.id=''; }
+  const pb=$('#playBtn'); const doneLive = S.liveT>=run.end;
+  const want = doneLive && !S.playing ? 'replay' : S.playing ? 'pause' : 'resume';
+  if(pb.dataset.m!==want){ pb.dataset.m=want; pb.innerHTML = want==='pause' ? ic('pause','s14')+'Pause' : want==='resume' ? ic('play','s14')+'Resume' : ic('restart','s14')+'Replay'; }
+  const live=$('#live'); live.className='live'+(doneLive?' fin':(!S.follow?' dim':(!S.playing?' paused':'')));
+  live.querySelector('span').textContent = doneLive && S.follow ? 'FINISHED' : (!S.follow ? 'REPLAY' : (!S.playing ? 'PAUSED' : 'LIVE'));
+  const sc=$('#scrub'); sc.querySelector('.live-edge').style.width=(S.liveT/run.end*100)+'%'; sc.querySelector('.pos').style.width=(S.t/run.end*100)+'%'; sc.querySelector('.knob').style.left=(S.t/run.end*100)+'%';
+}
+function stagePop(btn){
+  const k=btn.dataset.stg; const run=S.run; const sn=snap(S.t); const D=run.D;
+  const all = run.stages.filter(s=>s.key===k);
+  const name = all[0].name; const desc = {spec:'Pins down inputs, output, clinical line and gate budget.', ref:'Trains a full-size model to set the ceiling.', propose:'The Architect proposes design families and sizes for the batch.', train:`Trains every candidate at once as one GPU batch (${fmt(run.N)} per round).`, compile:'Turns the smallest candidates that meet the line into logic-gate circuits.', verify:'Runs the circuit on unseen patients and compares every output bit with the model.', report:'Sign-off gate, then the datasheet and files.'}[k];
+  const go = {spec:'agents', ref:'design', propose:'agents', train:'design', compile:'chip', verify:'signal', report:'report'}[k];
+  const goName = VIEWS.find(v=>v.k===go).name;
+  const ag = AG[all[0].agent];
+  const rows = all.map(s=>{ const f=clamp((S.t-s.t0)/(s.t1-s.t0),0,1); const c=costAt(S.t); return `<div class="field" style="padding:4px 8px"><span>${s.round?'Round '+s.round:'Run'}</span><span class="mono" style="font-size:11px">${f>=1?'done, '+dur(s.t1-s.t0):f>0?'running':'pending'}</span></div>`; }).join('');
+  const sc = costAt(S.t).byStage[k]; const spent = sc ? sc.llm+sc.gpu+sc.cpu : 0;
+  openPop(btn, `<div style="padding:6px 8px"><b style="font-size:13px">${name}</b><div class="muted" style="font-size:12px;margin-top:2px">${desc}</div><div style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:12px"><span class="av" style="width:20px;height:20px;font-size:11px;background:${ag.tint};color:${ag.color}">${ag.g}</span>${ag.name}<span class="sp" style="flex:1"></span><span class="mono" style="font-size:11px">${money(spent)} so far</span></div></div>${rows}<div style="padding:6px 8px"><button class="btn sm" id="sp-go">Open ${goName}</button></div>`, pop=>{ $('#sp-go',pop).onclick=()=>{ closePop(); setView(go); }; });
+}
+function openOutputs(btn){
+  const sn=snap(S.t); const B=sn.best;
+  openPop(btn, `<div class="pop-h">Outputs ${sn.done?'':'(current best so far)'}</div>
+    <button class="opt" data-dl="v" ${B?'':'disabled'}>${ic('cpu','s16')}<span><b>Circuit netlist</b><span>${B?B.id+', '+fmt(B.g)+' gates, Verilog':'Available after round 1'}</span></span></button>
+    <button class="opt" data-dl="md" ${B?'':'disabled'}>${ic('file','s16')}<span><b>Datasheet</b><span>${sn.done?'Final report':'Draft, fills in as the run goes'}</span></span></button>
+    <button class="opt" data-dl="csv" ${B?'':'disabled'}>${ic('shield','s16')}<span><b>Verification log</b><span>Per-patient results, CSV</span></span></button>`, pop=>{ $$('[data-dl]',pop).forEach(b=>b.onclick=()=>{ closePop(); download(b.dataset.dl); }); });
+}
+
+/* ---------- redirect and asks ---------- */
+let steerSeq=1;
+function openRedirect(anchor){
+  if(S.view==='conversation'){ const ta=$('#cmp'); if(ta){ setPlaying(false); S.typingPause=true; ta.focus(); refreshComposerNote(); return; } }
+  setPlaying(false);
+  openPop(anchor, `<div style="padding:8px;width:340px"><b style="font-size:13px">Redirect the scientists</b><div class="muted" style="font-size:12px;margin:2px 0 8px">The run is paused while you write. Sending resumes it.</div>
+    <textarea id="rd-t" rows="3" style="width:100%;border:1px solid var(--ink-200);border-radius:10px;padding:8px 10px;font-size:13px;resize:none;outline:0" placeholder="For example: fewer gates, accept 2 points lower sensitivity"></textarea>
+    <div class="sugg" style="margin-top:8px">${suggestions().slice(0,2).map(s=>`<button data-s="${esc(s)}">${esc(s)}</button>`).join('')}</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn sm" id="rd-c">Keep paused</button><button class="btn sm blue" id="rd-s">${ic('send','s12')}Send redirect</button></div></div>`, pop=>{
+      const ta=$('#rd-t',pop); setTimeout(()=>ta.focus(),20);
+      $$('[data-s]',pop).forEach(b=>b.onclick=()=>{ ta.value=b.dataset.s; ta.focus(); });
+      $('#rd-c',pop).onclick=closePop;
+      $('#rd-s',pop).onclick=()=>{ const v=ta.value.trim(); if(!v) { ta.focus(); return; } closePop(); sendSteer(v,'redirect'); };
+      ta.onkeydown=e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); $('#rd-s',pop).click(); } };
+    });
+}
+function suggestions(){ const D=S.run.D; return ['Fewer gates, accept 2 points lower sensitivity', 'Make the circuit shallower', D.key==='eeg' ? 'Why was a candidate rejected?' : 'Why drop the binarised MLPs?']; }
+function sendSteer(text, type){
+  const run=S.run;
+  S.follow=true; S.t=S.liveT;
+  const t = S.liveT + 0.01;
+  if(type==='ask'){ S.steers.push({sid:steerSeq++, type:'ask', t, text, answer:answerFor(text)}); }
+  else S.steers.push({sid:steerSeq++, type:'redirect', t, text});
+  const curView=S.view; rebuild(); renderChrome();
+  if(curView==='conversation') { /* stream picks up new events */ } else mountView();
+  S.typingPause=false; setPlaying(true);
+  if(type!=='ask' && curView!=='conversation'){ setTimeout(()=>{ const ev=S.run.ev.find(e=>e.kind==='reply' && Math.abs(e.t-(t+1.3))<.01); if(ev) toast(`Architect: ${stripTags(ev.html).slice(0,120)}…`, 'conversation'); }, 900); }
+}
+function stripTags(h){ const d=document.createElement('div'); d.innerHTML=h; return d.textContent; }
+function answerFor(q){
+  const sn=snap(S.liveT), D=S.run.D, s=q.toLowerCase();
+  if(/reject|why.*round 2|patient/.test(s)){ const R=S.run.rounds[1]; if(R && S.liveT>=R.t.chosen){ const x=candOf(R,R.rejIdx); return `${x.id} was ${fmt(x.g)} gates, smaller than ${R.best.id}, but on one unseen newborn its specificity was ${pct(x.sp)}, below the ${D.line.spec}% line. The line applies to every patient, so it was rejected. The run is unchanged.`; } return `Nothing has been rejected yet. Candidates are rejected when any single unseen patient falls under the line. The run is unchanged.`; }
+  if(/mlp|drop|famil/.test(s)) return `In round 1 the ${D.families[2]} candidates sat well below the frontier for their size, so round 2 spends the batch on families that were on it. The run is unchanged.`;
+  if(/cost|spend|money|budget/.test(s)) return `So far ${money(sn.cost.total)}: ${money(sn.cost.llm)} for the agents, ${money(sn.cost.gpu)} of GPU time and ${money(sn.cost.cpu)} of CPU time for compiling and checks. The cap is $25.00. The run is unchanged.`;
+  return sn.best ? `Current best is ${sn.best.id}: ${fmt(sn.best.g)} gates, worst-patient sensitivity ${pct(sn.best.s)}, specificity ${pct(sn.best.sp)}, longest path ${sn.best.d} gate levels. The run is unchanged.` : `No chip yet; round 1 is ${sn.cur?sn.cur.name.toLowerCase():'starting'}. The run is unchanged.`;
+}
+
+/* ---------- toasts ---------- */
+function toast(msg, view){
+  const el=document.createElement('div'); el.className='toast'; el.innerHTML=`<span>${esc(msg)}</span>${view?`<button class="btn sm">Open</button>`:''}<button class="x" aria-label="Dismiss">${ic('x','s14')}</button>`;
+  $('#toasts').appendChild(el); const kill=()=>el.remove(); el.querySelector('.x').onclick=kill; if(view) el.querySelector('.btn').onclick=()=>{ kill(); setView(view); };
+  setTimeout(kill, 5200);
+  while($('#toasts').children.length>3) $('#toasts').firstChild.remove();
+}
+
+/* ---------- downloads ---------- */
+function download(kind){
+  const sn=snap(S.t), B=sn.best, D=S.run.D; if(!B) return;
+  let name, body;
+  if(kind==='v'){ name=`${B.id}.v`; const r=mulberry(hashStr(B.id)); const ops=['and','xor','or','not','and','xor']; const lines=[`// ${D.title}, ${B.id}. Demo data from a simulated run.`, `// ${fmt(B.g)} two-input gates, longest path ${B.d} levels, weights wired in.`, `module ${D.key==='eeg'?'seizure_flag':'brain_oxygen'} (input wire [${D.nInBits-1}:0] x, output wire ${D.key==='eeg'?'y':'[7:0] y'});`, `  wire [${B.g-1}:0] n;`];
+    for(let i=0;i<B.g;i++){ const op=ops[Math.floor(r()*ops.length)]; const a = i<64 ? `x[${Math.floor(r()*D.nInBits)}]` : `n[${Math.floor(r()*i)}]`; const b = i<64 ? `x[${Math.floor(r()*D.nInBits)}]` : `n[${Math.floor(r()*i)}]`; lines.push(op==='not' ? `  not g${i} (n[${i}], ${a});` : `  ${op} g${i} (n[${i}], ${a}, ${b});`); }
+    lines.push(D.key==='eeg' ? `  assign y = n[${B.g-1}];` : `  assign y = n[${B.g-1}:${B.g-8}];`, 'endmodule'); body=lines.join('\n'); }
+  else if(kind==='csv'){ name=`${B.id}-verification.csv`; body='patient,'+D.unit+',positives,detected,sensitivity,specificity,circuit_equals_model\n'+B.patients.map(p=>`${p.id},${p.win},${p.pos},${p.det},${p.sens.toFixed(2)},${p.spec.toFixed(2)},${p.win}/${p.win}`).join('\n'); }
+  else { name=`${B.id}-datasheet.md`; body=`# ${D.title}, ${B.id}\n\nDemo data from a simulated run. Not clinically validated.\n\n- Gates: ${fmt(B.g)}\n- Longest path: ${B.d} gate levels\n- Worst-patient sensitivity: ${pct(B.s)} (line ${D.line.sens}%)\n- Worst-patient specificity: ${pct(B.sp)} (line ${D.line.spec}%)\n- Circuit equals model on ${fmt(D.windows)} of ${fmt(D.windows)} unseen ${D.unit}\n`; }
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([body],{type:'text/plain'})); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  toast(`Downloaded ${name}.`);
+}
+
+/* ---------- views ---------- */
+let V = {}; // current view handles
+function mountView(){
+  closePop();
+  const vp=$('#viewport'); vp.scrollTop=0; V={};
+  const fn = {conversation:mountConv, design:mountDesign, chip:mountChip, signal:mountSignal, agents:mountAgents, cost:mountCost, report:mountReport}[S.view];
+  fn(vp); renderSide(); tick(true);
+}
+
+/* --- conversation --- */
+function mountConv(vp){
+  vp.innerHTML = `<div class="conv view">
+    <div class="stream-col">
+      <div class="stream" id="stream"><div class="stream-in" id="streamIn"></div></div>
+      <button class="btn sm jump" id="jump" hidden>${ic('arrowdown','s12')}Jump to latest</button>
+      <div class="composer-dock"><div class="dock-in">
+        <div class="sugg" id="sugg">${suggestions().map(s=>`<button data-s="${esc(s)}">${esc(s)}</button>`).join('')}</div>
+        <div class="cbox">
+          <textarea id="cmp" rows="1" placeholder="Steer the scientists. For example: fewer gates, accept 2 points lower sensitivity" aria-label="Message to the AI scientists"></textarea>
+          <div class="cbox-row">
+            <div class="seg" role="group" aria-label="Send as"><button data-sm="redirect" aria-pressed="${S.sendMode==='redirect'}">${ic('loop','s12')}Redirect</button><button data-sm="ask" aria-pressed="${S.sendMode==='ask'}">${ic('question','s12')}Ask, run unchanged</button></div>
+            <span id="pnote"></span><span class="sp"></span>
+            <span class="hint">Enter to send</span>
+            <button class="btn sm blue" id="send">${ic('send','s12')}Send</button>
+          </div>
+        </div>
+      </div></div>
+    </div>
+    <aside class="summary" id="summary"></aside>
+  </div>`;
+  V.stream=$('#stream'); V.streamIn=$('#streamIn'); V.rendered=0; V.live=[]; V.stick=true; V.lastT=-1;
+  const userScroll=()=>{ V.user=performance.now(); };
+  ['wheel','touchmove','pointerdown','keydown'].forEach(ev=>V.stream.addEventListener(ev, userScroll, {passive:true}));
+  V.stream.addEventListener('scroll', ()=>{ if(!V.user || performance.now()-V.user>800) return; const s=V.stream; V.stick = s.scrollHeight - s.scrollTop - s.clientHeight < 60; $('#jump').hidden = V.stick; });
+  const dock=$('.composer-dock'); const placeJump=()=>{ const j=$('#jump'); if(j) j.style.setProperty('--jb', (dock.offsetHeight+12)+'px'); }; placeJump(); new ResizeObserver(placeJump).observe(dock);
+  $('#jump').onclick=()=>{ V.stick=true; V.stream.scrollTop=V.stream.scrollHeight; $('#jump').hidden=true; };
+  const ta=$('#cmp');
+  ta.addEventListener('input', ()=>{ ta.style.height='auto'; ta.style.height=Math.min(120,ta.scrollHeight)+'px'; if(ta.value.trim() && S.playing && S.sendMode==='redirect'){ S.typingPause=true; setPlaying(false); } refreshComposerNote(); });
+  ta.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); $('#send').click(); } });
+  $('#send').onclick=()=>{ const v=ta.value.trim(); if(!v){ ta.focus(); return; } ta.value=''; ta.style.height='auto'; sendSteer(v, S.sendMode); };
+  $$('#sugg [data-s]').forEach(b=>b.onclick=()=>{ ta.value=b.dataset.s; S.sendMode = /^why/i.test(b.dataset.s)?'ask':'redirect'; $$('[data-sm]').forEach(x=>x.setAttribute('aria-pressed', x.dataset.sm===S.sendMode)); ta.dispatchEvent(new Event('input')); ta.focus(); });
+  $$('[data-sm]').forEach(b=>b.onclick=()=>{ S.sendMode=b.dataset.sm; $$('[data-sm]').forEach(x=>x.setAttribute('aria-pressed', x.dataset.sm===S.sendMode)); refreshComposerNote(); });
+  V.update = updConv; V.summary=$('#summary');
+  refreshComposerNote();
+}
+function refreshComposerNote(){ const n=$('#pnote'); if(!n) return; n.innerHTML = !S.playing && S.liveT<S.run.end ? `<span class="paused-note">${ic('pause','s12')}${S.typingPause?'Paused while you write. Sending resumes the run.':'Run paused. Send a redirect or press Resume.'}</span>` : ''; }
+function avatar(k){ const a=AG[k]; return `<span class="av" style="background:${a.tint};color:${a.color}" title="${a.name}">${a.g}</span>`; }
+function whoLine(k, t, extra){ const a=AG[k]; return `<div class="who"><b style="color:${a.color}">${a.name}</b><span class="rl">${a.model}, ${a.effort.toLowerCase()} effort</span>${extra||''}<span class="tm">+${clock(t)}</span></div>`; }
+function evNode(e){
+  const run=S.run, D=run.D; const el=document.createElement('div'); let live=null;
+  const open = (view, label) => `<button class="link" data-open="${view}">${label}${ic('right','s12')}</button>`;
+  switch(e.kind){
+    case 'human': el.className='human'; el.innerHTML=`<div class="bubble"><div class="bh">You started a run, ${D.name.toLowerCase()}</div>${esc(e.text)}</div>`; break;
+    case 'steer': el.className='human'; el.innerHTML=`<div class="bubble"><div class="bh">${ic('loop','s12')}Redirect at +${clock(e.t)}</div>${esc(e.text)}</div>`; break;
+    case 'ask': el.className='human'; el.innerHTML=`<div class="bubble" style="background:#fff"><div class="bh">${ic('question','s12')}Side question</div>${esc(e.text)}</div>`; break;
+    case 'stage': { const col = {spec:'#a78bfa', ref:'#a78bfa', report:'#fb923c'}[e.stage] || '#60a5fa'; el.className='divider'; el.innerHTML=`<span class="lb"><span class="sw" style="background:${col}"></span>${esc(e.label)}</span><span class="ln"></span><span class="mono" style="font-size:10.5px">+${clock(e.t)}</span>`; break; }
+    case 'text': case 'reply': case 'answer': {
+      el.className='msg'; const tag = e.kind==='reply' ? '<span class="tag teal">Plan updated</span>' : e.kind==='answer' ? '<span class="tag ink">Side answer, run unchanged</span>' : e.warn ? '<span class="tag warn">Needs attention</span>' : '';
+      el.innerHTML = `${avatar(e.agent)}<div>${whoLine(e.agent, e.t, tag)}<div class="txt" data-txt></div></div>`;
+      const box = el.querySelector('[data-txt]'); const full = e.html; const plain = stripTags(full);
+      live = t=>{ const f=clamp((t-e.t)/1.1,0,1); if(f>=1){ box.innerHTML=full.startsWith('<p>')?full:`<p>${full}</p>`; return true; } box.innerHTML = `<p>${esc(plain.slice(0, Math.floor(plain.length*f)))}<span class="caret"></span></p>`; return false; };
+      break; }
+    case 'plan': el.className='msg'; el.innerHTML = `${avatar('arch')}<div>${whoLine('arch', e.t)}<div class="txt">Here is the plan. I'll tick it off as we go.</div><div class="card plan"><div class="card-h">${ic('list','s14')}Run plan<span class="sp"></span><span class="sub" data-pc></span></div><div class="card-b"><ul data-plan></ul></div></div></div>`;
+      live = t=>{ el.querySelector('[data-plan]').innerHTML = planItems(t).map(p=>`<li class="${p.st}"><span class="bx">${p.st==='done'?ic('check','s12'):''}</span><span>${p.text}</span></li>`).join(''); const it=planItems(t); el.querySelector('[data-pc]').textContent = `${it.filter(x=>x.st==='done').length} of ${it.length} done`; return t>=run.end; }; break;
+    case 'spec': el.className='msg'; el.innerHTML = `${avatar('arch')}<div>${whoLine('arch', e.t)}<div class="card"><div class="card-h">${ic('file','s14')}Spec<span class="sp"></span><span class="sub">locked for this run</span></div><div class="card-b"><dl class="kv">
+      <dt>Signal</dt><dd>${D.signal}</dd><dt>Chip inputs</dt><dd>${D.inputBits}</dd><dt>Chip output</dt><dd>${D.output}, ${D.outputDesc}</dd><dt>Clinical line</dt><dd>sens ≥ ${D.line.sens}%, spec ≥ ${D.line.spec}% in every patient</dd><dt>Gate budget</dt><dd>${fmt(D.budget)} gates</dd><dt>Data</dt><dd style="white-space:normal">${D.data}</dd></dl></div></div></div>`; break;
+    case 'tool': { el.className='msg'; el.innerHTML = `<span></span><div class="tool"><button class="tool-h" aria-expanded="true">${ic('term','s14')}<span>${esc(e.title)}</span><span class="sp"></span><span data-ts></span><span class="st" data-tt></span>${ic('down','s12')}</button><div class="tool-b" data-tb></div></div>`;
+      const hb=el.querySelector('.tool-h'), tb=el.querySelector('[data-tb]'); let userToggled=false;
+      hb.onclick=()=>{ userToggled=true; const o=hb.getAttribute('aria-expanded')!=='true'; hb.setAttribute('aria-expanded',o); tb.hidden=!o; };
+      live = t=>{ const f=clamp((t-e.t)/(e.t1-e.t),0,1); const vis=e.lines.filter(l=>l.f<=f+1e-6);
+        tb.innerHTML = vis.map(l=> l.c?`<span class="c">${esc(l.c)}</span>`: l.e?`<span class="e">${esc(l.e)}</span>`: l.w?`<span class="w">${esc(l.w)}</span>`: l.o?`<span class="o">${esc(l.o)}</span>`: esc(l.t)).join('\n');
+        tb.scrollTop=tb.scrollHeight;
+        el.querySelector('[data-ts]').innerHTML = f<1 ? '<span class="mspin"></span>' : `<span class="tag ${e.lines.some(l=>l.e)?'warn':'ok'}">${e.lines.some(l=>l.e)?'fixed':'ok'}</span>`;
+        el.querySelector('[data-tt]').textContent = f<1 ? 'running' : dur(e.t1-e.t);
+        if(f>=1 && !userToggled && t-e.t1>2.5){ hb.setAttribute('aria-expanded','false'); tb.hidden=true; return true; }
+        return false; };
+      break; }
+    case 'ref': el.className='msg'; el.innerHTML = `${avatar('train')}<div>${whoLine('train', e.t)}<div class="txt">The reference model sets the ceiling. The chip has to stay above the clinical line using a tiny fraction of its size.</div><div class="card"><div class="card-h">${ic('activity','s14')}Reference model<span class="sp"></span><span class="sub">${D.ref.kind}</span></div><div class="stats" style="border-top:0">
+      <div class="stat"><div class="l">Worst-patient sensitivity</div><div class="v">${pct(D.ref.sens)}</div></div><div class="stat"><div class="l">Specificity</div><div class="v">${pct(D.ref.spec)}</div></div><div class="stat"><div class="l">Size</div><div class="v">${D.ref.size.replace(' parameters','')}<small> params</small></div></div><div class="stat"><div class="l">Clinical line</div><div class="v">${D.line.sens}%<small> / ${D.line.spec}%</small></div></div></div></div></div>`; break;
+    case 'propose': { const R=run.rounds[e.r-1]; const fw=D.famWeights[Math.min(e.r-1,D.famWeights.length-1)]; const tot=fw.reduce((a,b)=>a+b,0);
+      el.className='msg'; el.innerHTML = `${avatar('arch')}<div>${whoLine('arch', e.t)}<div class="card"><div class="card-h">${ic('grid','s14')}Round ${e.r} proposal<span class="sp"></span><span class="sub">${fmt(run.N)} candidates, sizes ${fmt(Math.round(R.best.g*.42/100)*100)} to ${fmt(Math.min(D.xr[1],Math.round(R.best.g*7.5/1000)*1000))} gates</span></div><div class="card-b">
+        ${D.families.map((f,k)=>`<div class="fam"><span>${f}</span><span class="b"><i class="${fw[k]?'':'off'}" style="width:${fw[k]/tot*100}%"></i></span><span class="mono" style="text-align:right;font-size:11px">${fw[k]?fmt(Math.round(run.N*fw[k]/tot)):'dropped'}</span></div>`).join('')}
+        <div style="font-size:12.5px;color:var(--ink-600);margin-top:8px;line-height:1.55">${R.applied.length?'<span class="tag teal" style="margin-right:6px">Your redirect</span>':''}${esc(R.change)}</div></div></div></div>`; break; }
+    case 'batch': { const R=run.rounds[e.r-1]; el.className='msg'; el.innerHTML = `${avatar('train')}<div>${whoLine('train', e.t)}<div class="card"><div class="card-h">${ic('grid','s14')}Batch monitor, round ${e.r}<span class="sp"></span><span class="sub" data-bs></span></div><div class="card-b" style="display:grid;grid-template-columns:200px 1fr;gap:14px;align-items:center"><canvas data-bc style="height:${R.N>=4096?200:R.N>=2048?100:R.N>=512?100:200}px"></canvas><div><div class="big num" data-bn style="font-size:28px">0</div><div class="muted" style="font-size:12px">of ${fmt(R.N)} candidates trained</div><div style="margin-top:10px;font-size:12.5px" data-bm></div><div style="margin-top:10px">${open('design','Open in Design space')}</div></div></div></div></div>`;
+      const cv=el.querySelector('[data-bc]');
+      live = t=>{ drawBatch(cv,R,t); const k=upper(R.tfs,t); el.querySelector('[data-bn]').textContent=fmt(k); let m=0; for(let i=0;i<R.N;i++) if(R.tf[i]<=t && R.a[i]>=D.line.sens && R.g[i]<=D.budget) m++; const rate = k/Math.max(.01,(Math.min(t,R.t.compile)-R.t.train))/REAL*60; el.querySelector('[data-bm]').innerHTML=`<b class="mono">${fmt(m)}</b> meet the line within budget<br><span class="muted">${k>0?fmt(rate)+' candidates per minute':'warming up'}</span>`; el.querySelector('[data-bs]').textContent = t<R.t.compile ? 'training' : 'done'; return t>=R.t.chosen+.2; };
+      break; }
+    case 'curve': { const R=run.rounds[e.r-1]; el.className='msg'; el.innerHTML = `${avatar('train')}<div>${whoLine('train', e.t)}<div class="txt">Batch done. ${fmt(R.meetCount)} of ${fmt(R.N)} meet the line within the budget; the frontier moved ${e.r===1?'into view':'left'}.</div><div class="card"><div class="card-h">${ic('scatter','s14')}Design space after round ${e.r}<span class="sp"></span>${open('design','Open in Design space')}</div><div class="card-b"><canvas data-sc style="height:190px;cursor:pointer" title="Open in Design space"></canvas></div></div></div>`;
+      const cv=el.querySelector('[data-sc]'); cv.onclick=()=>setView('design'); live = t=>{ drawScatter(cv, Math.max(e.t, R.t.compile-.01), {mini:true}); return true; }; break; }
+    case 'chip': { const R=run.rounds[e.r-1], B=R.best; el.className='msg'; el.innerHTML = `${avatar('comp')}<div>${whoLine('comp', e.t)}<div class="txt">Smallest circuit that meets the line this round is <b>${B.id}</b>. The orange trace is the longest path through the gates.</div><div class="card"><div class="card-h">${ic('cpu','s14')}${B.id}<span class="sp"></span><span class="sub">${D.families[B.fam]}</span></div><div class="card-b" style="padding:8px 12px">${chipSVG(B,{w:640,h:230})}</div><div class="stats"><div class="stat"><div class="l">Gates</div><div class="v">${fmt(B.g)}</div></div><div class="stat"><div class="l">Longest path</div><div class="v">${B.d}<small> levels</small></div></div><div class="stat"><div class="l">Layers</div><div class="v">${B.layers.join('·')}</div></div><div class="stat"><div class="l">vs budget</div><div class="v">${pct(B.g/D.budget*100)}</div></div></div><div class="card-f"><span>Not yet checked against unseen patients</span><span class="sp"></span>${open('chip','Open in Chip view')}</div></div></div>`; el.querySelector('[data-open="chip"]').onclick=()=>{ S.chipA={r:R.r,i:R.bestIdx}; S.chipB=null; setView('chip'); }; break; }
+    case 'verify': { const R=run.rounds[e.r-1], B=R.best; const worst=Math.min(...B.patients.map(p=>p.sens));
+      el.className='msg'; el.innerHTML = `${avatar('ver')}<div>${whoLine('ver', e.t)}<div class="card"><div class="card-h">${ic('shield','s14')}Verification of ${B.id}<span class="sp"></span><span class="tag ok">${ic('check','s12')}passes the line</span></div><div class="card-b" style="display:grid;grid-template-columns:200px 1fr;gap:16px">
+        <div><div class="bigok num" style="font-size:30px">${fmt(D.windows)}<span style="font-size:15px;color:var(--ink-500)"> / ${fmt(D.windows)}</span></div><div class="muted" style="font-size:12px">${D.unit} where circuit and model agree bit for bit, ${D.patients} unseen ${D.who}</div></div>
+        <div>${B.patients.map(p=>`<div style="display:grid;grid-template-columns:30px 1fr 44px;gap:8px;align-items:center;font-size:11px;margin:1px 0"><span class="mono muted">${p.id}</span><span class="hb"><i style="width:${(p.sens-80)/20*100}%;${p.sens===worst?'background:var(--orange)':''}"></i><span class="ln" style="left:${(D.line.sens-80)/20*100}%"></span></span><span class="mono" style="text-align:right">${pct(p.sens)}</span></div>`).join('')}<div class="muted" style="font-size:11px;margin-top:4px">Sensitivity per patient, axis 80 to 100%, green tick is the line</div></div></div>
+        <div style="padding:0 12px 10px"><canvas data-sg style="height:110px"></canvas></div>
+        <div class="card-f"><span>Lowest specificity ${pct(B.sp)}, line ${D.line.spec}%</span><span class="sp"></span>${open('signal','Open in Signal and check')}</div></div></div>`;
+      const cv=el.querySelector('[data-sg]'); live = t=>{ drawSignal(cv, e.t, {mini:true, cand:B}); return true; }; break; }
+    case 'round': { const R=run.rounds[e.r-1], B=R.best, P=e.r>1?run.rounds[e.r-2].best:null; const dg = P? (B.g-P.g)/P.g*100 : null;
+      el.className='msg'; el.innerHTML = `${avatar('arch')}<div>${whoLine('arch', e.t)}<div class="card" style="border-color:#c7dbfb"><div class="card-h" style="background:#f6f9ff">${ic('loop','s14')}Round ${e.r} result<span class="sp"></span>${R.applied.length?'<span class="tag teal">shaped by your redirect</span>':''}</div><div class="stats" style="border-top:0">
+        <div class="stat"><div class="l">Best chip</div><div class="v">${fmt(B.g)}<small> gates</small></div></div><div class="stat"><div class="l">Change</div><div class="v ${dg!=null&&dg<0?'delta-good':dg>0?'delta-bad':''}">${dg==null?'first':(dg>0?'+':'')+dg.toFixed(0)+'%'}</div></div><div class="stat"><div class="l">Worst-patient sens.</div><div class="v">${pct(B.s)}</div></div><div class="stat"><div class="l">Specificity</div><div class="v">${pct(B.sp)}</div></div></div>
+        <div class="card-b" style="font-size:12.5px;color:var(--ink-600);border-top:1px solid var(--ink-150)">${esc(R.change)}</div></div></div>`; break; }
+    case 'gate': { el.className='msg'; el.innerHTML = `${avatar('rep')}<div>${whoLine('rep', e.t)}<div class="card" style="border-color:#fed7aa"><div class="card-h" style="background:#fffaf5">${ic('hand','s14')}Sign-off gate<span class="sp"></span><span class="sub" data-gs></span></div><div class="card-b" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><span style="font-size:13px;flex:1;min-width:220px" data-gt></span><span class="gate-actions" data-ga></span></div></div></div>`;
+      live = t=>{ const g=S.gate; const auto = t>=e.t1 && !g.held; const st = g.approved ? 'approved by you' : auto ? 'approved, run setting: continue unless held' : g.held ? 'held by you' : `continues in ${Math.max(0,Math.ceil((e.t1-t)*REAL/60))} min unless you hold`;
+        el.querySelector('[data-gs]').textContent=st; el.querySelector('[data-gt]').textContent = (g.approved||auto) ? 'Signed off. Writing the datasheet now.' : 'Approve the chosen chip for the report, or hold the run to look first.';
+        const ga=el.querySelector('[data-ga]'); const want=(g.approved||auto)?'none':g.held?'held':'open'; if(ga.dataset.w!==want){ ga.dataset.w=want; ga.innerHTML = want==='none' ? `<span class="tag ok">${ic('check','s12')}signed off</span>` : `${want==='open'?'<button class="btn sm" data-hold>Hold</button>':''}<button class="btn sm primary" data-approve>Approve</button>`; const ap=ga.querySelector('[data-approve]'); if(ap) ap.onclick=()=>{ S.gate.approved=true; S.gate.held=false; setPlaying(true); }; const ho=ga.querySelector('[data-hold]'); if(ho) ho.onclick=()=>{ S.gate.held=true; setPlaying(false); }; }
+        return g.approved||auto; }; break; }
+    case 'report': { const B=run.rounds[run.rounds.length-1].best; el.className='msg'; el.innerHTML = `${avatar('rep')}<div>${whoLine('rep', e.t)}<div class="txt">The datasheet is ready. Here is the chip, its numbers and the files.</div><div class="card"><div class="card-h">${ic('file','s14')}${D.title}, ${B.id}<span class="sp"></span><span class="tag ok">final</span></div><div class="card-b" style="padding:8px 12px">${chipSVG(B,{w:640,h:230})}</div><div class="stats"><div class="stat"><div class="l">Gates</div><div class="v">${fmt(B.g)}</div></div><div class="stat"><div class="l">Worst-patient sens.</div><div class="v">${pct(B.s)}</div></div><div class="stat"><div class="l">Specificity</div><div class="v">${pct(B.sp)}</div></div><div class="stat"><div class="l">Bit-exact</div><div class="v">${fmt(D.windows)}<small>/${fmt(D.windows)}</small></div></div></div><div class="card-f"><button class="btn sm" data-dl="v">${ic('download','s12')}Circuit</button><button class="btn sm" data-dl="md">${ic('download','s12')}Datasheet</button><button class="btn sm" data-dl="csv">${ic('download','s12')}Verification log</button><span class="sp"></span>${open('report','Open report')}</div></div></div>`; $$('[data-dl]',el).forEach(b=>b.onclick=()=>download(b.dataset.dl)); break; }
+  }
+  $$('[data-open]', el).forEach(b=>{ if(!b.onclick) b.onclick=()=>setView(b.dataset.open); });
+  return {el, live};
+}
+function planItems(t){
+  const run=S.run; const n=run.rounds.length; const R=run.rounds;
+  const items = [{text:'Pin down inputs, output, clinical line and gate budget', a:0, b:5}, {text:'Train a full-size reference model to find the ceiling', a:5, b:11}];
+  const roundTxt = ['Round 1: broad sweep across design families','Round 2: narrow to the families on the frontier','Round 3: prune inputs and share layers','Round 4: squeeze gates at fixed accuracy','Round 5: second squeeze','Round 6: final squeeze'];
+  R.forEach((x,k)=>{ items.push({text: (x.applied.length? `Round ${x.r}: revised after your note, “${esc(x.applied[x.applied.length-1].text)}”` : roundTxt[k]), a:x.t.propose, b:x.t.end, rev:x.applied.length>0}); });
+  items.push({text:'Sign-off gate, then datasheet and files', a:run.tR, b:run.end});
+  return items.map(it=>({text:it.text, st: t>=it.b ? 'done' : t>=it.a ? 'on' : (it.rev?'rev':'')}));
+}
+function updConv(sn, force){
+  const run=S.run, t=sn.t;
+  if(t < V.lastT - 1e-6 || V.runRef!==run && V.rendered>0 && run.ev[V.rendered-1] && V.evIds && V.evIds[V.rendered-1]!==evKey(run.ev[V.rendered-1])){ V.streamIn.innerHTML=''; V.rendered=0; V.live=[]; V.evIds=[]; }
+  V.runRef=run; V.evIds=V.evIds||[];
+  let added=false;
+  while(V.rendered < run.ev.length && run.ev[V.rendered].t <= t){ const e=run.ev[V.rendered]; const {el, live}=evNode(e); V.streamIn.appendChild(el); if(live){ const fin = live(t); if(!fin) V.live.push(live); } V.evIds[V.rendered]=evKey(e); V.rendered++; added=true; if(e.kind!=='stage' && e.kind!=='text' && e.kind!=='tool' && t-e.t<1) { const c=el.querySelector('.card'); if(c) c.classList.add('glow'); } }
+  V.live = V.live.filter(fn=>!fn(t));
+  V.lastT=t;
+  if(V.stick && (added || V.live.length)) V.stream.scrollTop = V.stream.scrollHeight;
+  updSummary(sn);
+}
+function evKey(e){ return e.kind+'|'+e.t.toFixed(3)+'|'+(e.r||'')+'|'+(e.sid||''); }
+function updSummary(sn){
+  const run=S.run, D=run.D, B=sn.best, el=V.summary; if(!el) return;
+  const key = (B?B.id:'-')+'|'+Math.floor(sn.t*8)+'|'+S.playing;
+  if(el.dataset.k===key) return; el.dataset.k=key;
+  const now = nowText(sn);
+  el.innerHTML = `
+    <div class="sum-h">${ic('cpu','s14')}<b>Current best</b><span class="sp" style="flex:1"></span>${B?`<span class="tag ok">${ic('check','s12')}verified</span>`:'<span class="tag ink">none yet</span>'}</div>
+    ${B ? `<button style="display:block;width:100%;border:1px solid var(--ink-150);border-radius:10px;padding:6px;background:var(--ink-50)" id="sumChip" title="Open in Chip view">${chipSVG(B,{w:300,h:120,mini:true})}</button>
+    <div style="margin-top:12px;display:flex;align-items:baseline;gap:6px"><span class="big num">${fmt(B.g)}</span><span class="muted" style="font-size:13px">gates</span><span style="flex:1"></span><span class="mono muted" style="font-size:11px">${B.id}</span></div>
+    <div class="muted" style="font-size:12px">${D.families[B.fam]}, longest path ${B.d} gate levels, found in round ${B.r}${sn.prevBest?`, ${((B.g-sn.prevBest.g)/sn.prevBest.g*100).toFixed(0)}% vs round ${sn.prevBest.r}`:''}</div>
+    <div class="meter"><div class="row"><span>Worst-patient sensitivity</span><span>${pct(B.s)}</span></div><div class="mtrack"><i style="width:${(B.s-80)/20*100}%"></i><span class="line" style="left:${(D.line.sens-80)/20*100}%" title="Clinical line"></span></div></div>
+    <div class="meter"><div class="row"><span>Worst-patient specificity</span><span>${pct(B.sp)}</span></div><div class="mtrack"><i style="width:${(B.sp-80)/20*100}%"></i><span class="line" style="left:${(D.line.spec-80)/20*100}%"></span></div></div>
+    <div class="meter"><div class="row"><span>Gate budget used</span><span>${fmt(B.g)} / ${fmt(D.budget)}</span></div><div class="mtrack"><i style="width:${B.g/D.budget*100}%;background:var(--azure)"></i></div></div>
+    <div class="meter"><div class="row"><span>Circuit equals model</span><span>${fmt(D.windows)} / ${fmt(D.windows)}</span></div></div>`
+    : `<div class="empty" style="min-height:150px;padding:20px 10px;border:1px dashed var(--ink-200);border-radius:10px"><b>No chip yet</b>The first circuit is checked at +${clock(run.rounds[0].t.chosen)}. The green line it must clear: ${D.line.sens}% sensitivity and ${D.line.spec}% specificity in every patient.</div>`}
+    <div class="sum-sec"><h4>Happening now</h4><div class="now">${sn.done?ic('check','s16'):S.playing?'<span class="mspin" style="margin-top:4px"></span>':ic('pause','s16')}<span>${now}</span></div></div>
+    <div class="sum-sec"><h4>Run so far</h4><dl class="kv"><dt>Candidates evaluated</dt><dd>${fmt(sn.cands)}</dd><dt>Elapsed</dt><dd>${clock(sn.t)}</dd><dt>GPU hours</dt><dd>${sn.cost.gpuH.toFixed(2)}</dd><dt>Spent</dt><dd>${money(sn.cost.total)} of $25.00</dd></dl></div>
+    <div class="sum-sec"><h4>Rounds</h4>${run.rounds.map((R,k)=>{ const done=sn.t>=R.t.chosen; const P=k?run.rounds[k-1].best:null; return `<div class="rrow"><span class="rn">R${R.r}</span><span>${done?`<span class="g">${fmt(R.best.g)}</span> <span class="muted" style="font-size:11px">gates, ${pct(R.best.s)}</span>`:sn.t>=R.t.propose?'<span class="muted">in progress</span>':'<span class="muted" style="color:var(--ink-300)">queued</span>'}</span><span class="d">${done&&P?((R.best.g-P.g)/P.g*100).toFixed(0)+'%':''}</span></div>`; }).join('')}</div>`;
+  const sc=$('#sumChip',el); if(sc) sc.onclick=()=>{ S.chipA=null; setView('chip'); };
+}
+function nowText(sn){
+  const run=S.run, D=run.D; if(sn.done) return `Finished. ${run.rounds[run.rounds.length-1].best.id} signed off and the datasheet is ready.`;
+  if(!S.playing) return S.gate.held ? 'Held at the sign-off gate by you.' : 'Paused by you. Agents hold their state until you resume.';
+  const c=sn.cur; if(!c) return 'Starting.';
+  const R=sn.round;
+  switch(c.key){
+    case 'spec': return 'The Architect is pinning down the spec.';
+    case 'ref': return 'The Trainer is training the reference model to find the ceiling.';
+    case 'propose': return `The Architect is choosing ${fmt(run.N)} designs for round ${R.r}.`;
+    case 'train': return `Training round ${R.r}: ${fmt(upper(R.tfs,sn.t))} of ${fmt(run.N)} candidates done.`;
+    case 'compile': return `The Compiler is turning ${R.compiled.length} candidates into gates.`;
+    case 'verify': return `The Verifier is checking ${R.best.id} bit for bit on ${D.patients} unseen ${D.who}.`;
+    default: return 'Sign-off and datasheet.';
+  }
+}
+
+/* --- design space --- */
+function mountDesign(vp){
+  const run=S.run, D=run.D;
+  vp.innerHTML = `<div class="view pad">
+    <div class="vh"><h2>Design space</h2><p>Every candidate is a dot: accuracy against chip size. Click a dot to inspect it.</p></div>
+    <div class="ds">
+      <div class="panel"><div class="panel-h">${ic('scatter','s14')}Accuracy against chip size<span class="sub" id="dsCount"></span><span class="sp"></span><div style="display:flex;gap:4px" id="dsRounds"></div></div>
+        <div class="panel-b" style="position:relative"><canvas id="dsC" style="height:420px;cursor:crosshair"></canvas><div class="tip" id="dsTip" hidden></div>
+        <div class="legend" style="margin-top:8px"><span><i style="background:#1d4ed8"></i>Current round, meets line</span><span><i style="background:rgba(59,130,246,.35)"></i>Current round</span><span><i style="background:rgba(90,90,106,.5)"></i>Earlier rounds</span><span><i style="background:#fb923c;border:1.5px solid #c2560c"></i>Current best</span><span><i class="ln" style="background:#1a1a2e"></i>Frontier</span><span><i class="ln" style="background:#5b8a5b"></i>Clinical line</span></div></div></div>
+      <div class="panel" id="dsDetail"></div>
+    </div>
+    <div class="ds-bottom">
+      <div class="panel"><div class="panel-h">${ic('grid','s14')}Batch monitor<span class="sub" id="bmSub"></span></div><div class="panel-b"><canvas id="bmC" style="height:256px"></canvas><div style="display:flex;justify-content:space-between;margin-top:10px;font-size:12px" id="bmStats"></div></div></div>
+      <div class="panel"><div class="panel-h">${ic('list','s14')}Compiled candidates<span class="sub">smallest that meet the line, each turned into gates</span></div><div style="max-height:320px;overflow:auto" id="dsTable"></div></div>
+    </div></div>`;
+  const cv=$('#dsC');
+  cv.onmousemove=e=>{ const r=cv.getBoundingClientRect(); const h=nearestCand(cv, e.clientX-r.left, e.clientY-r.top, S.t); const tip=$('#dsTip'); if(!h){ tip.hidden=true; return; } const c=candOf(h.R,h.i); tip.hidden=false; tip.innerHTML=`${c.id}  ${fmt(c.g)} gates  ${pct(c.s)}`; tip.style.left=(e.clientX-r.left+30)+'px'; tip.style.top=(e.clientY-r.top-10)+'px'; };
+  cv.onmouseleave=()=>{ $('#dsTip').hidden=true; };
+  cv.onclick=e=>{ const r=cv.getBoundingClientRect(); const h=nearestCand(cv, e.clientX-r.left, e.clientY-r.top, S.t); if(h){ S.sel={r:h.R.r, i:h.i}; V.force=true; tick(true); } };
+  V.update=(sn,force)=>{
+    const key=Math.floor(sn.t*8)+'|'+S.dsRound+'|'+(S.sel?S.sel.r+'-'+S.sel.i:'')+'|'+run.ev.length;
+    if(!force && V.k===key) return; V.k=key;
+    $('#dsRounds').innerHTML = [0,...run.rounds.filter(R=>sn.t>=R.t.train).map(R=>R.r)].map(r=>`<button class="chipbtn" data-dr="${r}" aria-pressed="${S.dsRound===r}">${r?'R'+r:'All rounds'}</button>`).join('');
+    $$('[data-dr]').forEach(b=>b.onclick=()=>{ S.dsRound=+b.dataset.dr; tick(true); });
+    const sel = S.sel ? candOf(run.rounds[S.sel.r-1], S.sel.i) : null;
+    drawScatter(cv, sn.t, {round:S.dsRound, sel});
+    $('#dsCount').textContent = `${fmt(sn.cands)} candidates so far`;
+    // detail
+    const c = sel || sn.best;
+    const dEl=$('#dsDetail');
+    if(!c){ dEl.innerHTML = `<div class="panel-h">${ic('cpu','s14')}Candidate</div><div class="empty"><b>Nothing to inspect yet</b>Dots appear as round 1 trains. The orange dot will mark the best chip once one passes verification.</div>`; }
+    else { const st = {chosen:['ok','chosen, verified'], verified:['ok','compiled and verified'], compiled:['blue','compiled'], rejected:['bad','rejected at verify'], trained:['ink','trained only']}[c.status||'chosen'];
+      dEl.innerHTML = `<div class="panel-h">${ic('cpu','s14')}${c.id}<span class="sp"></span><span class="tag ${st[0]}">${st[1]}</span></div>
+      <div class="panel-b" style="padding:8px 10px;border-bottom:1px solid var(--ink-100);background:var(--ink-50)">${chipSVG(c,{w:300,h:130,mini:true})}</div>
+      <div class="panel-b"><dl class="kv"><dt>Design family</dt><dd>${D.families[c.fam]}</dd><dt>Gates</dt><dd>${fmt(c.g)}${c.status==='trained'?' est.':''}</dd><dt>Longest path</dt><dd>${c.d} levels</dd><dt>Layers</dt><dd>${c.layers.join(' → ')}</dd><dt>${D.metric.replace('Worst-patient sensitivity to low oxygen','Worst-patient sens.')}</dt><dd>${pct(c.s)}</dd><dt>Specificity</dt><dd>${pct(c.sp)}</dd><dt>Round</dt><dd>${c.r}</dd></dl>
+      <div style="font-size:12px;color:var(--ink-600);margin-top:10px;line-height:1.5">${c.status==='trained'?'Trained in the batch but not compiled: it was larger than candidates of similar accuracy, or under the line.':c.status==='rejected'?'Compiled, but one unseen newborn fell under the specificity line.':c.status==='compiled'?'Compiled into gates; not among the six checked bit for bit.':'Compiled into gates and checked bit for bit on unseen patients.'}</div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn sm primary" id="toChip">${ic('cpu','s12')}Open in Chip view</button>${sn.best&&c.id!==sn.best.id?`<button class="btn sm" id="cmpBest">${ic('compare','s12')}Compare with best</button>`:''}${S.sel?'<button class="btn sm ghost" id="clrSel">Clear</button>':''}</div></div>`;
+      $('#toChip').onclick=()=>{ S.chipA={r:c.r,i:c.i}; S.chipB=null; setView('chip'); };
+      const cb=$('#cmpBest'); if(cb) cb.onclick=()=>{ S.chipA={r:c.r,i:c.i}; S.chipB='best'; setView('chip'); };
+      const cl=$('#clrSel'); if(cl) cl.onclick=()=>{ S.sel=null; tick(true); };
+    }
+    // batch monitor for current round
+    const R = run.rounds.filter(x=>sn.t>=x.t.train).pop() || null; const bm=$('#bmC');
+    if(R){ drawBatch(bm,R,sn.t); const k=upper(R.tfs,sn.t); let m=0; for(let i=0;i<R.N;i++) if(R.tf[i]<=sn.t && R.a[i]>=D.line.sens && R.g[i]<=D.budget) m++; const rate=k/Math.max(.01,(Math.min(sn.t,R.t.compile)-R.t.train))/REAL*60; $('#bmSub').textContent=`round ${R.r}, ${sn.t<R.t.train?'queued':sn.t<R.t.compile?'training':'done'}`; $('#bmStats').innerHTML=`<span><b class="mono">${fmt(k)}</b> <span class="muted">of ${fmt(R.N)} trained</span></span><span><b class="mono">${fmt(m)}</b> <span class="muted">meet the line</span></span><span><b class="mono">${k?fmt(rate):'0'}</b> <span class="muted">per minute</span></span>`; }
+    else { const {c:ctx,w,h}=fitCanvas(bm); ctx.fillStyle='#8a8a99'; ctx.font='12px sans-serif'; ctx.textAlign='center'; ctx.fillText('The first batch starts at +'+clock(run.rounds[0].t.train), w/2, h/2); $('#bmStats').innerHTML=''; $('#bmSub').textContent=''; }
+    // table
+    const rows=[]; for(const RR of run.rounds){ if(sn.t < RR.t.compile+1) continue; for(const i of RR.compiled){ const c=candOf(RR,i); if(sn.t<RR.t.chosen && (c.status==='chosen'||c.status==='verified'||c.status==='rejected')) c.status='compiled'; rows.push(c); } }
+    rows.sort((a,b)=>a.g-b.g);
+    $('#dsTable').innerHTML = rows.length ? `<table class="t"><thead><tr><th>Candidate</th><th>Family</th><th class="n">Gates</th><th class="n">Path</th><th class="n">Sens.</th><th class="n">Spec.</th><th>Status</th></tr></thead><tbody>${rows.slice(0,40).map(c=>`<tr class="click ${S.sel&&S.sel.r===c.r&&S.sel.i===c.i?'sel':''} ${c.status==='chosen'?'best':''}" data-c="${c.r}-${c.i}"><td class="mono">${c.id}</td><td>${D.families[c.fam]}</td><td class="n">${fmt(c.g)}</td><td class="n">${c.d}</td><td class="n">${pct(c.s)}</td><td class="n">${pct(c.sp)}</td><td>${({chosen:'<span class="tag ok">round best</span>',verified:'<span class="tag ok">verified</span>',compiled:'<span class="tag blue">compiled</span>',rejected:'<span class="tag bad">rejected</span>'})[c.status]}</td></tr>`).join('')}</tbody></table>` : `<div class="empty"><b>No circuits yet</b>The table fills when round 1 compiles at +${clock(run.rounds[0].t.compile)}.</div>`;
+    $$('#dsTable [data-c]').forEach(tr=>tr.onclick=()=>{ const [r,i]=tr.dataset.c.split('-').map(Number); S.sel={r,i}; tick(true); });
+  };
+}
+
+/* --- chip --- */
+function resolveRef(ref, sn){
+  const run=S.run;
+  if(ref==='best' || ref==null) return sn.best;
+  if(ref==='prev') return sn.prevBest;
+  if(typeof ref==='string' && ref.startsWith('R')){ const r=+ref.slice(1); const R=run.rounds[r-1]; return R && sn.t>=R.t.chosen ? R.best : null; }
+  const R=run.rounds[ref.r-1]; if(!R || sn.t < R.t.train) return null; return candOf(R, ref.i);
+}
+function mountChip(vp){
+  vp.innerHTML = `<div class="view pad"><div class="vh"><h2>Chip</h2><p>The circuit with its weights wired in as gates. Compare any two candidates side by side.</p></div><div class="cmp" id="cmp2"><div class="panel" id="paneA"></div><div class="panel" id="paneB"></div></div></div>`;
+  V.update=(sn,force)=>{
+    const run=S.run; const key=(sn.best?sn.best.id:'-')+'|'+JSON.stringify(S.chipA)+'|'+JSON.stringify(S.chipB)+'|'+Math.floor(sn.t*2)+'|'+run.ev.length;
+    if(!force && V.k===key) return; V.k=key;
+    const A = S.chipA ? resolveRef(S.chipA, sn) : sn.best;
+    let B = S.chipB==null ? (S.chipA ? sn.best : sn.prevBest) : resolveRef(S.chipB, sn);
+    if(B && A && B.id===A.id) B = sn.prevBest && sn.prevBest.id!==A.id ? sn.prevBest : null;
+    renderPane($('#paneA'), A, 'A', sn, null);
+    renderPane($('#paneB'), B, 'B', sn, A);
+  };
+}
+function chipOptions(sn, cur){
+  const run=S.run; const opts=[]; if(sn.best) opts.push(['best', `Current best, ${sn.best.id}`]);
+  run.rounds.forEach(R=>{ if(sn.t>=R.t.chosen) opts.push(['R'+R.r, `Round ${R.r} best, ${R.best.id}`]); });
+  if(S.sel){ const R=run.rounds[S.sel.r-1]; if(R && sn.t>=R.t.train) opts.push(['sel', `Picked on curve, ${candOf(R,S.sel.i).id}`]); }
+  return opts;
+}
+function renderPane(el, c, side, sn, other){
+  const run=S.run, D=run.D;
+  const opts=chipOptions(sn);
+  const curRef = side==='A' ? S.chipA : S.chipB; let curVal = curRef==null ? (side==='A'?'best':'') : (typeof curRef==='string'?curRef:'sel');
+  if(c && sn.best && c.id===sn.best.id) curVal='best'; else if(c){ const R=run.rounds.find(R=>R.best.id===c.id); if(R) curVal='R'+R.r; }
+  if(!c){ el.innerHTML = `<div class="panel-h">${ic('cpu','s14')}${side==='A'?'Chip':'Compare with'}<span class="sp"></span>${opts.length?`<select class="sel" data-pick="${side}"><option value="">Choose a chip</option>${opts.map(o=>`<option value="${o[0]}">${o[1]}</option>`).join('')}</select>`:''}</div><div class="empty" style="min-height:420px"><b>${side==='A'?'No chip yet':'Nothing to compare yet'}</b>${side==='A'?`The first circuit compiles in round 1 at +${clock(run.rounds[0].t.compile)}.`:'A second chip appears here once round 2 finishes, or pick one on the Design space curve.'}</div>`; bindPick(el); return; }
+  const mix=gateMix(c);
+  const dl=(a,b,lowGood=true,unit='')=>{ if(!other) return ''; const d=a-b; if(Math.abs(d)<1e-9) return '<span class="muted">same</span>'; const good = lowGood ? d<0 : d>0; return `<span class="${good?'delta-good':'delta-bad'}">${d>0?'+':''}${unit==='%'?d.toFixed(1)+' pts':fmt(d)}</span>`; };
+  const verified = c.status==='chosen' || c.status==='verified' || (sn.best && c.id===sn.best.id) || run.rounds.some(R=>R.best.id===c.id);
+  el.innerHTML = `<div class="panel-h">${ic('cpu','s14')}<span class="mono">${c.id}</span><span class="sub">${D.families[c.fam]}</span><span class="sp"></span><select class="sel" data-pick="${side}" aria-label="Choose chip">${opts.map(o=>`<option value="${o[0]}" ${o[0]===curVal?'selected':''}>${o[1]}</option>`).join('')}${curVal==='sel'||!opts.find(o=>o[0]===curVal)?`<option selected value="">${c.id}</option>`:''}</select></div>
+    <div style="padding:10px 12px;background:var(--ink-50);border-bottom:1px solid var(--ink-150)">${chipSVG(c,{w:620,h:330})}</div>
+    <div class="panel-b">
+      <div style="display:flex;align-items:baseline;gap:8px"><span class="big num">${fmt(c.g)}</span><span class="muted">gates${c.status==='trained'?', estimated from the trained model':''}</span><span style="flex:1"></span>${verified?`<span class="tag ok">${ic('check','s12')}bit-exact on ${fmt(D.windows)} ${D.unit}</span>`:c.status==='rejected'?'<span class="tag bad">rejected</span>':'<span class="tag ink">not checked</span>'}</div>
+      <table class="t" style="margin-top:10px"><tbody>
+        <tr><td>Longest path</td><td class="n">${c.d} gate levels</td><td class="n">${dl(c.d, other?other.d:0)}</td></tr>
+        <tr><td>Gates</td><td class="n">${fmt(c.g)}</td><td class="n">${dl(c.g, other?other.g:0)}</td></tr>
+        <tr><td>${D.metric.length>26?'Worst-patient sens.':D.metric}</td><td class="n">${pct(c.s)}</td><td class="n">${dl(c.s, other?other.s:0, false, '%')}</td></tr>
+        <tr><td>Specificity, lowest patient</td><td class="n">${pct(c.sp)}</td><td class="n">${dl(c.sp, other?other.sp:0, false, '%')}</td></tr>
+        <tr><td>Layers</td><td class="n">${D.inputs.length} in → ${c.layers.join(' → ')}</td><td></td></tr>
+        <tr><td>Estimated area</td><td class="n">${(c.g*9.6/1e6).toFixed(3)} mm²</td><td class="n muted">at 9.6 µm² per gate</td></tr>
+      </tbody></table>
+      <div style="margin-top:12px;font-size:12px;color:var(--ink-500)">Gate mix</div>
+      <div class="mix">${mix.map((m,k)=>`<i style="width:${m.f*100}%;background:${MIXC[k]}" title="${m.n} ${pct(m.f*100)}"></i>`).join('')}</div>
+      <div class="legend">${mix.map((m,k)=>`<span><i style="background:${MIXC[k]}"></i>${m.n} ${(m.f*100).toFixed(0)}%</span>`).join('')}</div>
+    </div>`;
+  bindPick(el);
+}
+function bindPick(el){ const s=el.querySelector('[data-pick]'); if(!s) return; s.onchange=()=>{ const v=s.value; if(!v) return; const ref = v==='sel' ? S.sel : v; if(s.dataset.pick==='A') S.chipA=ref; else S.chipB=ref; tick(true); }; }
+
+/* --- signal and check --- */
+function mountSignal(vp){
+  const D=S.run.D;
+  vp.innerHTML = `<div class="view pad"><div class="vh"><h2>Signal and check</h2><p>The sensor signal as it scrolls by, with the chip's decision under it, and the bit-for-bit check on unseen ${D.who}.</p></div>
+    <div class="panel"><div class="panel-h">${ic('activity','s14')}${D.key==='eeg'?'EEG':'Light readings'}, <span class="mono" id="sgPat"></span><span class="sub">${D.signal}</span><span class="sp"></span><div class="legend"><span><i style="background:#fb923c"></i>${D.key==='eeg'?'Seizure (clinician label)':'Low oxygen (reference)'}</span><span><i style="background:#1d4ed8"></i>Chip flag</span></div></div><div class="panel-b"><canvas id="sgC" style="height:${D.key==='eeg'?330:320}px"></canvas><div class="muted" style="font-size:11.5px;margin-top:6px" id="sgNote"></div></div></div>
+    <div class="sig-grid">
+      <div class="panel"><div class="panel-h">${ic('shield','s14')}Circuit against model, bit for bit<span class="sp"></span><span id="bitTag"></span></div><div class="panel-b" style="display:grid;grid-template-columns:200px 1fr;gap:16px;align-items:start"><div><div class="bigok num" id="bitN">0</div><div class="muted" style="font-size:12px" id="bitL"></div><div style="font-size:12px;margin-top:12px;line-height:1.55;color:var(--ink-600)" id="bitTxt"></div></div><canvas id="bitC" style="height:230px"></canvas></div></div>
+      <div class="panel"><div class="panel-h">${ic('list','s14')}Per patient, unseen ${D.who}<span class="sp"></span><span class="sub">bars 80 to 100%, green tick is the line</span></div><div class="panel-b" id="ptT"></div></div>
+    </div></div>`;
+  V.update=(sn,force)=>{
+    const run=S.run; const B=sn.best; const pIdx = S.patient!=null ? S.patient : (B ? B.patients.findIndex(p=>p.sens===Math.min(...B.patients.map(q=>q.sens))) : 2);
+    $('#sgPat').textContent = (B? B.patients[pIdx].id : 'P'+pad2(pIdx+1)) + (S.patient==null && B ? ' (lowest sensitivity)' : '');
+    drawSignal($('#sgC'), sn.t, {patient:pIdx, cand:B});
+    $('#sgNote').textContent = B ? `Chip ${B.id}. The model row is the trained model's output on the same ${D.unit}; it matches the chip on every one.${D.key==='eeg'?' Each block is a 4-second step of the 8-second window.':''}` : 'No chip has passed verification yet, so only the label row is drawn.';
+    const R = run.rounds.slice().reverse().find(R=>sn.t>=R.t.verify) || null;
+    const key=(R?R.r:0)+'|'+Math.floor(sn.t*6)+'|'+pIdx+'|'+(B?B.id:'');
+    if(!force && V.k===key) return; V.k=key;
+    const n = drawBits($('#bitC'), sn.t, R);
+    const fin = R && sn.t>=R.t.chosen;
+    const mism = R && R.r===1 && !fin && n>D.windows*.2 && n<D.windows*.45;
+    $('#bitN').innerHTML = R ? `${fmt(n)}<span style="font-size:16px;color:var(--ink-500)"> / ${fmt(D.windows)}</span>` : '0';
+    $('#bitL').textContent = R ? `${D.unit} identical, ${R.best.id}` : 'Waiting for the first circuit';
+    $('#bitTag').innerHTML = !R ? '<span class="tag ink">waiting</span>' : fin ? `<span class="tag ok">${ic('check','s12')}identical</span>` : mism ? '<span class="tag bad">8 differ, patching</span>' : '<span class="tag blue">checking</span>';
+    $('#bitTxt').innerHTML = !R ? `The Verifier runs the compiled circuit on every ${D.unit.slice(0,-1)} from ${D.patients} unseen ${D.who} and compares each output bit with the trained model.` : R.r===1 ? 'Round 1 found 8 differing outputs from an adder overflow; the Compiler switched to saturating adders and the re-run matched everywhere.' : 'Every output bit matches the trained model, so the numbers on the right hold for the chip itself.';
+    if(!B){ $('#ptT').innerHTML = `<div class="empty"><b>No results yet</b>Per-patient sensitivity and specificity appear after the first verified chip.</div>`; return; }
+    const ws=Math.min(...B.patients.map(p=>p.sens)), wp=Math.min(...B.patients.map(p=>p.spec));
+    $('#ptT').innerHTML = `<div class="pt-row" style="cursor:default;color:var(--ink-500);font-size:11px"><span>Patient</span><span>Sensitivity</span><span></span><span>Specificity</span><span></span></div>` + B.patients.map((p,k)=>`<div class="pt-row ${k===pIdx?'sel':''}" data-p="${k}" title="Show ${p.id} in the signal strip"><span class="mono">${p.id}</span><span class="hb ${p.sens<D.line.sens?'fail':''}"><i style="width:${clamp((p.sens-80)/20,0,1)*100}%;${p.sens===ws?'background:var(--orange)':''}"></i><span class="ln" style="left:${(D.line.sens-80)/20*100}%"></span></span><span class="n">${p.det}/${p.pos}</span><span class="hb"><i style="width:${clamp((p.spec-80)/20,0,1)*100}%;${p.spec===wp?'background:var(--orange)':''}"></i><span class="ln" style="left:${(D.line.spec-80)/20*100}%"></span></span><span class="n">${pct(p.spec)}</span></div>`).join('') + `<div class="muted" style="font-size:11.5px;margin-top:8px">Sensitivity shown as ${D.posWord} caught. Orange marks the lowest patient. ${fmt(B.patients.reduce((a,p)=>a+p.pos,0))} ${D.posWord} in ${fmt(D.windows)} ${D.unit}.</div>`;
+    $$('#ptT [data-p]').forEach(r=>r.onclick=()=>{ S.patient=+r.dataset.p; tick(true); });
+  };
+}
+
+/* --- agents --- */
+function mountAgents(vp){
+  vp.innerHTML = `<div class="view pad"><div class="vh"><h2>Agents</h2><p>Five single-purpose agents. Each one's live output, the plan they share, their decisions and your steering.</p></div>
+    <div class="ag"><div class="panel plan"><div class="panel-h">${ic('list','s14')}Plan<span class="sp"></span><span class="sub" id="agPc"></span></div><div class="panel-b"><ul id="agPlan"></ul></div></div>
+      <div class="agents" id="agList"></div>
+      <div class="ag-right" style="display:flex;flex-direction:column;gap:14px"><div class="panel log"><div class="panel-h">${ic('history','s14')}Decision log</div><div class="panel-b" style="max-height:330px;overflow:auto"><ul id="agDec"></ul></div></div>
+      <div class="panel log"><div class="panel-h">${ic('loop','s14')}Steering history</div><div class="panel-b"><ul id="agSteer"></ul><button class="btn sm" id="agRedir" style="margin-top:8px">${ic('msg','s12')}Redirect</button></div></div></div></div></div>`;
+  $('#agRedir').onclick=e=>openRedirect(e.currentTarget);
+  V.update=(sn,force)=>{
+    const run=S.run, t=sn.t; const key=Math.floor(t*4)+'|'+run.ev.length+'|'+S.playing; if(!force && V.k===key) return; V.k=key;
+    const it=planItems(t); $('#agPlan').innerHTML = it.map(p=>`<li class="${p.st}"><span class="bx">${p.st==='done'?ic('check','s12'):''}</span><span>${p.text}</span></li>`).join(''); $('#agPc').textContent=`${it.filter(x=>x.st==='done').length} of ${it.length}`;
+    const evs = run.ev.filter(e=>e.t<=t);
+    $('#agList').innerHTML = AGENTS.map(a=>{ const mine=evs.filter(e=>e.agent===a.k && (e.kind==='text'||e.kind==='reply'||e.kind==='answer')); const last=mine[mine.length-1], older=mine[mine.length-2];
+      const active = sn.cur && sn.cur.agent===a.k && !sn.done; const tok = (sn.cost.byAgent[a.k]||0)/7.4*1e6; const cfgA = run.cfg.agents.find(x=>x.k===a.k)||a;
+      let body = last ? stripTags(last.html) : 'Waiting for its first step.'; let caret=''; if(last && t-last.t<1.1 && S.playing){ body=body.slice(0, Math.floor(body.length*clamp((t-last.t)/1.1,0,1))); caret='<span class="caret"></span>'; }
+      return `<div class="agent ${active?'active':''}"><div class="agent-h"><span class="av" style="background:${a.tint};color:${a.color}">${a.g}</span><div style="min-width:0"><b>${a.name}</b><div class="rl">${a.role}</div></div><span style="flex:1"></span>${active?(S.playing?'<span class="tag blue"><span class="mspin" style="width:9px;height:9px"></span>working</span>':'<span class="tag warn">paused</span>'):'<span class="tag ink">idle</span>'}</div>
+        <div class="agent-b">${esc(body)}${caret}${older?`<div class="older"><span class="mono" style="font-size:10.5px">+${clock(older.t)}${older.r?', round '+older.r:''}</span> ${esc(stripTags(older.html).slice(0,150))}${stripTags(older.html).length>150?'…':''}</div>`:''}</div>
+        <div class="agent-f"><span>${cfgA.model}</span><span>${cfgA.effort.toLowerCase()} effort</span><span style="flex:1"></span><span>${fmt(tok/1000)}k tokens</span></div></div>`; }).join('');
+    const decs = evs.filter(e=>e.dec).slice().reverse();
+    $('#agDec').innerHTML = decs.length ? decs.map(e=>`<li><span class="tm">+${clock(e.t)}</span><span>${esc(e.dec)} <span class="muted" style="font-size:11px">${AG[e.agent||'ver'].name}</span></span></li>`).join('') : '<li><span></span><span class="muted">Decisions appear as the agents make them.</span></li>';
+    const st = evs.filter(e=>e.kind==='steer'||e.kind==='ask');
+    $('#agSteer').innerHTML = st.length ? st.map(e=>{ const rep = run.ev.find(x=>x.kind==='reply'&&x.sid===e.sid); return `<li><span class="tm">+${clock(e.t)}</span><span><b style="font-weight:600;color:var(--teal-900)">${e.kind==='ask'?'Asked':'You'}:</b> ${esc(e.text)}${rep&&rep.t<=t?`<br><span class="muted" style="font-size:11.5px">${rep.round?`Applied from round ${rep.round}.`:'Noted, too late to change this run.'}</span>`:''}</span></li>`; }).join('') : '<li><span></span><span class="muted">No redirects yet. Pause the run and type an instruction; the Architect replies and re-plans the next round.</span></li>';
+  };
+}
+
+/* --- cost and compute --- */
+function mountCost(vp){
+  vp.innerHTML = `<div class="view pad"><div class="vh"><h2>Cost and compute</h2><p>Money, GPU hours and candidates so far, against the run's $25.00 cap.</p></div>
+    <div class="kpis" id="kp"></div>
+    <div class="cost-grid"><div class="panel"><div class="panel-h">${ic('coins','s14')}Spend over the run<span class="sp"></span><div class="legend"><span><i style="background:#a78bfa88"></i>Agents (tokens)</span><span><i style="background:#3b82f688"></i>GPU</span><span><i style="background:#0e749088"></i>CPU</span></div></div><div class="panel-b"><canvas id="burn" style="height:330px"></canvas></div></div>
+      <div class="panel"><div class="panel-h">${ic('bot','s14')}Agent tokens</div><div class="panel-b" id="byAgent"></div><div class="panel-h" style="border-top:1px solid var(--ink-150)">${ic('cpu','s14')}Compute for this run</div><div class="panel-b" id="compBox"></div></div></div>
+    <div class="panel" style="margin-top:14px"><div class="panel-h">${ic('list','s14')}By stage</div><div id="byStage"></div></div></div>`;
+  V.update=(sn,force)=>{
+    const run=S.run, c=sn.cost; const key=Math.floor(sn.t*3)+'|'+run.ev.length; if(!force && V.k===key) return; V.k=key;
+    const fin=costAt(run.end);
+    $('#kp').innerHTML = [['Spent so far', money(c.total), `projected ${money(fin.total)} at finish`],['GPU hours', c.gpuH.toFixed(2), `${run.comp.name}, $${run.comp.price.toFixed(2)}/h`],['Agent tokens', fmt(c.tokens/1000)+'k', money(c.llm)+' of model calls'],['Candidates evaluated', fmt(sn.cands), `${fmt(run.N)} per batch`],['Per 1,000 candidates', sn.cands? money(c.total/sn.cands*1000):'none yet', 'all costs included']].map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v num">${k[1]}</div><div class="s">${k[2]}</div></div>`).join('');
+    drawBurn($('#burn'), sn.t);
+    const maxA = Math.max(...AGENTS.map(a=>fin.byAgent[a.k]||0));
+    $('#byAgent').innerHTML = AGENTS.map(a=>`<div class="hbar"><span>${a.name}</span><span class="t"><i style="width:${(c.byAgent[a.k]||0)/maxA*100}%;background:${a.color}"></i></span><span class="mono" style="text-align:right;font-size:11.5px">${fmt((c.byAgent[a.k]||0)/7.4*1000)}k</span></div>`).join('');
+    $('#compBox').innerHTML = `<dl class="kv"><dt>Training batches</dt><dd>${run.comp.name}</dd><dt>Compile and checks</dt><dd>CPU Plus</dd><dt>Batch size</dt><dd>${fmt(run.N)} candidates</dd><dt>Mode</dt><dd>${run.cfg.mode}</dd><dt>Budget cap</dt><dd>$25.00, wrap up at cap</dd></dl>`;
+    const order=['spec','ref','propose','train','compile','verify','report']; const names={spec:'Spec',ref:'Reference',propose:'Propose',train:'Train batch',compile:'Compile',verify:'Verify',report:'Report'};
+    $('#byStage').innerHTML = `<table class="t"><thead><tr><th>Stage</th><th class="n">Time</th><th class="n">Agents</th><th class="n">GPU</th><th class="n">CPU</th><th class="n">Total</th><th style="width:30%">Share of spend</th></tr></thead><tbody>${order.map(k=>{ const b=c.byStage[k]||{llm:0,gpu:0,cpu:0,time:0}; const tot=b.llm+b.gpu+b.cpu; return `<tr><td>${names[k]}${['propose','train','compile','verify'].includes(k)?` <span class="muted" style="font-size:11px">${run.rounds.filter(R=>sn.t>=R.t.propose).length} rounds</span>`:''}</td><td class="n">${b.time?dur(b.time):'0 min'}</td><td class="n">${money(b.llm)}</td><td class="n">${money(b.gpu)}</td><td class="n">${money(b.cpu)}</td><td class="n"><b>${money(tot)}</b></td><td><span class="hb" style="display:block"><i style="width:${c.total?tot/c.total*100:0}%;background:var(--ink-700)"></i></span></td></tr>`; }).join('')}</tbody></table>`;
+  };
+}
+
+/* --- report --- */
+function mountReport(vp){
+  vp.innerHTML = `<div class="view"><div class="report" id="rep"></div></div>`;
+  V.update=(sn,force)=>{
+    const run=S.run, D=run.D; const key=(sn.best?sn.best.id:'-')+'|'+sn.done+'|'+run.ev.length+'|'+Math.floor(sn.t); if(!force && V.k===key) return; V.k=key;
+    const B=sn.best; const el=$('#rep');
+    if(!B){ el.innerHTML = `<span class="draft">${ic('file','s12')}Draft</span><h1>${D.title}</h1><p class="lede">The datasheet writes itself as the run goes. It needs a verified chip first; round 1 checks its chip at +${clock(run.rounds[0].t.chosen)}.</p>${ledgerBlock()}`; return; }
+    const pos=B.patients.reduce((a,p)=>a+p.pos,0), det=B.patients.reduce((a,p)=>a+p.det,0);
+    el.innerHTML = `${sn.done?`<span class="tag ok">${ic('check','s12')}Final, signed off</span>`:`<span class="draft">${ic('file','s12')}Draft, based on the current best. It updates as rounds finish.</span>`}
+      <h1>${D.title}, ${B.id}</h1>
+      <p class="lede">A ${fmt(B.g)}-gate circuit that ${D.key==='eeg'?'raises a seizure flag from eight newborn EEG channels':'turns eight near-infrared light readings into a brain-oxygen value and a low-oxygen flag'}. On ${D.patients} ${D.who} it never saw, it caught ${det} of ${pos} ${D.posWord}, at least ${pct(B.s)} in every patient, and its output matched the trained model on all ${fmt(D.windows)} ${D.unit}.</p>
+      <div class="ds-table"><div><div class="l">Gates</div><div class="v">${fmt(B.g)}</div></div><div><div class="l">Longest path</div><div class="v">${B.d} levels</div></div><div><div class="l">Estimated area</div><div class="v">${(B.g*9.6/1e6).toFixed(3)} mm²</div></div>
+        <div><div class="l">Worst-patient sensitivity</div><div class="v">${pct(B.s)} <span class="muted" style="font-size:11px;font-weight:400">line ${D.line.sens}%</span></div></div><div><div class="l">Worst-patient specificity</div><div class="v">${pct(B.sp)} <span class="muted" style="font-size:11px;font-weight:400">line ${D.line.spec}%</span></div></div><div><div class="l">Circuit equals model</div><div class="v">${fmt(D.windows)} / ${fmt(D.windows)}</div></div></div>
+      <h3>The circuit</h3><div class="panel" style="padding:10px">${chipSVG(B,{w:840,h:300})}</div>
+      <p style="margin-top:10px;font-size:14px;color:var(--ink-600)">${D.families[B.fam]} with layers ${D.inputs.length} → ${B.layers.join(' → ')}. Inputs: ${D.inputBits}. Output: ${D.output}, ${D.outputDesc}. The orange trace is the longest path.</p>
+      <h3>How the agents got here</h3>
+      <table class="t"><thead><tr><th>Round</th><th>Chip</th><th class="n">Gates</th><th class="n">Change</th><th class="n">Worst sens.</th><th>What changed</th></tr></thead><tbody>${run.rounds.filter(R=>sn.t>=R.t.chosen).map((R,k,arr)=>`<tr><td>${R.r}</td><td class="mono">${R.best.id}</td><td class="n">${fmt(R.best.g)}</td><td class="n">${k?((R.best.g-arr[k-1].best.g)/arr[k-1].best.g*100).toFixed(0)+'%':''}</td><td class="n">${pct(R.best.s)}</td><td style="white-space:normal;font-size:12px;color:var(--ink-600)">${esc(R.change)}</td></tr>`).join('')}</tbody></table>
+      <h3>Limits</h3><ul class="limits"><li>Tested on ${D.patients} unseen ${D.who} from one data source; other units, devices and ${D.key==='eeg'?'montages':'sensor placements'} are untested.</li><li>${D.key==='eeg'?'Assumes the fixed 8-channel montage above; a missing channel is not detected by the chip.':'Assumes the probe geometry above; a different source-detector spacing needs re-training.'}</li><li>The bit-for-bit check proves the chip equals the trained model, not that the model is right; accuracy rests on the clinician labels.</li><li>A design-stage result from a simulated demo run. It is not clinically validated and is not a medical device.</li></ul>
+      <h3>Files</h3><div class="files"><button class="btn" data-dl="v">${ic('download','s14')}Circuit netlist, ${B.id}.v</button><button class="btn" data-dl="md">${ic('download','s14')}Datasheet</button><button class="btn" data-dl="csv">${ic('download','s14')}Verification log, CSV</button></div>
+      ${ledgerBlock()}`;
+    $$('[data-dl]',el).forEach(b=>b.onclick=()=>download(b.dataset.dl));
+  };
+}
+function ledgerBlock(){ return `<h3>Gates per diagnosis, across devices</h3><div class="list">${ledgerRows(true)}</div>`; }
+
+/* ---------- loop ---------- */
+let lastFrame=performance.now(), lastDom=0;
+function tick(force){
+  if(S.screen!=='run' || !S.run) return;
+  const sn=snap(S.t);
+  updateChrome(sn);
+  if(V.update) V.update(sn, force===true);
+  if(sn.done!==tick.lastDone){ tick.lastDone=sn.done; renderSide(); }
+  // sidebar badges
+  $$('#side [data-badge]').forEach(b=>{ const k=b.dataset.badge; const v = k==='design'?fmt(sn.cands): k==='chip'?(sn.best?fmt(sn.best.g):''): k==='cost'?money(sn.cost.total): k==='signal'?(sn.best?'checked':''): k==='report'?(sn.done?'ready':'draft'):''; if(b.textContent!==v) b.textContent=v; });
+}
+let prevBestId=null;
+function frame(now){
+  const dt=Math.min(.1,(now-lastFrame)/1000); lastFrame=now;
+  if(S.screen==='run' && S.run){
+    const run=S.run;
+    if(S.playing){
+      const gateEv = run.ev.find(e=>e.kind==='gate');
+      S.liveT = Math.min(run.end, S.liveT + dt*S.speed);
+      if(S.gate.held && gateEv) S.liveT=Math.min(S.liveT, gateEv.t+.5);
+      if(S.follow) S.t=S.liveT; else { S.t=Math.min(S.liveT, S.t+dt*S.speed); if(S.t>=S.liveT-1e-6) S.follow=true; }
+      if(S.liveT>=run.end){ S.playing=false; }
+    }
+    if(now-lastDom>80){ lastDom=now; tick(false);
+      const sn=snap(S.t); const bid=sn.best?sn.best.id:null; if(bid && bid!==prevBestId && S.follow && prevBestId!==null && S.view!=='conversation' && S.view!=='chip') toast(`New best: ${fmt(sn.best.g)} gates in round ${sn.best.r}.`, 'chip'); prevBestId=bid; }
+  }
+  requestAnimationFrame(frame);
+}
+/* scrubbing */
+(function(){ const sc=$('#scrub'); let drag=false; const seek=e=>{ const r=sc.getBoundingClientRect(); const f=clamp((e.clientX-r.left)/r.width,0,1); const t=f*S.run.end; S.t=Math.min(t,S.liveT); S.follow = S.t>=S.liveT-.05; tick(true); };
+  sc.addEventListener('pointerdown', e=>{ if(!S.run) return; drag=true; sc.classList.add('drag'); sc.setPointerCapture(e.pointerId); seek(e); });
+  sc.addEventListener('pointermove', e=>{ if(drag) seek(e); }); sc.addEventListener('pointerup', ()=>{ drag=false; sc.classList.remove('drag'); }); })();
+
+/* ---------- global events ---------- */
+document.addEventListener('click', e=>{
+  const v=e.target.closest('[data-view]'); if(v && v.closest('#side')){ setView(v.dataset.view); return; }
+  const g=e.target.closest('[data-go]'); if(g){ if(g.dataset.go==='start') goStart(); else if(S.run){ S.screen='run'; $('#start').hidden=true; $('#run').hidden=false; renderChrome(); setView(S.view,true); } return; }
+  const o=e.target.closest('[data-old]'); if(o){ toast(o.dataset.old==='x'?'That run was stopped before round 1; nothing to open in this demo.':'Earlier runs are not part of this demo. Replaying the current run instead.'); return; }
+  const p=e.target.closest('[data-preset]'); if(p){ setDevice(p.dataset.preset); renderStart(); return; }
+  const pp=e.target.closest('[data-pop]'); if(pp){ startPop(pp.dataset.pop, pp); return; }
+  if(e.target.closest('#startBtn')){ launch(); return; }
+});
+window.addEventListener('resize', ()=>{ if(S.screen==='run'){ if(V.update) V.update(snap(S.t), true); if(S.view==='conversation'){ V.k=null; $$('#streamIn canvas').forEach(()=>{}); } } });
+
+/* test hooks for the mock-up */
+window.__cw = { seek(t){ S.liveT=Math.max(S.liveT,t); S.t=t; S.follow=true; tick(true); }, pause(){ setPlaying(false); }, play(){ setPlaying(true); }, get state(){ return S; } };
+
+/* ---------- boot ---------- */
+setDevice('eeg');
+const h0 = location.hash.slice(1);
+renderStart(); renderSide();
+if(VIEWS.find(v=>v.k===h0)) startRun('eeg', h0);
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

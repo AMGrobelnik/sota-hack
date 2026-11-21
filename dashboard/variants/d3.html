@@ -1,0 +1,1376 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Chipwright: chip-first run view</title>
+<style>
+:root{
+  --ink-50:#fafaf9;--ink-100:#f3f3f6;--ink-150:#e8e8ec;--ink-200:#d4d4dc;--ink-300:#b0b0be;--ink-350:#9a9aa8;
+  --ink-400:#8a8a99;--ink-500:#6c6c85;--ink-600:#5a5a6a;--ink-700:#4a4a5a;--ink-800:#3a3a4a;--ink-900:#1a1a2e;--ink-950:#07070d;
+  --az-50:#eff6ff;--az-100:#dbeafe;--az-200:#bfdbfe;--az-500:#3b82f6;--az-600:#2563eb;--az-700:#1d4ed8;
+  --sky:#eaf4fb;
+  --violet:#a78bfa;--violet-ink:#6d4fd6;--blue:#60a5fa;--blue-ink:#2563eb;--orange:#fb923c;--orange-ink:#c2560c;
+  --em-50:#ecfdf5;--em-100:#d1fae5;--em-500:#10b981;--em-600:#059669;--em-700:#047857;
+  --red-50:#fef2f2;--red-500:#ef4444;--red-600:#dc2626;
+  --am-50:#fffbeb;--am-500:#f59e0b;--am-700:#b45309;
+  --teal-50:#f0f7f6;--teal-600:#0d9488;--teal-900:#134e4a;
+  --die:#1a1a2e;--die-2:#232340;--wire:#8fb0ff;--crit:#fb923c;
+  --sans:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --serif:"Source Serif 4","Iowan Old Style","Charter","Georgia",serif;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sh-xs:0 1px 3px rgb(0 0 0/.04);--sh-sm:0 2px 8px rgb(0 0 0/.08);--sh-lg:0 4px 20px rgb(0 0 0/.1),0 2px 4px rgb(0 0 0/.04);
+  --sh-2xl:0 8px 40px rgb(0 0 0/.12),0 2px 8px rgb(0 0 0/.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font:14px/1.45 var(--sans);color:var(--ink-900);background:#fff;-webkit-font-smoothing:antialiased;overflow:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--az-500);outline-offset:2px;border-radius:4px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-500)}
+.hidden{display:none!important}
+.serif{font-family:var(--serif)}
+
+/* ---------- shared bits ---------- */
+.logo{display:flex;align-items:center;gap:8px;font-family:var(--serif);font-size:17px;font-weight:600;letter-spacing:-.01em;white-space:nowrap}
+.logo svg{flex:none}
+.pill{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:1px solid var(--ink-150);border-radius:999px;background:#fff;font-size:12.5px;white-space:nowrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:30px;padding:0 12px;border-radius:6px;border:1px solid var(--ink-150);background:#fff;font-size:12.5px;font-weight:500;white-space:nowrap}
+.btn:hover{background:var(--ink-100)}
+.btn.dark{background:var(--ink-900);border-color:var(--ink-900);color:#fff}
+.btn.dark:hover{background:var(--ink-800)}
+.btn.icon{width:30px;padding:0}
+.btn svg{width:15px;height:15px;stroke-width:1.6}
+.lbl{font-size:11.5px;color:var(--ink-500)}
+.demo-tag{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;background:var(--am-50);border:1px solid #f6dfa6;color:var(--am-700);font-size:11.5px;font-weight:500;white-space:nowrap}
+.demo-tag i{width:6px;height:6px;border-radius:50%;background:var(--am-500)}
+.toast-wrap{position:fixed;left:50%;transform:translateX(-50%);bottom:122px;align-items:center;display:flex;flex-direction:column;gap:8px;z-index:60;pointer-events:none}
+.toast{pointer-events:auto;max-width:340px;background:#fff;border:1px solid var(--ink-150);box-shadow:var(--sh-lg);border-radius:10px;padding:10px 12px;font-size:12.5px;animation:tin .25s ease-out}
+.toast b{display:block;font-weight:600;margin-bottom:2px}
+@keyframes tin{from{transform:translateY(6px);opacity:0}to{transform:none;opacity:1}}
+
+/* ---------- start screen ---------- */
+#start{height:100%;overflow:auto;background:#fff}
+.s-top{height:52px;display:flex;align-items:center;gap:20px;padding:0 24px;border-bottom:1px solid var(--ink-150)}
+.s-top nav{display:flex;gap:18px;font-size:12.5px;color:var(--ink-600)}
+.s-top .sp{flex:1}
+.s-main{max-width:920px;margin:0 auto;padding:44px 24px 64px}
+.greet{font-family:var(--serif);font-size:38px;line-height:1.08;font-weight:500;letter-spacing:-.015em;margin:0 0 8px}
+.greet-sub{color:var(--ink-500);margin:0 0 26px;max-width:62ch}
+.presets{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.preset{display:grid;grid-template-columns:54px 1fr;gap:12px;align-items:center;text-align:left;padding:12px 14px;border:1px solid var(--ink-150);border-radius:10px;background:#fff}
+.preset:hover{border-color:var(--ink-200);background:var(--ink-50)}
+.preset[aria-pressed=true]{border-color:var(--az-500);box-shadow:0 0 0 3px var(--az-100)}
+.preset .tile{width:54px;height:54px;border-radius:10px;background:var(--die);display:grid;place-items:center}
+.preset h3{margin:0;font-size:14px;font-weight:600}
+.preset p{margin:2px 0 0;font-size:12px;color:var(--ink-500)}
+.composer{border:1px solid var(--ink-200);border-radius:16px;background:#fff;box-shadow:var(--sh-sm);padding:14px 14px 10px}
+.composer textarea{width:100%;border:0;resize:none;outline:none;min-height:84px;font-size:14px;line-height:1.6}
+.composer .row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;border-top:1px solid var(--ink-100);padding-top:10px}
+.composer .row .sp{flex:1}
+.composer .pill b{font-weight:600}
+.btn.start{height:36px;padding:0 18px;border-radius:999px;font-size:13px}
+.settings{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:30px}
+.settings h4{font-family:var(--serif);font-size:18px;font-weight:500;margin:0 0 4px}
+.settings .hint{font-size:12px;color:var(--ink-500);margin:0 0 12px}
+.fields{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.field label{display:block;font-size:11.5px;color:var(--ink-500);margin-bottom:4px}
+.field .in{display:flex;align-items:center;border:1px solid var(--ink-150);border-radius:6px;height:34px;padding:0 10px;gap:4px}
+.field input{border:0;outline:none;width:100%;font-family:var(--mono);font-size:13px;background:transparent}
+.ladder{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--ink-150);border-radius:10px;overflow:hidden}
+.rung{padding:10px 10px 9px;text-align:left;border:0;border-right:1px solid var(--ink-150);background:#fff}
+.rung:last-child{border-right:0}
+.rung[aria-pressed=true]{background:var(--az-50);box-shadow:inset 0 -2px 0 var(--az-500)}
+.rung b{display:block;font-size:12.5px;font-weight:600}
+.rung span{display:block;font-size:11px;color:var(--ink-500)}
+.rung em{display:block;font-style:normal;font-family:var(--mono);font-size:11px;margin-top:4px}
+.agents-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.agents-tbl td{padding:6px 0;border-bottom:1px solid var(--ink-100)}
+.agents-tbl td:first-child b{display:block;font-weight:600}
+.agents-tbl td:first-child span{font-size:11.5px;color:var(--ink-500)}
+.agents-tbl select{height:28px;border:1px solid var(--ink-150);border-radius:6px;background:#fff;font-size:12px;padding:0 6px}
+.backend{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.backend button{height:28px;border-radius:999px;border:1px solid var(--ink-150);background:#fff;font-size:12px;padding:0 11px}
+.backend button[aria-pressed=true]{background:var(--ink-900);color:#fff;border-color:var(--ink-900)}
+.launching{border:1px solid var(--ink-200);border-radius:16px;padding:26px;display:flex;gap:16px;align-items:center}
+.launching ol{margin:0;padding:0;list-style:none;font-size:13px}
+.launching li{display:flex;gap:8px;align-items:center;color:var(--ink-400);padding:2px 0}
+.launching li.on{color:var(--ink-900)}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--ink-150);border-top-color:var(--az-500);animation:sp 0.9s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ---------- run screen ---------- */
+#run{height:100%;display:grid;grid-template-rows:48px 38px minmax(0,1fr) auto}
+.top{display:flex;align-items:center;gap:12px;padding:0 14px 0 16px;border-bottom:1px solid var(--ink-150);min-width:0}
+.top .title{min-width:120px;max-width:340px;flex:0 1 340px;border:1px solid transparent;border-radius:6px;padding:4px 7px;font-weight:500;font-size:14px;background:transparent;text-overflow:ellipsis}
+.top .title:hover{border-color:var(--ink-150)}
+.top .sp{flex:1;min-width:0}
+.devswitch{display:inline-flex;border:1px solid var(--ink-150);border-radius:999px;padding:2px;gap:2px}
+.devswitch button{border:0;background:transparent;height:24px;border-radius:999px;padding:0 10px;font-size:12px;color:var(--ink-600);white-space:nowrap}
+.devswitch button[aria-pressed=true]{background:var(--ink-900);color:#fff}
+.live{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.06em;border:1px solid #fecaca;color:var(--red-600);background:var(--red-50)}
+.live i{width:7px;height:7px;border-radius:50%;background:var(--red-500);animation:blink 1.2s ease-in-out infinite}
+.live.paused{border-color:var(--ink-150);color:var(--ink-500);background:var(--ink-50)}
+.live.paused i{background:var(--ink-300);animation:none}
+.live.done{border-color:#a7f3d0;color:var(--em-700);background:var(--em-50)}
+.live.done i{background:var(--em-500);animation:none}
+@keyframes blink{50%{opacity:.25}}
+.speed{height:30px;border:1px solid var(--ink-150);border-radius:6px;background:#fff;font-size:12.5px;padding:0 6px}
+.tabs{display:flex;align-items:stretch;gap:2px;padding:0 12px;border-bottom:1px solid var(--ink-150);background:var(--ink-50);overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{border:0;background:transparent;padding:0 12px;font-size:12.5px;color:var(--ink-600);position:relative;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.tab:hover{color:var(--ink-900)}
+.tab[aria-selected=true]{color:var(--ink-900);font-weight:600}
+.tab[aria-selected=true]::after{content:"";position:absolute;left:10px;right:10px;bottom:-1px;height:2px;background:var(--ink-900);border-radius:2px}
+.tab .badge{font-family:var(--mono);font-size:10px;font-weight:500;color:var(--ink-500);background:#fff;border:1px solid var(--ink-150);border-radius:999px;padding:0 5px}
+.tabs .sp{flex:1}
+.tabs .clock{display:flex;align-items:center;gap:12px;font-size:11.5px;color:var(--ink-500);white-space:nowrap;padding-left:12px}
+.main{min-height:0;overflow:hidden;position:relative}
+.view{position:absolute;inset:0;overflow:auto}
+.panel-h{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:0 0 8px}
+.panel-h h3{margin:0;font-size:13px;font-weight:600}
+.panel-h .lbl a,.linkbtn{color:var(--az-600);background:none;border:0;padding:0;font-size:11.5px;cursor:pointer}
+.linkbtn:hover{text-decoration:underline}
+.hline{height:1px;background:var(--ink-150);margin:14px 0}
+
+/* overview */
+.ov{display:grid;grid-template-columns:300px minmax(0,1fr) 340px;height:100%}
+.side{background:var(--ink-50);overflow:auto;padding:14px}
+.side.l{border-right:1px solid var(--ink-150)}
+.side.r{border-left:1px solid var(--ink-150);padding:0;display:flex;flex-direction:column}
+.centre{display:flex;flex-direction:column;min-width:0;padding:16px 20px 12px;gap:12px}
+.headline{display:flex;align-items:flex-end;gap:26px;flex-wrap:wrap}
+.gc{display:flex;align-items:baseline;gap:10px}
+.gc .n{font-family:var(--serif);font-size:56px;line-height:1;font-weight:500;letter-spacing:-.02em;font-variant-numeric:tabular-nums lining-nums}
+.gc .u{font-family:var(--serif);font-size:20px;color:var(--ink-600)}
+.delta{font-size:12px;font-weight:600;color:var(--em-700);background:var(--em-50);border-radius:999px;padding:2px 8px;align-self:center}
+.delta.neutral{color:var(--ink-600);background:var(--ink-100)}
+.delta.flash{animation:flash 1.6s ease-out}
+@keyframes flash{0%{box-shadow:0 0 0 0 rgb(16 185 129/.5)}100%{box-shadow:0 0 0 14px rgb(16 185 129/0)}}
+.facts{display:flex;gap:22px;flex-wrap:wrap;padding-bottom:6px}
+.fact .k{font-size:11.5px;color:var(--ink-500)}
+.fact .v{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+.fact .v small{font-size:11.5px;font-weight:500;color:var(--ink-500)}
+.diewrap{flex:1;min-height:0;position:relative;border-radius:14px;background:var(--die);box-shadow:0 0 0 1px rgb(26 26 46/.9),0 18px 40px -18px rgb(26 26 46/.6)}
+.diewrap svg{position:absolute;inset:0;width:100%;height:100%}
+.diewrap .cap{position:absolute;left:14px;top:10px;font-family:var(--mono);font-size:10.5px;color:#aab3d6;pointer-events:none;z-index:2}
+.diewrap .cap2{position:absolute;right:14px;top:12px;font-size:11px;color:#aab3d6;pointer-events:none;z-index:2;display:flex;gap:12px;align-items:center}
+.diewrap .cap2 i{display:inline-block;width:14px;height:2px;background:var(--crit);vertical-align:middle;margin-right:4px}
+.diewrap.prov svg{opacity:.62}
+.diewrap.prov{box-shadow:0 0 0 1px rgb(26 26 46/.9),inset 0 0 0 1px rgb(143 176 255/.25)}
+.diewrap .empty{position:absolute;inset:0;display:grid;place-items:center;color:#aab3d6;font-size:13px;text-align:center;padding:20px}
+.now{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px;border:1px solid var(--ink-150);border-radius:10px;padding:9px 12px;background:#fff}
+.now .stagechip{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600}
+.now .txt{font-size:12.5px;color:var(--ink-700);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar{height:5px;border-radius:999px;background:var(--ink-150);overflow:hidden;width:160px}
+.bar i{display:block;height:100%;background:var(--az-500);border-radius:999px}
+.minicurve{width:100%;height:190px;display:block;background:#fff;border:1px solid var(--ink-150);border-radius:10px;cursor:pointer}
+.rounds{display:flex;flex-direction:column;gap:6px}
+.rd{display:grid;grid-template-columns:28px 1fr auto;gap:8px;align-items:start;padding:8px 10px;border:1px solid var(--ink-150);border-radius:8px;background:#fff;text-align:left;width:100%}
+.rd:hover{border-color:var(--ink-200)}
+.rd .rn{font-family:var(--mono);font-size:11px;color:var(--ink-500);padding-top:1px}
+.rd .ch{font-size:12px;color:var(--ink-700);line-height:1.35}
+.rd .g{font-family:var(--mono);font-size:12px;font-weight:600;text-align:right}
+.rd .g small{display:block;font-weight:400;color:var(--ink-500);font-size:10.5px}
+.rd.pending{opacity:.55;background:transparent}
+.rd.cur{border-color:var(--az-200);box-shadow:0 0 0 1px var(--az-100)}
+
+/* feed */
+.feed-h{padding:12px 14px 8px;border-bottom:1px solid var(--ink-150);display:flex;justify-content:space-between;align-items:center;background:var(--ink-50)}
+.feed{flex:1;overflow:auto;padding:8px 10px 14px;background:#fff}
+.fe{display:grid;grid-template-columns:22px 1fr;gap:8px;padding:6px 4px;font-size:12.5px;line-height:1.45}
+.fe.new{animation:glow 1.4s ease-out}
+@keyframes glow{from{background:var(--az-50)}to{background:transparent}}
+.av{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;font-size:10px;font-weight:700;color:#fff}
+.fe>div{min-width:0}
+.fe .who{font-size:11.5px;font-weight:600}
+.fe .who span{font-weight:400;color:var(--ink-400);margin-left:6px;font-family:var(--mono);font-size:10.5px}
+.fe .msg{color:var(--ink-800)}
+.fe.human .msg{background:var(--teal-50);border:1px solid #cfe6e3;border-radius:10px;padding:6px 9px;color:var(--teal-900)}
+.divrow{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink-500);margin:8px 4px 4px}
+.divrow::before,.divrow::after{content:"";flex:1;height:1px;background:var(--ink-150)}
+.divrow b{font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+.tool{margin-top:5px;border:1px solid var(--ink-150);border-radius:8px;overflow:hidden;background:var(--ink-50)}
+.tool-h{display:flex;align-items:center;gap:7px;width:100%;white-space:nowrap;min-width:0;border:0;background:transparent;padding:5px 8px;font-family:var(--mono);font-size:11px;text-align:left}
+.tool-h .muted{overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+.tool-h .st{margin-left:auto;flex:none;font-family:var(--sans);font-size:10.5px;color:var(--ink-500);display:flex;align-items:center;gap:5px}
+.tool-h .chev{transition:transform .15s}
+.tool.open .tool-h .chev{transform:rotate(90deg)}
+.tool-b{display:none;border-top:1px solid var(--ink-150);background:#fff;padding:6px 8px;font-family:var(--mono);font-size:10.5px;line-height:1.55;color:var(--ink-700);white-space:pre-wrap;word-break:break-word}
+.tool.open .tool-b{display:block}
+.ln-warn{color:var(--am-700);background:var(--am-50);display:block;margin:0 -8px;padding:0 8px}
+.ln-err{color:var(--red-600);background:var(--red-50);display:block;margin:0 -8px;padding:0 8px}
+.ln-ok{color:var(--em-700)}
+.tool .res{border-top:1px dashed var(--ink-150);margin-top:4px;padding-top:4px;color:var(--ink-900)}
+.spin.s{width:10px;height:10px;border-width:1.5px}
+
+/* dock */
+.dock{border-top:1px solid var(--ink-150);background:#fff;display:grid;grid-template-columns:minmax(0,1fr) 230px 380px;min-height:104px;position:relative}
+.track{padding:10px 16px 10px;min-width:0}
+.stages{display:grid;grid-template-columns:1fr 1.3fr 1fr 1.3fr 1fr 1fr 1fr;gap:6px;align-items:stretch}
+.stg{border:1px solid var(--ink-150);border-radius:8px;background:#fff;padding:5px 8px;text-align:left;min-width:0;position:relative;overflow:hidden}
+.stg:hover{border-color:var(--ink-200)}
+.stg .nm{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;white-space:nowrap}
+.stg .mt{font-size:10.5px;color:var(--ink-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--mono)}
+.stg.pending{opacity:.55}
+.stg.running{border-color:color-mix(in srgb,var(--acc) 45%,white);box-shadow:0 0 0 1px color-mix(in srgb,var(--acc) 25%,white)}
+.stg.running::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,color-mix(in srgb,var(--acc) 16%,transparent) 50%,transparent 70%);background-size:250% 100%;animation:shimmer 3.5s linear infinite;pointer-events:none}
+@keyframes shimmer{from{background-position:150% 0}to{background-position:-100% 0}}
+.ring{width:11px;height:11px;border-radius:50%;flex:none;border:2px solid var(--ink-200)}
+.stg.running .ring{border-color:color-mix(in srgb,var(--acc) 30%,white);border-top-color:var(--acc);animation:sp 4s ease-in-out infinite}
+.stg.done .ring{border-color:var(--acc);background:var(--acc)}
+.stg.between .ring{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 35%,white)}
+.tl{position:relative;height:22px;margin-top:8px;display:flex;border-radius:5px;overflow:visible;cursor:pointer}
+.tl .seg{height:8px;margin-top:2px;background:var(--ink-100);position:relative;border-right:1px solid #fff;overflow:hidden}
+.tl .seg i{position:absolute;inset:0;width:0;background:var(--acc)}
+.tl .rl{position:absolute;top:12px;font-size:9.5px;color:var(--ink-500);font-family:var(--mono);transform:translateX(-50%);white-space:nowrap}
+.tl .ph{position:absolute;top:-2px;width:2px;height:16px;background:var(--ink-900);border-radius:2px;transform:translateX(-1px)}
+.bestmini{border-left:1px solid var(--ink-150);padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:0;text-align:left;background:#fff;border-top:0;border-right:0;border-bottom:0}
+.bestmini:hover{background:var(--ink-50)}
+.bestmini .k{font-size:11px;color:var(--ink-500)}
+.bestmini .v{font-family:var(--serif);font-size:26px;line-height:1.1;font-variant-numeric:tabular-nums lining-nums}
+.bestmini .v small{font-family:var(--sans);font-size:12px;color:var(--ink-500);margin-left:4px}
+.bestmini .s{font-size:11.5px;color:var(--ink-600);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ctl{border-left:1px solid var(--ink-150);padding:10px 14px;display:flex;flex-direction:column;gap:7px;justify-content:center;min-width:0}
+.ctl .r1{display:flex;gap:6px;align-items:center}
+.ctl .r1 .lbl{margin-left:auto;white-space:nowrap}
+.redirect{display:flex;gap:6px;border:1px solid var(--ink-200);border-radius:999px;padding:3px 3px 3px 12px;align-items:center;background:#fff}
+.redirect:focus-within{border-color:var(--teal-600);box-shadow:0 0 0 3px var(--teal-50)}
+.redirect input{flex:1;border:0;outline:none;font-size:12.5px;min-width:0;background:transparent}
+.redirect button{height:26px;border-radius:999px;border:0;background:var(--teal-600);color:#fff;font-size:12px;padding:0 11px;font-weight:500}
+.redirect button:disabled{background:var(--ink-200)}
+.reply{position:absolute;right:12px;bottom:calc(100% + 8px);width:380px;background:#fff;border:1px solid var(--ink-150);border-radius:12px;box-shadow:var(--sh-2xl);padding:12px;z-index:40;font-size:12.5px}
+.reply .q{background:var(--teal-50);border:1px solid #cfe6e3;color:var(--teal-900);border-radius:10px;padding:6px 9px;margin-bottom:8px}
+.reply .a{display:grid;grid-template-columns:22px 1fr;gap:8px}
+.reply .foot{display:flex;justify-content:flex-end;gap:6px;margin-top:10px}
+.typing{display:inline-flex;gap:3px}
+.typing i{width:5px;height:5px;border-radius:50%;background:var(--ink-400);animation:blink 1s infinite}
+.typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
+.pop{position:absolute;bottom:calc(100% + 8px);width:380px;background:#fff;border:1px solid var(--ink-150);border-radius:12px;box-shadow:var(--sh-2xl);padding:14px;z-index:41;font-size:12.5px}
+.pop h4{margin:0 0 2px;font-family:var(--serif);font-size:20px;font-weight:500;display:flex;align-items:center;gap:8px}
+.pop p{margin:4px 0 8px;color:var(--ink-600)}
+.pop table{width:100%;border-collapse:collapse;font-size:12px}
+.pop td,.pop th{padding:4px 0;border-bottom:1px solid var(--ink-100);text-align:left}
+.pop th{font-weight:500;color:var(--ink-500);font-size:11px}
+.pop .x{position:absolute;right:8px;top:8px}
+
+/* design space */
+.ds{display:grid;grid-template-columns:minmax(0,1fr) 360px;height:100%}
+.ds-l{display:flex;flex-direction:column;min-width:0;padding:14px 18px;gap:12px;overflow:auto}
+.ds-r{border-left:1px solid var(--ink-150);background:var(--ink-50);padding:14px;overflow:auto;display:flex;flex-direction:column;gap:14px}
+.curvebox{position:relative;flex:1 1 380px;min-height:300px;border:1px solid var(--ink-150);border-radius:10px;background:#fff}
+.curvebox canvas{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-600);align-items:center}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.tip{position:absolute;pointer-events:none;background:var(--ink-900);color:#fff;font-size:11.5px;border-radius:6px;padding:5px 8px;white-space:nowrap;z-index:5;transform:translate(10px,-50%)}
+table.dt{width:100%;border-collapse:collapse;font-size:12px}
+table.dt th{font-weight:500;color:var(--ink-500);text-align:left;font-size:11px;padding:5px 8px;border-bottom:1px solid var(--ink-150);position:sticky;top:0;background:#fff;white-space:nowrap}
+table.dt td{padding:5px 8px;border-bottom:1px solid var(--ink-100);white-space:nowrap}
+table.dt td.r,table.dt th.r{text-align:right}
+table.dt tbody tr{cursor:pointer}
+table.dt tbody tr:hover{background:var(--ink-50)}
+table.dt tr.best td{background:#fff7ed}
+table.dt tr.sel td{box-shadow:inset 0 1px 0 var(--az-500),inset 0 -1px 0 var(--az-500)}
+.tblbox{border:1px solid var(--ink-150);border-radius:10px;overflow:auto;max-height:250px;flex:none;background:#fff}
+.card{background:#fff;border:1px solid var(--ink-150);border-radius:10px;padding:12px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:12px}
+.kv dt{color:var(--ink-500)}
+.kv dd{margin:0;text-align:right;font-family:var(--mono);font-size:11.5px}
+.batch canvas{width:100%;aspect-ratio:1;display:block;border-radius:6px;background:var(--ink-100)}
+.stat3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.stat3 div{font-size:11px;color:var(--ink-500)}
+.stat3 b{display:block;font-size:15px;color:var(--ink-900);font-variant-numeric:tabular-nums}
+.chipthumb{height:120px;border-radius:8px;background:var(--die);position:relative;overflow:hidden;margin:8px 0}
+.chipthumb svg{position:absolute;inset:0;width:100%;height:100%}
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;border-radius:999px;padding:1px 7px;font-weight:500}
+.tag.pass{background:var(--em-50);color:var(--em-700)}
+.tag.fail{background:var(--red-50);color:var(--red-600)}
+.tag.warn{background:var(--am-50);color:var(--am-700)}
+.tag.info{background:var(--az-50);color:var(--az-700)}
+.tag.best{background:#fff1e6;color:var(--orange-ink)}
+
+/* chip view */
+.cv{display:grid;grid-template-columns:minmax(0,1fr) 320px;grid-template-rows:minmax(0,1.45fr) minmax(0,1fr);height:100%;gap:0}
+.cv-main{padding:14px 18px 10px;display:flex;flex-direction:column;gap:10px;min-width:0;min-height:0}
+.cv-main .diewrap{flex:1}
+.cv-side{grid-row:1 / span 2;grid-column:2;border-left:1px solid var(--ink-150);background:var(--ink-50);padding:14px;overflow:auto;display:flex;flex-direction:column;gap:12px}
+.cv-cmp{padding:0 18px 14px;display:grid;grid-template-columns:1fr 200px 1fr;gap:12px;min-height:0}
+.cmpcol{display:flex;flex-direction:column;gap:6px;min-height:0}
+.cmpcol .diewrap{border-radius:10px}
+.cmphead{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px}
+.cmphead select{height:26px;border:1px solid var(--ink-150);border-radius:6px;font-size:12px;background:#fff;max-width:200px}
+.cmpmid{display:flex;flex-direction:column;justify-content:center;gap:6px;font-size:12px}
+.cmpmid .row{display:flex;justify-content:space-between;border-bottom:1px solid var(--ink-100);padding:3px 0}
+.cmpmid .row b{font-family:var(--mono);font-weight:600}
+.good{color:var(--em-700)}.bad{color:var(--red-600)}
+.mixbar{display:flex;height:10px;border-radius:999px;overflow:hidden;margin:6px 0}
+.mixbar i{display:block;height:100%}
+.vhead{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.vhead h2{margin:0;font-family:var(--serif);font-size:26px;font-weight:500;letter-spacing:-.01em;line-height:1.1}
+.vhead .sub{font-size:12px;color:var(--ink-500)}
+.notice{font-size:12px;border-radius:8px;padding:6px 10px;background:var(--az-50);color:var(--az-700);display:flex;gap:8px;align-items:center}
+
+/* signal */
+.sg{display:grid;grid-template-rows:minmax(0,1.15fr) minmax(0,1fr);height:100%}
+.sg-top{padding:14px 18px 10px;display:flex;flex-direction:column;gap:8px;min-height:0}
+.stripbox{flex:1;min-height:200px;position:relative;border:1px solid var(--ink-150);border-radius:10px;background:#fff;overflow:hidden}
+.stripbox canvas{position:absolute;inset:0;width:100%;height:100%}
+.sg-bot{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);border-top:1px solid var(--ink-150);min-height:0}
+.sg-bot>div{padding:14px 18px;overflow:auto;min-height:0}
+.sg-bot>div+div{border-left:1px solid var(--ink-150);background:var(--ink-50)}
+.bitbig{display:flex;align-items:baseline;gap:10px;margin:2px 0 8px}
+.bitbig .n{font-family:var(--serif);font-size:38px;line-height:1;font-variant-numeric:tabular-nums lining-nums}
+.bitgrid{width:100%;height:150px;display:block;border-radius:6px;background:var(--ink-100)}
+.pbar{position:relative;height:8px;background:var(--ink-150);border-radius:999px;width:120px}
+.pbar i{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:var(--az-500)}
+.pbar b{position:absolute;top:-3px;width:2px;height:14px;background:var(--ink-900)}
+
+/* agents */
+.ag{padding:14px 18px;display:flex;flex-direction:column;gap:14px}
+.agrow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.agc{border:1px solid var(--ink-150);border-radius:10px;background:#fff;display:flex;flex-direction:column;height:318px}
+.agc.on{border-color:var(--az-200);box-shadow:0 0 0 1px var(--az-100)}
+.agc .h{display:flex;align-items:center;gap:8px;padding:9px 10px;border-bottom:1px solid var(--ink-100)}
+.agc .h b{font-size:13px}
+.agc .h .m{font-size:10.5px;color:var(--ink-500);display:block;font-weight:400}
+.agc .h .s{margin-left:auto}
+.agc .b{padding:6px 10px;overflow:auto;font-size:12px;display:flex;flex-direction:column;gap:6px}
+.agc .b p{margin:0;color:var(--ink-700);line-height:1.4}
+.agc .b p span{font-family:var(--mono);font-size:10px;color:var(--ink-400);margin-right:5px}
+.ag3{display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:14px}
+.plan li{list-style:none;display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:12.5px;border-bottom:1px solid var(--ink-100)}
+.plan{margin:0;padding:0}
+.chk{width:15px;height:15px;border-radius:4px;border:1.5px solid var(--ink-300);flex:none;margin-top:1px;display:grid;place-items:center}
+.chk.on{background:var(--em-500);border-color:var(--em-500)}
+.chk.run{border-color:var(--az-500)}
+.declog{display:flex;flex-direction:column;gap:8px}
+.dec{border-left:2px solid var(--az-500);padding:2px 0 2px 10px;font-size:12.5px}
+.dec b{font-size:12px}
+.dec p{margin:2px 0 0;color:var(--ink-700)}
+.steer{display:flex;flex-direction:column;gap:10px}
+.steer .q{background:var(--teal-50);border:1px solid #cfe6e3;color:var(--teal-900);border-radius:10px;padding:6px 9px;font-size:12.5px}
+.steer .a{font-size:12.5px;color:var(--ink-700);padding-left:10px;border-left:2px solid var(--ink-150);margin-top:5px}
+.empty-note{font-size:12.5px;color:var(--ink-500);border:1px dashed var(--ink-200);border-radius:8px;padding:12px}
+
+/* cost */
+.co{padding:14px 18px;display:flex;flex-direction:column;gap:14px}
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;border:1px solid var(--ink-150);border-radius:10px;background:#fff}
+.kpi{padding:12px 14px;border-right:1px solid var(--ink-150)}
+.kpi:last-child{border-right:0}
+.kpi .k{font-size:11.5px;color:var(--ink-500)}
+.kpi .v{font-family:var(--serif);font-size:30px;line-height:1.15;font-variant-numeric:tabular-nums lining-nums}
+.kpi .s{font-size:11px;color:var(--ink-500)}
+.co2{display:grid;grid-template-columns:1.3fr 1fr;gap:14px}
+.co3{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.chartbox{height:250px;position:relative}
+.chartbox svg{width:100%;height:100%;display:block}
+.sbar{display:grid;grid-template-columns:90px 1fr 70px;gap:10px;align-items:center;font-size:12px;padding:4px 0}
+.sbar .t{display:flex;height:14px;border-radius:3px;overflow:hidden;background:var(--ink-100)}
+.sbar .t i{display:block;height:100%}
+.sbar .c{text-align:right;font-family:var(--mono);font-size:11.5px}
+.budget{height:10px;border-radius:999px;background:var(--ink-150);overflow:hidden;margin:8px 0 4px}
+.budget i{display:block;height:100%;background:var(--az-500)}
+
+/* report */
+.rp{padding:22px 18px 40px;background:var(--ink-50);min-height:100%}
+.paper{max-width:900px;margin:0 auto;background:#fff;border:1px solid var(--ink-150);border-radius:10px;box-shadow:var(--sh-xs);padding:34px 42px}
+.paper h1{font-family:var(--serif);font-size:32px;line-height:1.08;font-weight:500;margin:6px 0 6px;letter-spacing:-.015em}
+.paper h2{font-family:var(--serif);font-size:20px;font-weight:500;margin:26px 0 8px}
+.paper p{font-family:var(--serif);font-size:15.5px;line-height:1.65;color:var(--ink-800);max-width:70ch}
+.paper .meta{font-size:12.5px;color:var(--ink-500)}
+.ds-grid{display:grid;grid-template-columns:1.1fr 1fr;gap:22px;align-items:start;margin-top:16px}
+.ds-grid .diewrap{height:230px;flex:none}
+.sheet{width:100%;border-collapse:collapse;font-size:12.5px}
+.sheet td{padding:6px 0;border-bottom:1px solid var(--ink-100)}
+.sheet td:last-child{text-align:right;font-family:var(--mono);font-size:12px}
+.limits{margin:0;padding-left:18px;font-family:var(--serif);font-size:15px;line-height:1.6;color:var(--ink-800)}
+.files{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.file{display:flex;gap:10px;align-items:center;border:1px solid var(--ink-150);border-radius:8px;padding:10px;background:#fff;text-align:left}
+.file:hover{background:var(--ink-50)}
+.file b{display:block;font-size:12.5px;font-family:var(--mono);font-weight:500}
+.file span{font-size:11px;color:var(--ink-500)}
+.draft{background:var(--am-50);border:1px solid #f6dfa6;color:var(--am-700);border-radius:8px;padding:8px 12px;font-size:12.5px;margin-bottom:14px}
+
+/* svg chip */
+.chip .w{fill:none;stroke:var(--wire);stroke-opacity:.2;stroke-width:.8}
+.chip .gt{fill:var(--die-2);stroke:#7f95d8;stroke-width:.8}
+.chip .gt.c{fill:var(--crit);stroke:#ffd2ad}
+.chip .pad{fill:#2c2c4e;stroke:#8d98c7;stroke-width:.8}
+.chip .pin{fill:#cfa45e}
+.chip .crit{fill:none;stroke:var(--crit);stroke-width:2;stroke-linejoin:round;filter:drop-shadow(0 0 3px rgb(251 146 60/.8))}
+.chip text{font-family:var(--mono);fill:#b8c0e0}
+.chip .blk{fill:#2a2a4c;stroke:#9aa6d8;stroke-width:1}
+.chip.anim .w,.chip.anim .crit{stroke-dasharray:1;stroke-dashoffset:1;animation:draw .9s ease-out var(--d,0ms) forwards}
+.chip.anim .gt{opacity:0;animation:fadein .4s ease-out var(--d,0ms) forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+@keyframes fadein{to{opacity:1}}
+
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:1ms!important;animation-delay:0ms!important;transition-duration:1ms!important}}
+
+/* responsive */
+@media (max-width:1280px){
+  .ov{grid-template-columns:260px minmax(0,1fr) 300px}
+  .dock{grid-template-columns:minmax(0,1fr) 200px 320px}
+  .top .title{max-width:220px}
+  .agrow{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media (max-width:1100px){
+  .dock{grid-template-columns:minmax(0,1fr) 170px 290px}
+  .track{padding:10px 10px}
+  .stages{gap:4px}
+  .stg{padding:4px 6px}
+  .stg .nm{font-size:11px;gap:4px;overflow:hidden;text-overflow:ellipsis}
+  .stg .nm .mono{display:none}
+  .bestmini .v{font-size:22px}
+  .ctl .r1 .lbl{display:none}
+  .top .hide-m{display:none}
+  .ds{grid-template-columns:minmax(0,1fr) 300px}
+  .cv{grid-template-columns:minmax(0,1fr) 260px}
+  .kpis{grid-template-columns:repeat(3,1fr)}
+  .kpi:nth-child(3){border-right:0}
+  .kpi:nth-child(n+4){border-top:1px solid var(--ink-150)}
+}
+@media (max-width:820px){
+  body{overflow:auto}
+  #run{height:auto;min-height:100%;grid-template-rows:auto auto auto auto}
+  .top{flex-wrap:wrap;padding:8px 12px;gap:8px}
+  .top .title{flex:1 1 100%;max-width:none;order:5}
+  .main{overflow:visible}
+  .view{position:static;overflow:visible}
+  .ov,.ds,.cv,.sg,.sg-bot,.co2,.co3,.ag3,.ds-grid{display:flex;flex-direction:column;height:auto}
+  .side.l,.side.r,.ds-r,.cv-side{border:0;border-top:1px solid var(--ink-150)}
+  .side.r .feed{max-height:420px}
+  .centre .diewrap,.cv-main .diewrap{flex:none;height:300px}
+  .cv-cmp{display:flex;flex-direction:column}
+  .cmpcol .diewrap{flex:none;height:180px}
+  .curvebox{flex:none;height:320px}
+  .stripbox{flex:none;height:300px}
+  .agrow{grid-template-columns:1fr}
+  .kpis{grid-template-columns:1fr 1fr}
+  .kpi{border-right:0;border-top:1px solid var(--ink-150)}
+  .toast-wrap{bottom:150px;width:calc(100vw - 24px)}
+  .dock{position:sticky;bottom:0;grid-template-columns:1fr 1fr;z-index:20;min-height:0}
+  .stages,.ctl .r1,.bestmini .s{display:none}
+  .tl{margin-top:0}
+  .bestmini{padding:6px 12px}.bestmini .v{font-size:20px}
+  .ctl{padding:6px 12px 8px}
+  .track{grid-column:1 / span 2;padding:8px 10px}
+  .stages{grid-template-columns:repeat(7,minmax(64px,1fr));overflow-x:auto}
+  .ctl{grid-column:1 / span 2;border-left:0;border-top:1px solid var(--ink-150)}
+  .bestmini{grid-column:1 / span 2;border-left:0;border-top:1px solid var(--ink-150);flex-direction:row;align-items:baseline;gap:10px}
+  .reply,.pop{width:calc(100vw - 24px);right:12px;left:12px!important}
+  .presets,.settings,.fields{grid-template-columns:1fr}
+  .ladder{grid-template-columns:1fr 1fr}
+  .rung:nth-child(2){border-right:0}.rung:nth-child(-n+2){border-bottom:1px solid var(--ink-150)}
+  .paper{padding:22px 18px}
+  .files{grid-template-columns:1fr}
+  .gc .n{font-size:44px}
+  .greet{font-size:30px}
+  .s-top nav{display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- ================= START SCREEN ================= -->
+<section id="start" class="hidden" aria-label="New design run">
+  <header class="s-top">
+    <div class="logo"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="4" y="4" width="14" height="14" rx="2.5" fill="#1a1a2e"/><path d="M8 4V1M11 4V1M14 4V1M8 21v-3M11 21v-3M14 21v-3M4 8H1M4 11H1M4 14H1M21 8h-3M21 11h-3M21 14h-3" stroke="#1a1a2e" stroke-width="1.4"/><path d="M7.5 9.5h3l1 3h3" stroke="#fb923c" stroke-width="1.4" fill="none"/></svg>Chipwright</div>
+    <nav><span>Runs</span><span>Gallery</span><span>Usage</span><span>Help</span></nav>
+    <span class="sp"></span>
+    <span class="demo-tag"><i></i>Simulated run, demo data</span>
+  </header>
+  <main class="s-main">
+    <h1 class="greet">What should the chip do?</h1>
+    <p class="greet-sub">Name the device and its job. Agents propose circuits, train thousands of them at once, compile the best into logic gates and check them bit for bit on unseen patients. You watch every stage and can redirect at any point.</p>
+    <div class="presets" id="presets"></div>
+    <div id="composerWrap">
+      <div class="composer">
+        <label class="hidden" for="prompt">Device and job</label>
+        <textarea id="prompt" rows="3"></textarea>
+        <div class="row">
+          <span class="pill">Device <b id="pDev"></b></span>
+          <span class="pill">Clinical line <b id="pLine"></b></span>
+          <span class="pill">Gate budget <b id="pBudget" class="mono"></b></span>
+          <span class="pill">Compute <b id="pCompute"></b></span>
+          <span class="pill">Agents <b id="pAgents"></b></span>
+          <span class="sp"></span>
+          <button class="btn dark start" id="startBtn">Start run</button>
+        </div>
+      </div>
+    </div>
+    <div class="settings">
+      <div>
+        <h4>Clinical line and budget</h4>
+        <p class="hint">The chip must clear the line on every held-out patient. The run stops making it smaller once it can no longer clear it.</p>
+        <div class="fields">
+          <div class="field"><label for="fSens">Sensitivity at least</label><div class="in"><input id="fSens" inputmode="decimal"><span class="muted">%</span></div></div>
+          <div class="field"><label for="fSpec">Specificity at least</label><div class="in"><input id="fSpec" inputmode="decimal"><span class="muted">%</span></div></div>
+          <div class="field"><label for="fBudget">Gate budget</label><div class="in"><input id="fBudget" inputmode="numeric"><span class="muted">gates</span></div></div>
+          <div class="field"><label for="fRounds">Rounds</label><div class="in"><input id="fRounds" value="4" readonly></div></div>
+          <div class="field"><label for="fBatch">Candidates per round</label><div class="in"><input id="fBatch" value="4,096" readonly></div></div>
+          <div class="field"><label for="fCap">Spend cap</label><div class="in"><span class="muted">$</span><input id="fCap" value="25"></div></div>
+        </div>
+        <h4 style="margin-top:24px">Compute</h4>
+        <p class="hint">Each rung includes the ones below it. Training runs as one GPU batch; the CPU rungs work but train far slower.</p>
+        <div class="ladder" id="ladder"></div>
+      </div>
+      <div>
+        <h4>Agents</h4>
+        <p class="hint">Each role has its own model and effort. Steering messages go to the architect, who replans the next round.</p>
+        <div class="backend" id="backend"></div>
+        <table class="agents-tbl" id="agentsTbl"></table>
+      </div>
+    </div>
+  </main>
+</section>
+
+<!-- ================= RUN SCREEN ================= -->
+<section id="run" class="hidden" aria-label="Design run">
+  <header class="top">
+    <div class="logo"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="4" y="4" width="14" height="14" rx="2.5" fill="#1a1a2e"/><path d="M8 4V1M11 4V1M14 4V1M8 21v-3M11 21v-3M14 21v-3M4 8H1M4 11H1M4 14H1M21 8h-3M21 11h-3M21 14h-3" stroke="#1a1a2e" stroke-width="1.4"/><path d="M7.5 9.5h3l1 3h3" stroke="#fb923c" stroke-width="1.4" fill="none"/></svg><span class="hide-m">Chipwright</span></div>
+    <input class="title" id="runTitle" aria-label="Run title">
+    <div class="devswitch" role="group" aria-label="Device">
+      <button data-dev="eeg">EEG seizure</button><button data-dev="nirs">Brain oxygen</button>
+    </div>
+    <span class="sp"></span>
+    <span class="demo-tag"><i></i>Simulated run, demo data</span>
+    <span class="live" id="live"><i></i><span>LIVE</span></span>
+    <button class="btn icon" id="restartBtn" title="Restart run" aria-label="Restart run"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
+    <button class="btn icon" id="playBtn" title="Pause" aria-label="Pause"></button>
+    <select class="speed" id="speed" aria-label="Playback speed"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option><option value="4">4x</option></select>
+    <button class="btn hide-m" id="newRunBtn">New run</button>
+    <button class="btn hide-m" id="shareBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="M16 6l-4-4-4 4M12 2v13"/></svg>Share</button>
+  </header>
+  <nav class="tabs" role="tablist" id="tabs"></nav>
+  <div class="main" id="main">
+    <!-- OVERVIEW -->
+    <div class="view" id="v-overview" role="tabpanel">
+      <div class="ov">
+        <aside class="side l">
+          <div class="panel-h"><h3>Design space</h3><button class="linkbtn" data-go="space">Open</button></div>
+          <canvas class="minicurve" id="miniCurve" aria-label="Accuracy against gates, click to open"></canvas>
+          <div class="legend" style="margin:6px 0 14px;font-size:11px"><span><i class="dot" style="background:#5b8def"></i>candidates</span><span><i class="dot" style="background:var(--orange)"></i>current best</span><span><i style="width:12px;border-top:1.5px dashed var(--ink-900)"></i>clinical line</span></div>
+          <div class="panel-h"><h3>Rounds</h3><span class="lbl" id="ovRoundLbl"></span></div>
+          <div class="rounds" id="ovRounds"></div>
+        </aside>
+        <section class="centre">
+          <div class="headline">
+            <div>
+              <div class="lbl" id="ovBestLbl">Current best chip</div>
+              <div class="gc"><span class="n" id="ovGates">0</span><span class="u">gates</span><span class="delta hidden" id="ovDelta"></span></div>
+            </div>
+            <div class="facts" id="ovFacts"></div>
+          </div>
+          <div class="diewrap" id="ovDie" role="button" tabindex="0" aria-label="Open in Chip view"></div>
+          <div class="now" id="ovNow"></div>
+        </section>
+        <aside class="side r">
+          <div class="feed-h"><div class="panel-h" style="margin:0"><h3>Live log</h3></div><button class="linkbtn" data-go="agents">All agents</button></div>
+          <div class="feed" id="feed" aria-live="polite"></div>
+        </aside>
+      </div>
+    </div>
+    <!-- DESIGN SPACE -->
+    <div class="view hidden" id="v-space" role="tabpanel">
+      <div class="ds">
+        <div class="ds-l">
+          <div class="vhead"><div><h2>Design space</h2><div class="sub" id="dsSub"></div></div>
+            <div class="legend" id="dsLegend"></div></div>
+          <div class="curvebox" id="curveBox"><canvas id="curve" aria-label="Every candidate as a dot: accuracy against gates"></canvas><div class="tip hidden" id="curveTip"></div></div>
+          <div class="panel-h"><h3>Compiled candidates</h3><span class="lbl">Smallest passing candidates of each round, compiled to gates. Click a row to select.</span></div>
+          <div class="tblbox"><table class="dt" id="candTbl"></table></div>
+        </div>
+        <aside class="ds-r">
+          <div class="card" id="selCard"></div>
+          <div class="card batch">
+            <div class="panel-h"><h3>Batch monitor</h3><span class="lbl" id="batchLbl"></span></div>
+            <canvas id="batchCv" aria-label="Batch training grid"></canvas>
+            <div class="legend" style="margin-top:8px;font-size:11px"><span><i class="dot" style="background:#2563eb"></i>clears the line</span><span><i class="dot" style="background:#9fbdf5"></i>close</span><span><i class="dot" style="background:#d4d4dc"></i>below</span><span><i class="dot" style="background:var(--orange)"></i>sent to compile</span></div>
+            <div class="stat3" id="batchStats"></div>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <!-- CHIP -->
+    <div class="view hidden" id="v-chip" role="tabpanel">
+      <div class="cv">
+        <div class="cv-main">
+          <div class="vhead"><div><h2 id="cvTitle">Chip</h2><div class="sub" id="cvSub"></div></div><div id="cvNotice"></div></div>
+          <div class="diewrap" id="cvDie"></div>
+        </div>
+        <aside class="cv-side" id="cvSide"></aside>
+        <div class="cv-cmp">
+          <div class="cmpcol"><div class="cmphead"><b>A</b><span id="cmpALbl" class="mono"></span></div><div class="diewrap" id="cmpA"></div></div>
+          <div class="cmpmid" id="cmpMid"></div>
+          <div class="cmpcol"><div class="cmphead"><label for="cmpBSel"><b>B</b></label><select id="cmpBSel"></select></div><div class="diewrap" id="cmpB"></div></div>
+        </div>
+      </div>
+    </div>
+    <!-- SIGNAL -->
+    <div class="view hidden" id="v-signal" role="tabpanel">
+      <div class="sg">
+        <div class="sg-top">
+          <div class="vhead"><div><h2>Signal and check</h2><div class="sub" id="sgSub"></div></div><div class="legend" id="sgLegend"></div></div>
+          <div class="stripbox"><canvas id="strip" aria-label="Sensor signal with the circuit's decisions"></canvas></div>
+        </div>
+        <div class="sg-bot">
+          <div>
+            <div class="panel-h"><h3>Circuit against model, bit for bit</h3><span class="lbl" id="bitLbl"></span></div>
+            <div class="bitbig"><span class="n" id="bitN">0</span><span class="muted" id="bitOf"></span></div>
+            <canvas class="bitgrid" id="bitCv" aria-label="Each cell is one unseen window"></canvas>
+            <p class="lbl" id="bitNote" style="margin:8px 0 0"></p>
+          </div>
+          <div>
+            <div class="panel-h"><h3>Per held-out patient</h3><span class="lbl" id="ppLbl"></span></div>
+            <table class="dt" id="ppTbl" style="background:#fff;border:1px solid var(--ink-150);border-radius:8px"></table>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- AGENTS -->
+    <div class="view hidden" id="v-agents" role="tabpanel">
+      <div class="ag">
+        <div class="vhead"><div><h2>Agents</h2><div class="sub" id="agSub"></div></div></div>
+        <div class="agrow" id="agRow"></div>
+        <div class="ag3">
+          <div class="card"><div class="panel-h"><h3>Plan for this round</h3><span class="lbl" id="planLbl"></span></div><ul class="plan" id="plan"></ul></div>
+          <div class="card"><div class="panel-h"><h3>Decision log</h3><span class="lbl">One entry per finished round</span></div><div class="declog" id="declog"></div></div>
+          <div class="card"><div class="panel-h"><h3>Steering history</h3><span class="lbl" id="steerLbl"></span></div><div class="steer" id="steerHist"></div></div>
+        </div>
+      </div>
+    </div>
+    <!-- COST -->
+    <div class="view hidden" id="v-cost" role="tabpanel">
+      <div class="co">
+        <div class="vhead"><div><h2>Cost and compute</h2><div class="sub" id="coSub"></div></div></div>
+        <div class="kpis" id="kpis"></div>
+        <div class="co2">
+          <div class="card"><div class="panel-h"><h3>Spend over time</h3><span class="lbl"><i class="dot" style="background:#fb923c"></i> total <i class="dot" style="background:#3b82f6;margin-left:8px"></i> models only <span style="margin-left:8px">dashed: projected</span></span></div><div class="chartbox" id="burn"></div></div>
+          <div class="card"><div class="panel-h"><h3>By stage</h3><span class="lbl"><i class="dot" style="background:#3b82f6"></i> models <i class="dot" style="background:#fb923c;margin-left:8px"></i> GPU</span></div><div id="byStage"></div></div>
+        </div>
+        <div class="co3">
+          <div class="card" id="computeCard"></div>
+          <div class="card" id="budgetCard"></div>
+        </div>
+      </div>
+    </div>
+    <!-- REPORT -->
+    <div class="view hidden" id="v-report" role="tabpanel">
+      <div class="rp"><article class="paper" id="paper"></article></div>
+    </div>
+  </div>
+  <footer class="dock" id="dock">
+    <div class="track">
+      <div class="stages" id="stages"></div>
+      <div class="tl" id="tl" aria-label="Run timeline"></div>
+    </div>
+    <button class="bestmini" id="bestMini" aria-label="Open the current best chip"></button>
+    <div class="ctl">
+      <div class="r1"><button class="btn" id="pauseBtn2"></button><span class="lbl" id="steerHint">Pause to redirect the agents</span></div>
+      <form class="redirect" id="redirectForm" autocomplete="off">
+        <input id="redirectIn" placeholder="Redirect, e.g. fewer gates, accept 2 points lower sensitivity" aria-label="Redirect instruction">
+        <button type="submit" id="redirectSend">Send</button>
+      </form>
+    </div>
+    <div class="reply hidden" id="reply"></div>
+    <div class="pop hidden" id="stagePop"></div>
+  </footer>
+</section>
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+"use strict";
+/* ============ utilities ============ */
+const $=s=>document.querySelector(s);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const fmt=n=>Math.round(n).toLocaleString('en-US');
+const fmt1=n=>(Math.round(n*10)/10).toFixed(1);
+const money=n=>'$'+n.toFixed(2);
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function hstr(s){let h=2166136261;for(const c of s){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0}
+function randn(r){let u=0,v=0;while(u===0)u=r();while(v===0)v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+function hash01(a,b){let h=Math.imul(a|0,374761393)+Math.imul(b|0,668265263);h=(h^(h>>>13))*1274126177;h=h^(h>>>16);return (h>>>0)/4294967296}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function fitCanvas(cv){const r=cv.getBoundingClientRect();const d=window.devicePixelRatio||1;const w=Math.max(1,Math.round(r.width*d)),h=Math.max(1,Math.round(r.height*d));if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h}const c=cv.getContext('2d');c.setTransform(d,0,0,d,0,0);return {c,w:r.width,h:r.height}}
+/* write markup only when it changed, so clickable rows survive the render loop */
+Object.defineProperty(HTMLElement.prototype,'htmlIfChanged',{set(h){if(this._h!==h){this._h=h;this.innerHTML=h}}});
+function toast(title,body){const t=document.createElement('div');t.className='toast';t.innerHTML='<b>'+esc(title)+'</b>'+esc(body||'');const W=$('#toasts');W.appendChild(t);while(W.children.length>2)W.firstChild.remove();setTimeout(()=>t.remove(),4200)}
+
+/* ============ devices ============ */
+const DEV={
+ eeg:{id:'eeg',name:'Newborn EEG seizure monitor',short:'EEG seizure monitor',title:'Seizure-flag chip for newborn EEG',
+  prompt:'Design the core chip of a bedside EEG monitor for newborns. It reads 8 bipolar scalp channels and flags seizure activity once per 4-second window. Find the smallest chip that keeps sensitivity at 90% or more with specificity at 95%, on every held-out patient.',
+  signal:'8 bipolar EEG channels at 256 Hz',output:'Seizure flag, 1 bit per 4 s window',
+  inputs:['Fp1-C3','C3-O1','Fp2-C4','C4-O2','T3-C3','C4-T4','Fp1-T3','Fp2-T4'],inBits:6,outPins:['SEIZURE'],outBlock:'Popcount',
+  metric:'Sensitivity at 95% specificity',ms:'sensitivity',ml:'Sensitivity',line:90,cap:94.6,A:55,scale0:4030,decay:.62,sigma:1.25,yMin:58,xMin:500,xMax:50000,
+  budget:4000,verifyN:3880,vUnit:'windows',patients:8,sensLine:90,specLine:95,alarm:'seizure flag',
+  reference:{name:'Float reference network',ops:'1.2 M multiply-adds per window',score:94.1},
+  families:[
+   ['Line-length and band-energy features, 3 logic layers','Raw 8-bit samples, 6 logic layers','Delta-coded windows, 4 layers','Zero-crossing counts, 2 layers'],
+   ['Band energy with the two frontal channels dropped','Shared gates across left and right channel pairs','4-bit energy inputs instead of 6','Wider first layer, shallower tree'],
+   ['3-bit energy into a threshold tree','Prune gates that never change an output on training patients','Left-right symmetry, half the gates','Popcount output instead of an adder'],
+   ['2-bit energy on the quiet channels','Merge duplicate gates after compile','One popcount shared across windows','Depth 10 instead of 14']]},
+ nirs:{id:'nirs',name:'Newborn brain-oxygen sensor',short:'Brain-oxygen sensor',title:'Oxygen-value chip for newborn NIRS',
+  prompt:'Design the core chip of a near-infrared brain-oxygen sensor for newborns. It combines six light readings (three wavelengths, near and far detector) into a regional oxygen value once per second. Find the smallest chip whose value lands within 3 points of the reference on 95% of readings, with a low-oxygen alarm at 90% sensitivity and specificity.',
+  signal:'6 light readings: 730, 810, 850 nm at 15 and 30 mm',output:'rSO2 value, 7 bits per second',
+  inputs:['730 nm near','730 nm far','810 nm near','810 nm far','850 nm near','850 nm far'],inBits:10,outPins:['rSO2[6]','rSO2[5]','rSO2[4]','rSO2[3]','rSO2[2]','rSO2[1]','rSO2[0]'],outBlock:'Adder tree',
+  metric:'Readings within 3 points of reference',ms:'within 3 pts',ml:'Within 3 points',line:95,cap:98.9,A:60,scale0:980,decay:.62,sigma:.6,yMin:70,xMin:150,xMax:14000,
+  budget:1200,verifyN:12600,vUnit:'readings',patients:8,sensLine:90,specLine:90,alarm:'low-oxygen alarm (below 55%)',
+  reference:{name:'Float reference regressor',ops:'38 k multiply-adds per reading',score:98.7},
+  families:[
+   ['Far-to-near light ratio per wavelength, 4 layers','Raw 10-bit readings, 6 layers','Log-lookup front end, 3 layers','Two wavelengths only'],
+   ['Drop the 730 nm near detector','8-bit inputs instead of 10','One ratio stage shared across wavelengths','Piecewise-linear output stage'],
+   ['6-bit ratios','Prune constant gates','2-point output steps below 40%','Shallower adder tree'],
+   ['5-bit ratios on 850 nm','Merge duplicate gates after compile','Carry-save output stage','Depth 9 instead of 12']]}
+};
+const WIN=[0,2,1,3];
+const AGENTS=[
+ {id:'arch',name:'Architect',ini:'Ar',col:'#7c3aed',role:'Proposes circuit families'},
+ {id:'train',name:'Trainer',ini:'Tr',col:'#2563eb',role:'Trains the batch on GPU'},
+ {id:'comp',name:'Compiler',ini:'Co',col:'#0891b2',role:'Turns models into gates'},
+ {id:'ver',name:'Verifier',ini:'Ve',col:'#059669',role:'Bit-for-bit and per-patient checks'},
+ {id:'rev',name:'Reviewer',ini:'Re',col:'#c2560c',role:'Picks each round, writes report'}];
+const AG=Object.fromEntries(AGENTS.map(a=>[a.id,a]));
+const TIERS=[{id:'cpub',name:'CPU Basic',spec:'4 cores, 16 GB',price:.12},{id:'cpup',name:'CPU Plus',spec:'16 cores, 64 GB',price:.36},{id:'gpub',name:'GPU Basic',spec:'16 GB+ VRAM',price:.89},{id:'gpup',name:'GPU Plus',spec:'40 GB+ VRAM',price:2.2}];
+const MODELS=['Claude Opus','Claude Sonnet','Claude Haiku','OpenHands (free)'];
+
+/* ============ schedule ============ */
+const STAGES=[
+ {id:'spec',name:'Spec',acc:'#a78bfa',desc:'Turns the prompt into a checkable spec: inputs, output, clinical line, gate budget and the held-out patients.'},
+ {id:'ref',name:'Reference',acc:'#a78bfa',desc:'Trains a full-precision reference model, the ceiling every chip is compared with.'},
+ {id:'propose',name:'Propose',acc:'#60a5fa',desc:'The architect proposes families of small circuits; each family becomes about a thousand candidates.'},
+ {id:'train',name:'Train',acc:'#60a5fa',desc:'All 4,096 candidates of the round train at once as one GPU batch.'},
+ {id:'compile',name:'Compile',acc:'#60a5fa',desc:'The 32 smallest candidates that clear the line are compiled into logic gates with their weights wired in.'},
+ {id:'verify',name:'Verify',acc:'#60a5fa',desc:'The round’s best circuit is checked bit for bit against its model on unseen patients, then scored per patient.'},
+ {id:'report',name:'Report',acc:'#fb923c',desc:'Writes the datasheet: the chosen chip, its numbers, its limits and the files.'}];
+const SG=Object.fromEntries(STAGES.map(s=>[s.id,s]));
+const ROUNDS=4,NB=4096,NCOMP=32,REAL=40;
+const SCHED=(()=>{const s=[];let t=0;const add=(stage,r,d)=>{s.push({stage,r,t0:t,t1:t+d});t+=d};add('spec',-1,4);add('ref',-1,6);
+ for(let r=0;r<ROUNDS;r++){add('propose',r,3);add('train',r,8);add('compile',r,3.5);add('verify',r,3.5)}add('report',-1,8);return s})();
+const TOTAL=SCHED[SCHED.length-1].t1;
+const RS=(r,st)=>SCHED.find(s=>s.r===r&&s.stage===st);
+const RATES={spec:{llm:.11,tok:15500,gpu:0},ref:{llm:.05,tok:6800,gpu:1},propose:{llm:.19,tok:26000,gpu:0},train:{llm:.03,tok:4100,gpu:1},compile:{llm:.04,tok:5900,gpu:.3},verify:{llm:.06,tok:8200,gpu:.6},report:{llm:.24,tok:31000,gpu:0}};
+
+/* ============ state ============ */
+const S={screen:'start',view:'overview',device:'eeg',t:0,playing:true,speed:1,rounds:[],steer:{scaleMul:1,targetDelta:0,ver:0},steering:[],
+ sel:null,cmpB:null,tier:'gpup',backend:'Claude',models:{arch:['Claude Opus','high'],train:['Claude Sonnet','medium'],comp:['Claude Sonnet','medium'],ver:['Claude Sonnet','high'],rev:['Claude Opus','high']},
+ sens:null,spec:null,budget:null,lastBestId:null,openTools:new Set(),closedTools:new Set(),logVer:0,pendingReply:null};
+const D=()=>DEV[S.device];
+
+/* ============ run generation ============ */
+function genRound(r,device,steer){
+ const d=DEV[device];const rng=mulberry(hstr(device)+r*7919+steer.ver*104729);
+ const scale=d.scale0*Math.pow(d.decay,r)*steer.scaleMul;
+ const target=d.line+steer.targetDelta;
+ const gStar=-scale*Math.log((d.cap-target)/d.A);
+ const g=new Float32Array(NB),s=new Float32Array(NB),fam=new Uint8Array(NB);
+ const pen=[0,0,0,0];const w=WIN[r];let k=0;const others=[.6+rng()*.6,1.4+rng()*1.2,2.4+rng()*1.8];
+ for(let f=0;f<4;f++){if(f!==w)pen[f]=others[k++]}
+ const lo=Math.log(gStar*.34),hi=Math.log(gStar*(r===0?5:3.4));
+ for(let i=0;i<NB;i++){
+  const f=Math.floor(rng()*4);fam[i]=f;
+  const gi=Math.round(Math.exp(lo+(hi-lo)*Math.pow(rng(),1.15)));g[i]=gi;
+  let si=d.cap-d.A*Math.exp(-gi/scale)-Math.abs(randn(rng))*d.sigma-pen[f]*(.6+.4*rng());
+  if(rng()<.045)si-=5+rng()*16;
+  s[i]=Math.max(si,d.yMin+.4+rng()*1.6);
+ }
+ const order=new Uint16Array(NB);for(let i=0;i<NB;i++)order[i]=i;
+ for(let i=NB-1;i>0;i--){const j=Math.floor(rng()*(i+1));const t=order[i];order[i]=order[j];order[j]=t}
+ const pass=[];for(let i=0;i<NB;i++)if(s[i]>=target)pass.push(i);
+ pass.sort((a,b)=>g[a]-g[b]);
+ let compiled=pass.slice(0,NCOMP);
+ if(compiled.length<NCOMP){const rest=[...Array(NB).keys()].filter(i=>s[i]<target).sort((a,b)=>s[b]-s[a]);compiled=compiled.concat(rest.slice(0,NCOMP-compiled.length))}
+ const best=compiled[0];
+ const nPass=pass.length;
+ const R={r,device,g,s,fam,order,compiled,best,target,scale,nPass,steerVer:steer.ver,fams:d.families[r],win:w,steerNote:steer.note||null,logs:[]};
+ R.logs=roundLogs(R);
+ return R;
+}
+function arch(device,g){const L=clamp(Math.round(2+1.3*Math.log2(g/(device==='eeg'?260:70))),3,14);return {L,depth:L+(device==='eeg'?4:5)}}
+function cand(r,i){const R=S.rounds[r];if(!R)return null;const g=R.g[i];
+ const {L,depth}=arch(R.device,g);
+ return {r,i,id:'C'+(r+1)+'-'+String(i).padStart(4,'0'),g,s:R.s[i],fam:R.fam[i],famName:R.fams[R.fam[i]],L,depth,compiled:R.compiled.includes(i),seed:hstr(R.device+r+':'+i),device:R.device,isRoundBest:R.best===i}}
+const candKey=c=>c?c.r+'.'+c.i:'';
+
+/* timing helpers */
+function segAt(t){for(const s of SCHED)if(t<s.t1)return s;return null}
+const prog=(seg,t)=>clamp((t-seg.t0)/(seg.t1-seg.t0),0,1);
+function ensureRounds(){for(let r=0;r<ROUNDS;r++){const p=RS(r,'propose');if(S.t>=p.t0&&!S.rounds[r]){S.rounds[r]=genRound(r,S.device,S.steer);S.logVer++}}}
+function trained(r){const R=S.rounds[r];if(!R)return 0;return Math.floor(NB*prog(RS(r,'train'),S.t))}
+function verified(r){return S.rounds[r]&&S.t>=RS(r,'verify').t1}
+function curTarget(){return D().line+S.steer.targetDelta}
+function roundBest(r){const R=S.rounds[r];return R?cand(r,R.best):null}
+function bestNow(){let b=null;for(let r=0;r<ROUNDS;r++){if(!verified(r))continue;const c=roundBest(r);if(c.s<S.rounds[r].target)continue;if(!b||c.g<b.g)b=c}
+ if(!b){for(let r=0;r<ROUNDS;r++)if(verified(r)){const c=roundBest(r);if(!b||c.s>b.s)b=c}}return b}
+function prevBest(cur){let b=null;if(!cur)return null;for(let r=0;r<cur.r;r++){if(!verified(r))continue;const c=roundBest(r);if(!b||c.g<b.g)b=c}return b}
+function evaluated(){let n=0;for(let r=0;r<ROUNDS;r++)n+=trained(r);return n}
+function curRound(){const s=segAt(S.t);if(!s)return ROUNDS-1;if(s.r>=0)return s.r;if(s.stage==='report')return ROUNDS-1;return -1}
+function runClock(t){const x=Math.round(t*REAL);const h=Math.floor(x/3600),m=Math.floor(x/60)%60,s=x%60;return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')}
+function costAt(t){const out={llm:0,gpuH:0,tok:0,by:{}};for(const st of STAGES)out.by[st.id]={llm:0,gpu:0};
+ const price=TIERS.find(x=>x.id===S.tier).price;
+ for(const s of SCHED){const dt=clamp(t,s.t0,s.t1)-s.t0;if(dt<=0)continue;const R=RATES[s.stage];out.llm+=R.llm*dt;out.tok+=R.tok*dt;const gh=R.gpu*dt*REAL/3600;out.gpuH+=gh;out.by[s.stage].llm+=R.llm*dt;out.by[s.stage].gpu+=gh*price}
+ for(const st of S.steering){if(st.t<=t){out.llm+=.04;out.tok+=2600;out.by.propose.llm+=.04}}
+ out.gpu=out.gpuH*price;out.total=out.llm+out.gpu;return out}
+
+/* per-patient results */
+function patients(c){if(!c)return[];const d=DEV[c.device];const rng=mulberry(c.seed^0x9e3779b9);const out=[];let left=d.verifyN;
+ for(let p=0;p<d.patients;p++){const n=p===d.patients-1?left:Math.round(d.verifyN/d.patients*(.75+rng()*.5));left-=n;
+  const ev=d.id==='eeg'?4+Math.floor(rng()*9):3+Math.floor(rng()*7);
+  const room=Math.floor(ev*(1-d.sensLine/100)+1e-9);
+  let miss=c.s>=d.line?(rng()<.55?room:0):(p<Math.ceil((d.line-c.s)*1.6)?room+1:(rng()<.5?room:0));
+  const det=clamp(ev-miss,0,ev);
+  const spec=c.s>=d.line?d.specLine+.4+rng()*3.4:clamp(d.specLine-1+rng()*4,80,99.8);
+  out.push({id:'P'+String(p+1).padStart(2,'0'),n,ev,det,sens:det/ev*100,spec})}
+ return out}
+
+/* ============ log generation ============ */
+let LID=0;
+function L(t,agent,text,extra){return Object.assign({id:'L'+(++LID),t,agent,text},extra||{})}
+function baseLogs(){const d=D();const out=[];const s0=RS(-1,'spec')||SCHED[0];
+ out.push({id:'Dspec',t:0,div:'Spec',acc:SG.spec.acc});
+ out.push(L(.3,'arch','Reading the prompt. Device: '+d.name.toLowerCase()+'. Input: '+d.signal+'. Output: '+d.output.toLowerCase()+'.'));
+ out.push(L(1.6,'arch','Spec written. Clinical line: '+d.metric.toLowerCase()+' of at least '+d.line+'%, checked on '+d.patients+' held-out patients ('+fmt(d.verifyN)+' '+d.vUnit+'). Gate budget '+fmt(d.budget)+'.',{tool:{name:'write_spec',args:'spec.yaml',lines:[{t:1.0,x:'inputs: '+d.inputs.length+' x '+d.inBits+' bit'},{t:1.2,x:'output: '+d.outPins.length+' pin'+(d.outPins.length>1?'s':'')},{t:1.4,x:'split: 40 train / 8 tune / '+d.patients+' held-out patients'}],end:1.6,res:'spec.yaml written, 3 checks defined'}}));
+ out.push(L(3.1,'rev','Spec reviewed. Held-out patients are never seen by training or tuning; the verifier holds their keys.'));
+ out.push({id:'Dref',t:4,div:'Reference',acc:SG.ref.acc});
+ out.push(L(4.2,'train','Training the float reference model as the ceiling to compare against.',{tool:{name:'train_reference',args:'--epochs 40',lines:[{t:5.5,x:'epoch 10/40  loss 0.512'},{t:7,x:'epoch 25/40  loss 0.301'},{t:8,x:'warn: 3 recordings have a flat channel for over 60 s, masked',w:1},{t:9.2,x:'epoch 40/40  loss 0.244'}],end:9.6,res:d.reference.name+': '+d.reference.score+'% '+d.ms+', '+d.reference.ops}}));
+ return out}
+function roundLogs(R){const d=DEV[R.device];const out=[];const r=R.r;const p=RS(r,'propose'),tr=RS(r,'train'),co=RS(r,'compile'),ve=RS(r,'verify');
+ const best=R.best,bg=R.g[best],bs=R.s[best];const prev=r>0&&S.rounds[r-1]?S.rounds[r-1]:null;
+ const tgt=R.target;const fams=R.fams;
+ out.push({id:'Dp'+r,t:p.t0,div:'Round '+(r+1)+', Propose',acc:SG.propose.acc});
+ let plan='Round '+(r+1)+' plan: 4 families, 1,024 candidates each. '+(r===0?'Start wide: gate estimates from '+fmt(gEst(R,.05))+' to '+fmt(gEst(R,.95))+'.':'Keep what won round '+r+' ('+DEV[R.device].families[r-1][WIN[r-1]].toLowerCase()+') and push it smaller.');
+ if(R.steerNote)plan+=' Following your redirect: '+R.steerNote+'.';
+ out.push(L(p.t0+.2,'arch',plan));
+ out.push(L(p.t0+1.3,'arch','Families: '+fams.map((f,i)=>(i+1)+') '+f.toLowerCase()).join('; ')+'.',{tool:{name:'propose_batch',args:'--families 4 --per-family 1024',lines:fams.map((f,i)=>({t:p.t0+.5+i*.3,x:'family '+(i+1)+': '+f.toLowerCase()})),end:p.t0+2.2,res:'4,096 configs written, est. '+fmt(gEst(R,.05))+' to '+fmt(gEst(R,.95))+' gates'}}));
+ out.push(L(p.t0+2.5,'rev',r===0?'Approved. Family 2 is likely too large to win but sets the top of the curve.':'Approved. Asked the architect to keep one control family so rounds stay comparable.'));
+ out.push({id:'Dt'+r,t:tr.t0,div:'Round '+(r+1)+', Train',acc:SG.train.acc});
+ const nDiv=Math.round(NB*(.03+((r*37)%7)/300));
+ out.push(L(tr.t0+.1,'train','Training 4,096 candidates as one batch on '+TIERS.find(x=>x.id===S.tier).name+'.',{tool:{name:'train_batch',args:'--candidates 4096 --epochs 30',lines:[
+   {t:tr.t0+1.5,x:'epoch  5/30  mean loss 0.688  best 0.402'},{t:tr.t0+3,x:'epoch 12/30  mean loss 0.471  best 0.268'},
+   {t:tr.t0+4.2,x:'warn: '+nDiv+' candidates diverged (loss NaN), dropped from ranking',w:1},
+   {t:tr.t0+5.6,x:'epoch 24/30  mean loss 0.355  best 0.211'},{t:tr.t0+7.4,x:'epoch 30/30  done'}],end:tr.t1-.1,res:fmt(NB)+' trained, '+fmt(R.nPass)+' clear '+fmt1(tgt)+'%'}}));
+ out.push(L(tr.t1-.05,'train',fmt(R.nPass)+' of 4,096 clear the line. Smallest passing estimate: '+fmt(bg)+' gates, from family '+(R.fam[best]+1)+'.'));
+ out.push({id:'Dc'+r,t:co.t0,div:'Round '+(r+1)+', Compile',acc:SG.compile.acc});
+ const id='C'+(r+1)+'-'+String(best).padStart(4,'0');
+ out.push(L(co.t0+.2,'comp','Compiling the 32 smallest passing candidates into gates.',{tool:{name:'compile_to_gates',args:'--top 32 --fold-constants',lines:[
+   {t:co.t0+.8,x:'lowering 32 models to gate netlists'},{t:co.t0+1.5,x:'folded '+fmt(Math.round(bg*.31))+' constant gates in '+id},
+   ...(r===1?[{t:co.t0+2,x:'error: C2 netlist 17 has a combinational loop, dropped',e:1}]:[]),
+   {t:co.t0+2.6,x:id+': '+fmt(bg)+' gates, longest path '+arch(R.device,bg).depth}],end:co.t1-.2,res:(r===1?31:32)+' netlists, smallest '+fmt(bg)+' gates'}}));
+ out.push({id:'Dv'+r,t:ve.t0,div:'Round '+(r+1)+', Verify',acc:SG.verify.acc});
+ const vlines=[{t:ve.t0+.8,x:'replaying '+fmt(d.verifyN)+' '+d.vUnit+' through model and circuit'}];
+ if(r===0)vlines.push({t:ve.t0+1.4,x:'warn: 2 '+d.vUnit+' differ, rounding in the '+d.outBlock.toLowerCase()+' threshold; recompiled with exact threshold',w:1});
+ vlines.push({t:ve.t0+2.6,x:fmt(d.verifyN)+' of '+fmt(d.verifyN)+' identical',ok:1});
+ out.push(L(ve.t0+.2,'ver','Checking '+id+' against its model on '+d.patients+' unseen patients.',{tool:{name:'verify_bits',args:id+' --heldout',lines:vlines,end:ve.t0+2.8,res:fmt(d.verifyN)+' of '+fmt(d.verifyN)+' '+d.vUnit+' identical; '+fmt1(bs)+'% '+d.ms}}));
+ const pg=prev?prev.g[prev.best]:null;
+ out.push(L(ve.t1-.3,'rev',(pg&&bg<pg?'New best: '+fmt(bg)+' gates, '+fmt(pg-bg)+' fewer than round '+r+'. ':'Round '+(r+1)+' best: '+fmt(bg)+' gates. ')+'What paid off: '+fams[R.win].toLowerCase()+'.'));
+ return out}
+function gEst(R,q){const a=Array.from(R.g).sort((x,y)=>x-y);return a[Math.floor(q*(a.length-1))]}
+function reportLogs(){const s=RS(-1,'report');const out=[{id:'Drep',t:s.t0,div:'Report',acc:SG.report.acc}];
+ out.push(L(s.t0+.3,'rev','Writing the datasheet for the smallest chip that clears the line.'));
+ out.push(L(s.t0+3.5,'rev','Datasheet, netlist and Verilog written. Limits listed: held-out patients only from one site; no testing on hardware yet.',{tool:{name:'write_report',args:'datasheet.md circuit.v',lines:[{t:s.t0+1,x:'collecting numbers from verify logs'},{t:s.t0+2,x:'linking each number to the log that produced it'},{t:s.t0+3,x:'writing circuit.v and netlist.json'}],end:s.t0+3.4,res:'3 files written'}}));
+ out.push(L(s.t1-.2,'rev','Run finished.'));return out}
+let LOGCACHE={v:-1,list:[]};
+function allLogs(){const key=S.logVer;if(LOGCACHE.v===key)return LOGCACHE.list;
+ let list=[...S.base];for(const R of S.rounds)if(R)list=list.concat(R.logs);list=list.concat(S.rep);
+ for(const st of S.steering){list.push({id:'H'+st.n,t:st.t,agent:'you',text:st.text,human:1});if(st.reply)list.push({id:'HR'+st.n,t:st.t+.001,agent:'arch',text:st.reply})}
+ list.sort((a,b)=>a.t-b.t);LOGCACHE={v:key,list};return list}
+
+/* ============ chip SVG ============ */
+let UID=0;
+function chipSVG(c,W,H,o){o=o||{};if(!c)return '';const d=DEV[c.device];const rng=mulberry(c.seed);const id='u'+(++UID);
+ const cp=!!o.compact;W=Math.max(W,200);H=Math.max(H,120);
+ const padL=cp?40:122,padR=cp?40:118,top=cp?14:40,bot=cp?14:34;
+ const rowH=cp?7:Math.max(9,Math.min(14,(H-top-bot)/34));
+ const gw=cp?6:11,gh=cp?4:Math.min(8,rowH-3);
+ const capRows=Math.max(4,Math.floor((H-top-bot)/rowH));
+ const Lc=c.L;const ws=[];for(let j=0;j<Lc;j++)ws.push(1.3-.75*j/Math.max(1,Lc-1));
+ const sw=ws.reduce((a,b)=>a+b,0);const widths=ws.map(x=>x/sw*c.g);
+ const per=Math.max(1,Math.ceil(widths[0]/capRows));
+ const x0=padL+(cp?18:44),x1=W-padR-(cp?18:44);
+ const cols=[];const midY=top+(H-top-bot)/2;
+ for(let j=0;j<Lc;j++){const n=Math.max(2,Math.min(capRows,Math.round(widths[j]/per)));const x=Lc===1?x0:x0+(x1-x0)*j/(Lc-1);const ys=[];for(let k=0;k<n;k++)ys.push(midY+(k-(n-1)/2)*rowH);cols.push({x,ys,n,src:[]})}
+ const nIn=d.inputs.length;const inYs=[];const span=(H-top-bot)*.86;for(let k=0;k<nIn;k++)inYs.push(midY+(k-(nIn-1)/2)*(span/Math.max(1,nIn-1)));
+ let wires='',gates='',crit='';
+ for(let j=0;j<Lc;j++){const C=cols[j];const prevN=j===0?nIn:cols[j-1].n;
+  for(let k=0;k<C.n;k++){const a=clamp(Math.round(k*(prevN-1)/Math.max(1,C.n-1)+(rng()-.5)*prevN*.35),0,prevN-1);const b=Math.floor(rng()*prevN);C.src.push([a,b]);
+   for(const s of [a,b]){const sx=j===0?padL+ (cp?2:6):cols[j-1].x+gw/2,sy=j===0?inYs[s]:cols[j-1].ys[s];const tx=C.x-gw/2,ty=C.ys[k];const mx=(sx+tx)/2;
+    wires+='<path class="w" pathLength="1" style="--d:'+(j*70)+'ms" d="M'+sx.toFixed(1)+' '+sy.toFixed(1)+'C'+mx.toFixed(1)+' '+sy.toFixed(1)+' '+mx.toFixed(1)+' '+ty.toFixed(1)+' '+tx.toFixed(1)+' '+ty.toFixed(1)+'"/>'}}}
+ // critical path
+ const last=cols[Lc-1];let k=Math.floor(last.n/2);const path=[];
+ for(let j=Lc-1;j>=0;j--){path.unshift([j,k]);k=cols[j].src[k][0]}
+ const inK=k;const critSet=new Set(path.map(p=>p[0]+':'+p[1]));
+ for(let j=0;j<Lc;j++){const C=cols[j];for(let kk=0;kk<C.n;kk++){const cr=critSet.has(j+':'+kk);gates+='<rect class="gt'+(cr?' c':'')+'" style="--d:'+(j*70+120)+'ms" x="'+(C.x-gw/2).toFixed(1)+'" y="'+(C.ys[kk]-gh/2).toFixed(1)+'" width="'+gw+'" height="'+gh+'" rx="1.5"/>'}}
+ let pd='M'+(padL+(cp?2:6))+' '+inYs[inK].toFixed(1);
+ let px=padL+(cp?2:6),py=inYs[inK];
+ for(const [j,kk] of path){const tx=cols[j].x-gw/2,ty=cols[j].ys[kk];const mx=(px+tx)/2;pd+='C'+mx.toFixed(1)+' '+py.toFixed(1)+' '+mx.toFixed(1)+' '+ty.toFixed(1)+' '+tx.toFixed(1)+' '+ty.toFixed(1)+'h'+gw;px=tx+gw;py=ty}
+ // output block
+ const ob={x:W-padR+(cp?-14:-30),w:cp?16:40,h:Math.min(H*.38,cp?40:120)};ob.y=midY-ob.h/2;
+ let outw='';for(let kk=0;kk<last.n;kk++){const sx=last.x+gw/2,sy=last.ys[kk];const ty=ob.y+ob.h*(kk+.5)/last.n;const mx=(sx+ob.x)/2;outw+='<path class="w" pathLength="1" style="--d:'+(Lc*70)+'ms" d="M'+sx.toFixed(1)+' '+sy.toFixed(1)+'C'+mx.toFixed(1)+' '+sy.toFixed(1)+' '+mx.toFixed(1)+' '+ty.toFixed(1)+' '+ob.x.toFixed(1)+' '+ty.toFixed(1)+'"/>'}
+ {const ty=midY;const mx=(px+ob.x)/2;pd+='C'+mx.toFixed(1)+' '+py.toFixed(1)+' '+mx.toFixed(1)+' '+ty.toFixed(1)+' '+ob.x.toFixed(1)+' '+ty.toFixed(1)+'h'+ob.w;px=ob.x+ob.w;py=ty}
+ const pins=d.outPins;const pinGap=cp?5:Math.min(18,ob.h/Math.max(1,pins.length));let pinsS='';
+ for(let p=0;p<pins.length;p++){const y=midY+(p-(pins.length-1)/2)*pinGap;pinsS+='<path class="w" style="stroke-opacity:.6" d="M'+(ob.x+ob.w)+' '+y.toFixed(1)+'H'+(W-(cp?16:34))+'"/><rect class="pin" x="'+(W-(cp?16:34))+'" y="'+(y-(cp?2:3)).toFixed(1)+'" width="'+(cp?8:12)+'" height="'+(cp?4:6)+'" rx="1"/>';
+  if(!cp&&(pins.length<3||p===0||p===pins.length-1))pinsS+='<text x="'+(W-36)+'" y="'+(y-6).toFixed(1)+'" font-size="9" text-anchor="end">'+esc(pins[p])+'</text>'}
+ if(pins.length===1&&!cp){}
+ pd+='H'+(W-(cp?16:34));
+ // inputs
+ let pads='';for(let kk=0;kk<nIn;kk++){const y=inYs[kk];
+  if(cp){pads+='<rect class="pad" x="'+(padL-26)+'" y="'+(y-3)+'" width="22" height="6" rx="1"/>'}
+  else{pads+='<rect class="pad" x="'+(padL-104)+'" y="'+(y-8).toFixed(1)+'" width="80" height="16" rx="3"/><text x="'+(padL-96)+'" y="'+(y+3).toFixed(1)+'" font-size="9.5">'+esc(d.inputs[kk])+'</text><rect class="blk" x="'+(padL-20)+'" y="'+(y-6).toFixed(1)+'" width="22" height="12" rx="2"/><text x="'+(padL-9)+'" y="'+(y+3).toFixed(1)+'" font-size="8" text-anchor="middle">'+d.inBits+'b</text>'}}
+ let labels='';
+ if(!cp){for(let j=0;j<Lc;j++){labels+='<text x="'+cols[j].x.toFixed(1)+'" y="'+(H-14)+'" font-size="9" text-anchor="middle" fill-opacity=".7">'+(j===0||j===Lc-1||Lc<=8||j%2===0?'L'+(j+1):'')+'</text>'}
+  labels+='<text x="'+(ob.x+ob.w/2)+'" y="'+(ob.y-8).toFixed(1)+'" font-size="9" text-anchor="middle">'+esc(d.outBlock)+'</text>';
+  labels+='<text x="'+(padL-64)+'" y="'+(top-14)+'" font-size="9" text-anchor="middle">'+nIn+' inputs</text>';
+  labels+='<text x="'+((x0+x1)/2)+'" y="'+(top-14)+'" font-size="9" text-anchor="middle">'+Lc+' logic layers, 1 square = '+per+' gate'+(per>1?'s':'')+'</text>'}
+ const grid='<pattern id="'+id+'p" width="'+(cp?8:14)+'" height="'+(cp?8:14)+'" patternUnits="userSpaceOnUse"><path d="M'+(cp?8:14)+' 0H0V'+(cp?8:14)+'" fill="none" stroke="#fff" stroke-opacity=".035"/></pattern>';
+ return '<svg class="chip'+(o.anim?' anim':'')+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img" aria-label="Circuit '+c.id+', '+fmt(c.g)+' gates"><defs>'+grid+'</defs><rect width="'+W+'" height="'+H+'" fill="url(#'+id+'p)"/><rect x="'+(cp?5:10)+'" y="'+(cp?5:10)+'" width="'+(W-(cp?10:20))+'" height="'+(H-(cp?10:20))+'" rx="'+(cp?5:9)+'" fill="none" stroke="#fff" stroke-opacity=".08" stroke-dasharray="3 4"/>'
+  +'<g>'+wires+outw+'</g>'+'<rect class="blk" x="'+ob.x.toFixed(1)+'" y="'+ob.y.toFixed(1)+'" width="'+ob.w+'" height="'+ob.h.toFixed(1)+'" rx="3"/>'+pinsS+'<g>'+gates+'</g>'+pads+'<path class="crit" pathLength="1" style="--d:'+(Lc*70+200)+'ms" d="'+pd+'"/>'+labels+'</svg>'}
+function gateMix(c){const r=mulberry(c.seed^77);const w=[.24+r()*.08,.18+r()*.06,.16+r()*.06,.14+r()*.05,.1+r()*.04,.08+r()*.04];const s=w.reduce((a,b)=>a+b,0);
+ const names=['NAND','AND','XOR','OR','NOR','XNOR'];const cols=['#3b82f6','#60a5fa','#a78bfa','#93c5fd','#c4b5fd','#fb923c'];let left=c.g;
+ return names.map((n,i)=>{const v=i===names.length-1?left:Math.round(c.g*w[i]/s);left-=v;return {n,v,col:cols[i]}})}
+
+const dieCache=new Map();
+function drawDie(el,c,o){o=o||{};if(!el)return;const r=el.getBoundingClientRect();if(r.width<10)return;
+ const key=candKey(c)+'|'+Math.round(r.width)+'x'+Math.round(r.height)+'|'+S.device+(o.compact?'c':'');
+ if(dieCache.get(el)===key)return;dieCache.set(el,key);
+ if(!c){el.innerHTML='<div class="empty">'+(o.emptyText||'The first circuit appears after round 1 is verified.')+'</div>';return}
+ const svg=chipSVG(c,r.width,r.height,{compact:o.compact||r.width<560,anim:o.anim});if(o.anim)S.animId=null;
+ el.innerHTML=(o.cap?'<div class="cap">'+o.cap+'</div>':'')+(o.cap2?'<div class="cap2">'+o.cap2+'</div>':'')+svg}
+
+/* ============ start screen ============ */
+function devTile(id){return id==='eeg'?'<svg width="34" height="22" viewBox="0 0 34 22"><path d="M1 11h5l2-6 3 12 3-14 3 16 2-8h4l2-3 2 3h6" fill="none" stroke="#8fb0ff" stroke-width="1.6"/></svg>':'<svg width="30" height="30" viewBox="0 0 30 30"><circle cx="15" cy="15" r="10" fill="none" stroke="#8fb0ff" stroke-width="1.4"/><path d="M5 22c5-8 15-8 20 0" fill="none" stroke="#fb923c" stroke-width="1.6"/><circle cx="8" cy="20" r="2" fill="#fb923c"/><circle cx="22" cy="20" r="2" fill="#8fb0ff"/></svg>'}
+function renderStart(){
+ const d=D();
+ $('#presets').innerHTML=Object.values(DEV).map(x=>'<button class="preset" data-dev="'+x.id+'" aria-pressed="'+(x.id===S.device)+'"><span class="tile">'+devTile(x.id)+'</span><span><h3>'+x.name+'</h3><p>'+x.signal+'. Output: '+x.output.toLowerCase()+'.</p></span></button>').join('');
+ $('#prompt').value=d.prompt;
+ $('#fSens').value=S.sens??d.sensLine;$('#fSpec').value=S.spec??d.specLine;$('#fBudget').value=fmt(S.budget??d.budget);
+ $('#ladder').innerHTML=TIERS.map(t=>'<button class="rung" data-tier="'+t.id+'" aria-pressed="'+(t.id===S.tier)+'"><b>'+t.name+'</b><span>'+t.spec+'</span><em>$'+t.price.toFixed(2)+'/h</em></button>').join('');
+ $('#backend').innerHTML=['Claude','OpenHands','OpenHands (free)'].map(b=>'<button data-be="'+b+'" aria-pressed="'+(b===S.backend)+'">'+b+'</button>').join('');
+ $('#agentsTbl').innerHTML=AGENTS.map(a=>'<tr><td><b>'+a.name+'</b><span>'+a.role+'</span></td><td style="text-align:right"><select data-ag="'+a.id+'" data-k="0" aria-label="'+a.name+' model">'+MODELS.map(m=>'<option'+(m===S.models[a.id][0]?' selected':'')+'>'+m+'</option>').join('')+'</select> <select data-ag="'+a.id+'" data-k="1" aria-label="'+a.name+' effort">'+['low','medium','high'].map(m=>'<option'+(m===S.models[a.id][1]?' selected':'')+'>'+m+'</option>').join('')+'</select></td></tr>').join('');
+ pills()}
+function pills(){const d=D();if(!$('#pDev'))return;$('#pDev').textContent=d.short;$('#pLine').textContent=d.id==='eeg'?'sens '+$('#fSens').value+'%, spec '+$('#fSpec').value+'%':'within 3 pts 95%, alarm '+$('#fSens').value+'/'+$('#fSpec').value;
+ $('#pBudget').textContent=$('#fBudget').value;$('#pCompute').textContent=TIERS.find(t=>t.id===S.tier).name;$('#pAgents').textContent=S.backend+', 5 roles'}
+$('#presets').addEventListener('click',e=>{const b=e.target.closest('[data-dev]');if(!b)return;S.device=b.dataset.dev;S.sens=S.spec=S.budget=null;renderStart()});
+$('#ladder').addEventListener('click',e=>{const b=e.target.closest('[data-tier]');if(!b)return;S.tier=b.dataset.tier;renderStart()});
+$('#backend').addEventListener('click',e=>{const b=e.target.closest('[data-be]');if(!b)return;S.backend=b.dataset.be;renderStart()});
+$('#agentsTbl').addEventListener('change',e=>{const s=e.target;if(s.dataset.ag)S.models[s.dataset.ag][+s.dataset.k]=s.value});
+['#fSens','#fSpec','#fBudget'].forEach(q=>$(q).addEventListener('input',pills));
+$('#composerWrap').addEventListener('click',e=>{if(!e.target.closest('#startBtn'))return;
+ S.sens=parseFloat($('#fSens').value)||D().sensLine;S.spec=parseFloat($('#fSpec').value)||D().specLine;
+ const steps=['Writing the spec from your prompt','Reserving '+TIERS.find(t=>t.id===S.tier).name+' and loading recordings','Starting 5 agents on '+S.backend];
+ $('#composerWrap').innerHTML='<div class="launching"><span class="spin"></span><ol>'+steps.map((s,i)=>'<li data-i="'+i+'">'+s+'</li>').join('')+'</ol></div>';
+ let i=0;const tick=()=>{const li=document.querySelector('.launching li[data-i="'+i+'"]');if(li)li.classList.add('on');i++;if(i<=steps.length)setTimeout(tick,330);else{location.hash='overview'}};tick()});
+
+/* ============ run lifecycle ============ */
+function resetRun(){S.t=0;S.rounds=[];S.steer={scaleMul:1,targetDelta:0,ver:0};S.steering=[];S.sel=null;S.cmpB=null;S.lastBestId=null;S.lastBestG=null;S.openTools.clear();S.closedTools.clear();
+ LID=0;S.base=baseLogs();S.rep=reportLogs();S.logVer++;feedState.ids=[];$('#feed').innerHTML='';dieCache.clear();$('#reply').classList.add('hidden');$('#stagePop').classList.add('hidden');S.playing=true;
+ $('#runTitle').value=D().title;document.title='Chipwright: '+D().title}
+function setDevice(dv){if(S.device===dv)return;S.device=dv;resetRun();toast('Replaying for the '+D().short.toLowerCase(),'Same run plan, with this device’s signals, clinical line and gate budget.');renderAll(true)}
+
+/* ============ tabs / hash ============ */
+const VIEWS=[{id:'overview',name:'Overview'},{id:'space',name:'Design space'},{id:'chip',name:'Chip'},{id:'signal',name:'Signal and check'},{id:'agents',name:'Agents'},{id:'cost',name:'Cost and compute'},{id:'report',name:'Report'}];
+function renderTabs(){$('#tabs').innerHTML=VIEWS.map(v=>'<button class="tab" role="tab" data-view="'+v.id+'" aria-selected="'+(v.id===S.view)+'">'+v.name+'<span class="badge hidden" data-badge="'+v.id+'"></span></button>').join('')+'<span class="sp"></span><span class="clock"><span>Run clock <b class="mono" id="clock">00:00:00</b></span><span id="evalLbl" class="mono"></span></span>'}
+$('#tabs').addEventListener('click',e=>{const b=e.target.closest('[data-view]');if(b)go(b.dataset.view)});
+function go(v,extra){location.hash=v+(extra?'?'+extra:'')}
+function applyHash(){const h=(location.hash||'').replace(/^#\/?/,'');const [v,q]=h.split('?');
+ if(!v||v==='start'){S.screen='start';S.playing=false;$('#run').classList.add('hidden');$('#start').classList.remove('hidden');if(!$('#startBtn'))$('#composerWrap').innerHTML=composerHTML;renderStart();return}
+ if(!VIEWS.find(x=>x.id===v)){location.hash='overview';return}
+ if(q){const m=/c=(\d)\.(\d+)/.exec(q);if(m){ensureRounds();const r=+m[1],i=+m[2];if(S.rounds[r]&&i<NB)S.sel={r,i}}}
+ if(S.screen!=='run'){S.screen='run';$('#start').classList.add('hidden');$('#run').classList.remove('hidden');resetRun();renderTabs()}
+ S.view=v;document.querySelectorAll('.view').forEach(el=>el.classList.toggle('hidden',el.id!=='v-'+v));
+ document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',b.dataset.view===v));
+ dieCache.clear();renderAll(true)}
+window.addEventListener('hashchange',applyHash);
+document.addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(g){e.preventDefault();go(g.dataset.go,g.dataset.q)}});
+
+/* ============ controls ============ */
+const ICON_PAUSE='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 5v14M16 5v14"/></svg>',ICON_PLAY='<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M7 4.5v15l12-7.5z"/></svg>';
+function setPlaying(p){if(S.t>=TOTAL&&p){resetRun();}S.playing=p;renderControls()}
+function renderControls(){const done=S.t>=TOTAL;$('#playBtn').innerHTML=S.playing?ICON_PAUSE:ICON_PLAY;$('#playBtn').title=S.playing?'Pause':(done?'Replay':'Play');$('#playBtn').setAttribute('aria-label',$('#playBtn').title);
+ $('#pauseBtn2').innerHTML=(S.playing?ICON_PAUSE+'Pause':ICON_PLAY+(done?'Replay':'Resume'));
+ const lv=$('#live');lv.classList.toggle('paused',!S.playing&&!done);lv.classList.toggle('done',done);lv.querySelector('span').textContent=done?'DONE':S.playing?'LIVE':'PAUSED';
+ $('#steerHint').textContent=done?'Run finished. Replay or start a new run':S.playing?'Pause to redirect the agents':'Paused. Type a redirect for the architect'}
+$('#playBtn').onclick=()=>setPlaying(!S.playing);$('#pauseBtn2').onclick=()=>setPlaying(!S.playing);
+$('#restartBtn').onclick=()=>{resetRun();renderAll(true);toast('Run restarted','Replaying from the spec.')};
+$('#speed').onchange=e=>{S.speed=parseFloat(e.target.value)};
+$('#newRunBtn').onclick=()=>{location.hash='start'};
+$('#shareBtn').onclick=()=>toast('Share link','Public share links are switched off in this mock-up.');
+document.querySelector('.devswitch').addEventListener('click',e=>{const b=e.target.closest('[data-dev]');if(b)setDevice(b.dataset.dev)});
+$('#redirectIn').addEventListener('focus',()=>{if(S.playing&&S.t<TOTAL){S.playing=false;renderControls();toast('Paused','The run waits while you write the redirect.')}});
+$('#redirectForm').addEventListener('submit',e=>{e.preventDefault();const v=$('#redirectIn').value.trim();if(!v)return;sendRedirect(v);$('#redirectIn').value=''});
+const composerHTML=$('#composerWrap').innerHTML;
+
+function parseRedirect(text){const t=text.toLowerCase();const eff={scaleMul:1,targetDelta:0,notes:[]};
+ const fewer=/fewer|smaller|less gates|reduce|shrink|cheaper|tiny|tinier/.test(t);
+ const m=/(\d+(?:\.\d+)?)\s*(?:points?|pts?|%|percent)?\s*(?:lower|less|down|drop)/.exec(t)||/(?:accept|allow|lose|drop)\s*(\d+(?:\.\d+)?)/.exec(t);
+ const up=/more accurate|higher (?:sens|spec|accuracy)|raise|stricter|safer/.test(t);
+ if(fewer){eff.scaleMul=.82;eff.notes.push('gate penalty raised')}
+ if(m&&!up){eff.targetDelta=-clamp(parseFloat(m[1]),0,5)}
+ else if(up){const n=/(\d+(?:\.\d+)?)/.exec(t);eff.targetDelta=clamp(n?parseFloat(n[1]):1,.5,3);eff.scaleMul*=1.05}
+ return eff}
+function sendRedirect(text){const d=D();const n=S.steering.length+1;const eff=parseRedirect(text);
+ const done=S.t>=TOTAL;const cr=curRound();const seg=segAt(S.t);
+ // which round takes it
+ let from=null;for(let r=0;r<ROUNDS;r++){if(S.t<RS(r,'train').t0){from=r;break}}
+ const st={n,t:S.t,text,reply:null,from,eff};S.steering.push(st);S.logVer++;
+ const R=$('#reply');R.classList.remove('hidden');$('#stagePop').classList.add('hidden');
+ R.innerHTML='<div class="q">'+esc(text)+'</div><div class="a"><span class="av" style="background:'+AG.arch.col+'">Ar</span><div><div class="who" style="font-size:11.5px;font-weight:600">Architect</div><span class="typing"><i></i><i></i><i></i></span></div></div>';
+ setTimeout(()=>{let reply;
+  if(done||from===null){reply='The run has finished all rounds, so nothing is left to change. Restart to apply this from round 1.'}
+  else{const newT=d.line+S.steer.targetDelta+eff.targetDelta;const parts=[];
+   if(eff.targetDelta<0)parts.push('the target drops from '+fmt1(d.line+S.steer.targetDelta)+'% to '+fmt1(newT)+'% '+d.ms);
+   if(eff.targetDelta>0)parts.push('the target rises to '+fmt1(newT)+'% '+d.ms+', so expect larger chips');
+   if(eff.scaleMul<1)parts.push('the trainer adds a gate penalty and I bias the families toward pruning and sharing');
+   if(!parts.length)parts.push('I’ve added this to the reviewer’s checklist; it doesn’t change the target or the gate penalty');
+   const gain=(eff.targetDelta<0||eff.scaleMul<1)?' Expect roughly '+(eff.targetDelta<0&&eff.scaleMul<1?'20 to 30':'10 to 20')+'% fewer gates than planned.':'';
+   reply='Understood. From round '+(from+1)+', '+parts.join(', and ')+'.'+gain+(newT<d.line?' The clinical line stays drawn at '+d.line+'%; the report will say this chip sits below it.':'');
+   S.steer={scaleMul:S.steer.scaleMul*eff.scaleMul,targetDelta:clamp(S.steer.targetDelta+eff.targetDelta,-6,4),ver:S.steer.ver+1,note:text.length>80?text.slice(0,78)+'…':text};
+   for(let r=from;r<ROUNDS;r++){if(S.rounds[r]){S.rounds[r]=genRound(r,S.device,S.steer)}}
+  }
+  st.reply=reply;S.logVer++;
+  R.innerHTML='<div class="q">'+esc(text)+'</div><div class="a"><span class="av" style="background:'+AG.arch.col+'">Ar</span><div><div style="font-size:11.5px;font-weight:600">Architect</div><div>'+esc(reply)+'</div></div></div><div class="foot"><button class="btn" id="replyClose">Close</button>'+(done?'<button class="btn dark" id="replyGo">Restart run</button>':'<button class="btn dark" id="replyGo">Resume with this change</button>')+'</div>';
+  $('#replyClose').onclick=()=>R.classList.add('hidden');
+  $('#replyGo').onclick=()=>{R.classList.add('hidden');if(done){resetRun();renderAll(true)}else setPlaying(true)};
+  renderAll(true)},900)}
+
+/* ============ dock ============ */
+function stageState(id){const segs=SCHED.filter(s=>s.stage===id);if(S.t>=segs[segs.length-1].t1)return 'done';const cur=segAt(S.t);if(cur&&cur.stage===id)return 'running';if(S.t<segs[0].t0)return 'pending';return 'between'}
+function stageMetric(id){const cur=segAt(S.t);const cr=curRound();const d=D();
+ switch(id){case 'spec':return S.t>=4?'line '+fmt1(curTarget())+'%':'writing';
+  case 'ref':return S.t>=10?d.reference.score+'% float':S.t>=4?'training':'waiting';
+  case 'propose':return cr>=0?'round '+(cr+1)+' of 4':'4 rounds';
+  case 'train':{if(cr<0)return '4,096 per round';const n=trained(cr);return fmt(n)+' / 4,096'}
+  case 'compile':{if(cr<0||!S.rounds[cr])return 'top 32';const s=RS(cr,'compile');return Math.floor(NCOMP*prog(s,S.t))+' / 32'}
+  case 'verify':{if(cr<0||!S.rounds[cr])return 'bit for bit';const s=RS(cr,'verify');const p=clamp((S.t-s.t0)/2.8,0,1);return fmt(d.verifyN*p)+' '+d.vUnit}
+  case 'report':return S.t>=TOTAL?'written':S.t>=RS(-1,'report').t0?'writing':'at the end'}}
+function renderDock(){
+ $('#stages').innerHTML=STAGES.map(s=>{const cls=stageState(s.id);return '<button class="stg '+cls+'" data-stage="'+s.id+'" style="--acc:'+s.acc+'"><span class="nm"><span class="ring"></span>'+s.name+(['propose','train','compile','verify'].includes(s.id)&&curRound()>=0?' <span class="mono" style="font-weight:400;color:var(--ink-500);font-size:10.5px">R'+(curRound()+1)+'</span>':'')+'</span><span class="mt">'+stageMetric(s.id)+'</span></button>'}).join('');
+ if(!$('#tl').dataset.built){$('#tl').dataset.built=1;$('#tl').innerHTML=SCHED.map((s,i)=>'<div class="seg" data-stage="'+s.stage+'" data-i="'+i+'" title="'+SG[s.stage].name+(s.r>=0?', round '+(s.r+1):'')+'" style="flex:'+(s.t1-s.t0)+';--acc:'+SG[s.stage].acc+'"><i></i></div>').join('')+[0,1,2,3].map(r=>'<span class="rl" style="left:'+((RS(r,'propose').t0+9)/TOTAL*100)+'%">R'+(r+1)+'</span>').join('')+'<span class="ph" id="ph"></span>'}
+ document.querySelectorAll('#tl .seg').forEach(el=>{const s=SCHED[+el.dataset.i];el.firstChild.style.width=(prog(s,S.t)*100)+'%'});
+ $('#ph').style.left=(S.t/TOTAL*100)+'%';
+ const b=bestNow();const d=D();
+ $('#bestMini').htmlIfChanged=b?'<span class="k">Current best, '+b.id+'</span><span class="v">'+fmt(b.g)+'<small>gates</small></span><span class="s">'+fmt1(b.s)+'% '+d.ms+', longest path '+b.depth+'</span>':'<span class="k">Current best</span><span class="v" style="font-size:18px;color:var(--ink-400)">None yet</span><span class="s">First chip after round 1 verifies</span>';
+ const sb=$('#redirectSend');sb.disabled=false}
+$('#stages').addEventListener('click',e=>{const b=e.target.closest('[data-stage]');if(b)openStagePop(b.dataset.stage,b)});
+$('#tl').addEventListener('click',e=>{const b=e.target.closest('[data-stage]');if(b)openStagePop(b.dataset.stage,b)});
+function openStagePop(id,anchor){const P=$('#stagePop');const s=SG[id];const d=D();const segs=SCHED.filter(x=>x.stage===id);
+ const dur=segs.reduce((a,x)=>a+(x.t1-x.t0),0);const c=costAt(S.t).by[id];
+ let rows='';
+ if(segs[0].r>=0){rows='<table><tr><th>Round</th><th>State</th><th>Result</th></tr>'+segs.map(x=>{const R=S.rounds[x.r];const p=prog(x,S.t);let res='';
+  if(!R||p===0)res='<span class="muted">waiting</span>';else{
+   if(id==='propose')res=R.fams[R.win].slice(0,34)+(R.fams[R.win].length>34?'…':'');
+   if(id==='train')res=fmt(trained(x.r))+' trained, '+(p>=1?fmt(R.nPass)+' clear':'running');
+   if(id==='compile')res=p>=1?(x.r===1?31:32)+' netlists, min '+fmt(R.g[R.best]):'compiling';
+   if(id==='verify')res=p>=1?fmt(d.verifyN)+' identical':'checking'}
+  return '<tr><td class="mono">R'+(x.r+1)+'</td><td>'+(p>=1?'<span class="tag pass">done</span>':p>0?'<span class="tag info">running</span>':'<span class="tag" style="background:var(--ink-100)">pending</span>')+'</td><td>'+res+'</td></tr>'}).join('')+'</table>'}
+ P.innerHTML='<button class="btn icon x" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 6l12 12M18 6L6 18"/></svg></button><h4><span class="dot" style="background:'+s.acc+'"></span>'+s.name+'</h4><p>'+s.desc+'</p><div class="kv" style="margin-bottom:8px"><dt>Planned time</dt><dd>'+Math.round(dur*REAL/60)+' min'+(segs.length>1?' over 4 rounds':'')+'</dd><dt>Spent so far</dt><dd>'+money(c.llm+c.gpu)+'</dd><dt>State</dt><dd>'+stageState(id).replace('between','between rounds')+'</dd></div>'+rows;
+ P.classList.remove('hidden');$('#reply').classList.add('hidden');
+ const ar=anchor.getBoundingClientRect(),dr=$('#dock').getBoundingClientRect();P.style.left=clamp(ar.left-dr.left,8,Math.max(8,dr.width-392))+'px';
+ P.querySelector('.x').onclick=()=>P.classList.add('hidden')}
+$('#bestMini').onclick=()=>{S.sel=null;go('chip')};
+
+/* ============ overview ============ */
+const feedState={ids:[]};
+function renderFeed(){const list=allLogs().filter(x=>x.t<=S.t);const F=$('#feed');
+ const atBottom=F.scrollHeight-F.scrollTop-F.clientHeight<40;
+ const ids=list.map(x=>x.id);let same=feedState.ids.length<=ids.length&&feedState.ids.every((id,i)=>ids[i]===id);
+ if(!same){F.innerHTML='';feedState.ids=[]}
+ for(let i=feedState.ids.length;i<list.length;i++){const el=document.createElement('div');el.dataset.id=list[i].id;F.appendChild(el);feedState.ids.push(list[i].id);fillEntry(el,list[i],true)}
+ // update running tools
+ F.querySelectorAll('[data-live="1"]').forEach(el=>{const e=list.find(x=>x.id===el.dataset.id);if(e)fillEntry(el,e,false)});
+ if(atBottom||!same)F.scrollTop=F.scrollHeight}
+function entryHTML(e){
+ if(e.div)return '<div class="divrow"><b><span class="dot" style="background:'+e.acc+'"></span>'+esc(e.div)+'</b></div>';
+ const a=e.human?{ini:'You',col:'#0d9488',name:'You'}:AG[e.agent];
+ let h='<div class="fe'+(e.human?' human':'')+'"><span class="av" style="background:'+a.col+'">'+(e.human?'Y':a.ini)+'</span><div><div class="who">'+(e.human?'You, redirect':a.name)+'<span>'+runClock(e.t)+'</span></div><div class="msg">'+esc(e.text)+'</div>';
+ if(e.tool){const T=e.tool;const done=S.t>=T.end;const open=S.openTools.has(e.id)||(!done&&!S.closedTools.has(e.id));
+  const lines=T.lines.filter(l=>l.t<=S.t).map(l=>'<span class="'+(l.w?'ln-warn':l.e?'ln-err':l.ok?'ln-ok':'')+'">'+esc(l.x)+'</span>').join('\n');
+  const nw=T.lines.filter(l=>l.t<=S.t&&l.w).length,ne=T.lines.filter(l=>l.t<=S.t&&l.e).length;
+  h+='<div class="tool'+(open?' open':'')+'"><button class="tool-h" data-tool="'+e.id+'"><svg class="chev" width="10" height="10" viewBox="0 0 10 10"><path d="M3 2l4 3-4 3" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>'+esc(T.name)+' <span class="muted">'+esc(T.args)+'</span><span class="st">'+(ne?'<span class="tag fail">'+ne+' error</span>':'')+(nw?'<span class="tag warn">'+nw+' warning'+(nw>1?'s':'')+'</span>':'')+(done?'<span class="tag pass">done</span>':'<span class="spin s"></span>running')+'</span></button><div class="tool-b">'+(lines||'<span class="muted">starting…</span>')+(done?'<div class="res">'+esc(T.res)+'</div>':'')+'</div></div>'}
+ return h+'</div></div>'}
+function fillEntry(el,e,isNew){const live=e.tool&&S.t<e.tool.end+0.05?'1':'0';const key=e.tool?(e.tool.lines.filter(l=>l.t<=S.t).length+':'+(S.t>=e.tool.end)+':'+S.openTools.has(e.id)+S.closedTools.has(e.id)):'s';
+ if(el.dataset.key===key)return;el.dataset.key=key;el.dataset.live=live;el.innerHTML=entryHTML(e);if(isNew&&!e.div){el.firstChild.classList.add('new')}}
+$('#feed').addEventListener('click',e=>{const b=e.target.closest('[data-tool]');if(!b)return;const id=b.dataset.tool;const box=b.parentElement;const open=box.classList.toggle('open');
+ if(open){S.openTools.add(id);S.closedTools.delete(id)}else{S.openTools.delete(id);S.closedTools.add(id)}const el=b.closest('[data-id]');if(el)el.dataset.key=''});
+
+function provisional(){const r=curRound();if(r<0||!S.rounds[r])return null;const R=S.rounds[r];const n=trained(r);let bi=-1;
+ for(let k=0;k<n;k++){const i=R.order[k];if(R.s[i]>=R.target&&(bi<0||R.g[i]<R.g[bi]))bi=i}return bi>=0?cand(r,bi):null}
+function renderOverview(force){const d=D();const b=bestNow();const pb=prevBest(b);const pv=b?null:provisional();const show=b||pv;
+ const G=$('#ovGates');G.textContent=show?fmt(show.g):'–';G.style.color=b?'':'var(--ink-400)';
+ const dl=$('#ovDelta');if(b&&pb&&pb.g>b.g){dl.textContent='−'+fmt(pb.g-b.g)+' vs round '+(pb.r+1);dl.classList.remove('hidden','neutral')}else if(b){dl.textContent='first chip, round '+(b.r+1);dl.classList.remove('hidden');dl.classList.add('neutral')}else if(pv){dl.textContent='provisional';dl.classList.remove('hidden');dl.classList.add('neutral')}else dl.classList.add('hidden');
+ const bud=S.budget||d.budget;
+ $('#ovBestLbl').textContent=b?'Current best chip, '+b.id+(b.g<=bud?', inside the '+fmt(bud)+'-gate budget':', above the '+fmt(bud)+'-gate budget'):pv?'Smallest passing candidate so far, '+pv.id+'. Not compiled or verified yet':'Current best chip';
+ const ev=evaluated();const c=costAt(S.t);
+ $('#ovFacts').htmlIfChanged=[
+  ['Longest path',show?show.depth+' <small>gates'+(b?'':', est.')+'</small>':'–'],
+  [d.ml,show?fmt1(show.s)+'<small>%</small>':'–'],
+  ['Bit-for-bit',b?fmt(d.verifyN)+' <small>of '+fmt(d.verifyN)+'</small>':'<small>after round 1</small>'],
+  ['Evaluated',fmt(ev)+' <small>candidates</small>'],
+  ['Spent',money(c.total)]].map(f=>'<div class="fact"><div class="k">'+f[0]+'</div><div class="v">'+f[1]+'</div></div>').join('');
+ if(S.flash){S.flash=false;dl.classList.remove('flash');void dl.offsetWidth;dl.classList.add('flash')}
+ $('#ovDie').classList.toggle('prov',!b&&!!pv);
+ drawDie($('#ovDie'),show,{anim:b&&S.animId===candKey(b),cap2:b?'<span><i></i>longest path</span><span>click to inspect</span>':'<span>provisional sketch</span>',emptyText:'Round 1 starts training at '+runClock(RS(0,'train').t0)+'. Its smallest passing candidate is sketched here as soon as it appears; the first verified chip replaces it.'});
+ // now
+ const seg=segAt(S.t);let txt,st,p;
+ if(!seg){st=SG.report;txt='Run finished. The datasheet and files are in the Report view.';p=1}
+ else{st=SG[seg.stage];p=prog(seg,S.t);const cr=seg.r;
+  txt={spec:'Writing the spec: inputs, output, clinical line and held-out patients.',ref:'Training the float reference model, the ceiling to compare with.',
+   propose:'Architect is proposing 4 circuit families for round '+(cr+1)+'.',train:'Training round '+(cr+1)+': '+fmt(trained(cr))+' of 4,096 candidates done.',
+   compile:'Compiling the 32 smallest passing candidates of round '+(cr+1)+' into gates.',verify:'Checking the round '+(cr+1)+' best bit for bit on '+d.patients+' unseen patients.',report:'Reviewer is writing the datasheet.'}[seg.stage];
+  if(!S.playing)txt='Paused. '+txt}
+ $('#ovNow').htmlIfChanged='<span class="stagechip"><span class="dot" style="background:'+st.acc+'"></span>'+st.name+'</span><span class="txt">'+esc(txt)+'</span><span class="bar"><i style="width:'+(p*100)+'%"></i></span>';
+ // rounds
+ const cr=curRound();$('#ovRoundLbl').textContent=cr<0?'starts after the reference':'round '+(cr+1)+' of 4';
+ $('#ovRounds').htmlIfChanged=[0,1,2,3].map(r=>{const R=S.rounds[r];const v=verified(r);const c=R?roundBest(r):null;
+  return '<button class="rd'+(!R?' pending':'')+(r===cr&&!v&&R?' cur':'')+'" '+(v?'data-go="chip" data-q="c='+r+'.'+R.best+'"':'data-go="space"')+'><span class="rn">R'+(r+1)+'</span><span class="ch">'+(R?esc(R.fams[R.win]):'Not started')+(R&&R.steerNote?'<br><span class="tag" style="background:var(--teal-50);color:var(--teal-600);margin-top:3px">redirected</span>':'')+'</span><span class="g">'+(v?fmt(c.g):R?'<span class="muted">…</span>':'')+(v?'<small>'+fmt1(c.s)+'%</small>':'')+'</span></button>'}).join('');
+ drawCurve($('#miniCurve'),true);
+ renderFeed()}
+$('#miniCurve').addEventListener('click',()=>go('space'));
+$('#ovDie').addEventListener('click',()=>{const pv=bestNow()?null:provisional();S.sel=pv?{r:pv.r,i:pv.i}:null;go('chip')});
+$('#ovDie').addEventListener('keydown',e=>{if(e.key==='Enter'){S.sel=null;go('chip')}});
+
+/* ============ curve ============ */
+const RCOL=['#c3d4f6','#93b3ef','#5b8def','#2563eb'];
+let curvePts=[];
+function curveGeom(w,h,mini){const d=D();const pad=mini?{l:30,r:8,t:10,b:20}:{l:52,r:20,t:18,b:40};
+ const lx0=Math.log10(d.xMin),lx1=Math.log10(d.xMax);const y0=d.yMin,y1=d.cap+1.4;
+ return {pad,X:g=>pad.l+(Math.log10(g)-lx0)/(lx1-lx0)*(w-pad.l-pad.r),Y:s=>pad.t+(1-(s-y0)/(y1-y0))*(h-pad.t-pad.b),lx0,lx1,y0,y1}}
+function drawCurve(cv,mini){const {c,w,h}=fitCanvas(cv);const d=D();const G=curveGeom(w,h,mini);c.clearRect(0,0,w,h);
+ c.font=(mini?'9px ':'10.5px ')+getComputedStyle(document.body).fontFamily;
+ // axes grid
+ c.strokeStyle='#efeff3';c.lineWidth=1;c.fillStyle='#8a8a99';c.textAlign='center';
+ const ticks=[100,200,500,1000,2000,5000,10000,20000,50000].filter(x=>x>=d.xMin&&x<=d.xMax);
+ for(const tk of ticks){const x=G.X(tk);c.beginPath();c.moveTo(x,G.pad.t);c.lineTo(x,h-G.pad.b);c.stroke();if(!mini||tk===1000||tk===10000||tk===500||tk===5000)c.fillText(tk>=1000?(tk/1000)+'k':tk,x,h-G.pad.b+(mini?12:15))}
+ c.textAlign='right';const ys=[];for(let y=Math.ceil(G.y0/5)*5;y<=G.y1;y+=mini?10:5)ys.push(y);
+ for(const y of ys){const yy=G.Y(y);c.beginPath();c.moveTo(G.pad.l,yy);c.lineTo(w-G.pad.r,yy);c.stroke();c.fillText(y+'%',G.pad.l-6,yy+3)}
+ if(!mini){c.textAlign='center';c.fillStyle='#6c6c85';c.fillText('Chip size, gates (log scale)',G.pad.l+(w-G.pad.l-G.pad.r)/2,h-8);c.save();c.translate(13,G.pad.t+(h-G.pad.t-G.pad.b)/2);c.rotate(-Math.PI/2);c.fillText(d.metric,0,0);c.restore()}
+ // pass region
+ const ly=G.Y(d.line);c.fillStyle='rgba(16,185,129,0.045)';c.fillRect(G.pad.l,G.pad.t,w-G.pad.l-G.pad.r,ly-G.pad.t);
+ // budget line
+ const bx=G.X(S.budget||d.budget);c.setLineDash([2,3]);c.strokeStyle='#b0b0be';c.beginPath();c.moveTo(bx,G.pad.t);c.lineTo(bx,h-G.pad.b);c.stroke();
+ if(!mini){c.fillStyle='#8a8a99';c.textAlign='left';c.fillText('gate budget '+fmt(S.budget||d.budget),bx+4,G.pad.t+10)}
+ // dots
+ curvePts=[];const all=[];
+ for(let r=0;r<ROUNDS;r++){const R=S.rounds[r];if(!R)continue;const n=trained(r);c.fillStyle=RCOL[r];c.globalAlpha=mini?.55:.6;const sz=mini?1.6:2.4;
+  for(let k=0;k<n;k++){const i=R.order[k];const x=G.X(R.g[i]),y=G.Y(R.s[i]);c.fillRect(x-sz/2,y-sz/2,sz,sz);if(!mini)curvePts.push([x,y,r,i]);all.push([R.g[i],R.s[i]])}}
+ c.globalAlpha=1;
+ // frontier
+ if(all.length){all.sort((a,b)=>a[0]-b[0]);let mx=-1;c.strokeStyle='#1a1a2e';c.lineWidth=mini?1:1.4;c.beginPath();let first=true;let lastY=0;
+  for(const [g,s] of all){if(s>mx){const x=G.X(g),y=G.Y(s);if(first){c.moveTo(x,y);first=false}else{c.lineTo(x,lastY);c.lineTo(x,y)}lastY=y;mx=s}}
+  c.lineTo(w-G.pad.r,lastY);c.stroke()}
+ // clinical line
+ c.setLineDash([5,4]);c.strokeStyle='#1a1a2e';c.lineWidth=1.2;c.beginPath();c.moveTo(G.pad.l,ly);c.lineTo(w-G.pad.r,ly);c.stroke();
+ if(S.steer.targetDelta!==0){const ty=G.Y(curTarget());c.strokeStyle='#0d9488';c.beginPath();c.moveTo(G.pad.l,ty);c.lineTo(w-G.pad.r,ty);c.stroke();if(!mini){c.setLineDash([]);c.fillStyle='#0d9488';c.textAlign='right';c.fillText('redirected target '+fmt1(curTarget())+'%',w-G.pad.r-4,ty+(S.steer.targetDelta<0?13:-5))}}
+ c.setLineDash([]);if(!mini){c.fillStyle='#1a1a2e';c.textAlign='right';c.fillText('clinical line '+d.line+'%',w-G.pad.r-4,ly-5)}
+ // round bests
+ for(let r=0;r<ROUNDS;r++){if(!verified(r))continue;const b=roundBest(r);const x=G.X(b.g),y=G.Y(b.s);c.strokeStyle='#c2560c';c.lineWidth=1;c.beginPath();c.arc(x,y,mini?2.5:4,0,7);c.stroke()}
+ const b=bestNow();if(b){const x=G.X(b.g),y=G.Y(b.s);c.fillStyle='#fb923c';c.strokeStyle='#fff';c.lineWidth=2;c.beginPath();c.arc(x,y,mini?4.5:7,0,7);c.fill();c.stroke();
+  if(!mini){c.fillStyle='#c2560c';c.textAlign='left';c.font='600 11.5px '+getComputedStyle(document.body).fontFamily;c.fillText('best '+b.id+', '+fmt(b.g)+' gates',x+11,y+18)}}
+ if(S.sel&&!mini&&S.rounds[S.sel.r]){const sc=cand(S.sel.r,S.sel.i);const x=G.X(sc.g),y=G.Y(sc.s);c.strokeStyle='#1a1a2e';c.lineWidth=1.6;c.beginPath();c.arc(x,y,8,0,7);c.stroke()}
+ if(!all.length){c.fillStyle='#8a8a99';c.textAlign='center';c.font=(mini?'11px ':'13px ')+getComputedStyle(document.body).fontFamily;c.fillText(mini?'Dots appear as round 1 trains':'Every candidate becomes a dot here as round 1 trains',w/2,h/2)}}
+function nearest(e){const cv=$('#curve');const r=cv.getBoundingClientRect();const x=e.clientX-r.left,y=e.clientY-r.top;let best=null,bd=100;for(const p of curvePts){const dd=(p[0]-x)**2+(p[1]-y)**2;if(dd<bd){bd=dd;best=p}}return best}
+$('#curve').addEventListener('mousemove',e=>{const p=nearest(e);const T=$('#curveTip');if(!p){T.classList.add('hidden');return}const c=cand(p[2],p[3]);T.classList.remove('hidden');T.style.left=p[0]+'px';T.style.top=p[1]+'px';T.textContent=c.id+'  '+fmt(c.g)+' gates  '+fmt1(c.s)+'%  click to open'});
+$('#curve').addEventListener('mouseleave',()=>$('#curveTip').classList.add('hidden'));
+$('#curve').addEventListener('click',e=>{const p=nearest(e);if(!p)return;S.sel={r:p[2],i:p[3]};go('chip','c='+p[2]+'.'+p[3])});
+
+/* ============ design space ============ */
+function renderSpace(){const d=D();const cr=curRound();
+ $('#dsSub').textContent=fmt(evaluated())+' candidates trained so far, every one a dot. '+d.metric+' on tuning patients against compiled size.';
+ $('#dsLegend').htmlIfChanged=[0,1,2,3].map(r=>'<span><i class="dot" style="background:'+RCOL[r]+'"></i>round '+(r+1)+'</span>').join('')+'<span><i class="dot" style="background:var(--orange)"></i>current best</span><span><i style="width:14px;border-top:1.5px solid var(--ink-900)"></i>frontier</span><span><i style="width:14px;border-top:1.5px dashed var(--ink-900)"></i>clinical line</span>';
+ drawCurve($('#curve'),false);
+ // table
+ const rows=[];for(let r=0;r<ROUNDS;r++){const R=S.rounds[r];if(!R)continue;const k=Math.floor(NCOMP*prog(RS(r,'compile'),S.t));for(let j=0;j<k;j++)rows.push(cand(r,R.compiled[j]))}
+ rows.sort((a,b)=>(b.s>=S.rounds[b.r].target)-(a.s>=S.rounds[a.r].target)||a.g-b.g);
+ const b=bestNow();const sk=S.sel?S.sel.r+'.'+S.sel.i:'';
+ $('#candTbl').htmlIfChanged='<thead><tr><th>Candidate</th><th>Round</th><th>Family</th><th class="r">Gates</th><th class="r">Longest path</th><th class="r">'+esc(d.ml)+'</th><th>Checked</th></tr></thead><tbody>'+(rows.length?rows.slice(0,40).map(c=>'<tr data-c="'+c.r+'.'+c.i+'" class="'+(b&&b.id===c.id?'best':'')+(sk===c.r+'.'+c.i?' sel':'')+'"><td class="mono">'+c.id+(b&&b.id===c.id?' <span class="tag best">best</span>':'')+'</td><td>R'+(c.r+1)+'</td><td style="max-width:260px;overflow:hidden;text-overflow:ellipsis">'+esc(c.famName)+'</td><td class="r mono">'+fmt(c.g)+'</td><td class="r mono">'+c.depth+'</td><td class="r mono">'+fmt1(c.s)+'%</td><td>'+(c.isRoundBest&&verified(c.r)?'<span class="tag pass">bit for bit</span>':c.s>=S.rounds[c.r].target?'<span class="tag info">passes line</span>':'<span class="tag fail">below line</span>')+'</td></tr>').join(''):'<tr><td colspan="7" class="muted" style="padding:14px 8px;cursor:default">The first 32 netlists arrive when round 1 compiles.</td></tr>')+'</tbody>';
+ // selected card
+ const sc=S.sel&&S.rounds[S.sel.r]?cand(S.sel.r,S.sel.i):b;
+ const sel=$('#selCard');
+ if(!sc){sel.htmlIfChanged='<div class="panel-h"><h3>Selected candidate</h3></div><p class="empty-note">Click any dot on the curve to inspect that candidate. The current best appears here once round 1 is verified.</p>'}
+ else{const isB=b&&sc.id===b.id;sel.htmlIfChanged='<div class="panel-h"><h3>'+(isB?'Current best':'Selected')+' <span class="mono" style="font-weight:500">'+sc.id+'</span></h3><button class="linkbtn" data-go="chip" data-q="c='+sc.r+'.'+sc.i+'">Open in Chip view</button></div><div class="chipthumb" id="selThumb"></div><dl class="kv"><dt>Gates</dt><dd>'+fmt(sc.g)+(sc.compiled?'':' (estimate)')+'</dd><dt>'+esc(d.ml)+'</dt><dd>'+fmt1(sc.s)+'%</dd><dt>Longest path</dt><dd>'+sc.depth+' gates</dd><dt>Family</dt><dd style="font-family:var(--sans)">'+esc(sc.famName)+'</dd><dt>Status</dt><dd style="font-family:var(--sans)">'+(sc.isRoundBest&&verified(sc.r)?'verified bit for bit':sc.compiled?'compiled':'trained only')+'</dd></dl>';
+  drawDie($('#selThumb'),sc,{compact:true})}
+ // batch
+ const br=cr<0?-1:cr;$('#batchLbl').textContent=br<0?'waiting for round 1':'round '+(br+1)+', 64 by 64';
+ drawBatch(br);
+ const R=br>=0?S.rounds[br]:null;const n=br>=0?trained(br):0;const tseg=br>=0?RS(br,'train'):null;
+ const rate=NB/((8*REAL)/60);
+ $('#batchStats').htmlIfChanged='<div><b>'+fmt(n)+'</b>trained this round</div><div><b>'+(tseg&&S.t>=tseg.t0&&S.t<tseg.t1?fmt(rate):'0')+'</b>candidates per min</div><div><b>'+(R&&n>=NB?fmt(R.nPass):n?'…':'0')+'</b>clear the line</div>'}
+$('#candTbl').addEventListener('click',e=>{const tr=e.target.closest('[data-c]');if(!tr)return;const [r,i]=tr.dataset.c.split('.').map(Number);S.sel={r,i};renderAll(true)});
+function drawBatch(r){const cv=$('#batchCv');const {c,w,h}=fitCanvas(cv);c.clearRect(0,0,w,h);const n=64,cs=w/n;
+ const R=r>=0?S.rounds[r]:null;const tN=r>=0?trained(r):0;const comp=R?new Set(R.compiled):null;const cN=R?Math.floor(NCOMP*prog(RS(r,'compile'),S.t)):0;const compShown=R?new Set(R.compiled.slice(0,cN)):null;
+ for(let k=0;k<NB;k++){const x=(k%n)*cs,y=Math.floor(k/n)*cs;let col='#ececf1';
+  if(R){if(k<tN){const i=R.order[k];const s=R.s[i];col=s>=R.target?'#2563eb':s>=R.target-4?'#9fbdf5':'#d4d4dc';if(compShown.has(i))col='#fb923c'}
+   else if(k<tN+200&&S.t<RS(r,'train').t1&&S.t>=RS(r,'train').t0){col='rgba(59,130,246,'+(0.12+0.25*Math.abs(Math.sin(S.t*6+k)))+')'}}
+  c.fillStyle=col;c.fillRect(x+.5,y+.5,cs-1,cs-1)}}
+
+/* ============ chip view ============ */
+function renderChip(){const d=D();const b=bestNow();let A=S.sel&&S.rounds[S.sel.r]?cand(S.sel.r,S.sel.i):(b||provisional());
+ const isBest=A&&b&&A.id===b.id;
+ $('#cvTitle').textContent=A?(isBest?'Current best chip':'Candidate')+' '+A.id:'Chip';
+ $('#cvSub').textContent=A?fmt(A.g)+' gates in '+A.L+' logic layers, longest path '+A.depth+' gates. '+esc(A.famName)+'.':'No circuit yet: the first one is drawn when round 1 passes verification.';
+ $('#cvNotice').htmlIfChanged=A&&!isBest?'<div class="notice">'+(A.compiled?'Compiled, not the current best.':'Trained only, gate count is the trainer’s estimate.')+' <button class="linkbtn" id="backBest">Show current best</button></div>':'';
+ const bb=$('#backBest');if(bb)bb.onclick=()=>{S.sel=null;go('chip')};
+ drawDie($('#cvDie'),A,{anim:isBest&&S.animId===candKey(A),cap2:'<span><i></i>longest path, '+(A?A.depth:0)+' gates</span>',emptyText:'The first circuit is drawn when round 1 passes verification.'});
+ S._cvLast=candKey(A);
+ // side
+ if(A){const mix=gateMix(A);const area=A.g*12.5/1e6;const pp=patients(A);
+  $('#cvSide').htmlIfChanged='<div><div class="lbl">Gate count</div><div class="gc"><span class="n" style="font-size:44px">'+fmt(A.g)+'</span><span class="u">gates</span></div></div>'
+  +'<dl class="kv"><dt>Longest path</dt><dd>'+A.depth+' gates</dd><dt>Logic layers</dt><dd>'+A.L+'</dd><dt>Inputs</dt><dd>'+d.inputs.length+' x '+d.inBits+' bit</dd><dt>Output</dt><dd>'+d.outPins.length+' pin'+(d.outPins.length>1?'s':'')+'</dd><dt>'+esc(d.ml)+'</dt><dd>'+fmt1(A.s)+'%</dd><dt>Area at 130 nm</dt><dd>~'+area.toFixed(3)+' mm²</dd><dt>Gate budget</dt><dd>'+(A.g<=(S.budget||d.budget)?'inside':'over')+' ('+fmt(S.budget||d.budget)+')</dd></dl>'
+  +'<div><div class="lbl">Gate types</div><div class="mixbar">'+mix.map(m=>'<i style="width:'+(m.v/A.g*100)+'%;background:'+m.col+'"></i>').join('')+'</div><div class="legend" style="font-size:11px;gap:8px">'+mix.map(m=>'<span><i class="dot" style="background:'+m.col+'"></i>'+m.n+' '+fmt(m.v)+'</span>').join('')+'</div></div>'
+  +'<div class="hline" style="margin:4px 0"></div><div><div class="lbl" style="margin-bottom:4px">Where the gates go</div>'+layerBars(A)+'</div>'
+  +'<div class="hline" style="margin:4px 0"></div><div class="panel-h"><h3 style="font-size:12.5px">Check</h3><button class="linkbtn" data-go="signal">Signal and check</button></div><p style="margin:0;font-size:12.5px;color:var(--ink-700)">'+(A.isRoundBest&&verified(A.r)?fmt(d.verifyN)+' of '+fmt(d.verifyN)+' '+d.vUnit+' identical to the model. '+pp.filter(p=>p.sens>=d.sensLine).length+' of '+d.patients+' patients at or above '+d.sensLine+'% sensitivity.':'Not verified. Only each round’s best goes through the bit-for-bit check.')+'</p>'}
+ else $('#cvSide').htmlIfChanged='<p class="empty-note">Gate count, longest path, gate types and the per-layer budget appear here with the first verified circuit.</p>';
+ // compare
+ const bests=[];for(let r=0;r<ROUNDS;r++)if(verified(r))bests.push(roundBest(r));
+ const opts=bests.filter(c=>!A||c.id!==A.id);
+ let B=S.cmpB?opts.find(c=>c.id===S.cmpB):null;if(!B)B=opts.length?opts[opts.length-1]:null;
+ const sel=$('#cmpBSel');const oh=opts.length?opts.map(c=>'<option value="'+c.id+'"'+(B&&c.id===B.id?' selected':'')+'>Round '+(c.r+1)+' best, '+c.id+'</option>').join(''):'<option>No other verified chip yet</option>';
+ if(sel.dataset.h!==oh){sel.innerHTML=oh;sel.dataset.h=oh}
+ $('#cmpALbl').textContent=A?A.id+', '+fmt(A.g)+' gates':'';
+ drawDie($('#cmpA'),A,{compact:true,emptyText:'Nothing to compare yet'});drawDie($('#cmpB'),B,{compact:true,emptyText:'A second verified chip appears after round 2'});
+ if(A&&B){const row=(k,a,b,lowGood,f)=>{const dd=a-b;const cls=dd===0?'':((dd<0)===lowGood?'good':'bad');return '<div class="row"><span>'+k+'</span><b class="'+cls+'">'+(dd>0?'+':dd<0?'−':'')+f(Math.abs(dd))+'</b></div>'};
+  $('#cmpMid').htmlIfChanged='<div class="lbl">A against B</div>'+row('Gates',A.g,B.g,true,fmt)+row('Longest path',A.depth,B.depth,true,x=>x)+row(d.ml,A.s,B.s,false,x=>fmt1(x)+'%')+row('Layers',A.L,B.L,true,x=>x)+'<div class="lbl" style="margin-top:6px">B changed: '+esc(B.famName.toLowerCase())+'</div>'}
+ else $('#cmpMid').htmlIfChanged='<div class="lbl">Pick two verified chips to compare gates, path and '+esc(d.ms)+'.</div>'}
+$('#cmpBSel').addEventListener('change',e=>{S.cmpB=e.target.value;renderAll(true)});
+function layerBars(A){const ws=[];for(let j=0;j<A.L;j++)ws.push(1.3-.75*j/Math.max(1,A.L-1));const s=ws.reduce((a,b)=>a+b,0);const mx=Math.max(...ws);
+ return ws.map((w,j)=>'<div class="sbar" style="grid-template-columns:28px 1fr 52px;padding:1px 0"><span class="mono" style="font-size:10.5px;color:var(--ink-500)">L'+(j+1)+'</span><span class="t" style="height:8px"><i style="width:'+(w/mx*100)+'%;background:#93b3ef"></i></span><span class="c">'+fmt(w/s*A.g)+'</span></div>').join('')}
+$('#cvDie').addEventListener('click',()=>{});
+
+/* ============ signal ============ */
+function seizureAt(tau){for(let k=0;k<40;k++){const s=26+k*58+12*Math.sin(k*1.7);const dur=16+(k%3)*6;if(tau>=s&&tau<s+dur)return {k,p:(tau-s)/dur};if(s>tau)break}return null}
+function eegVal(ch,tau){let v=14*Math.sin(2*Math.PI*1.1*tau+ch)+8*Math.sin(2*Math.PI*3.7*tau+ch*1.7)+5*Math.sin(2*Math.PI*8.3*tau+ch*.7)+(hash01(ch,Math.floor(tau*64))-.5)*10;
+ const sz=seizureAt(tau);if(sz&&(ch+sz.k)%8<4){const f=2.4+sz.p*.8;const ph=(tau*f)%1;const amp=55*Math.sin(Math.PI*sz.p)+10;v+=amp*(ph<.12?(1-ph/.12)*1.3:-.25)}return v}
+function rso2(tau){let v=68+5*Math.sin(tau/23)+2*Math.sin(tau/7.3);for(let k=0;k<20;k++){const s=40+k*95;const dur=28;if(tau>s&&tau<s+dur+20){const p=(tau-s)/dur;v-=(k%2?14:19)*(p<1?Math.sin(Math.PI*p/2):Math.max(0,1-(p-1)*1.4))}}return v+(hash01(9,Math.floor(tau*2))-.5)*.8}
+function drawStrip(){const cv=$('#strip');const {c,w,h}=fitCanvas(cv);c.clearRect(0,0,w,h);const d=D();const b=bestNow();
+ const font=getComputedStyle(document.body).fontFamily;c.font='10.5px '+font;
+ const left=108,right=12;const pw=w-left-right;
+ if(d.id==='eeg'){const span=30;const tau1=S.t*5+40,tau0=tau1-span;const rowsH=h-86;const lane=rowsH/8;
+  // window shading for seizures (reference)
+  for(let x=0;x<pw;x+=2){const tau=tau0+x/pw*span;if(seizureAt(tau)){c.fillStyle='rgba(239,68,68,0.06)';c.fillRect(left+x,6,2,rowsH)}}
+  for(let ch=0;ch<8;ch++){const y0=6+lane*(ch+.5);c.fillStyle='#6c6c85';c.textAlign='left';c.fillText(d.inputs[ch],10,y0+3);
+   c.strokeStyle='#3a3a4a';c.lineWidth=.9;c.beginPath();for(let x=0;x<=pw;x+=1){const tau=tau0+x/pw*span;const v=eegVal(ch,tau);const y=y0-v*lane/160;x?c.lineTo(left+x,y):c.moveTo(left+x,y)}c.stroke()}
+  // decision rows
+  const winS=4;const rows=[['Clinician',0],['Model',1],['Circuit',2]];const ry=rowsH+14;
+  for(const [nm,k] of rows){const y=ry+k*20;c.fillStyle='#4a4a5a';c.textAlign='left';c.fillText(nm,10,y+10);c.fillStyle='#f3f3f6';c.fillRect(left,y,pw,14);
+   for(let wi=Math.floor(tau0/winS);wi*winS<tau1;wi++){const ws=wi*winS;let ref=0;for(let q=0;q<4;q++)if(seizureAt(ws+q+.5))ref++;const refF=ref>=2;
+    let flag=refF;if(k>0){if(!b)flag=false;else{const err=hash01(wi,b.seed&0xffff);if(refF&&err>b.s/100+.02)flag=false;if(!refF&&err<.012)flag=true}}
+    const x0=left+(ws-tau0)/span*pw,x1=left+(ws+winS-tau0)/span*pw;const xa=Math.max(left,x0),xb=Math.min(left+pw,x1);if(xb<=xa)continue;
+    if(flag){c.fillStyle=k===0?'#ef4444':k===1?'#93b3ef':'#2563eb';c.fillRect(xa+1,y+2,xb-xa-2,10)}
+    c.strokeStyle='#fff';c.beginPath();c.moveTo(x1,y);c.lineTo(x1,y+14);c.stroke()}}
+  c.fillStyle='#8a8a99';c.textAlign='right';c.fillText((b?'chip '+b.id:'no chip yet')+', held-out patient P03, t = '+fmt(tau1)+' s',w-right,h-6)}
+ else{const span=160;const tau1=S.t*12+60,tau0=tau1-span;const topH=(h-90)*.48;const lane=topH/6;
+  for(let ch=0;ch<6;ch++){const y0=6+lane*(ch+.5);c.fillStyle='#6c6c85';c.textAlign='left';c.fillText(d.inputs[ch],10,y0+3);c.strokeStyle=['#7c3aed','#a78bfa','#2563eb','#60a5fa','#c2560c','#fb923c'][ch];c.lineWidth=1;c.beginPath();
+   for(let x=0;x<=pw;x+=1){const tau=tau0+x/pw*span;const o=rso2(tau);const wl=[730,730,810,810,850,850][ch];const far=ch%2;
+    const v=(wl===730?(70-o)*.9:wl===850?(o-70)*.6:(o-70)*.05)+Math.sin(2*Math.PI*2.3*tau+ch)*1.2*(far?.6:1)+Math.sin(tau/4+ch)*1.5;const y=y0-v*lane/13;x?c.lineTo(left+x,y):c.moveTo(left+x,y)}c.stroke()}
+  const oy0=6+topH+10,oh=h-90-topH;const Y=v=>oy0+(1-(v-35)/45)*oh;
+  c.fillStyle='#6c6c85';c.fillText('rSO2 (%)',10,oy0+12);c.strokeStyle='#efeff3';for(const v of [40,55,70]){c.beginPath();c.moveTo(left,Y(v));c.lineTo(left+pw,Y(v));c.stroke();c.fillStyle='#8a8a99';c.textAlign='right';c.fillText(v,left-6,Y(v)+3)}
+  c.setLineDash([4,3]);c.strokeStyle='#ef4444';c.beginPath();c.moveTo(left,Y(55));c.lineTo(left+pw,Y(55));c.stroke();c.setLineDash([]);
+  c.strokeStyle='#b0b0be';c.lineWidth=2.5;c.beginPath();for(let x=0;x<=pw;x+=2){const v=rso2(tau0+x/pw*span);x?c.lineTo(left+x,Y(v)):c.moveTo(left+x,Y(v))}c.stroke();
+  if(b){c.strokeStyle='#2563eb';c.lineWidth=1.3;c.beginPath();let py=null;for(let x=0;x<=pw;x+=1){const tau=tau0+x/pw*span;const sec=Math.floor(tau);const err=(hash01(sec,b.seed&0xffff)-.5)*2*(3.2*(1-(b.s-90)/12));const v=Math.round(rso2(sec)+err);const y=Y(v);if(py===null)c.moveTo(left+x,y);else{c.lineTo(left+x,py);c.lineTo(left+x,y)}py=y}c.stroke()}
+  const rows=[['Reference alarm',0],['Circuit alarm',1]];const ry=h-76+14;
+  for(const [nm,k] of rows){const y=ry+k*20;c.fillStyle='#4a4a5a';c.textAlign='left';c.fillText(nm,10,y+10);c.fillStyle='#f3f3f6';c.fillRect(left,y,pw,14);
+   for(let x=0;x<pw;x+=2){const tau=tau0+x/pw*span;const sec=Math.floor(tau);const ref=rso2(sec)<55;let fl=ref;if(k===1){if(!b)fl=false;else{const err=(hash01(sec,b.seed&0xffff)-.5)*2*(3.2*(1-(b.s-90)/12));fl=Math.round(rso2(sec)+err)<55}}
+    if(fl){c.fillStyle=k===0?'#ef4444':'#2563eb';c.fillRect(left+x,y+2,2,10)}}}
+  c.fillStyle='#8a8a99';c.textAlign='right';c.fillText((b?'chip '+b.id:'no chip yet')+', held-out patient P03, t = '+fmt(tau1)+' s',w-right,h-6)}}
+function renderSignal(){const d=D();const b=bestNow();
+ $('#sgSub').textContent=d.signal+'. '+(b?'Decisions come from '+b.id+', the current best circuit.':'Decision rows fill in once round 1 has a verified circuit.');
+ $('#sgLegend').htmlIfChanged=d.id==='eeg'?'<span><i class="dot" style="background:#ef4444"></i>seizure marked by clinician</span><span><i class="dot" style="background:#93b3ef"></i>model</span><span><i class="dot" style="background:#2563eb"></i>circuit</span>':'<span><i style="width:14px;border-top:2.5px solid #b0b0be"></i>reference oximeter</span><span><i style="width:14px;border-top:1.5px solid #2563eb"></i>circuit output</span><span><i style="width:14px;border-top:1.5px dashed #ef4444"></i>alarm at 55%</span>';
+ drawStrip();
+ // bit for bit
+ let vr=-1;for(let r=0;r<ROUNDS;r++){if(S.rounds[r]&&S.t>=RS(r,'verify').t0)vr=r}
+ let checked=0,label='';
+ if(vr>=0){const s=RS(vr,'verify');checked=Math.floor(d.verifyN*clamp((S.t-s.t0)/2.8,0,1));const c=roundBest(vr);label=checked<d.verifyN?'checking '+c.id+', round '+(vr+1):c.id+', round '+(vr+1)}
+ $('#bitLbl').textContent=label||'no check yet';$('#bitN').textContent=fmt(checked);$('#bitOf').textContent='of '+fmt(d.verifyN)+' '+d.vUnit+' identical';
+ $('#bitNote').textContent=vr<0?'The first bit-for-bit check runs at the end of round 1.':'Each cell is one unseen '+d.vUnit.replace(/s$/,'')+'. The circuit output and the model output are compared bit by bit; 0 differ.'+(vr===0&&checked<d.verifyN&&checked>d.verifyN*.4?' Two differences found earlier in this round were traced to rounding and recompiled.':'');
+ drawBits(checked);
+ const pp=b?patients(b):[];
+ $('#ppLbl').textContent=b?'chip '+b.id+', lines at '+d.sensLine+'% / '+d.specLine+'%':'';
+ $('#ppTbl').htmlIfChanged='<thead><tr><th>Patient</th><th class="r">'+(d.id==='eeg'?'Windows':'Readings')+'</th><th class="r">'+(d.id==='eeg'?'Seizures found':'Low episodes found')+'</th><th>Sensitivity</th><th class="r">Specificity</th><th>Line</th></tr></thead><tbody>'+(pp.length?pp.map(p=>{const ok=p.sens>=d.sensLine&&p.spec>=d.specLine;return '<tr style="cursor:default"><td class="mono">'+p.id+'</td><td class="r mono">'+fmt(p.n)+'</td><td class="r mono">'+p.det+' of '+p.ev+'</td><td><span style="display:inline-flex;gap:8px;align-items:center"><span class="pbar"><i style="width:'+p.sens+'%;background:'+(p.sens>=d.sensLine?'#3b82f6':'#f59e0b')+'"></i><b style="left:'+d.sensLine+'%"></b></span><span class="mono">'+fmt1(p.sens)+'%</span></span></td><td class="r mono">'+fmt1(p.spec)+'%</td><td>'+(ok?'<span class="tag pass">clears</span>':'<span class="tag warn">below</span>')+'</td></tr>'}).join(''):'<tr><td colspan="6" class="muted" style="padding:14px 8px">Per-patient scores appear with the first verified chip.</td></tr>')+'</tbody>'}
+function drawBits(n){const cv=$('#bitCv');const {c,w,h}=fitCanvas(cv);c.clearRect(0,0,w,h);const N=D().verifyN;const cols=Math.ceil(Math.sqrt(N*w/h));const rows=Math.ceil(N/cols);const cw=w/cols,ch=h/rows;
+ for(let k=0;k<N;k++){const x=(k%cols)*cw,y=Math.floor(k/cols)*ch;c.fillStyle=k<n?'#10b981':'#e3e3ea';c.fillRect(x,y,Math.max(1,cw-.6),Math.max(1,ch-.6))}}
+
+/* ============ agents ============ */
+function agentActive(id){const s=segAt(S.t);if(!s)return false;const m={spec:['arch','rev'],ref:['train'],propose:['arch','rev'],train:['train'],compile:['comp'],verify:['ver','rev'],report:['rev']};return m[s.stage].includes(id)}
+function renderAgents(){const d=D();const list=allLogs().filter(x=>x.t<=S.t&&!x.div);
+ $('#agSub').textContent='Five agents on '+S.backend+'. Each card shows the agent’s latest output; the full stream is the live log on the Overview.';
+ $('#agRow').htmlIfChanged=AGENTS.map(a=>{const mine=list.filter(x=>x.agent===a.id).slice(-4).reverse();const on=agentActive(a.id)&&S.t<TOTAL;
+  return '<div class="agc'+(on?' on':'')+'"><div class="h"><span class="av" style="background:'+a.col+'">'+a.ini+'</span><b>'+a.name+'<span class="m">'+S.models[a.id][0]+', '+S.models[a.id][1]+' effort</span></b><span class="s">'+(on?(S.playing?'<span class="tag info"><span class="spin s"></span>working</span>':'<span class="tag" style="background:var(--ink-100)">paused</span>'):'<span class="tag" style="background:var(--ink-100);color:var(--ink-500)">idle</span>')+'</span></div><div class="b">'+(mine.length?mine.map(m=>'<p><span>'+runClock(m.t)+'</span>'+esc(m.text)+'</p>').join(''):'<p class="muted">'+a.role+'. Nothing yet.</p>')+'</div></div>'}).join('');
+ const cr=curRound();const seg=segAt(S.t);$('#planLbl').textContent=cr<0?'before round 1':'round '+(cr+1)+' of 4';
+ const items=cr<0?[['Write the spec from the prompt','spec'],['Train the float reference','ref'],['Plan round 1','propose']]:[['Propose 4 families, 1,024 each','propose'],['Train 4,096 candidates as one batch','train'],['Compile the 32 smallest that clear the line','compile'],['Verify the best bit for bit on '+d.patients+' patients','verify'],['Decide what to keep for the next round','verify']];
+ $('#plan').htmlIfChanged=items.map(([t,st],ix)=>{const sg=cr<0?RS(-1,st)||SCHED.find(x=>x.stage===st):RS(cr,st);const done=S.t>=sg.t1;const run=S.t>=sg.t0&&!done;return '<li><span class="chk '+(done?'on':run?'run':'')+'">'+(done?'<svg width="9" height="9" viewBox="0 0 10 10"><path d="M2 5l2 2 4-4" stroke="#fff" stroke-width="1.6" fill="none"/></svg>':run?'<span class="spin s" style="width:9px;height:9px"></span>':'')+'</span><span>'+t+(st==='propose'&&cr>=0&&S.rounds[cr]&&S.rounds[cr].steerNote&&ix===0?' <span class="tag" style="background:var(--teal-50);color:var(--teal-600)">uses your redirect</span>':'')+'</span></li>'}).join('');
+ const decs=[];for(let r=0;r<ROUNDS;r++){if(!verified(r))continue;const R=S.rounds[r];const c=roundBest(r);const pc=r>0&&verified(r-1)?roundBest(r-1):null;decs.push('<div class="dec"><b>Round '+(r+1)+': keep '+c.id+', '+fmt(c.g)+' gates</b><p>'+(pc?(c.g<pc.g?fmt(pc.g-c.g)+' fewer gates than round '+r+'. ':'No gain on round '+r+'. '):'First circuit that clears the line. ')+'Winning change: '+esc(R.fams[R.win].toLowerCase())+'. '+fmt(R.nPass)+' of 4,096 cleared '+fmt1(R.target)+'%.</p></div>')}
+ $('#declog').htmlIfChanged=decs.length?decs.reverse().join(''):'<p class="empty-note">The reviewer writes one decision per round, starting when round 1 is verified.</p>';
+ $('#steerLbl').textContent=S.steering.length?S.steering.length+' redirect'+(S.steering.length>1?'s':''):'';
+ $('#steerHist').htmlIfChanged=S.steering.length?S.steering.slice().reverse().map(s=>'<div><div class="lbl" style="margin-bottom:3px">'+runClock(s.t)+(s.from!==null&&s.reply?', applies from round '+(s.from+1):'')+'</div><div class="q">'+esc(s.text)+'</div><div class="a">'+(s.reply?esc(s.reply):'<span class="typing"><i></i><i></i><i></i></span>')+'</div></div>').join(''):'<p class="empty-note">No redirects yet. Pause the run and type an instruction in the strip at the bottom, for example “fewer gates, accept 2 points lower sensitivity”.</p>'}
+
+/* ============ cost ============ */
+function renderCost(){const d=D();const c=costAt(S.t);const tier=TIERS.find(t=>t.id===S.tier);const ev=evaluated();const cap=parseFloat($('#fCap').value)||25;
+ $('#coSub').textContent='Money, GPU time and candidates so far. Model spend is tokens; GPU spend is '+tier.name+' at $'+tier.price.toFixed(2)+' an hour.';
+ $('#kpis').htmlIfChanged=[['Spent',money(c.total),'of a '+money(cap)+' cap'],['GPU hours',c.gpuH.toFixed(2),money(c.gpu)+' on '+tier.name],['Model tokens',(c.tok/1e6).toFixed(2)+'M',money(c.llm)+' across 5 agents'],['Candidates evaluated',fmt(ev),'of '+fmt(NB*ROUNDS)+' planned'],['Per 1,000 candidates',ev?'$'+(c.total/ev*1000).toFixed(2):'–','all spend, per thousand trained']].map(k=>'<div class="kpi"><div class="k">'+k[0]+'</div><div class="v">'+k[1]+'</div><div class="s">'+k[2]+'</div></div>').join('');
+ // burn chart
+ const box=$('#burn');const W=Math.max(300,box.clientWidth),H=box.clientHeight||250;const pad={l:44,r:14,t:12,b:26};const full=costAt(TOTAL).total;const ymax=Math.max(cap*.5,full*1.25);
+ const X=t=>pad.l+t/TOTAL*(W-pad.l-pad.r),Y=v=>pad.t+(1-v/ymax)*(H-pad.t-pad.b);let p1='',p2='';
+ for(let t=0;t<=S.t+.01;t+=.5){const cc=costAt(Math.min(t,S.t));p1+=(t?'L':'M')+X(t).toFixed(1)+' '+Y(cc.total).toFixed(1);p2+=(t?'L':'M')+X(t).toFixed(1)+' '+Y(cc.llm).toFixed(1)}
+ let proj='';for(let t=S.t;t<=TOTAL+.01;t+=1){const cc=costAt(t);proj+=(t===S.t?'M':'L')+X(t).toFixed(1)+' '+Y(cc.total).toFixed(1)}
+ let grid='';for(let v=0;v<=ymax;v+=ymax>20?5:2){grid+='<line x1="'+pad.l+'" x2="'+(W-pad.r)+'" y1="'+Y(v)+'" y2="'+Y(v)+'" stroke="#efeff3"/><text x="'+(pad.l-6)+'" y="'+(Y(v)+3)+'" font-size="10" text-anchor="end" fill="#8a8a99">$'+v+'</text>'}
+ let rl='';for(let r=0;r<ROUNDS;r++){const x=X(RS(r,'propose').t0);rl+='<line x1="'+x+'" x2="'+x+'" y1="'+pad.t+'" y2="'+(H-pad.b)+'" stroke="#e8e8ec" stroke-dasharray="2 3"/><text x="'+(x+3)+'" y="'+(H-pad.b+14)+'" font-size="10" fill="#8a8a99">R'+(r+1)+'</text>'}
+ const capY=Y(cap);
+ box.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Spend over time">'+grid+rl+(cap<=ymax?'<line x1="'+pad.l+'" x2="'+(W-pad.r)+'" y1="'+capY+'" y2="'+capY+'" stroke="#ef4444" stroke-dasharray="5 4"/><text x="'+(W-pad.r)+'" y="'+(capY-5)+'" font-size="10" text-anchor="end" fill="#dc2626">spend cap '+money(cap)+'</text>':'')+'<path d="'+proj+'" fill="none" stroke="#b0b0be" stroke-dasharray="3 3"/><path d="'+p1+'" fill="none" stroke="#fb923c" stroke-width="2"/><path d="'+p2+'" fill="none" stroke="#3b82f6" stroke-width="2"/><text x="'+(X(S.t)+6)+'" y="'+(Y(c.total)-4)+'" font-size="11" fill="#c2560c" font-weight="600">'+money(c.total)+' total</text><text x="'+(W-pad.r)+'" y="'+(Y(full)+14)+'" font-size="10" fill="#8a8a99" text-anchor="end">projected '+money(full)+'</text></svg>';
+ const mx=Math.max(...STAGES.map(s=>costAt(TOTAL).by[s.id].llm+costAt(TOTAL).by[s.id].gpu));
+ $('#byStage').htmlIfChanged=STAGES.map(s=>{const v=c.by[s.id];return '<div class="sbar"><span><span class="dot" style="background:'+s.acc+';margin-right:6px"></span>'+s.name+'</span><span class="t"><i style="width:'+(v.llm/mx*100)+'%;background:#3b82f6"></i><i style="width:'+(v.gpu/mx*100)+'%;background:#fb923c"></i></span><span class="c">'+money(v.llm+v.gpu)+'</span></div>'}).join('')+'<p class="lbl" style="margin:10px 0 0">Propose and Report are model-heavy; Train is almost all GPU time. Redirects add a small planning cost to Propose.</p>';
+ const seg=segAt(S.t);const busy=seg&&RATES[seg.stage].gpu>0;
+ $('#computeCard').htmlIfChanged='<div class="panel-h"><h3>Compute</h3><span class="tag '+(busy?'info':'')+'" style="'+(busy?'':'background:var(--ink-100);color:var(--ink-500)')+'">'+(busy?'GPU busy':'GPU idle')+'</span></div><dl class="kv"><dt>Tier</dt><dd>'+tier.name+', '+tier.spec+'</dd><dt>Batch</dt><dd>4,096 candidates per round</dd><dt>Train time per round</dt><dd>'+Math.round(8*REAL/60)+' min</dd><dt>Throughput while training</dt><dd>'+fmt(NB/((8*REAL)/60))+' candidates/min</dd><dt>Compile and verify</dt><dd>CPU workers, 32 netlists</dd><dt>Run clock</dt><dd>'+runClock(S.t)+' of '+runClock(TOTAL)+'</dd></dl>';
+ $('#budgetCard').htmlIfChanged='<div class="panel-h"><h3>Spend cap</h3><span class="lbl">The reviewer wraps up early if the projection crosses it</span></div><div class="budget"><i style="width:'+clamp(c.total/cap*100,0,100)+'%"></i></div><div class="lbl">'+money(c.total)+' spent, '+money(cap-c.total)+' left. Projected finish at '+money(full)+', '+Math.round(full/cap*100)+'% of the cap.</div><div class="hline"></div><dl class="kv">'+AGENTS.map(a=>'<dt>'+a.name+'</dt><dd>'+S.models[a.id][0]+', '+S.models[a.id][1]+'</dd>').join('')+'</dl>'}
+
+/* ============ report ============ */
+function finalFor(device){const st={scaleMul:1,targetDelta:0,ver:0};let best=null;const save=S.rounds,sd=S.device;S.device=device;S.rounds=[];
+ for(let r=0;r<ROUNDS;r++)S.rounds[r]=genRound(r,device,st);for(let r=0;r<ROUNDS;r++){const c=cand(r,S.rounds[r].best);if(!best||c.g<best.g)best=c}S.rounds=save;S.device=sd;return best}
+const FINALCACHE={};
+function renderReport(){const d=D();const b=bestNow();const done=S.t>=TOTAL;const P=$('#paper');
+ if(!b){P.innerHTML='<div class="meta">Datasheet</div><h1>'+esc(d.title)+'</h1><p>The datasheet is written at the end of the run. It fills in here as soon as round 1 produces a verified chip, and updates whenever a smaller one is found.</p>';return}
+ const pp=patients(b);const below=pp.filter(p=>p.sens<d.sensLine||p.spec<d.specLine);const c=costAt(S.t);const tgt=curTarget();
+ const other=d.id==='eeg'?'nirs':'eeg';if(!FINALCACHE[other])FINALCACHE[other]=finalFor(other);const ob=FINALCACHE[other];
+ const key=b.id+done+S.steering.length+below.length;
+ if(P.dataset.key===key){return}P.dataset.key=key;
+ P.innerHTML=(done?'':'<div class="draft">Draft. The run is still going; these numbers describe the current best and will change if a smaller chip clears the line.</div>')
+ +'<div class="meta">Datasheet for the '+esc(d.name)+'</div><h1>'+esc(d.title)+', '+b.id+'</h1>'
+ +'<p>'+fmt(b.g)+' logic gates with the weights wired in, '+b.L+' layers deep, longest path '+b.depth+' gates. It takes '+d.inputs.length+' inputs of '+d.inBits+' bits ('+esc(d.signal)+') and returns one '+esc(d.output.charAt(0).toLowerCase()+d.output.slice(1))+'. On '+d.patients+' held-out patients it reached '+fmt1(b.s)+'% '+esc(d.metric.toLowerCase())+(b.s>=d.line?', above the '+d.line+'% clinical line':', below the '+d.line+'% clinical line, as accepted by redirect')+', and the circuit matched its model on '+fmt(d.verifyN)+' of '+fmt(d.verifyN)+' '+d.vUnit+'.</p>'
+ +'<div class="ds-grid"><div class="diewrap" id="rpDie"></div><table class="sheet"><tr><td>Gates</td><td>'+fmt(b.g)+'</td></tr><tr><td>Longest path</td><td>'+b.depth+' gates</td></tr><tr><td>'+esc(d.metric)+'</td><td>'+fmt1(b.s)+'%</td></tr><tr><td>Bit-for-bit check</td><td>'+fmt(d.verifyN)+' / '+fmt(d.verifyN)+'</td></tr><tr><td>Patients clearing '+d.sensLine+'% / '+d.specLine+'%</td><td>'+(d.patients-below.length)+' of '+d.patients+'</td></tr><tr><td>Reference model</td><td>'+d.reference.score+'%, '+d.reference.ops+'</td></tr><tr><td>Candidates trained</td><td>'+fmt(evaluated())+'</td></tr><tr><td>Run cost</td><td>'+money(c.total)+', '+c.gpuH.toFixed(2)+' GPU h</td></tr></table></div>'
+ +'<h2>How it got here</h2><p>'+[0,1,2,3].filter(r=>verified(r)).map(r=>{const rb=roundBest(r);return 'Round '+(r+1)+' kept '+rb.id+' at '+fmt(rb.g)+' gates ('+S.rounds[r].fams[S.rounds[r].win].toLowerCase()+').'}).join(' ')+(S.steering.length?' The run was redirected '+S.steering.length+' time'+(S.steering.length>1?'s':'')+': “'+esc(S.steering[0].text)+'”.':'')+'</p>'
+ +'<h2>Limits</h2><ul class="limits"><li>All held-out patients come from the same recording set as the training patients; a second site has not been tried.</li><li>'+(below.length?below.map(p=>p.id).join(', ')+(below.length>1?' fall':' falls')+' below the per-patient line ('+below.map(p=>p.det+' of '+p.ev+' events').join(', ')+'); few events per patient make these figures coarse.':'Every held-out patient clears the line, but each has between '+Math.min(...pp.map(p=>p.ev))+' and '+Math.max(...pp.map(p=>p.ev))+' events, so per-patient figures are coarse.')+'</li><li>The gate count is for the logic only; the analog front end, clock and power are not included.</li><li>Nothing here has been tested on fabricated hardware or in a clinical study.</li></ul>'
+ +'<h2>Files</h2><div class="files"><button class="file" data-dl="v"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4a4a5a" stroke-width="1.5"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M9 14l-2 2 2 2M15 14l2 2-2 2"/></svg><span><b>circuit.v</b><span>Gate-level Verilog</span></span></button><button class="file" data-dl="j"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4a4a5a" stroke-width="1.5"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5"/><circle cx="12" cy="15" r="2"/></svg><span><b>netlist.json</b><span>Gates and wiring</span></span></button><button class="file" data-dl="m"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4a4a5a" stroke-width="1.5"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M8 13h8M8 17h5"/></svg><span><b>datasheet.md</b><span>This report</span></span></button></div>'
+ +'<h2>Gates per diagnosis</h2><p style="margin-top:0">The same question across devices: how many gates does one answer take?</p><table class="dt"><thead><tr><th>Device</th><th>Answer</th><th class="r">Gates</th><th class="r">Longest path</th><th class="r">Score</th><th>Source</th></tr></thead><tbody>'
+ +ledgerRow(d,b,'this run')+ledgerRow(DEV[other],ob,'earlier run, demo data')+'<tr style="cursor:default"><td class="muted">For scale</td><td class="muted">'+esc(d.reference.name)+'</td><td class="r mono muted">'+d.reference.ops.split(' per')[0]+'</td><td class="r mono muted">–</td><td class="r mono muted">'+d.reference.score+'%</td><td class="muted">float model, not a chip</td></tr></tbody></table>';
+ dieCache.delete($('#rpDie'));requestAnimationFrame(()=>drawDie($('#rpDie'),b,{compact:true}))}
+function ledgerRow(d,c,src){return '<tr style="cursor:default"><td>'+esc(d.short)+'</td><td>'+esc(d.id==='eeg'?'seizure flag per 4 s':'oxygen value per second')+'</td><td class="r mono">'+fmt(c.g)+'</td><td class="r mono">'+c.depth+'</td><td class="r mono">'+fmt1(c.s)+'%</td><td>'+src+'</td></tr>'}
+$('#paper').addEventListener('click',e=>{const b=e.target.closest('[data-dl]');if(!b)return;const c=bestNow();if(!c)return;const d=D();let txt,name,type='text/plain';
+ if(b.dataset.dl==='v'){name='circuit.v';txt='// '+d.title+', '+c.id+' (simulated demo data)\n// '+c.g+' gates, longest path '+c.depth+'\nmodule chip(input wire ['+(d.inputs.length*d.inBits-1)+':0] x, output wire ['+(d.outPins.length-1)+':0] y);\n  // '+c.L+' logic layers elided in this mock-up\nendmodule\n'}
+ else if(b.dataset.dl==='j'){name='netlist.json';type='application/json';txt=JSON.stringify({candidate:c.id,gates:c.g,depth:c.depth,layers:c.L,mix:gateMix(c),demo:true},null,2)}
+ else{name='datasheet.md';txt=$('#paper').innerText}
+ try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);toast('Downloaded '+name,'Generated from the simulated run.')}catch(err){toast('Download blocked','This frame does not allow downloads.')}});
+
+/* ============ main loop ============ */
+let lastF=performance.now(),lastUI=0;
+function renderAll(force){if(S.screen!=='run')return;ensureRounds();
+ const nb=bestNow();if(nb&&S.lastBestId!==nb.id){const better=!S.lastBestG||nb.g<S.lastBestG;S.lastBestId=nb.id;S.lastBestG=nb.g;S.animId=candKey(nb);S.flash=better;const d=D();if(better)toast('New best chip: '+fmt(nb.g)+' gates',nb.id+' matched its model on '+fmt(d.verifyN)+' of '+fmt(d.verifyN)+' '+d.vUnit+'.')}else if(!nb){S.lastBestId=null;S.lastBestG=null}
+ renderControls();renderDock();
+ $('#clock').textContent=runClock(S.t);$('#evalLbl').textContent=fmt(evaluated())+' candidates';
+ document.querySelectorAll('.devswitch button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.dev===S.device));
+ const v=S.view;if(v==='overview')renderOverview(force);else if(v==='space')renderSpace();else if(v==='chip')renderChip();else if(v==='signal')renderSignal();else if(v==='agents')renderAgents();else if(v==='cost')renderCost();else if(v==='report')renderReport();
+ if(v!=='overview'){/* keep log in step for when user returns */}}
+function frame(now){const dt=Math.min(.1,(now-lastF)/1000);lastF=now;
+ if(S.screen==='run'&&S.playing){S.t=Math.min(TOTAL,S.t+dt*S.speed);if(S.t>=TOTAL){S.playing=false}}
+ if(S.screen==='run'&&(now-lastUI>90)){if(S.playing||now-lastUI>300){lastUI=now;renderAll()}}
+ requestAnimationFrame(frame)}
+window.addEventListener('resize',()=>{dieCache.clear();renderAll(true)});
+window.__sim={S,seek(t){S.t=clamp(t,0,TOTAL);ensureRounds();renderAll(true)},pause(){S.playing=false;renderAll(true)},play(){S.playing=true}};
+$('#runTitle').addEventListener('change',e=>toast('Run renamed',e.target.value));
+renderStart();applyHash();requestAnimationFrame(frame);
+</script>
+</body>
+</html>
