@@ -64,6 +64,11 @@ Code and rerun commands are in `spike/` (a quick feasibility test).
 - 256 candidates train in one batch at 1,626 per minute. One at a time
   it is 27.6 per minute on the same GPU (about 59 times slower) and 56.0
   per minute on the CPU (about 29 times slower).
+- Fair-baseline warning: the same batch on the CPU reached 342 per
+  minute. So the GPU batch is about 5 times the best CPU figure
+  measured, and the larger gain comes from batching itself. Report the
+  two separately. The CPU figure is noisy, since synthesis was running
+  at the same time.
 - One small model became 2,330 gates and matched the model on all 3,880
   test windows.
 - Accuracy is not there yet: the circuit scores sensitivity 0.73,
@@ -97,6 +102,63 @@ Code and rerun commands are in `spike/` (a quick feasibility test).
   sensitivity and specificity per patient, not accuracy.
 - Privacy wording: say that keeping data on the device removes the
   transfer question. Do not say the law forbids cloud processing.
+
+### Pulled in from Oran's and Antonio's notes
+
+Changes to the plan:
+
+- **Baseline (Antonio):** compare against the same search on all CPU
+  cores with the best existing tools, never only against one at a time.
+- **Reshaping (Oran):** running many copies is not reshaping. Say what
+  changed in the method: one-at-a-time circuit synthesis becomes batched
+  gradient training, and checking becomes one batched bit-level
+  simulation.
+- **Headline (Antonio):** time to discovery is designs per hour, times
+  how few designs the agent loop needs against random search at the same
+  budget. This needs a random-search run as the control.
+- **Independent check (Antonio):** confirm the bit-for-bit agreement
+  with a standard circuit simulator (Verilator), not only our own
+  evaluator.
+- **Metrics (Oran):** sensitivity and specificity per patient at a
+  screening operating point, never accuracy alone, split by patient.
+- **Curve (Antonio):** accuracy against energy if an energy and area
+  model can be justified; otherwise against gates, and say so.
+- **Benchmark hygiene (Antonio):** same precision, warm-up excluded but
+  reported, repeats with the median and spread, a batch-size sweep, data
+  loading included.
+
+For the pitch:
+
+- **Order:** the correctness check, the fair baseline, the speedup, the
+  result and its curve, the limits, built-before against built-here.
+- **Sponsor line (Oran):** weights wired into the chip remove memory
+  traffic entirely, the far end of Fractile's point that memory
+  bandwidth is the bottleneck. Medicine moving to continuous sensing
+  makes this a small-chip problem.
+- The talk said "novelty" where the slide says "fundamental reshaping":
+  cover both.
+- One validated device plus a crude second one beats "works for
+  anything".
+- A named clinician with a quote on a slide has worked at past events.
+- Keep a figure ledger like Oran's: each number, its source, checked or
+  not, and the wording that is safe on a slide.
+- Track record, if asked: Adrian and Antonio won the build track at the
+  Oxford and Cambridge AI Race (25 Oct 2026).
+
+To do in person:
+
+- Ask the organisers: are own ideas allowed, does an engineering
+  problem count, how to get the compute credits, the submission format,
+  the demo length.
+- Antonio's notes list a participant looking for a team who has chip
+  formal-verification and FPGA experience: a natural fourth member.
+- Fractile has a verification engineer on site: ask how they would want
+  correctness shown.
+
+Published numbers in Antonio's notes, not re-checked here: ECG chips at
+98.29% with 31.39 nJ per inference and at 95% balanced accuracy with
+10.96 microwatts; GPU circuit simulation 40 times faster than an
+80-thread CPU. Sources are in `ant/context`.
 
 ### Who does what
 
