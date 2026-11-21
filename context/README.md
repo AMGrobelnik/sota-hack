@@ -36,3 +36,4 @@ Everything collected for the hackathon, one line per file.
 - `notes/2026-11-21-neonatal-ir-computation.md`: neonatal infrared monitoring, computation side, 21 Nov, research note.
 - `notes/2026-11-21-neonatal-ir-data.md`: neonatal infrared monitoring, available data, 21 Nov, research note.
 - `notes/data/`: structured JSON outputs behind the notes (idea panels, sponsors, past events, dialysis verification), research note.
+- `whatsapp/team-group-chat.md`: the team's WhatsApp group, 4 to 21 Nov, read-only export, 21 Nov.
