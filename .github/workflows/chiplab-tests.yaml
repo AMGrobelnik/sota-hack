@@ -1,5 +1,8 @@
 # Fast chip-lab tests (no Docker, no datasets) on Linux x86_64 and macOS Apple Silicon.
 name: chiplab-tests
+concurrency:
+  group: chiplab-tests-${{ github.ref }}
+  cancel-in-progress: true
 on:
   push:
     paths: ["chiplab/**", ".github/workflows/chiplab-tests.yaml"]
@@ -22,6 +25,8 @@ jobs:
         with:
           python-version: "3.12"
       - uses: YosysHQ/setup-oss-cad-suite@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Python environment (CPU torch on Linux to keep the runner small)
         run: |
           uv venv -p 3.12 .venv
