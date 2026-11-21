@@ -18,10 +18,11 @@ existing devices, so it is not a case study.
   the heartbeat without touching the baby. The chip turns that into breathing and heart
   rate and flags apnoea and bradycardia. It replaces wired chest leads, which irritate
   fragile skin and fall off.
-- **Thermal infrared camera**: measures the temperature of the core against the hands and
-  feet. A widening gap (warm core, cold periphery) is the warning pattern for cold stress
-  and early sepsis (Oran's NeoTherm work). The chip turns the image into that gap and
-  flags it.
+- **Thermal infrared camera**: one camera, one chip, several outputs (see the thermal
+  readouts table under Case 1). For the demo it gives two: the core against hands and
+  feet gap (warm core, cold periphery is the warning pattern for cold stress and early
+  sepsis; Oran's NeoTherm work), and breathing from nostril temperature, a second,
+  independent breathing signal fused with the radar.
 - **Not doing**: two-wavelength near-infrared for oxygen. Contactless camera oxygen in
   neonates is not reliable enough, and there is no open neonatal ground truth;
   desaturation stays with the existing pulse oximeter.
@@ -52,7 +53,23 @@ prematurity; BAPM wording not yet found):
 | Sensor | Measures | Data | Status |
 |---|---|---|---|
 | Radar on the incubator | Chest movement: breathing and heartbeat | Real neonatal physiology from PhysioNet PICS; radar signal simulated from it; front end checked against open radar data | Build first |
-| Thermal camera | Core versus peripheral temperature (cold stress, early sepsis pattern) | Simulated: body heat of thousands of babies and incubator settings on the GPU | Next sensor |
+| Thermal camera | Core versus peripheral temperature; breathing from nostril temperature | Simulated: body heat and breathing airflow for thousands of babies and incubator settings on the GPU | Build second |
+
+**Fusion: the alarm-fatigue story.** Radar and nostril temperature give two independent
+breathing signals. The chip raises an apnoea alarm only when both agree (or when one
+agrees together with bradycardia), which targets the non-actionable alarms directly.
+Report false alarms per hour for radar alone, thermal alone and fused.
+
+**Thermal readouts**
+
+| Readout | Detects | Evidence | Demo |
+|---|---|---|---|
+| Core against hands and feet | Cold stress, early sepsis | Thermoregulation and peripheral perfusion are listed thermal uses in neonatal imaging reviews (PMC6481091; Topalidou et al. 2019 scoping review, 21 observational studies, cohorts of 4 to 29); Oran's NeoTherm work | Build |
+| Breathing from nostril temperature | Breathing rate, apnoea | Abbas et al. 2011, BioMedical Engineering OnLine: 0.3 to 0.5 C difference between inspiration and expiration at the anterior nares in NICU newborns (PMC3258209) | Build, fused with radar |
+| Overall temperature trend | Hypothermia, fever | Comes with the core readout | Build |
+| Abdomen temperature pattern | Necrotising enterocolitis (NEC) | Pilot level only: Rice et al., 13 ELBW infants, 3 with radiographic NEC had lower abdominal skin temperature (PMC3775585); Herry, Frize and Bariciak 2011, slower abdominal temperature decrease in NEC; Ottawa cohort NCT03994341 completed, results not found | Roadmap slide |
+| Local hot spots | Skin infection (umbilical stump, cellulitis), cannula sites | Principle only (inflammation raises local temperature); no human neonatal studies found; one newborn calf omphalitis study | Roadmap, exploratory |
+| Jaundice | | Needs visible light, not thermal | Not thermal |
 
 **Data sources**
 
