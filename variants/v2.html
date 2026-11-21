@@ -398,9 +398,9 @@ a:not(.btn, .brand, .skip):focus-visible { border-radius: 4px; outline-offset: 2
       <div class="labels" id="labels" aria-hidden="true"></div>
       <!-- an illustration of a run: candidate layouts flicker past on the chip and the count falls -->
       <div class="hud" id="hud" aria-hidden="true">
-        <div class="hud-top"><span>Gates in this layout</span><span class="tag">Illustration</span></div>
+        <div class="hud-top"><span id="hud-t">Gates in this layout</span><span class="tag">Illustration</span></div>
         <p class="hud-n" id="hud-n">2,330</p>
-        <p class="hud-s" id="hud-s">Redrawing the layout</p>
+        <p class="hud-s" id="hud-s">gates, early feasibility test</p>
         <div class="hud-bar"><i id="hud-bar"></i></div>
       </div>
       <p class="hint" id="hint" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h16M8 8l-4 4 4 4M16 8l4 4-4 4"/></svg><span>Drag to turn the chip</span></p>
@@ -487,10 +487,10 @@ a:not(.btn, .brand, .skip):focus-visible { border-radius: 4px; outline-offset: 2
         <figure class="card prompt" aria-labelledby="p-cap">
           <div class="card-h"><span id="p-cap">Your prompt</span><span class="tag">Illustration</span></div>
           <div class="devs" role="group" aria-label="Example devices">
-            <button type="button" aria-pressed="true" data-p="0" style="--c:var(--g5)">Heart-rhythm patch</button>
-            <button type="button" aria-pressed="false" data-p="1" style="--c:var(--g1)">Newborn brain monitor</button>
-            <button type="button" aria-pressed="false" data-p="2" style="--c:var(--g3)">Fertile-window sensor</button>
             <button type="button" aria-pressed="false" data-p="3" style="--c:var(--g4)">Newborn brain-oxygen sensor</button>
+            <button type="button" aria-pressed="false" data-p="1" style="--c:var(--g1)">Newborn brain monitor</button>
+            <button type="button" aria-pressed="true" data-p="0" style="--c:var(--g5)">Heart-rhythm patch</button>
+            <button type="button" aria-pressed="false" data-p="2" style="--c:var(--g3)">Fertile-window sensor</button>
           </div>
           <div class="pbox"><span class="pl" id="p-sig">ECG patch</span><p id="ptext" aria-live="polite">A patch on the chest that reads the heart's electrical signal and says whether the rhythm is normal.<span class="caret" aria-hidden="true"></span></p></div>
           <div class="pfoot"><span>Examples of prompts, not results.</span><span class="fake" aria-hidden="true">Design the chip</span></div>
@@ -668,6 +668,31 @@ a:not(.btn, .brand, .skip):focus-visible { border-radius: 4px; outline-offset: 2
 })();
 </script>
 
+<script>
+/* a narrative card fades out as it is clipped by the nav bar or the bottom of the screen, so none is ever shown cut off */
+(() => {
+  const panels = [...document.querySelectorAll('.steps .panel')];
+  const bar = document.querySelector('header.bar');
+  if (!panels.length || !bar) return;
+  let queued = false;
+  function fit() {
+    queued = false;
+    const top = bar.getBoundingClientRect().bottom + 6, bottom = innerHeight - 6;
+    for (const el of panels) {
+      const r = el.getBoundingClientRect();
+      const slack = Math.max(0, r.height - (bottom - top));
+      const cut = Math.max(0, Math.max(top - r.top, r.bottom - bottom) - slack);
+      const o = Math.max(0, 1 - cut / (Math.min(r.height, 400) * 0.05));
+      el.style.opacity = o >= 0.999 ? '' : o.toFixed(3);
+      el.style.pointerEvents = o < 0.5 ? 'none' : '';
+    }
+  }
+  const ask = () => { if (!queued) { queued = true; requestAnimationFrame(fit); } };
+  addEventListener('scroll', ask, { passive: true });
+  addEventListener('resize', ask);
+  fit();
+})();
+</script>
 <script type="module">
 import * as THREE from '../vendor/three.module.min.js';
 
@@ -677,6 +702,7 @@ const canvas = document.getElementById('gl');
 const hud = document.getElementById('hud');
 const hudN = document.getElementById('hud-n');
 const hudS = document.getElementById('hud-s');
+const hudT = document.getElementById('hud-t');
 const hudBar = document.getElementById('hud-bar');
 const hint = document.getElementById('hint');
 const halo = document.getElementById('halo');
@@ -845,9 +871,10 @@ function start() {
   const fmt = (n) => Math.round(n).toLocaleString('en-GB');
   const gate = { phase: 'search', i: 0, N: 30, next: 0, t0: 0, until: 0, r: rng(3) };
   function setHud(n, settled) {
-    hudN.textContent = fmt(n);
+    hudN.textContent = settled ? fmt(n) : 'Searching';
+    hudT.textContent = settled ? 'Gates in this layout' : 'Candidate layouts';
     hud.classList.toggle('settled', settled);
-    hudS.textContent = settled ? 'Settled: smallest that does the job' : 'Redrawing the layout';
+    hudS.textContent = settled ? 'gates, early feasibility test' : 'Redrawing the layout';
     hudBar.style.transform = `scaleX(${clamp(n / (START_N * SCALE), 0, 1).toFixed(3)})`;
   }
   function gateStatic() { drawLayout(finalCells, true, 1); gateTex.needsUpdate = true; setHud(2330, true); }
@@ -985,7 +1012,7 @@ function start() {
   const KF = [
     { t: [0, -0.1, 0], az: 0.5, el: 0.62, d: 13.4, ex: 0, spin: 1, rib: 0, out: 0, hud: 1, ox: 0.19, oy: 0.13, pd: 0.8 },
     { t: [-2.7, -0.15, 0], az: -0.42, el: 0.24, d: 9.6, ex: 0, spin: 0, rib: 1, out: 0, hud: 0, ox: 0.2, oy: -0.13, pd: 0.95 },
-    { t: [0, 0, 0.1], az: 0.02, el: 1.28, d: 7.6, ex: 0, spin: 0, rib: 0, out: 0, hud: 1, ox: 0.19, oy: -0.13, pd: 1.3 },
+    { t: [0, 0, 0.1], az: 0.02, el: 1.28, d: 9.6, ex: 0, spin: 0, rib: 0, out: 0, hud: 1, ox: 0.19, oy: -0.13, pd: 1.3 },
     { t: [0.05, 2.3, 0], az: 0.62, el: 0.36, d: 17, ex: 1, spin: 0, rib: 0, out: 0, hud: 0, ox: 0.13, oy: -0.13, pd: 1 },
     { t: [2.7, -0.15, 0], az: 0.44, el: 0.26, d: 9.8, ex: 0, spin: 0, rib: 0, out: 1, hud: 0, ox: 0.19, oy: -0.13, pd: 0.95 },
     { t: [0, -0.1, 0], az: -0.55, el: 0.7, d: 13.5, ex: 0, spin: 0, rib: 0, out: 0, hud: 0, ox: 0.19, oy: -0.13, pd: 0.85 },
