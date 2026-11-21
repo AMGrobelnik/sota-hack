@@ -583,7 +583,7 @@ exhaustive.
 
 ### Team idea: a chip with the model wired in, for medical devices
 
-- **Source**: the team dictated this at about 15:15 on Sat 21 Nov 2026.
+- **Source**: the team dictated this at 14:45 on Sat 21 Nov 2026.
   The dictation was cut off mid-sentence.
 - **What the team said**: medical devices such as ultrasound machines have
   sensors that feed a pattern-recognition model. The first version ran
@@ -596,7 +596,7 @@ exhaustive.
   ultrasound idea, and it is separate from the infrared idea. It is not the
   "Through-skull focus designer" from the first panel (beam steering through
   the skull), which stays dropped. Fact checks on beam steering were started
-  by mistake and stopped at about 15:20; nothing from them was kept.
+  by mistake and stopped in mid-afternoon; nothing from them was kept.
 - **Claude's assessment (its own view, 21 Nov)**: the best fit so far for the
   chip steer and for sponsors who build inference chips, and it absorbs the
   earlier "smallest chip that still gets the diagnosis right" idea. Two
@@ -618,13 +618,13 @@ exhaustive.
   allows, since images need much larger models.
 - **Pitch caution**: say that data never leaves the device. Do not claim the
   law forbids cloud processing; that is unchecked and being checked.
-- **Status at about 15:30**: a fact check (prior art, medical chips and data,
+- **Status in mid-afternoon**: a fact check (prior art, medical chips and data,
   tools on the Mac; notes will be under
   `[local path removed]`) and a test of the
   whole chain on Adrian's Mac (under
   `[local path removed]`) are running. No
   results yet. Adrian has not yet responded to the specific version.
-- **Team clarification (about 15:35, Sat 21 Nov 2026)**: the team is not the
+- **Team clarification (14:48, Sat 21 Nov 2026)**: the team is not the
   chip supplier. They build the design environment: a place where anyone who
   makes a medical sensing device designs its core chip with AI scientists. The
   device has sensors, a housing and a core chip. The chip takes the sensor
@@ -658,34 +658,176 @@ exhaustive.
   up on a heartbeat); Oran owns the clinical line and which errors matter.
 - **Declaration**: if the environment is code written before the event, declare
   it, because the event Discord allows pre-written code when it is declared.
-- **Housekeeping**: the hackathon folder landed on master as 29227e5dd at about
-  15:35 (land log `.worktrees/_logs/land-sota-hackathon-6.log`). This section
-  was committed afterwards and still needs a land.
-- **Evidence result (about 15:45)**: the concept and even the AF example already exist.
-  Closest published work: a LUT-based 1-D CNN for AF on MIT-BIH with F1 up to 95% in
-  2,844 LUTs (arXiv 2605.29994, May 2026); logic-gate and LUT networks on ECG at 94.41%
-  (arXiv 2609.32854, Sep 2026); a hardware-aware-search wearable AF patch on an FPGA at
-  95% accuracy and 3.8 mW. Details in
+- **Evidence result (mid-afternoon)**: the concept and even the AF example already
+  exist. Closest published work: a LUT-based 1-D CNN for AF on MIT-BIH with F1 up
+  to 95% in 2,844 LUTs (arXiv 2605.29994, May 2026); logic-gate and LUT networks
+  on ECG at 94.41% (arXiv 2609.32854, Sep 2026); a hardware-aware-search wearable
+  AF patch on an FPGA at 95% accuracy and 3.8 mW. Details in
   `notes/2026-11-21-medical-chip-evidence.md`.
-- **What that means (Claude's reading)**: no "first" claim. These become the published
-  baselines to match or beat, in the same unit, on the same data. In one search pass,
-  no published system was found where a language-model agent generates both the model
-  and the circuit in one loop. Not found is not proof of absence.
-- **Tools**: the pip build of Yosys runs on macOS arm64 at about half native speed.
-  difflogic's fast path needs CUDA, hls4ml targets vendor tools and FINN is Docker-only,
-  so the team writes its own small version. Open ECG data (CinC 2017, PTB-XL, MIT-BIH
-  AF) needs no account.
-- **Privacy wording**: health data is specially protected under GDPR Article 9, with
-  exceptions under conditions. Say that keeping data on the device removes the transfer
-  question, not that the law forbids cloud processing.
-- **Still missing (follow-up running)**: the exact protocol of the closest papers (how
-  they split patients), the clinical accuracy bar, a microcontroller baseline, and
-  ultrasound facts.
-- **Adrian, about 15:50**: the environment he showed the team is all his own code, and
-  any part of it may be used. Pre-written code is allowed; the team only has to say what
-  was made new during the event. The team wants one shared GitHub repo holding
-  everything. Claude offered to create a private one and is waiting for his go; it is
-  not created yet.
+- **What that means (Claude's reading)**: no "first" claim. These become the
+  published baselines to match or beat, in the same unit, on the same data. In
+  one search pass, no published system was found where a language-model agent
+  generates both the model and the circuit in one loop. Not found is not proof
+  of absence.
+- **Tools**: the pip build of Yosys runs on macOS arm64 at about half native
+  speed. difflogic's fast path needs CUDA, hls4ml targets vendor tools and FINN
+  is Docker-only, so the team writes its own small version. Open ECG data
+  (CinC 2017, PTB-XL, MIT-BIH AF) needs no account.
+- **Privacy wording**: health data is specially protected under GDPR Article 9,
+  with exceptions under conditions. Say that keeping data on the device removes
+  the transfer question, not that the law forbids cloud processing.
+- **Still missing (follow-up running)**: the exact protocol of the closest papers
+  (how they split patients), the clinical accuracy bar, a microcontroller
+  baseline, and ultrasound facts.
+- **Adrian, mid-afternoon**: the environment he showed the team is all his own
+  code, and any part of it may be used. Pre-written code is allowed; the team
+  only has to say what was made new during the event. The team wants one shared
+  GitHub repo holding everything. Claude offered to create a private one and is
+  waiting for his go; it is not created yet.
+- **Baseline papers read in full (Sat 21 Nov, mid-afternoon)**: the closest
+  one, arXiv 2605.29994, detects AF against normal rhythm on 16 of the 25
+  MIT-BIH AF records, from raw ECG at 125 Hz in windows of about 42 s. It
+  reports accuracy 95.8 and F1 95.6 at 2,844 LUTs. It does not state how train
+  and test were split. Its design was hand-built and scored over 73 and 115
+  configurations, at about 13 minutes per training run. Details in
+  `notes/2026-11-21-medical-chip-baselines.md`.
+- **The other two baseline papers**: arXiv 2609.32854 classifies four heartbeat
+  types (AAMI N, S, V and F). It is not AF, and it splits train and test by
+  patient. arXiv 2508.13181 is a wearable AF patch on a private dataset. Its
+  3.81 mW is measured on the whole platform, and its design was found by an
+  evolutionary search over 190 generations.
+- **Demo target Claude proposed from this**: use the same database, test on
+  patients the model never saw, search the designs automatically in one batch,
+  and draw a full curve of accuracy against size, compared in the paper's own
+  unit. Caveat: the paper does not say which 16 records it used, so an exact
+  repeat is not possible.
+- **Chip-specific stages Claude proposed for the environment**: spec, reference
+  model, propose, train in one batch, compile to gates, verify bit for bit on
+  unseen patients plus noise tests, then report. Proposed views: a live curve
+  with each candidate as a dot, plus the clinical line and the published
+  result; the chip sketch with its gate count; and an ECG strip with the
+  circuit's decision.
+- **Team note from Antonio (Granola, shared 14:56)**: filed as
+  `notes/2026-11-21-team-idea-discussion.md`. The file itself does not name
+  its author, so the attribution to Antonio is unconfirmed. Its next steps:
+  refine the prompt and pitch, define the chip-specific features of the
+  environment, and share the transcript and code.
+- **Still not verified**: the clinical accuracy bar, which rests on one review
+  article's figures for one device; and a microcontroller baseline for AF,
+  where none was found. The one microcontroller result that was confirmed,
+  arXiv 2606.02256 on an ESP32-S3, is a normal-versus-abnormal arrhythmia task,
+  not AF.
+- **Team repo**: Adrian created a public GitHub repo named `sota-hack` and
+  cloned it to his Mac, under his projects folder. On his instruction it has a
+  `context` folder: the dictated team discussions, the three Granola notes with
+  their share links, the judging-slide image and the research notes. It was
+  pushed in full. Asked whether to keep it public with the raw discussions in
+  it, he chose to push everything and keep it public. The team-background
+  section built from the LinkedIn profiles was left out of the shared copy.
+- **Mac chain test finished**: on Sat 21 Nov, about 15:05, the whole chain
+  ran on Adrian's Mac. The files are in `chip-spike`, a folder under
+  `[local path removed]`, and the results are in its
+  `results.md`. Data: the PhysioNet / CinC
+  Challenge 2017 training set, AF against normal only, 5,788 recordings,
+  split by recording 70/15/15. The test set has 800 recordings (96 AF) and
+  3,880 windows.
+- **Inside and outside the circuit**: peak detection, beat-to-beat
+  intervals, windowing and integer quantisation run outside the circuit.
+  Inside it are the integer model, with ternary weights, and a 1-bit AF
+  output.
+- **Reference model**: the full-precision model scores sensitivity 0.9745,
+  specificity 0.9334 and F1 0.8831 on the test windows.
+- **Batch training speed**: on the Mac GPU, 256 candidates trained as one
+  batch at 1,626 candidates per minute. One at a time on the same GPU gave
+  27.6 per minute, so the batch was about 59 times faster. One at a time on
+  the CPU gave 56.0 per minute, about 29 times slower than the batch. The
+  one-at-a-time rate was measured on 16 candidates.
+- **Gate compilation**: a small model (8-beat window, 6-bit differences, 16
+  hidden units) compiled to 2,330 simple gates with a longest path of 52.
+  The best larger candidate (24-beat window, 32 hidden units, 8,503 cells)
+  did not finish the gate-mapping step in 11 minutes with the pip build of
+  Yosys, so it was dropped.
+- **Same answers**: the circuit matched the integer model and the trained
+  model on all 3,880 test windows, with no mismatches. Claude re-ran this
+  check itself and got the same counts and the same 2,330 gates.
+- **Circuit accuracy**: on the test windows, sensitivity 0.7315,
+  specificity 0.8790 and F1 0.6792. By recording (majority vote):
+  sensitivity 0.8333, specificity 0.8764 and F1 0.6084. The gap to the
+  reference comes from the small model, not from the hardware step.
+- **Limits**: one seed and no tuning. The circuit was checked with the
+  agent's own netlist evaluator, not Yosys's simulator. There is no cell
+  library, so no area, timing or energy figures. The dataset differs from
+  the one in the closest published paper. The input is beat intervals, not
+  raw ECG.
+- **Claude's reading**: the chain is feasible on the Mac. The work left is
+  closing the accuracy gap and getting larger models through synthesis.
+- **Full call transcripts**: none were added. The Granola share pages hold
+  only summary notes, and the app's local cache on the Mac is encrypted.
+  Adrian would have to export the team call and the opening talk himself,
+  and Antonio the chip-design discussion.
+- **WhatsApp group chat**: at about 15:15 on Sat 21 Nov, Adrian asked for the
+  team's WhatsApp group chat to be read for context too. In progress.
+- **WhatsApp group read**: the team group was read (read-only) on Sat 21
+  Nov; the summary is in `notes/2026-11-21-whatsapp-group.md`. It holds the
+  dialysis graft brief and the hybrid-computing idea, and nothing on the
+  chip-design idea, which the team settled in person.
+- **Correction of attribution**: the hybrid-computing idea (where scarce
+  bio-inspired parts pay off inside ordinary computers) was posted to the
+  group by Antonio at 14:01 on 21 Nov; Adrian dictated it to Claude at the
+  same time. Earlier entries in this file call it Adrian's.
+- **Schedule as relayed by Oran in the group**: Saturday hacking 13:00 to
+  18:00 and again from 19:00 after dinner; Sunday hacking 09:30 to 14:45,
+  demos 15:00 to 16:30, winners 16:50 to 17:00. This gives a Sunday start of
+  09:30, earlier than the 13:00 final-hacking block recorded from the
+  Discord.
+- **Team repo layout** (Adrian, Sat 21 Nov, about 15:20 to 15:40): each
+  person keeps their material on their own branch: `amg/context`,
+  `oran/context` and `ant/context`. `main` stays empty for now, apart from
+  what the others put there (Oran's four idea notes). Adrian's branch holds
+  `ideas/` (the idea, the design environment, the event rules and the checked
+  evidence), `context/` (dictations, Granola notes with their links, the slide
+  image, the chat export with personal messages removed, and `adrian-notes/`
+  with the research notes and the idea-panel data) and `spike/` (the Mac
+  test). The README on Adrian's branch summarises the main idea and every
+  idea from all three teammates.
+- **Correction to the Mac test speedup** (found by applying Antonio's
+  baseline rule): the 59 times figure compares the GPU batch with one
+  candidate at a time on the same GPU. The same batch run on the CPU reached
+  342 candidates per minute, against 1,626 on the GPU. So the GPU is about 5
+  times the best CPU figure measured. The larger gain comes from batching
+  itself. The CPU figure is noisy because synthesis ran at the same time.
+  Report the two gains separately.
+- **From Antonio's notes**: compare against the same search run on all CPU
+  cores with the best existing tools. The headline metric is designs per hour
+  multiplied by how few designs the agent loop needs, against random search at
+  the same budget; this needs a random-search control. Confirm the bit-for-bit
+  check with Verilator as an independent simulator. Benchmark hygiene: repeat
+  runs and report the median and the spread, report the warm-up, sweep the
+  batch size, and include data loading. Pitch order: correctness, fair
+  baseline, speedup, curve, limits, then built-before against built-here. Code
+  freeze is Sunday 14:45.
+- **From Oran's notes**: running many copies is not reshaping, so the claim is
+  that one-at-a-time circuit synthesis becomes batched gradient training.
+  Report sensitivity and specificity per patient at a screening operating
+  point, never accuracy alone. Hard-wired weights remove memory traffic, the
+  far end of Fractile's memory-bandwidth argument. Keep a figure ledger: each
+  number, its source, whether it is checked, and slide-safe wording. His
+  candidate devices for the environment, in order: AF from ECG, newborn brain
+  oxygen, a breath or smell classifier, and a sperm motility classifier.
+- **Oran's ranking before the chip pivot**: focused ultrasound through the
+  skull under uncertainty came first, with 24 of 30. This is the skull
+  ultrasound idea Adrian mentioned earlier. It is Oran's idea, and it is now
+  the first fallback.
+- **Fallback rule** (from Antonio's notes): if own ideas are allowed and the
+  GPU is strong, use ultrasound. If own ideas are allowed and the GPU is
+  limited, use thermal detection limits. If only the organisers' three
+  examples are allowed, use flood uncertainty.
+- **Unanswered by the organisers** (from Antonio's reading of the Discord):
+  whether own ideas are allowed, whether an engineering problem counts, how to
+  get compute credits, the submission format and the demo length. Antonio's
+  notes also list a participant with chip formal-verification and FPGA
+  experience who is looking for a team, and say a Fractile verification
+  engineer is on site.
 
 ## Not explored
 

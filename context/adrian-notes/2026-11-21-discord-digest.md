@@ -59,7 +59,7 @@ Rules and answers from organisers:
   not; judges will be suspicious otherwise (Matvey, general, Tue 17 Nov 14:57).
 - Data or starter code for the three example challenges: "Some! We are working on this"
   (Matvey, same message). Nothing was posted later.
-- Under-18s: need written parent or guardian consent, emailed to [organiser email removed],
+- Under-18s: need written parent or guardian consent, emailed to [email removed],
   and must leave by 22:00 Saturday (SoTA, general, Mon 3 Nov 16:45).
 - Travel reimbursement comes after the hackathon (answered by participant Warten404, not an
   organiser, travel-accommodation, Tue 11 Nov 10:19).

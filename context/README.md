@@ -32,8 +32,11 @@ Everything collected for the hackathon, one line per file.
 - `adrian-notes/2026-11-21-idealab-search.md`: search of an idea database for overlap, 21 Nov, research note.
 - `adrian-notes/2026-11-21-judges-check.md`: who the judges likely are, 21 Nov, research note.
 - `adrian-notes/2026-11-21-medical-chip-evidence.md`: evidence for the medical chip idea, 21 Nov, research note.
+- `adrian-notes/2026-11-21-medical-chip-baselines.md`: the closest published baseline papers for the medical chip idea read in full, 21 Nov, research note.
 - `adrian-notes/2026-11-21-neonatal-ir-clinical.md`: neonatal infrared monitoring, clinical side, 21 Nov, research note.
 - `adrian-notes/2026-11-21-neonatal-ir-computation.md`: neonatal infrared monitoring, computation side, 21 Nov, research note.
 - `adrian-notes/2026-11-21-neonatal-ir-data.md`: neonatal infrared monitoring, available data, 21 Nov, research note.
+- `adrian-notes/2026-11-21-team-idea-discussion.md`: shared team note on the chip idea discussion, 21 Nov (author not named in the file).
+- `adrian-notes/2026-11-21-whatsapp-group.md`: summary of the team's WhatsApp group, 21 Nov, research note.
 - `adrian-notes/data/`: structured JSON outputs behind the notes (idea panels, sponsors, past events, dialysis verification), research note.
 - `whatsapp/team-group-chat.md`: the team's WhatsApp group, 4 to 21 Nov, read-only export, 21 Nov.
