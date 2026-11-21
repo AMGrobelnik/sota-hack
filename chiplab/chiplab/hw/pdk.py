@@ -26,8 +26,11 @@ _FALLBACK = {"sky130": "sky130/versions/*/sky130B/libs.ref/sky130_fd_sc_hd/lib/s
 def liberty(pdk: str) -> Path:
     if pdk not in PDKS:
         raise ValueError(f"pdk must be one of {list(PDKS)}")
-    root = config.PDK_ROOT / "ciel"
+    root = Path(config.PDK_ROOT) / "ciel"
     hits = sorted(root.glob(PDKS[pdk]["glob"])) or sorted(root.glob(_FALLBACK.get(pdk, "__none__")))
+    if not hits:  # ciel's enabled layout: PDK_ROOT/<variant>/libs.ref/...
+        tail = PDKS[pdk]["glob"].split("/versions/*/", 1)[1]
+        hits = sorted(Path(config.PDK_ROOT).glob(tail)) or sorted(Path(config.PDK_ROOT).glob(tail.replace("sky130A", "sky130B")))
     if not hits:
         raise FileNotFoundError(f"Liberty for {pdk} not found under {root}; run scripts/setup_toolchain.sh")
     return hits[0]

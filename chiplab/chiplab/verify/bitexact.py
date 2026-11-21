@@ -11,6 +11,8 @@ def circuit_outputs(netlist_json: str, port_info: dict, X: dict | np.ndarray, de
     """Run integer inputs through the gate netlist; return {output name: int [N, lanes]}."""
     if not isinstance(X, dict):
         X = {port_info["inputs"][0]["name"]: X}
+    from chiplab.device import resolve
+    device = resolve(device)
     net = Netlist(netlist_json, port_info["top"])
     bits_in = {p["name"]: lanes_to_bits(X[p["name"]], p["bits"]) for p in port_info["inputs"]}
     raw = net.evaluate(bits_in, device=device)

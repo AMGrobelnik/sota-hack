@@ -11,7 +11,6 @@ import time
 from pathlib import Path
 
 from chiplab import config
-from chiplab.hw.tinytapeout import TT_PY
 
 PDK_NAMES = {"sky130": "sky130A", "sky130A": "sky130A", "gf180": "gf180mcuD", "gf180mcuD": "gf180mcuD",
              "ihp": "ihp-sg13g2", "ihp-sg13g2": "ihp-sg13g2"}
@@ -41,11 +40,28 @@ class LayoutError(RuntimeError):
     pass
 
 
-def _ll_env() -> dict:
-    env = os.environ.copy()
-    env["PDK_ROOT"] = str(config.PDK_ROOT)
-    env.pop("VIRTUAL_ENV", None)
-    return env
+def docker_cmd(workdir: Path, args: list[str], extra_mounts: tuple = ()) -> list[str]:
+    """`docker run` the LibreLane image (multi-arch: amd64 and arm64, so the same on Linux and Apple Silicon Macs)
+    with the work dir and the PDK root mounted at their own paths. No host LibreLane install needed."""
+    wd = str(Path(workdir).resolve())
+    pdk = str(Path(config.PDK_ROOT).resolve())
+    mounts = dict.fromkeys([wd, pdk, *[str(Path(m).resolve()) for m in extra_mounts]])
+    cmd = ["docker", "run", "--rm", "-u", f"{os.getuid()}:{os.getgid()}", "-e", "HOME=/tmp", "-e", f"PDK_ROOT={pdk}",
+           "-w", wd]
+    for m in mounts:
+        cmd += ["-v", f"{m}:{m}"]
+    return cmd + [config.LIBRELANE_IMAGE, *args]
+
+
+def run_librelane(workdir: Path, config_file: str, pdk: str, tag: str, timeout: int, force_run_dir: str | None = None) -> subprocess.CompletedProcess:
+    args = ["librelane", "--pdk-root", str(Path(config.PDK_ROOT).resolve()), "--pdk", pdk, "--run-tag", tag,
+            "--hide-progress-bar"]
+    if force_run_dir:
+        args += ["--force-run-dir", force_run_dir]
+    try:
+        return subprocess.run(docker_cmd(workdir, args + [config_file]), capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise LayoutError(f"LibreLane timed out after {timeout}s")
 
 
 def timing_power_layout(rtl_files: list[Path], top: str, workdir: Path, pdk: str = "sky130A",
@@ -83,12 +99,7 @@ def timing_power_layout(rtl_files: list[Path], top: str, workdir: Path, pdk: str
     run_dir = wd / "runs" / tag
     if run_dir.exists():
         shutil.rmtree(run_dir)
-    cmd = [str(TT_PY), "-m", "librelane", "--docker-no-tty", "--dockerized", "--pdk-root", str(config.PDK_ROOT),
-           "--pdk", pdk, "--run-tag", tag, "--hide-progress-bar", "config.json"]
-    try:
-        p = subprocess.run(cmd, cwd=wd, env=_ll_env(), capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        raise LayoutError(f"LibreLane timed out after {timeout}s")
+    p = run_librelane(wd, "config.json", pdk, tag, timeout)
     (wd / "librelane.log").write_text(p.stdout[-200000:] + p.stderr[-50000:])
     final = run_dir / "final"
     mj = final / "metrics.json"
@@ -143,11 +154,7 @@ lv.set_config("grid-visible", "false")
 lv.zoom_fit()
 lv.save_image({str(out)!r}, {width}, {width})
 """)
-    mounts = {str(gds.parent), str(out.parent), str(config.PDK_ROOT)}
-    cmd = ["docker", "run", "--rm", "-u", f"{os.getuid()}:{os.getgid()}", "-e", "HOME=/tmp"]
-    for m in mounts:
-        cmd += ["-v", f"{m}:{m}"]
-    cmd += [config.LIBRELANE_IMAGE, "klayout", "-b", "-r", str(script)]
+    cmd = docker_cmd(out.parent, ["klayout", "-b", "-r", str(script)], extra_mounts=(gds.parent,))
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     except subprocess.TimeoutExpired:
@@ -178,11 +185,7 @@ def activity_power(run_dir: Path, top: str, pdk: str, vcd: Path, scope: str | No
         f"create_clock -name vclk -period {period_ns}" + ("" if True else ""),
         *( [f"read_spef {spef}"] if spef else []),
         f"read_vcd {sc}{vcd}", "report_power", "exit"]))
-    mounts = {str(run_dir.parent.parent), str(config.PDK_ROOT), str(vcd.parent)}
-    cmd = ["docker", "run", "--rm", "-u", f"{os.getuid()}:{os.getgid()}", "-e", "HOME=/tmp"]
-    for m in mounts:
-        cmd += ["-v", f"{m}:{m}"]
-    cmd += [config.LIBRELANE_IMAGE, "sta", "-no_init", "-no_splash", "-exit", str(tcl)]
+    cmd = docker_cmd(run_dir.parent.parent, ["sta", "-no_init", "-no_splash", "-exit", str(tcl)], extra_mounts=(vcd.parent,))
     p = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
     out = p.stdout + p.stderr
     (tcl.parent / "activity_power.log").write_text(out)

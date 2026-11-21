@@ -371,8 +371,8 @@ def _test_access(design_id: str, why: str) -> int:
       {"design_id": "str", "inputs": "str — random|vectors|val|test (random)", "n": "int — random vectors (100000)",
        "vectors": "dict — port -> [[lane ints]], the scientist's test inputs (inputs=vectors)",
        "expected": "list — expected first-output values per vector, from the scientist's own model (optional)",
-       "device": "str — numpy|cuda", "seed": "int"}, lane="gpu", cacheable=True)
-def simulate(design_id: str, inputs: str = "random", n: int = 100000, device: str = "numpy", seed: int = 0,
+       "device": "str — auto|cuda|mps|numpy (auto: CUDA, else Apple MPS, else CPU)", "seed": "int"}, lane="gpu", cacheable=True)
+def simulate(design_id: str, inputs: str = "random", n: int = 100000, device: str = "auto", seed: int = 0,
              vectors: dict | None = None, expected: list | None = None) -> dict:
     from chiplab.verify.bitexact import check
     d = _design_dir(design_id)
@@ -396,7 +396,9 @@ def simulate(design_id: str, inputs: str = "random", n: int = 100000, device: st
         if inputs == "test":
             _test_access(design_id, "simulate")
         res = check(ir, syn["netlist_json"], info, X, reference=ref, device=device)
+    from chiplab.device import resolve
     out = {"design_id": design_id, "inputs": inputs, "n": res["n"], "pairs": res["pairs"], "bit_exact": res["bit_exact"],
+           "device": resolve(device),
            "verification_level": 1 if res["bit_exact"] else 0}
     (d / f"simulate_{inputs}.json").write_text(json.dumps(out))
     log.event("check", design_id=design_id, inputs=inputs, bit_exact=res["bit_exact"], n=res["n"])

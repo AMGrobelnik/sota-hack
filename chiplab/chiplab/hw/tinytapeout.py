@@ -6,21 +6,45 @@ Wraps, never reimplements: tt-support-tools (Apache-2.0) and the ttsky-verilog-t
 from __future__ import annotations
 
 import csv
+import importlib.util
 import json
 import math
 import os
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 
 from chiplab import config
 
-TTSETUP = Path(os.environ.get("CHIPLAB_TTSETUP", Path.home() / "ttsetup"))
-TT_TOOLS = TTSETUP / "tt"
-TT_TEMPLATE = TTSETUP / "template"
-TT_PY = TTSETUP / "venv" / "bin" / "python"
+TT_TOOLS = Path(getattr(config, "TT_TOOLS", None) or os.environ.get("CHIPLAB_TT_TOOLS") or (Path(config.PDK_ROOT).parent / "tt"))
+TT_TEMPLATE = Path(os.environ.get("CHIPLAB_TT_TEMPLATE") or (TT_TOOLS.parent / "template"))
+TT_TOOLS_URL = "https://github.com/TinyTapeout/tt-support-tools"
+TT_TEMPLATE_URL = "https://github.com/TinyTapeout/ttsky-verilog-template"
 LIBRELANE_TAG = "3.0.14"
+
+
+def ensure_tt_assets() -> None:
+    """Shallow-clone tt-support-tools and the ttsky Verilog template if they are not there yet."""
+    for url, path in ((TT_TOOLS_URL, TT_TOOLS), (TT_TEMPLATE_URL, TT_TEMPLATE)):
+        if not (path / ".git").exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            subprocess.run(["git", "clone", "-q", "--depth", "1", url, str(path)], check=True, timeout=600)
+
+
+def tt_python() -> str:
+    """Interpreter with tt-support-tools' requirements (gitpython, pyyaml, chevron): CHIPLAB_TT_PYTHON, else this
+    interpreter if it has them, else a venv next to tt-support-tools."""
+    configured = str(getattr(config, "TT_PYTHON", "") or os.environ.get("CHIPLAB_TT_PYTHON", ""))
+    if configured:
+        return configured
+    if all(importlib.util.find_spec(m) for m in ("git", "yaml", "chevron")):
+        return sys.executable
+    for cand in (TT_TOOLS.parent / "venv" / "bin" / "python", TT_TOOLS / ".venv" / "bin" / "python"):
+        if cand.exists():
+            return str(cand)
+    return sys.executable
 TILE_UM = {"1x1": (161.0, 111.52), "1x2": (161.0, 225.76), "2x2": (334.88, 225.76), "3x2": (508.76, 225.76),
            "4x2": (682.64, 225.76), "6x2": (1030.4, 225.76), "8x2": (1378.16, 225.76)}
 
@@ -138,7 +162,7 @@ def _shims() -> Path:
     d = config.home("shims")
     sh = d / "yowasp-yosys"
     if not sh.exists():
-        sh.write_text(f"#!/bin/sh\nexec {config.OSS / 'bin' / 'yosys'} \"$@\"\n")
+        sh.write_text(f"#!/bin/sh\nexec {config.oss_bin('yosys')} \"$@\"\n")
         sh.chmod(0o755)
     return d
 
@@ -146,7 +170,7 @@ def _shims() -> Path:
 def _env() -> dict:
     env = os.environ.copy()
     env.update({"PDK_ROOT": str(config.PDK_ROOT), "LIBRELANE_TAG": LIBRELANE_TAG})
-    env["PATH"] = f"{_shims()}:{TT_PY.parent}:{env['PATH']}:{config.OSS / 'bin'}"
+    env["PATH"] = f"{_shims()}:{Path(tt_python()).parent}:{env['PATH']}"
     return env
 
 
@@ -171,6 +195,7 @@ def tt_package(rtl_files: list[Path], top_module: str, workdir: Path, design_met
     """Create a TT project folder (and optionally harden it). vectors: {"bits", "out_bits", "vectors": [{lanes, expect}]}
     from the integer model; they drive the RTL test (level 3) and the gate-level test (level 4)."""
     t0 = time.time()
+    ensure_tt_assets()
     tile_choice = None
     if tiles == "auto":
         tile_choice = pick_tiles(rtl_files, top_module, workdir, pdk)
@@ -216,7 +241,7 @@ def tt_package(rtl_files: list[Path], top_module: str, workdir: Path, design_met
     git("init", "-q"); git("add", "-A")
     git("-c", "user.name=chipin.space chip lab", "-c", "user.email=lab@chipin.space", "commit", "-q", "-m", "chip lab: TT project")
     env = _env()
-    tt = lambda *a, t=timeout: subprocess.run([str(TT_PY), "tt/tt_tool.py", "--pdk", pdk, *a], cwd=proj, env=env,
+    tt = lambda *a, t=timeout: subprocess.run([tt_python(), "tt/tt_tool.py", "--pdk", pdk, *a], cwd=proj, env=env,
                                               capture_output=True, text=True, timeout=t)
     r = tt("--create-user-config", t=600)
     out = {"folder": str(proj), "top": top_module, "tiles": tiles, "tile_um": TILE_UM[tiles], "pdk": pdk, "tile_choice": tile_choice,
@@ -234,12 +259,20 @@ def tt_package(rtl_files: list[Path], top_module: str, workdir: Path, design_met
 
 
 def harden_project(proj: Path, pdk: str = "sky130A", timeout: int = 5400, gl_test: bool = True) -> dict:
+    """The same LibreLane run tt_tool.py --harden performs (src/config_merged.json, run tag wokwi), executed in the
+    LibreLane image, so the host needs Docker but no LibreLane install."""
+    from chiplab.hw.librelane import LayoutError, run_librelane
     env = _env()
-    tt = lambda *a, t=timeout: subprocess.run([str(TT_PY), "tt/tt_tool.py", "--pdk", pdk, *a], cwd=proj, env=env,
+    tt = lambda *a, t=timeout: subprocess.run([tt_python(), "tt/tt_tool.py", "--pdk", pdk, *a], cwd=proj, env=env,
                                               capture_output=True, text=True, timeout=t)
     t0 = time.time()
-    r = tt("--harden")
-    (proj / "harden.log").write_text(r.stdout + r.stderr)
+    shutil.rmtree(proj / "runs" / "wokwi", ignore_errors=True)
+    (proj / "runs" / "wokwi").mkdir(parents=True, exist_ok=True)
+    try:
+        r = run_librelane(proj, "src/config_merged.json", pdk, "wokwi", timeout, force_run_dir="runs/wokwi")
+    except LayoutError as e:
+        return {"harden_ok": False, "error": str(e), "harden_seconds": round(time.time() - t0, 1)}
+    (proj / "harden.log").write_text(r.stdout[-200000:] + r.stderr[-50000:])
     final = proj / "runs" / "wokwi" / "final"
     res = {"harden_ok": r.returncode == 0 and final.exists(), "harden_seconds": round(time.time() - t0, 1)}
     if not res["harden_ok"]:
@@ -247,8 +280,11 @@ def harden_project(proj: Path, pdk: str = "sky130A", timeout: int = 5400, gl_tes
         return res
     gds = sorted((final / "gds").glob("*.gds"))
     res["gds"] = str(gds[0]) if gds else None
-    st = tt("--print-stats", t=600)
-    res["stats"] = st.stdout[-2000:]
+    try:
+        st = tt("--print-stats", t=600)
+        res["stats"] = st.stdout[-2000:]
+    except Exception as e:  # optional
+        res["stats"] = f"not available: {e}"
     m = final / "metrics.csv"
     if m.exists():
         rows = {row[0]: row[1] for row in csv.reader(m.open()) if len(row) >= 2}
@@ -283,7 +319,7 @@ def run_cocotb(proj: Path, gates: bool) -> dict:
     """Run the project's cocotb test (RTL or gate-level) with Icarus from the OSS CAD Suite."""
     env = os.environ.copy()
     # OSS CAD Suite's vvp pins PYTHONHOME to its own Python, so use its bundled cocotb too
-    env["PATH"] = f"{config.OSS / 'bin'}:{env['PATH']}"
+    env["PATH"] = f"{Path(config.oss_bin('iverilog')).parent}:{env['PATH']}"
     for k in ("VIRTUAL_ENV", "PYTHONPATH", "PYTHONHOME"):
         env.pop(k, None)
     env["PDK_ROOT"] = str(config.PDK_ROOT)

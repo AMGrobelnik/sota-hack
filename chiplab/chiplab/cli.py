@@ -47,6 +47,9 @@ def main(argv=None) -> int:
         print(json.dumps({"summary": t["summary"], "params": t["params"]}, indent=1)); return 0
     if cmd == "agent_doc":
         print(agent_doc()); return 0
+    if cmd == "doctor":
+        from chiplab.doctor import run
+        r = run(); print(json.dumps(r, indent=1, default=str)); return 0 if r["ok"] else 1
     if cmd == "mcp":
         from chiplab.mcp_server import stdio
         stdio(); return 0

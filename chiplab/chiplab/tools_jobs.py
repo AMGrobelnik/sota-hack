@@ -85,7 +85,7 @@ def synthesize_batch(design_ids: list, target: str = "generic", session_id: str 
       {"design_ids": "list[str]", "inputs": "str — random|val|vectors", "n": "int"}, lane="inline")
 def simulate_batch(design_ids: list, inputs: str = "random", n: int = 100000, session_id: str | None = None,
                    run_id: str | None = None) -> dict:
-    return submit_batch.__wrapped__("simulate", [{"design_id": d, "inputs": inputs, "n": n, "device": "cuda",
+    return submit_batch.__wrapped__("simulate", [{"design_id": d, "inputs": inputs, "n": n, "device": "auto",
                                                   **({"run_id": run_id} if run_id else {})} for d in design_ids],
                                     session_id=session_id)
 
