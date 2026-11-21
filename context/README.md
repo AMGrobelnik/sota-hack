@@ -35,5 +35,9 @@ Everything collected for the hackathon, one line per file.
 - `notes/2026-11-21-neonatal-ir-clinical.md`: neonatal infrared monitoring, clinical side, 21 Nov, research note.
 - `notes/2026-11-21-neonatal-ir-computation.md`: neonatal infrared monitoring, computation side, 21 Nov, research note.
 - `notes/2026-11-21-neonatal-ir-data.md`: neonatal infrared monitoring, available data, 21 Nov, research note.
+- `notes/2026-11-21-oran-ideas.md`: Oran's idea work: ranked candidates, problem sizes, chip hunches and case-study options, 21 Nov, research note.
+- `notes/2026-11-21-figure-ledger.md`: source-by-source check of the dialysis graft figures, 20 to 21 Nov, research note.
+- `notes/2026-11-21-idealab-ranking.md`: seven idea-database searches and a ranking against the judging slide, 21 Nov, research note.
+- `notes/2026-11-21-ideation-prompt.md`: paste-in prompt for generating and stress-testing ideas against the judging slide, 21 Nov.
 - `notes/data/`: structured JSON outputs behind the notes (idea panels, sponsors, past events, dialysis verification), research note.
 - `whatsapp/team-group-chat.md`: the team's WhatsApp group, 4 to 21 Nov, read-only export, 21 Nov.
