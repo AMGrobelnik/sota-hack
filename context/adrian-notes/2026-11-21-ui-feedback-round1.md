@@ -87,3 +87,38 @@ Paraphrased from the team; asked for: five round-3 variants.
 - The logo is undecided: several logo options are to be tried and the team picks.
 - The interface lives on the branch amg/frontend and the backend on the branch amg/backend; they are not connected yet.
 - The backend is a trimmed copy of the AI Inventor backend: OpenRouter access (also used for summarising, as in AI Inventor; no free-model handling), the Claude agent backend, and runs on the Mac and on RunPod (on demand and flex). Only the parts that are needed go into the public repo.
+
+## Decisions (Sat 21 Nov, about 20:00)
+
+- The logo is option 2 of the logo page ("Open Package": a chip package drawn as a letter C with the die inside, blue), to be used everywhere with the name ChipIn.
+- The dashboards get a microphone button with live transcription into the prompt and chat boxes.
+- The dashboards are to be connected to the real backend so that a prompt starts a real agent run; defaults: the Claude agent backend, running on the Mac.
+
+## Dashboards, round 3 walk-through (Sat 21 Nov, about 19:50)
+
+Paraphrased from the team; asked for: five round-4 variants.
+
+- The start page looks like any chatbot; make it ours, with cues from the landing pages.
+- Most users have their own recordings: attaching a file is the main path and the demo path. After attaching, ask a few quick questions about the protocol; every question can be skipped.
+- Show the assumptions also for the user's own data, with the option to change them and to add one.
+- "Find a public dataset" should look like a real search; the example searches are prepared in advance and that is said openly.
+- Say how simulated data was made.
+- The run should start as early as possible; less important questions and assumptions live in a side place while it runs.
+- Overview: the final chip was too small; draw chip and reference model to scale; keep the round-by-round fall in gates; label the corner chip tile in words.
+- Visuals: more realistic chip, device, sensors and person; labels to the side, never on the face; the fine-tuning view must explain itself; the trade-off must say why the chosen chip is best and what the percentages mean.
+- New: a timeline of one patient showing seizures caught and missed.
+- Liked: the three-step intake, the sources drawer, the tags, the assumptions list, the funnel Overview, the zoom from person to device to chip.
+- Variant 3 had a frozen fine-tuning view and a signal view that did not run.
+
+## Landing pages, round 3 review (Sat 21 Nov, about 20:15)
+
+Paraphrased from the team; asked for: five round-4 variants, not one-to-one remakes.
+
+- Variants 1 to 3 are kept as sources; variants 4 and 5 are dropped.
+- Variant 1: the rooms and the zoom into them are the best part, but the page loads slowly and there are more rooms than needed.
+- Variant 2: the hospital from outside is liked; its rooms are weaker and some chips sit outside their machine; chips belong inside the device.
+- Variant 3: the most photoreal look; the transparent pass into the device and the neural network view are liked; one shot looked blurred.
+- The new story: arrive at the hospital from outside, see a floor with only a few rooms lit, scroll into one room made as good as possible, then go into the device as in variant 3.
+- Idea to try: a well-known London hospital as the example, with its name and address.
+- Waitlist: the count and the map highlighting countries are good as they are; no extra animation.
+- The copy on the page is still to be decided.
