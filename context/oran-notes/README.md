@@ -6,3 +6,4 @@
 - `2026-11-21-ideation-prompt.md`: paste-in prompt for generating and stress-testing ideas against the judging slide.
 - `2026-11-21-sensor-datasets.md`: open datasets for second-device case studies (radar, red/IR light, neonatal NIRS, thermal, camera), research note.
 - `2026-11-21-demo-use-cases.md`: final demo use cases: Incubator Watch (neonatal radar plus thermal) and adult epilepsy wearable (EEG); AF and neonatal EEG dropped; definitions, data, metrics, open decisions.
+- `2026-11-21-build-brief.md`: build brief for Adrian: both case studies end to end (what, why, data, simulation, search, outputs, results) and what the dashboard should show.
