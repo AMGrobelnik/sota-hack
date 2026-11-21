@@ -12,6 +12,8 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 
+from chipin_backend.chiplab import chiplab_env
+
 #: Names copied from the launcher's environment when present.
 AGENT_ENV_ALLOWED_NAMES: frozenset[str] = frozenset(
     {
@@ -72,9 +74,11 @@ def build_agent_env(
 ) -> dict[str, str]:
     """The environment for one agent process.
 
-    ``base`` (default ``os.environ``) is filtered through the allowlist, then
-    ``extra`` (the spec's non-secret values) and :data:`AGENT_ENV_FORCED` are
-    laid on top; scrubbed names are removed last, whatever their source.
+    ``base`` (default ``os.environ``) is filtered through the allowlist; when
+    ``base`` names a chip lab install (:mod:`chipin_backend.chiplab`), its
+    ``PATH`` entry and the lab's own path settings are added. Then ``extra``
+    (the spec's non-secret values) and :data:`AGENT_ENV_FORCED` are laid on
+    top; scrubbed names are removed last, whatever their source.
     """
     source = os.environ if base is None else base
     env = {
@@ -82,6 +86,7 @@ def build_agent_env(
         for name, value in source.items()
         if name in AGENT_ENV_ALLOWED_NAMES or name.startswith(AGENT_ENV_ALLOWED_PREFIXES)
     }
+    env.update(chiplab_env(source))
     env.update(extra or {})
     env.update(AGENT_ENV_FORCED)
     for name in AGENT_ENV_SCRUBBED_NAMES:
