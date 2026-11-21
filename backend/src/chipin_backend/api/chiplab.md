@@ -5,8 +5,9 @@ Exit codes: 0 ok, 1 error (read `error`), 2 a check ran and the design failed it
 
 - **compile**: `ingest-model` (or `compile-ir`) to bring in your model, then `synthesize`, `count-luts` and
   `map-to-process`.
-- **verify**: `simulate` (pass your own test vectors and expected outputs), `prove-equivalence`,
-  `rtl-simulate`, and `verification-level`.
+- **verify** (the chip against your model; against patient recordings too when you have them): `simulate`
+  (pass your own test vectors and expected outputs), `prove-equivalence`, `rtl-simulate`, and
+  `verification-level`.
 - **report**: `chip-report`, `layout` / `timing-power` (pass `decision_rate_hz` = how often the chip decides,
   for the battery-relevant power), `tt-package`, `bitstream`, `estimate-cost`.
 
