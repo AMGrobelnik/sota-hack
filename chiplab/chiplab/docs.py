@@ -8,39 +8,61 @@ import typing
 
 from chiplab import config
 
+SPIKE = "765fa47586bd"     # design id of fixtures/spike_best.json after `ingest-model` (deterministic on every machine)
+TINY = "ed8e52cb7a11"      # design id of the `compile-ir` example below
+ADD_IR = {"ir": "chipir/1", "name": "xx", "inputs": [{"name": "x", "lanes": 1, "bits": 4, "signed": False}],
+          "nodes": [{"id": "s", "op": "add", "a": "x", "b": "x"}], "outputs": [{"name": "y", "src": "s"}], "meta": {}}
+# Every example runs as written (tests/test_agent_examples.py), in this order, after the two that create designs.
 EXAMPLES = {
-    "ingest_model": {"format": "intnn", "model": "<contents of fixtures/spike_best.json>", "name": "spike"},
+    "ingest_model": {"format": "intnn", "model": "@fixtures/spike_best.json", "name": "spike"},
     "compile_ir": {"ir": {"ir": "chipir/1", "name": "tiny", "inputs": [{"name": "x", "lanes": 4, "bits": 4, "signed": False}],
                           "nodes": [{"id": "s", "op": "matvec", "src": "x", "W": [[1, -1, 2, 0]], "b": [-3]},
                                     {"id": "y", "op": "cmp", "src": "s", "rel": "gt", "t": [0]}],
                           "outputs": [{"name": "y", "src": "y"}], "meta": {}}},
-    "synthesize": {"design_id": "cdaea5efb328"},
-    "simulate": {"design_id": "cdaea5efb328", "inputs": "random", "n": 100000},
-    "prove_equivalence": {"design_id": "cdaea5efb328"},
-    "map_to_process": {"design_id": "cdaea5efb328", "pdk": "sky130"},
-    "count_luts": {"design_id": "cdaea5efb328", "family": "ice40"},
-    "compose_chip": {"heads": {"a": "<design_id>", "b": "<design_id>"}, "fusion": [{"name": "alarm", "op": "and", "inputs": ["a_y", "b_y"]}],
+    "synthesize": {"design_id": SPIKE},
+    "simulate": {"design_id": SPIKE, "inputs": "random", "n": 100000},
+    "prove_equivalence": {"design_id": SPIKE},
+    "map_to_process": {"design_id": SPIKE, "pdk": "sky130"},
+    "count_luts": {"design_id": SPIKE, "family": "ice40"},
+    "compose_chip": {"heads": {"a": SPIKE, "b": TINY}, "fusion": [{"name": "alarm", "op": "and", "inputs": ["a_y", "b_y"]}],
                      "shared_inputs": False},
-    "compile_stream": {"design_id": "cdaea5efb328", "tt": True},
-    "rtl_simulate": {"design_id": "cdaea5efb328", "n": 300},
-    "submit_job": {"tool": "map_to_process", "args": {"design_id": "cdaea5efb328", "pdk": "sky130"}, "session_id": "agent-A"},
-    "job_result": {"job_id": "j-…"},
-    "estimate_batch": {"designs": ["<design_id>", "<design_id>"], "keep": 5},
-    "chip_report": {"design_id": "cdaea5efb328"},
-    "estimate_cost": {"design_id": "cdaea5efb328"},
-    "layout": {"design_id": "cdaea5efb328", "pdk": "sky130", "clock_period_ns": 20},
-    "timing_power": {"design_id": "cdaea5efb328", "pdk": "sky130"},
-    "bitstream": {"design_id": "cdaea5efb328"},
-    "tt_package": {"design_id": "cdaea5efb328", "harden": False},
-    "prove_sequential": {"design_id": "cdaea5efb328", "timeout": 300},
-    "verification_level": {"design_id": "cdaea5efb328"},
-    "gate_activity": {"design_id": "cdaea5efb328", "n": 2000, "vcd": True},
-    "compare_hw_baseline": {"design_id": "cdaea5efb328", "task": "af_vs_normal", "dataset": "AFDB", "protocol": "record-level, per paper"},
-    "submit_verilog": {"verilog": "module m(input [3:0] x, output [4:0] y); assign y = x + x; endmodule", "top": "m",
+    "compile_stream": {"design_id": SPIKE, "tt": True},
+    "rtl_simulate": {"design_id": SPIKE, "n": 300},
+    "prove_sequential": {"design_id": SPIKE, "timeout": 300},
+    "estimate_batch": {"designs": [SPIKE, TINY], "keep": 1},
+    "gate_activity": {"design_id": SPIKE, "n": 2000, "vcd": True},
+    "estimate_cost": {"design_id": SPIKE},
+    "compare_hw_baseline": {"design_id": SPIKE, "task": "af_vs_normal", "dataset": "AFDB", "protocol": "record-level, per paper"},
+    "verification_level": {"design_id": SPIKE},
+    "chip_report": {"design_id": SPIKE},
+    "bitstream": {"design_id": SPIKE},
+    "layout": {"design_id": TINY, "pdk": "sky130", "clock_period_ns": 20},
+    "timing_power": {"design_id": TINY, "pdk": "sky130", "clock_period_ns": 20},
+    "tt_package": {"design_id": TINY, "harden": False},
+    "tt_readiness": {"design_id": TINY, "run_tests": True},
+    "tt_export": {"design_id": TINY, "mode": "standalone"},
+    "submit_verilog": {"verilog": "module xx(input [3:0] x, output [4:0] y); assign y = x + x; endmodule", "top": "xx",
                        "port_spec": {"inputs": [{"name": "x", "lanes": 1, "bits": 4, "signed": False}],
                                      "outputs": [{"name": "y", "lanes": 1, "bits": 5, "signed": False}]},
-                       "reference_ir": "<chipir/1 doc computing x + x>"},
+                       "reference_ir": ADD_IR},
+    "submit_job": {"tool": "map_to_process", "args": {"design_id": SPIKE, "pdk": "sky130"}, "session_id": "agent-A"},
+    "job_status": {"job_id": "@job_id"},
+    "job_result": {"job_id": "@job_id"},
+    "cache_stats": {},
 }
+# What each example needs beyond yosys/iverilog/verilator (tests skip when it is missing).
+REQUIRES = {"map_to_process": ["pdk"], "layout": ["docker", "pdk"], "timing_power": ["docker", "pdk"],
+            "tt_package": ["tt"], "tt_readiness": ["tt"], "tt_export": ["tt"], "submit_verilog": ["docker"],
+            "submit_job": ["pdk"], "chip_report": [], "bitstream": ["ice40"]}
+
+
+def example_cli(name: str, ex: dict) -> str:
+    """The example as a shell command. '@file' values are inlined with $(cat ...); '@job_id' is the job id that
+    submit-job printed."""
+    if name == "ingest_model":
+        return ("chiplab ingest-model --json \"{\\\"format\\\": \\\"intnn\\\", \\\"model\\\": "
+                "$(cat fixtures/spike_best.json), \\\"name\\\": \\\"spike\\\"}\"")
+    return f"chiplab {name.replace('_', '-')} --json '{json.dumps(ex)}'"
 
 
 def _schema(t) -> dict:
@@ -108,6 +130,18 @@ def agent_md() -> str:
            "file); `chiplab doctor` shows what it picked. Start workers with `chiplab workers`. Results are "
            "cached by content, so duplicate designs return instantly (`cached: true`).",
            "- Every tool also accepts `run_id`, `session_id`, `round` (events, see EVENTS.md) and `force` (skip the cache).",
+           "- Status and exit code are honest: `ok` = 0 (the tool did its job and every check it ran passed), `error` = 1 "
+           "(it could not do its job; see `error`), `fail` = 2 (it ran, and the design failed a check, e.g. "
+           "`bit_exact: false`), `timeout` = 3. A queued job is `ok` with `state: queued`.",
+           "- Proof sizes: `prove-equivalence` (gates = RTL) takes about a second at a few thousand gates; with "
+           "`golden: true` it also proves the RTL against an independent golden model of the IR in one miter (spike, "
+           "2.3k gates: about 7 s). `prove-sequential` is compositional (the core is a black box, proven by "
+           "prove-equivalence), so it proves the clocked wrapper in seconds at any model size; `whole: true` proves "
+           "the flattened design and is only practical for a few hundred gates.",
+           "- Safety: `submit-verilog` runs lint/synthesis only inside the sandbox container unless you pass "
+           "`allow_host: true`; `ingest-model` with `format: torchlogix` loads a pickle and needs `trusted: true` (and "
+           "`CHIPLAB_ALLOW_PICKLE=1` when called through the optional network server). XGBoost models are converted in a "
+           "separate process.",
            "- Verification levels: 1 bit-exact simulation, 2 formal proof, 3 streaming RTL simulation (cocotb + Icarus) + "
            "lint, 4 Tiny Tapeout gate-level test after layout, 5 real hardware (never set automatically).", "",
            "## Tools", ""]
@@ -129,8 +163,9 @@ def agent_md() -> str:
             out.append(f"  - `{p}`: {d}")
         ex = EXAMPLES.get(name)
         out += ["", "<details><summary>JSON schema</summary>", "", "```json", json.dumps(tool_schema(fn), indent=1, default=str), "```", "</details>", ""]
-        if ex:
-            out += ["Example:", "```bash", f"chiplab {name.replace('_', '-')} --json '{json.dumps(ex)}'", "```", ""]
+        if ex is not None:
+            note = " (`@job_id` = the job id printed by the submit-job example)" if "@job_id" in json.dumps(ex) else ""
+            out += [f"Example{note}:", "```bash", example_cli(name, ex), "```", ""]
     return "\n".join(out)
 
 

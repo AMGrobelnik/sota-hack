@@ -170,6 +170,10 @@ def _shims() -> Path:
 def _env() -> dict:
     env = os.environ.copy()
     env.update({"PDK_ROOT": str(config.PDK_ROOT), "LIBRELANE_TAG": LIBRELANE_TAG})
+    if sys.platform == "darwin":
+        # cairocffi (tt-support-tools' PNG export) does not search Homebrew's lib folder on macOS
+        brew = "/opt/homebrew/lib" if Path("/opt/homebrew/lib").is_dir() else "/usr/local/lib"
+        env.setdefault("DYLD_FALLBACK_LIBRARY_PATH", brew)
     env["PATH"] = f"{_shims()}:{Path(tt_python()).parent}:{env['PATH']}"
     return env
 
@@ -222,10 +226,13 @@ def tt_package(rtl_files: list[Path], top_module: str, workdir: Path, design_met
         if (TT_TEMPLATE / name).exists():
             shutil.copy(TT_TEMPLATE / name, proj / name)
     (proj / "info.yaml").write_text(_info_yaml(design_meta, top_module, sources, tiles, clock_hz))
-    (proj / "docs" / "info.md").write_text(
-        f"## How it works\n\n{design_meta.get('how', 'A fixed-weight integer model wired into logic gates, designed by an AI scientist in the chipin.space chip lab.')}\n\n"
-        f"## How to test\n\nStream one input value per rising edge of ui_in[7] on ui_in[6:0]; after a full window the "
-        f"decision appears on uo_out with a valid bit.\n\n## External hardware\n\nNone.\n")
+    if design_meta.get("info_md"):
+        (proj / "docs" / "info.md").write_text(design_meta["info_md"])
+    else:
+        (proj / "docs" / "info.md").write_text(
+            f"## How it works\n\n{design_meta.get('how', 'A fixed-weight integer model wired into logic gates, designed by an AI scientist in the chipin.space chip lab.')}\n\n"
+            f"## How to test\n\nStream each input as 15-bit words ({{uio_in, ui_in[6:0]}}) on rising edges of ui_in[7]; after a full frame "
+            f"the decision appears on uo_out[6:0] with valid on uo_out[7].\n\n## External hardware\n\nNone.\n")
     # test bench from the template, pointed at our top module and sources
     tb = (TT_TEMPLATE / "test" / "tb.v").read_text().replace("tt_um_example", top_module)
     (proj / "test" / "tb.v").write_text(tb)
@@ -236,7 +243,7 @@ def tt_package(rtl_files: list[Path], top_module: str, workdir: Path, design_met
         (proj / "test" / "vectors.json").write_text(json.dumps(vectors))
     # tt-support-tools expects ./tt inside the project (FP_DEF_TEMPLATE is dir::../tt/tech/...)
     shutil.copytree(TT_TOOLS, proj / "tt", ignore=shutil.ignore_patterns("__pycache__"), symlinks=True)  # keeps tt/.git (tt_tool reads its version)
-    (proj / ".gitignore").write_text("runs/\ntt/\ntest/sim_build/\ntest/results.xml\n*.fst\n")
+    (proj / ".gitignore").write_text("runs/\ntt/\ntest/sim_build/\ntest/results.xml\n*.fst\nharden.log\n")
     git = lambda *a: subprocess.run(["git", *a], cwd=proj, capture_output=True, text=True)
     git("init", "-q"); git("add", "-A")
     git("-c", "user.name=chipin.space chip lab", "-c", "user.email=lab@chipin.space", "commit", "-q", "-m", "chip lab: TT project")

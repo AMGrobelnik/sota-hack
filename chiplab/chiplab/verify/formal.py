@@ -10,9 +10,9 @@ Two proofs, chained:
 A and B together: gates == golden model for every input. If A is inconclusive, B alone is reported (synthesis
 proved; RTL == IR then rests on construction and tests/test_ir_fuzz.py).
 
-Default is B only (fast: well under a second of ABC on a 2.2k-gate chip). A is opt-in (golden=True): it finishes in
-seconds on small chips, but a 16-lane x 8-input matvec node of the spike chip did not finish in 10 min (SAT) or 60 s
-(ABC cec), so it is not yet usable for chips of that size.
+Default is B only (fast: well under a second of ABC on a 2.2k-gate chip). A is opt-in (golden=True): it first tries
+the whole design in one techmapped miter with ABC iprove (prove_rtl_vs_golden_whole: every input, no range assumptions;
+the 2.2k-gate spike in a few seconds), and falls back to the node-by-node proof only if that is inconclusive.
 """
 from __future__ import annotations
 
@@ -114,6 +114,46 @@ def prove_rtl_vs_golden(ir: dict, workdir: Path, timeout: int = 600) -> dict:
             "seconds": round(time.time() - t0, 1)}
 
 
+def _abc_verdict(out: str) -> bool | None:
+    """ABC iprove on a one-output miter: UNSATISFIABLE = the miter never fires (equivalent); SATISFIABLE = a CEX."""
+    last = [ln.strip() for ln in out.splitlines() if "SATISFIABLE" in ln][-1:]
+    if not last:
+        return None
+    return True if last[0].startswith("UNSATISFIABLE") else (False if last[0].startswith("SATISFIABLE") else None)
+
+
+def prove_rtl_vs_golden_whole(ir: dict, port_info: dict, rtl: Path, workdir: Path, timeout: int = 600) -> dict:
+    """Proof A for the WHOLE design in one miter, every input value, no range assumptions.
+
+    Both sides are lowered with `techmap` (no alumacc/maccmap): each `a + b + c` stays a ripple-adder chain in source
+    order. The golden model and the production emitter add the same terms in the same order, so their partial sums
+    are equal signals, and ABC `iprove` (rewriting, fraiging and SAT on the miter output) merges them. The
+    lab's synthesis (alumacc/maccmap + ABC) reshapes those adders, which is why golden vs gates directly, or Yosys
+    `sat` on one node, takes minutes; RTL vs golden here takes seconds (spike ~3 s, 3-head chip ~10 s; `&cec -m` on the
+    same miter needed minutes for the 3-head chip's 2-of-3 vote cone)."""
+    workdir.mkdir(parents=True, exist_ok=True)
+    t0, top = time.time(), port_info["top"]
+    (workdir / "gold.v").write_text(emit_golden(ir, "gold_top", port_info))
+    try:
+        run(f"read_verilog gold.v\nread_verilog {Path(rtl).resolve()}\nproc\nopt_clean\n"
+            f"miter -equiv -flatten gold_top {top} miter\nhierarchy -top miter\nflatten\ntechmap\nopt -fast\naigmap\n"
+            f"opt_clean\nwrite_aiger -zinit miter.aig\n", workdir, timeout, "golden_miter")
+    except SynthError as e:
+        return {"proved": None, "nodes": [], "detail": str(e)[-300:], "seconds": round(time.time() - t0, 1)}
+    left = max(10, int(timeout - (time.time() - t0)))
+    try:
+        p = subprocess.run([oss_bin("yosys-abc"), "-c", "read_aiger miter.aig; iprove"], cwd=workdir,
+                           capture_output=True, text=True, timeout=left)
+        out = p.stdout + p.stderr
+    except subprocess.TimeoutExpired:
+        out = f"timed out after {left}s"
+    (workdir / "golden_cec.log").write_text(out)
+    ok = _abc_verdict(out)
+    s = round(time.time() - t0, 2)
+    return {"proved": ok, "nodes": [{"id": "<whole design>", "op": "whole", "proved": ok, "seconds": s}],
+            "detail": out[-300:], "seconds": s}
+
+
 def prove(ir: dict, port_info: dict, gate_verilog: Path, rtl: Path, workdir: Path, timeout: int = 600,
           golden: bool = False) -> dict:
     workdir.mkdir(parents=True, exist_ok=True)
@@ -132,8 +172,19 @@ def prove(ir: dict, port_info: dict, gate_verilog: Path, rtl: Path, workdir: Pat
     if not golden:
         return {"proved": True, "against": "production RTL (synthesis proved; RTL == IR by construction and fuzz tests)",
                 "method": "abc cec", "detail": out_b, "seconds": round(time.time() - t0, 1), "verification_level": 2}
-    # A: production RTL == golden model of the IR, node by node
-    a = prove_rtl_vs_golden(ir, workdir / "golden_nodes", timeout)
+    # A: production RTL == golden model of the IR; first the whole design in one miter (no range assumptions) ...
+    w = prove_rtl_vs_golden_whole(ir, port_info, rtl, workdir / "golden_whole", timeout)
+    if w["proved"] is True:
+        return {"proved": True, "against": "independent golden model of the IR (emit/golden.py)",
+                "method": "abc cec (gates == RTL) + abc iprove on one techmapped miter (RTL == golden, every input)",
+                "nodes": w["nodes"], "seconds": round(time.time() - t0, 1), "verification_level": 2}
+    if w["proved"] is False:
+        return {"proved": False, "against": "independent golden model of the IR (emit/golden.py)",
+                "method": "abc iprove, whole-design miter", "nodes": w["nodes"],
+                "detail": "emitter disagrees with golden model", "seconds": round(time.time() - t0, 1),
+                "verification_level": 1}
+    # ... and node by node if the whole miter was inconclusive
+    a = prove_rtl_vs_golden(ir, workdir / "golden_nodes", max(10, int(timeout - (time.time() - t0))))
     if a["proved"] is True:
         return {"proved": True, "against": "independent golden model of the IR (emit/golden.py)",
                 "method": "abc cec (gates == RTL) + per-node yosys miter/sat (RTL == golden on derived ranges)",

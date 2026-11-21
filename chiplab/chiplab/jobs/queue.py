@@ -52,7 +52,7 @@ def _execute(job_id: str) -> str:
     except Exception as e:  # tools already catch; this is a last resort
         res = {"status": "error", "error": f"{type(e).__name__}: {e}"}
     con.execute("UPDATE jobs SET status=?, finished=?, result=?, error=? WHERE id=?",
-                ("done" if res.get("status") == "ok" else "failed", time.time(), json.dumps(res, default=str),
+                ({"ok": "done", "fail": "done", "timeout": "timeout"}.get(res.get("status"), "failed"), time.time(), json.dumps(res, default=str),
                  res.get("error"), job_id))
     con.close()
     return res.get("status", "ok")
@@ -87,7 +87,7 @@ def submit(tool: str, args: dict, session_id: str | None = None, lane: str | Non
     r = _RUNNERS[lane](jid)
     con.execute("UPDATE jobs SET huey_id=? WHERE id=?", (getattr(r, "id", None), jid))
     con.close()
-    return {"job_id": jid, "tool": tool, "lane": lane, "status": "queued"}
+    return {"job_id": jid, "tool": tool, "lane": lane, "state": "queued"}
 
 
 def status(job_id: str, with_result: bool = False) -> dict:

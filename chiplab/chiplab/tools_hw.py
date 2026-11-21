@@ -86,17 +86,18 @@ def ingest_model(format: str, model: dict | None = None, path: str | None = None
         ir = to_ir(json.loads(blob) if isinstance(blob, (bytes, str)) else blob, in_spec=in_spec, name=name)
     elif fmt == "xgboost_json":
         import tempfile
-        import xgboost as xgb
-        from chiplab.ingest.treelut import from_xgboost
+        from chiplab.ingest.xgb_worker import run_worker  # xgboost runs in its own process (OpenMP clash on macOS)
         blob = _read_blob(model, path, b64)
         raw = json.dumps(blob).encode() if isinstance(blob, dict) else blob
         with tempfile.NamedTemporaryFile(suffix=".json") as f:
             f.write(raw); f.flush()
-            booster = xgb.XGBClassifier(); booster.load_model(f.name)
-        ir = from_xgboost(booster, w_feature, w_tree)
+            ir = run_worker(["convert", f.name, str(w_feature), str(w_tree), name])
     elif fmt == "torchlogix":
+        import os
         if not (path and trusted):
-            raise ValueError("torchlogix models are pickles: pass a local path and trusted=true")
+            raise ValueError("torchlogix models are pickles (loading one can run code): pass a local path and trusted=true")
+        if os.environ.get("CHIPLAB_REMOTE") and not os.environ.get("CHIPLAB_ALLOW_PICKLE"):
+            raise ValueError("refused over the network server: set CHIPLAB_ALLOW_PICKLE=1 on the lab machine to allow pickles")
         import torch
         from chiplab.ingest.torchlogix import to_ir
         ir = to_ir(torch.load(path, weights_only=False), name=name)
@@ -288,10 +289,11 @@ def chip_report(design_id: str, name: str | None = None) -> dict:
       "(port_spec: inputs/outputs with lanes, bits, signed). Accepted designs get a design_id like any other.",
       {"verilog": "str — the source", "top": "str — top module name", "port_spec": "dict — {inputs:[{name,lanes,bits,signed}], outputs:[...]}",
        "reference_ir": "dict — chipir/1 model the circuit must equal (optional)", "vectors": "dict — port -> [[ints]] (optional)",
-       "expected": "dict — output -> [[ints]] (optional)", "n": "int — random vectors when checking against reference_ir (20000)"},
+       "expected": "dict — output -> [[ints]] (optional)", "n": "int — random vectors when checking against reference_ir (20000)",
+       "allow_host": "bool — run lint/synthesis on this machine if the sandbox container is missing (default false: refuse)"},
       lane="cpu")
 def submit_verilog(verilog: str, top: str, port_spec: dict, reference_ir: dict | None = None, vectors: dict | None = None,
-                   expected: dict | None = None, n: int = 20000) -> dict:
+                   expected: dict | None = None, n: int = 20000, allow_host: bool = False) -> dict:
     import hashlib
     import numpy as np
     from chiplab import config
@@ -301,9 +303,9 @@ def submit_verilog(verilog: str, top: str, port_spec: dict, reference_ir: dict |
         raise ValueError("a reference is required: reference_ir, or vectors + expected")
     sid = "v" + hashlib.sha256((verilog + top + json.dumps(port_spec, sort_keys=True)).encode()).hexdigest()[:11]
     d = config.home("designs", sid)
-    r = check_verilog(verilog, top, d / "sandbox")
+    r = check_verilog(verilog, top, d / "sandbox", allow_host=allow_host)
     if not r["accepted"]:
-        return {"design_id": None, "accepted": False, **r}
+        return {"design_id": None, **r, "accepted": False, "error": "; ".join(r.get("problems") or ["rejected"])}
     info = {"top": top, "inputs": port_spec["inputs"], "outputs": port_spec["outputs"]}
     if vectors:
         X = {k: np.asarray(v, dtype=np.int64) for k, v in vectors.items()}
@@ -332,16 +334,18 @@ def submit_verilog(verilog: str, top: str, port_spec: dict, reference_ir: dict |
 
 # ------------------------------------------------------------------------------------------------ layout, FPGA, TT
 
+DEFAULT_CLOCK_NS = {"sky130A": 20.0, "ihp-sg13g2": 20.0, "gf180mcuD": 40.0}  # GF180 is slower: 40 ns default
 _PDK_ALIAS = {"sky130": "sky130A", "sky130A": "sky130A", "gf180": "gf180mcuD", "gf180mcuD": "gf180mcuD",
               "ihp": "ihp-sg13g2", "ihp-sg13g2": "ihp-sg13g2"}
 
 
-def _layout(design_id: str, pdk: str, clock_period_ns: float, core_util: int, activity_vcd: str | None, timeout: int) -> dict:
+def _layout(design_id: str, pdk: str, clock_period_ns: float | None, core_util: int, activity_vcd: str | None, timeout: int) -> dict:
     from pathlib import Path
     from chiplab.hw.librelane import timing_power_layout
     d = _design_dir(design_id)
     info = json.loads((d / "port.json").read_text())
     p = _PDK_ALIAS[pdk]
+    clock_period_ns = clock_period_ns or DEFAULT_CLOCK_NS.get(p, 20.0)
     r = timing_power_layout([d / "design.v"], info["top"], d / f"layout_{p}", pdk=p, clock_period_ns=clock_period_ns,
                             activity_vcd=Path(activity_vcd) if activity_vcd else None, core_util=core_util, timeout=timeout)
     pw = r.get("power_w")
@@ -365,21 +369,23 @@ def _layout(design_id: str, pdk: str, clock_period_ns: float, core_util: int, ac
 @tool("Place and route the chip with LibreLane (Docker): real cell area, die area, timing slack against a clock, "
       "power (vectorless, or from an activity VCD), GDS and the KLayout image. Validated on sky130; gf180 and ihp use "
       "the same flow (validated up to configuration).",
-      {"design_id": "str", "pdk": "str — sky130|gf180|ihp (sky130)", "clock_period_ns": "float — decision clock for timing (20)",
+      {"design_id": "str", "pdk": "str — sky130|gf180|ihp (sky130)", "clock_period_ns": "float — clock for timing (default 20 ns; 40 ns on gf180)",
        "core_util": "int — target utilisation % (40)", "activity_vcd": "str — VCD of real activity for power (optional)",
        "timeout": "int seconds (3600)"}, lane="docker", cacheable=True)
-def layout(design_id: str, pdk: str = "sky130", clock_period_ns: float = 20.0, core_util: int = 40,
+def layout(design_id: str, pdk: str = "sky130", clock_period_ns: float | None = None, core_util: int = 40,
            activity_vcd: str | None = None, timeout: int = 3600) -> dict:
     return _layout(design_id, pdk, clock_period_ns, core_util, activity_vcd, timeout)
 
 
 @tool("Timing and power of the laid-out chip (same LibreLane run as layout; cached, so calling both costs one run).",
-      {"design_id": "str", "pdk": "str — sky130|gf180|ihp (sky130)", "clock_period_ns": "float (20)",
+      {"design_id": "str", "pdk": "str — sky130|gf180|ihp (sky130)", "clock_period_ns": "float (default 20 ns; 40 ns on gf180)",
        "activity_vcd": "str — optional VCD for activity-based power"}, lane="docker", cacheable=True)
-def timing_power(design_id: str, pdk: str = "sky130", clock_period_ns: float = 20.0, activity_vcd: str | None = None) -> dict:
+def timing_power(design_id: str, pdk: str = "sky130", clock_period_ns: float | None = None, activity_vcd: str | None = None) -> dict:
     from chiplab.tools import TOOLS
     r = TOOLS["layout"]["fn"](design_id=design_id, pdk=pdk, clock_period_ns=clock_period_ns, activity_vcd=activity_vcd)
-    return {k: v for k, v in r.items() if k not in ("cost", "cached", "status")}
+    if r.get("status") != "ok":
+        return r
+    return {k: v for k, v in r.items() if k not in ("cost", "status")}
 
 
 @tool("iCE40UP5K bitstream (UPduino class board): the streaming wrapper plus a board top (clk, rst_n, ui_in, uo_out "
@@ -419,6 +425,10 @@ def tt_package(design_id: str, harden: bool = False, tiles: str = "auto", pdk: s
             "description": "A fixed-weight integer model wired into logic gates",
             "how": "Inputs are streamed as 15-bit words ({uio_in, ui_in[6:0]}) on rising edges of ui_in[7]; when a frame "
                    "is complete the decision appears on uo_out[6:0] with valid on uo_out[7]."}
+    from chiplab.hw.tt_submit import _info_md, stream_pinout
+    sinfo = json.loads((d / "stream_tt.json").read_text())
+    meta["pinout"] = stream_pinout(sinfo)         # every TT pin documented, so the project is submission-ready
+    meta["info_md"] = _info_md(sinfo, meta["title"])
     r = _tt([d / "stream_tt.v"], s["top"], d / "tt", meta, tiles=tiles, harden=harden, pdk=_PDK_ALIAS.get(pdk, pdk),
             vectors=tt_vectors(ir, vectors), clock_hz=clock_hz, test_py=tt_project_test())
     (d / "tt_package.json").write_text(json.dumps(r, default=str))
@@ -430,14 +440,19 @@ def tt_package(design_id: str, harden: bool = False, tiles: str = "auto", pdk: s
 
 
 @tool("Sequential equivalence (eqy) of the streaming wrapper against its synthesised netlist: verification level 2 "
-      "for clocked designs. Works on small chips; may time out on large ones (reported honestly).",
-      {"design_id": "str", "timeout": "int seconds (600)"}, lane="cpu", cacheable=True)
-def prove_sequential(design_id: str, timeout: int = 600) -> dict:
+      "for clocked designs. Compositional by default: the combinational core is a black box here (prove it with "
+      "prove_equivalence), so the proof covers only the clocked wrapper and takes seconds at any model size "
+      "(spike: 3 s). whole=true proves the flattened design instead (small chips only, a few hundred gates).",
+      {"design_id": "str", "timeout": "int seconds (600)", "whole": "bool — prove the whole flattened design (false)"},
+      lane="cpu", cacheable=True)
+def prove_sequential(design_id: str, timeout: int = 600, whole: bool = False) -> dict:
     from chiplab.tools import TOOLS
     from chiplab.verify.eqy import prove_sequential as _ps
     d = _design_dir(design_id)
     s = TOOLS["compile_stream"]["fn"].__wrapped__(design_id=design_id, tt=True)
-    r = _ps([d / "stream_tt.v"], s["top"], d / "eqy", timeout=timeout)
+    core = json.loads((d / "port.json").read_text())["top"]
+    r = _ps([d / "stream_tt.v"], s["top"], d / ("eqy_whole" if whole else "eqy"), timeout=timeout,
+            blackbox=None if whole else [core], blackbox_sources=None if whole else [d / "design.v"])
     (d / "eqy.json").write_text(json.dumps(r, default=str))
     return {"design_id": design_id, **r}
 
@@ -447,3 +462,34 @@ def prove_sequential(design_id: str, timeout: int = 600) -> dict:
 def verification_level(design_id: str) -> dict:
     from chiplab.verify.ladder import stamp
     return {"design_id": design_id, **stamp(_design_dir(design_id))}
+
+
+
+@tool("Tiny Tapeout submission readiness of a design's TT project (made by tt_package): info.yaml, pinout, docs, top "
+      "ports, lint, licence, RTL test, and TT's official precheck if the project was hardened. Never submits or pays.",
+      {"design_id": "str", "run_tests": "bool (true)", "precheck": "bool — run TT precheck if hardened (true)"}, lane="docker")
+def tt_readiness(design_id: str, run_tests: bool = True, precheck: bool = True) -> dict:
+    from chiplab.hw.tt_submit import readiness
+    d = _design_dir(design_id)
+    projs = sorted((d / "tt").glob("tt_*")) if (d / "tt").exists() else []
+    if not projs:
+        raise ValueError("no Tiny Tapeout project for this design: run tt_package first")
+    r = readiness(projs[0], run_tests=run_tests, run_precheck_if_hardened=precheck)
+    (d / "tt_readiness.json").write_text(json.dumps(r, default=str))
+    out = {"design_id": design_id, "project": str(projs[0]), **r}
+    if not r.get("ready"):
+        out["status"] = "fail"   # the check ran; the project is not ready yet (see blocking)
+    return out
+
+
+@tool("Export a design's TT project as a standalone repo shaped like Tiny Tapeout's template (or staged under "
+      "chiplab/tt_projects/ for the tt-gds workflow), ready for a human to push and submit. Creates no remote repo.",
+      {"design_id": "str", "out_dir": "str — where to write (optional)", "mode": "str — standalone|monorepo (standalone)"}, lane="cpu")
+def tt_export(design_id: str, out_dir: str | None = None, mode: str = "standalone") -> dict:
+    from chiplab.hw.tt_submit import export_submission_repo
+    d = _design_dir(design_id)
+    projs = sorted((d / "tt").glob("tt_*")) if (d / "tt").exists() else []
+    if not projs:
+        raise ValueError("no Tiny Tapeout project for this design: run tt_package first")
+    r = export_submission_repo(projs[0], out_dir, mode)
+    return {"design_id": design_id, **r, "files": [r.get("repo")]}
