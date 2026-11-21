@@ -126,6 +126,16 @@ Second, one pytest process per file, with the engine and `DYLD_FALLBACK_LIBRARY_
 | test_torchlogix.py | 2 passed (exit 0 seconds=14) |
 | test_treelut.py | 2 passed (exit 0 seconds=12) |
 
+Docker-based tests and colima: `test_librelane.py::test_sky130_layout` and
+`test_tinytapeout.py::test_tt_harden_and_gate_level` fail under colima with pytest's default temp folder
+(`/private/var/folders/...`), which colima does not mount into its VM. Exact errors:
+`Error: Invalid value for '[CONFIG_FILES]...': Path 'config.json' does not exist.` and
+`Error: Invalid value for '--force-run-dir': Directory 'runs/wokwi' does not exist.` The AGENT.md layout example
+works because the run folders are inside the project under `~/projects`. With `--basetemp` pointing inside the
+project, test_librelane.py: 4 passed (98.25s); test_tinytapeout.py: see log (?s, with the cairo path variable too) (observed). Suggested fix for the lab or its README: run the tests with a `--basetemp` under the
+checkout (or start colima with a mount for `/private/var/folders`); Docker Desktop shares these folders by default.
+In the per-file table below the two Docker test files therefore show the failure of the default run.
+
 macOS finding: the Tiny Tapeout tools import `cairocffi`, which does not search Homebrew's lib folder. With
 Homebrew `cairo` installed, `tt-package` fails with `no library called "libcairo-2" was found` unless
 `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib` is set; with it set, `tt-package` returns user_config_ok true and
