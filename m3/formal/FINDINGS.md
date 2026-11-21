@@ -86,7 +86,9 @@ Seconds are wall clock of the method, including miter building; "limit" is the r
 | chain, P1 &cec + bitwuzla race | spike | 4.9 to 5.5 s | proved | 3 |
 | chain, P1 &cec only | spike | 7.6 to 9.1 s | proved | 3 |
 | chain, P1 bitwuzla only | spike | 5.3 to 9.5 s | proved | 3 |
-| chain, P1 &cec only | 3-head | 132 to 158 s | proved | 3 |
+| chain, P1 &cec only, split | 3-head | 132 to 158 s | proved | 3 |
+| chain, P1 bitwuzla only, split | 3-head | 169 to 197 s | proved | 3 |
+| chain, P1 &cec + bitwuzla race, split | 3-head | 119 to 131 s | proved | 3 |
 | chain, P1 &cec + bitwuzla, split | 3-head | 175 s | proved | 1 |
 | chain, P1 &cec, split per output | 3-head | 274 s | proved | 1 |
 | chain, P1 &cec, whole | 3-head | 352 s | proved | 1 |
@@ -96,7 +98,10 @@ Seconds are wall clock of the method, including miter building; "limit" is the r
 | lab golden + both patches | 3-head | 10.9 to 12.1 s | proved | 3 |
 
 "lab golden" is the lab's True)` with both proposed patches applied: spike 4.0 to 4.4 s, 3-head chip about 12 s.=own `prove(golden=True)` with both proposed patches applied: spike 4.0 to 4.4 s, 3-head chip 10.9 to 12.1 s.=True)` (`scripts/lab_golden.py`, `scripts/check_iprove.sh`) on a
-copy of the lab package with the patch applied.
+copy of the lab package with the patch applied. "split" = one P1 miter per output port, all in parallel
+(the spike has one output, so split and whole are the same there). The last four 3-head repeat runs
+(bitwuzla run 3 and the three race runs, `scripts/remeasure.sh`) ran after b77cc76 was merged into the
+worktree; the rebuilt designs kept their ids, so the inputs to the proof were the same.
 
 P1 alone, from the recipe sweep (`scripts/fastgolden.py`, scope `wholertl`, up to 7 jobs in parallel,
 limit 300 s, 1 run each; add P2, 1.2 to 9 s, for the full chain):
