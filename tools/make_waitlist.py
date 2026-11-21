@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the join-waitlist copies waitlist/x1-x5.html, v1-v5.html and w1-w10.html from variants/.
+"""Generate the join-waitlist copies waitlist/y1-y5.html, x1-x5.html, v1-v5.html and w1-w10.html from variants/.
 
 Each copy is the landing variant with every "Try now" call to action relabelled
 "Join waitlist" and every link to ../dashboard/ pointed at join.html?v=N (N is 1-5 for v, "wN" for w).
@@ -18,7 +18,7 @@ SITE = Path(__file__).resolve().parent.parent
 SRC_DIR = SITE / "variants"
 OUT_DIR = SITE / "waitlist"
 MAIN = "w3"  # the variant shown at /waitlist/ (also set as the join page's back target)
-VARIANTS = [f"x{i}" for i in range(1, 6)] + [f"v{i}" for i in range(1, 6)] + [f"w{i}" for i in range(1, 11)]
+VARIANTS = [f"y{i}" for i in range(1, 6)] + [f"x{i}" for i in range(1, 6)] + [f"v{i}" for i in range(1, 6)] + [f"w{i}" for i in range(1, 11)]
 
 TRY_LABEL = re.compile(r">(\s*)Try now(\s*)<")
 DASH_HREF = re.compile(r"""href=(["'])\.\./dashboard/[^"']*\1""")

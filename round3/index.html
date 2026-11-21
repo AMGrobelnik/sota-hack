@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="../assets/brand/favicon.svg">
+<title>ChipIn - Round 3</title>
+<style>
+  :root { color-scheme: dark; --bar: 44px; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0b0d10; color: #e8eaed; font: 14px/1 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #bar { position: fixed; inset: 0 0 auto 0; height: var(--bar); display: flex; align-items: center; gap: 12px; padding: 0 12px; background: #14171c; border-bottom: 1px solid #262b33; z-index: 2; }
+  #bar button { width: 32px; height: 28px; border: 1px solid #333a45; border-radius: 6px; background: #1c2027; color: inherit; font-size: 16px; cursor: pointer; }
+  #bar button:hover { background: #262b33; }
+  #bar button:focus-visible, #bar a:focus-visible { outline: 2px solid #6aa9ff; outline-offset: 2px; }
+  #label { min-width: 0; flex: 1; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+  #label b { font-weight: 600; margin-right: 8px; color: #9aa4b2; }
+  #bar a { color: #8ab4ff; text-decoration: none; white-space: nowrap; }
+  #bar a:hover { text-decoration: underline; }
+  #stage { position: fixed; inset: var(--bar) 0 0 0; }
+  iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; }
+  #bar .logo { display: flex; align-items: center; }
+  #bar .logo img { height: 22px; width: auto; display: block; }
+  #bar .logo:hover { text-decoration: none; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <a class="logo" href="./" aria-label="ChipIn"><img src="../assets/brand/chipin-lockup-light.svg" alt="ChipIn" height="22"></a>
+  <button id="prev" aria-label="Previous variant" aria-keyshortcuts="ArrowLeft">&#8592;</button>
+  <div id="label" aria-live="polite"></div>
+  <button id="next" aria-label="Next variant" aria-keyshortcuts="ArrowRight">&#8594;</button>
+  <a id="alone" target="_blank" rel="noopener">open alone</a>
+  <a href="../">back to latest</a>
+  <a href="../how-it-works.html">how it works</a>
+  <a id="other" href="../waitlist/all/">waitlist versions</a>
+  <a href="../round2/">round 2</a>
+  <a href="../round1/">round 1</a>
+  <a href="../dashboard/">dashboard</a>
+</div>
+<div id="stage"><iframe id="frame" title="Variant"></iframe></div>
+<script>
+(function () {
+  var VARIANTS = [
+    { key: "x1", name: "Pick a room" },
+    { key: "x2", name: "Hospital at night" },
+    { key: "x3", name: "Inside the monitor" },
+    { key: "x4", name: "Smaller, then smaller" },
+    { key: "x5", name: "Thousands, then one" }
+  ];
+  var TOP_LINKS = /^(\.\.\/dashboard\/|(\.\.\/waitlist\/)?join\.html)/;
+  var frame = document.getElementById("frame");
+  var label = document.getElementById("label");
+  var alone = document.getElementById("alone");
+  var other = document.getElementById("other");
+  var idx = 0;
+
+  function fromHash() {
+    var n = parseInt(location.hash.replace("#", ""), 10);
+    return n >= 1 && n <= VARIANTS.length ? n - 1 : 0;
+  }
+  function render() {
+    var v = VARIANTS[idx], url = "../variants/" + v.key + ".html";
+    label.innerHTML = "";
+    var b = document.createElement("b");
+    b.textContent = (idx + 1) + " / " + VARIANTS.length;
+    label.appendChild(b);
+    label.appendChild(document.createTextNode(v.name));
+    alone.href = url;
+    other.href = "../waitlist/all/#" + (idx + 1);
+    document.title = (idx + 1) + " " + v.name + " - ChipIn";
+    if (frame.getAttribute("src") !== url) frame.src = url;
+  }
+  function go(n, replace) {
+    idx = ((n % VARIANTS.length) + VARIANTS.length) % VARIANTS.length;
+    var h = "#" + (idx + 1);
+    if (location.hash !== h) history.replaceState(null, "", location.pathname + location.search + h);
+    render();
+  }
+  function typing(el) {
+    return el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+  }
+  function onKey(e) {
+    if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || typing(e.target)) return;
+    if (e.key === "ArrowRight") go(idx + 1);
+    else if (e.key === "ArrowLeft") go(idx - 1);
+    else if (/^[1-9]$/.test(e.key) && +e.key <= VARIANTS.length) go(+e.key - 1);
+    else return;
+    e.preventDefault();
+  }
+  function hookFrame() {
+    try {
+      var doc = frame.contentDocument;
+      if (!doc) return;
+      doc.addEventListener("keydown", onKey);
+      var links = doc.querySelectorAll("a[href]");
+      for (var i = 0; i < links.length; i++) {
+        if (TOP_LINKS.test(links[i].getAttribute("href") || "")) links[i].target = "_top";
+      }
+    } catch (err) { /* cross-origin: leave the variant alone */ }
+  }
+  document.getElementById("prev").addEventListener("click", function () { go(idx - 1); });
+  document.getElementById("next").addEventListener("click", function () { go(idx + 1); });
+  document.addEventListener("keydown", onKey);
+  frame.addEventListener("load", hookFrame);
+  window.addEventListener("hashchange", function () { go(fromHash()); });
+  go(fromHash());
+})();
+</script>
+</body>
+</html>
