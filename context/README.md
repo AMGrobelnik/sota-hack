@@ -19,6 +19,7 @@ Everything collected for the hackathon, one line per file.
 - `transcripts/2026-11-21-1445-medical-devices-chip-weights.md`: spoken team talk about medical devices, ultrasound machines and embedding weights into a chip, 21 Nov 2026, 14:45.
 - `transcripts/2026-11-21-1448-chip-design-space-environment.md`: spoken team talk about building the chip for other people, the design space and an environment with AI scientists, 21 Nov 2026, 14:48.
 - `transcripts/2026-11-21-1531-one-job-chip-and-eeg-use-case.md`: spoken team talk questioning a chip that only detects AF, saying AF is one possible use case, and proposing EEG as a better one, 21 Nov 2026, 15:31.
+- `transcripts/2026-11-21-1441-recorder-team-and-validation-meeting.md`: ambient recording by the Lecture Recorder (1 h 18 min, from 14:41, several unlabelled speakers) with the team talk and the meeting with an outside person about the idea, personal passages and outside names removed, 21 Nov 2026.
 
 ## adrian-notes/ (research notes, 20 to 21 Nov 2026)
 
