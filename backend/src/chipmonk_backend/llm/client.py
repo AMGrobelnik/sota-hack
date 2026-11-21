@@ -1,11 +1,8 @@
 """OpenRouter client for direct chat calls (no agent loop) and the model catalogue.
 
-STUB: port the request shape and cost reading from AI Inventor's
-``.claude/skills/aii-openrouter-llms/scripts/aii_or_call_llms.py``
-(``core_openrouter_call``: cost from the response's ``usage.cost``) and
-``aii_or_search_llms.py`` (catalogue via ``/models``), on async ``httpx``,
-with :func:`chipmonk_backend.llm.retry.retry_paid_call` around each paid call.
-Drop the metering-proxy route, the key file and the ability-server wrapper.
+Adapted from AI Inventor's OpenRouter call and search scripts, on async
+``httpx``: the cost of a call is the response's own ``usage.cost``, and every
+paid call goes through :func:`chipmonk_backend.llm.retry.retry_paid_call`.
 """
 
 from __future__ import annotations
@@ -13,10 +10,34 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+import httpx
+
 from chipmonk_backend.config import LlmConfig
+from chipmonk_backend.llm.endpoints import BASE_URL
+from chipmonk_backend.llm.keys import is_key_exhausted, openrouter_api_key
+from chipmonk_backend.llm.presets import resolve_model
+from chipmonk_backend.llm.retry import retry_paid_call
 
 Message = dict[str, Any]  # {"role": "system" | "user" | "assistant", "content": ...}
 ReasoningEffort = Literal["minimal", "low", "medium", "high"]
+
+#: Longest slice of an error body kept in an exception message.
+_BODY_SNIPPET = 500
+
+
+class OpenRouterError(RuntimeError):
+    """OpenRouter refused or failed a call.
+
+    ``status_code`` is the HTTP status (or the ``error.code`` of a 200 answer
+    that carries an error); ``key_exhausted`` says the key is out of credit,
+    which no retry fixes.
+    """
+
+    def __init__(self, status_code: int | None, body: str) -> None:
+        self.status_code = status_code
+        self.body = body[:_BODY_SNIPPET]
+        self.key_exhausted = is_key_exhausted(status_code, body)
+        super().__init__(f"OpenRouter error {status_code}: {self.body}")
 
 
 @dataclass(frozen=True)
@@ -55,6 +76,7 @@ class OpenRouterClient:
     def __init__(self, config: LlmConfig, *, api_key: str | None = None) -> None:
         self.config = config
         self._api_key = api_key
+        self._http: httpx.AsyncClient | None = None
 
     async def __aenter__(self) -> OpenRouterClient:
         return self
@@ -64,7 +86,38 @@ class OpenRouterClient:
 
     async def aclose(self) -> None:
         """Close the HTTP connection pool."""
-        return None
+        if self._http is not None:
+            await self._http.aclose()
+            self._http = None
+
+    def _client(self) -> httpx.AsyncClient:
+        """The pooled HTTP client, created on first use (the key is read then)."""
+        if self._http is None:
+            key = self._api_key or openrouter_api_key()
+            self._http = httpx.AsyncClient(
+                base_url=(self.config.base_url or BASE_URL).rstrip("/") + "/",
+                headers={"Authorization": f"Bearer {key}"},
+                timeout=self.config.timeout_s,
+            )
+        return self._http
+
+    async def _request(self, method: str, path: str, *, json: dict[str, Any] | None = None) -> Any:
+        """One request, retried on transient faults; the decoded JSON body."""
+
+        async def call() -> Any:
+            response = await self._client().request(method, path, json=json)
+            if response.is_error:
+                raise httpx.HTTPStatusError(
+                    f"OpenRouter {response.status_code}: {response.text[:_BODY_SNIPPET]}",
+                    request=response.request,
+                    response=response,
+                )
+            return response.json()
+
+        try:
+            return await retry_paid_call(call, attempts=self.config.max_attempts)
+        except httpx.HTTPStatusError as err:
+            raise OpenRouterError(err.response.status_code, err.response.text) from err
 
     async def chat(
         self,
@@ -81,15 +134,77 @@ class OpenRouterClient:
         (default ``config.default_model``); ``response_format`` is passed
         through for JSON-schema output; ``provider`` is OpenRouter's routing
         preference (``order``, ``allow_fallbacks``)."""
-        raise NotImplementedError("OpenRouterClient.chat: port core_openrouter_call")
+        model_id = resolve_model(model or self.config.default_model, self.config.presets)
+        payload: dict[str, Any] = {"model": model_id, "messages": messages, "max_tokens": max_tokens}
+        if temperature is not None:
+            payload["temperature"] = temperature
+        if reasoning_effort is not None:
+            payload["reasoning"] = {"effort": reasoning_effort}
+        if response_format is not None:
+            payload["response_format"] = response_format
+        if provider is not None:
+            payload["provider"] = provider
+        data = await self._request("POST", "chat/completions", json=payload)
+        return _chat_result(data, model_id)
 
     async def list_models(self) -> list[ModelInfo]:
         """The live catalogue from ``/models``."""
-        raise NotImplementedError("OpenRouterClient.list_models: port aii_or_search_llms")
+        data = await self._request("GET", "models")
+        return [_model_info(entry) for entry in data.get("data", [])]
 
     async def key_info(self) -> dict[str, Any]:
         """The key's limits and usage from ``/key``; spends nothing (auth check)."""
-        raise NotImplementedError("OpenRouterClient.key_info")
+        data = await self._request("GET", "key")
+        return dict(data.get("data", data))
 
 
-__all__ = ["ChatResult", "Message", "ModelInfo", "OpenRouterClient", "ReasoningEffort"]
+def _chat_result(data: dict[str, Any], requested_model: str) -> ChatResult:
+    """A :class:`ChatResult` from a chat/completions body; an error body raises."""
+    choices = data.get("choices") or []
+    if not choices:
+        error = data.get("error") or {}
+        code = error.get("code") if isinstance(error, dict) else None
+        raise OpenRouterError(code if isinstance(code, int) else None, str(error or data))
+    choice = choices[0]
+    message = choice.get("message") or {}
+    usage = data.get("usage") or {}
+    return ChatResult(
+        model=data.get("model") or requested_model,
+        text=message.get("content") or "",
+        input_tokens=int(usage.get("prompt_tokens") or 0),
+        output_tokens=int(usage.get("completion_tokens") or 0),
+        cost_usd=float(usage.get("cost") or 0.0),
+        finish_reason=choice.get("finish_reason"),
+        raw=data,
+    )
+
+
+def _per_mtok(price: Any) -> float | None:
+    """A per-token price string as US dollars per million tokens."""
+    try:
+        return float(price) * 1e6
+    except (TypeError, ValueError):
+        return None
+
+
+def _model_info(entry: dict[str, Any]) -> ModelInfo:
+    """A :class:`ModelInfo` from one ``/models`` entry."""
+    pricing = entry.get("pricing") or {}
+    return ModelInfo(
+        id=entry["id"],
+        name=entry.get("name") or entry["id"],
+        context_length=entry.get("context_length"),
+        prompt_usd_per_mtok=_per_mtok(pricing.get("prompt")),
+        completion_usd_per_mtok=_per_mtok(pricing.get("completion")),
+        supported_parameters=tuple(entry.get("supported_parameters") or ()),
+    )
+
+
+__all__ = [
+    "ChatResult",
+    "Message",
+    "ModelInfo",
+    "OpenRouterClient",
+    "OpenRouterError",
+    "ReasoningEffort",
+]

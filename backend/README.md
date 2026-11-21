@@ -19,9 +19,9 @@ module to port.
 | ---------------------------- | ------- |
 | config, logging, run folders | working |
 | `stub` backend, local, flex  | working |
-| `claude_cli` backend         | stub    |
-| `openrouter` agent backend   | stub    |
-| OpenRouter chat client       | stub    |
+| `claude_cli` backend         | working |
+| `openrouter` agent backend   | working |
+| OpenRouter chat client       | working |
 | RunPod runner and worker     | dry run |
 
 The RunPod runner, worker, client and reaper are built and tested against a

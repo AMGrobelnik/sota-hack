@@ -26,10 +26,12 @@ async def test_stub_run_writes_record_events_and_files(config: BackendConfig) ->
     assert (run.workspace / "out" / "x.txt").is_file()
 
 
-async def test_unbuilt_runner_is_recorded_as_failed(config: BackendConfig) -> None:
+async def test_backend_setup_error_is_recorded_as_failed(config: BackendConfig) -> None:
+    cli = config.agents.claude_cli.model_copy(update={"cli_path": "/nonexistent/claude"})
+    agents = config.agents.model_copy(update={"claude_cli": cli})
     spec = AgentSpec(name="a1", prompts=["hi"], backend="claude_cli")
-    with pytest.raises(NotImplementedError):
-        await run_agent(spec, config, run_mode="local", run_id="r1")
+    with pytest.raises(RuntimeError, match="not on PATH"):
+        await run_agent(spec, config.model_copy(update={"agents": agents}), run_mode="local", run_id="r1")
     record = json.loads((config.runs_dir / "r1" / "run.json").read_text())
     assert record["status"] == "failed"
 

@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 import os
+import re
 
 OPENROUTER_KEY_ENV = "OPENROUTER_API_KEY"
+
+
+#: OpenRouter's body for a key over its own credit cap. It comes with the same
+#: 401/403 a wrong key gets, so only this text tells the two apart.
+_KEY_LIMIT_TEXT = re.compile(r"key limit exceeded(?:\s*\((\w+) limit\))?", re.IGNORECASE)
 
 
 class MissingKeyError(RuntimeError):
@@ -27,11 +33,12 @@ def has_openrouter_key() -> bool:
 def is_key_exhausted(status: int | None, body: str | None) -> bool:
     """Whether a response means the key itself is out of credit or over its limit.
 
-    Such an answer must not be retried. Port the classification from AI
-    Inventor's ``aii_lib/openrouter_key.py::is_key_exhausted`` (402, and 403
-    whose body names a key limit).
+    A ``402``, or a ``401``/``403`` whose body says "Key limit exceeded". Such
+    an answer must not be retried.
     """
-    raise NotImplementedError("port aii_lib/openrouter_key.py::is_key_exhausted")
+    if status == 402:
+        return True
+    return status in (401, 403) and bool(_KEY_LIMIT_TEXT.search(body or ""))
 
 
 __all__ = [
