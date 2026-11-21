@@ -85,6 +85,14 @@ p { text-wrap: pretty; }
   .scrim { background: linear-gradient(180deg, rgba(238, 240, 242, .92) 0, rgba(238, 240, 242, .55) 30%, rgba(238, 240, 242, 0) 44%); }
   .stage[data-dark] .scrim { background: linear-gradient(180deg, rgba(7, 11, 15, .9) 0, rgba(7, 11, 15, .5) 28%, rgba(7, 11, 15, 0) 42%, rgba(7, 11, 15, 0) 52%, rgba(7, 11, 15, .7) 100%); }
 }
+/* quiet backings for the two chapters whose text sits over busy parts: the gold wires (2) and the field of chips (5) */
+.scrim::before, .scrim::after { content: ""; position: absolute; inset: 0; opacity: 0; }
+.scrim::before { opacity: var(--s2, 0); background: linear-gradient(90deg, rgba(7, 11, 15, .9) 0, rgba(7, 11, 15, .82) 34%, rgba(7, 11, 15, 0) 52%); }
+.scrim::after { opacity: var(--s5, 0); background: linear-gradient(90deg, rgba(238, 240, 242, .97) 0, rgba(238, 240, 242, .92) 40%, rgba(238, 240, 242, 0) 58%); }
+@media (max-width: 760px) {
+  .scrim::before { background: linear-gradient(180deg, rgba(7, 11, 15, .92) 0, rgba(7, 11, 15, .8) 34%, rgba(7, 11, 15, 0) 50%); }
+  .scrim::after { background: linear-gradient(180deg, rgba(238, 240, 242, .97) 0, rgba(238, 240, 242, .9) 36%, rgba(238, 240, 242, 0) 52%); }
+}
 .labels { position: absolute; inset: 0; pointer-events: none; z-index: 2; overflow: hidden; }
 .lbl { position: absolute; left: 0; top: 0; opacity: 0; will-change: transform, opacity; color: var(--ink); }
 .stage[data-dark] .lbl { color: var(--light); }
@@ -341,6 +349,7 @@ function snap(rw) { return Math.min(LAST, Math.round(rw - 0.1)); }
 /* ---------------------------------------------------------------- chapter text, rail */
 const chs = [...document.querySelectorAll('.ch')];
 const chOp = chs.map(() => -1);
+const scrimEl = $('.scrim');
 const railBtns = [...rail.querySelectorAll('button')];
 let railOn = -1, darkOn = null, aboutSeen = false;
 new IntersectionObserver((es) => { for (const e of es) aboutSeen = e.isIntersecting; }, { rootMargin: '-45% 0px -45% 0px' }).observe(about);
@@ -363,6 +372,7 @@ function updateDOM() {
       chs[i].style.opacity = o;
       chs[i].classList.toggle('on', o > 0.02);
       chs[i].style.transform = isPhone() ? `translateY(${(1 - o) * 14}px)` : `translateY(calc(-50% + ${(1 - o) * 18}px))`;
+      if (i === 2 || i === 5) scrimEl.style.setProperty('--s' + i, o);
     }
   }
   const storyRect = story.getBoundingClientRect();
@@ -440,15 +450,17 @@ function drawBits(t) {
   const W = cv.clientWidth || 400, H = 96;
   if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.height = H + 'px'; }
   const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
-  const L = 52, cw = 22, rows = [12, 58], cols = Math.ceil((W - L) / cw) + 1;
+  // whole cells only: the column width is fitted to the panel and the rows step one cell at a
+  // time, the newest column fading in on the right, so no cell is ever cut off
+  const L = 52, n = Math.max(6, Math.floor((W - L) / 22)), cw = (W - L) / n, rows = [12, 58];
   const shift = REDUCE ? 0 : t * 2.2; const i0 = Math.floor(shift), fr = shift - i0;
   g.font = '600 12px "Avenir Next", system-ui, sans-serif'; g.fillStyle = 'rgba(238,241,244,.85)';
   g.fillText('Model', 0, rows[0] + 17); g.fillText('Chip', 0, rows[1] + 17);
-  g.save(); g.beginPath(); g.rect(L, 0, W - L, H); g.clip();
-  for (let c = -1; c < cols; c++) {
+  for (let c = 0; c < n; c++) {
     const idx = (i0 + c + 1024) % bitSeq.length; const v = bitSeq[idx];
-    const x = L + (c - fr) * cw;
-    const fresh = c >= cols - 3;
+    const x = L + c * cw;
+    g.globalAlpha = c === n - 1 && !REDUCE ? smooth(0, 0.35, fr) : 1;
+    const fresh = c >= n - 2;
     for (let k = 0; k < 2; k++) {
       const y = rows[k];
       g.fillStyle = v ? 'rgba(242,169,0,.95)' : 'rgba(238,241,244,.12)';
@@ -458,7 +470,7 @@ function drawBits(t) {
     }
     if (!fresh) { g.strokeStyle = 'rgba(120,220,160,.9)'; g.lineWidth = 1.6; g.beginPath(); const cx = x + cw / 2, cy = 46; g.moveTo(cx - 4, cy); g.lineTo(cx - 1, cy + 3); g.lineTo(cx + 5, cy - 4); g.stroke(); }
   }
-  g.restore(); g.textAlign = 'left';
+  g.globalAlpha = 1; g.textAlign = 'left';
   g.fillStyle = 'rgba(238,241,244,.6)'; g.font = '500 11px "Avenir Next", system-ui, sans-serif'; g.fillText('match', 0, 50);
 }
 function updatePanels(t) {
@@ -530,72 +542,119 @@ function initGL() {
     g.fillStyle = gr; g.fillRect(0, 0, w, w);
   });
 
-  /* ---- cell generator, shared by the die close-up texture and the 3D gate patch */
-  const RH = 12;
+  /* ---- cell generator, shared by the die close-up texture and the 3D gate patch.
+     Units are routing tracks. Rows of standard cells sit between alternating VSS and VDD rails;
+     poly crosses each row at one fixed pitch; the metal layers alternate direction, M1, M3 and
+     M5 along the rows (x), M2 and M4 across them (z), with vias where two layers meet. */
+  const RH = 12, PP = 2;
   function genCells(W, R, seed) {
-    const r = rng(seed); const L = { dn: [], dp: [], poly: [], ct: [], m1: [], v1: [], m2: [], v2: [], m3: [], m4: [] };
-    const cells = [], vias = [];
-    for (let k = 0; k <= R; k++) L.m1.push([0, k * RH - 0.8, W, k * RH + 0.8]);
-    const TYPES = [['INV', 1, 0.16], ['NAND', 2, 0.24], ['NOR', 2, 0.14], ['AOI', 3, 0.12], ['DFF', 6, 0.08], ['TIE', 1, 0.06], ['FILL', 0, 0.2]];
+    const r = rng(seed), ZM = R * RH;
+    const L = { dn: [], dp: [], poly: [], ctd: [], ctp: [], m1: [], v1: [], m2: [], v2: [], m3: [], v3: [], m4: [] };
+    const cells = [];
+    for (let k = 0; k <= R; k++) L.m1.push([0, k * RH - 0.42, W, k * RH + 0.42]);   // power rails
+    const TYPES = [['INV', 1, 0.16], ['NAND', 2, 0.22], ['NOR', 2, 0.14], ['AOI', 3, 0.12], ['DFF', 7, 0.1], ['TIE', 1, 0.06], ['FILL', 0, 0.2]];
+    const nH = 3.2, pH = 3.8;
     for (let row = 0; row < R; row++) {
       const z0 = row * RH, flip = row % 2 === 1;
-      const nLo = flip ? z0 + 7.2 : z0 + 1.8, pLo = flip ? z0 + 1.8 : z0 + 7.2;
+      const nLo = flip ? z0 + RH - 1.6 - nH : z0 + 1.6, pLo = flip ? z0 + 1.4 : z0 + RH - 1.4 - pH;
       const vss = flip ? z0 + RH : z0, vdd = flip ? z0 : z0 + RH;
-      let x = 1 + Math.floor(r() * 3);
+      const gz = z0 + RH / 2 + (flip ? -0.3 : 0.3);
+      for (let px = 1; px < W; px += PP) L.poly.push([px - 0.22, z0 + 1.0, px + 0.22, z0 + RH - 1.0]);
+      let x = 2 * (1 + Math.floor(r() * 2));
       for (;;) {
         let q = r(), T = TYPES[0]; for (T of TYPES) { q -= T[2]; if (q <= 0) break; }
-        const n = T[1]; const w = n ? 2 * n + 1 : 1 + Math.floor(r() * 2);
-        if (x + w > W - 1) break;
+        const n = T[1]; const w = n ? 2 * n + 2 : 2 * (1 + Math.floor(r() * 2));
+        if (x + w > W - 2) break;
         if (n) {
           cells.push({ type: T[0], x0: x, x1: x + w, z0, z1: z0 + RH });
-          L.dn.push([x + 0.25, nLo, x + w - 0.25, nLo + 3]); L.dp.push([x + 0.25, pLo, x + w - 0.25, pLo + 3]);
-          for (let i = 0; i < n; i++) {
-            const px = x + 1.5 + 2 * i;
-            L.poly.push([px - 0.3, z0 + 1.1, px + 0.3, z0 + RH - 1.1]);
-            L.poly.push([px - 0.5, z0 + 5.5, px + 0.5, z0 + 6.5]);
-            L.ct.push([px - 0.22, z0 + 5.78, px + 0.22, z0 + 6.22]);
-            L.m1.push([px - 0.45, z0 + 5.55, px + 0.45, z0 + 6.45]);
-            if (r() < 0.35) { L.v1.push([px - 0.25, z0 + 5.75, px + 0.25, z0 + 6.25]); vias.push([px, z0 + 6]); }
+          L.dn.push([x + 0.3, nLo, x + w - 0.3, nLo + nH]); L.dp.push([x + 0.3, pLo, x + w - 0.3, pLo + pH]);
+          const nC = nLo + nH / 2, pC = pLo + pH / 2;
+          for (let i = 1; i <= n; i++) {
+            const cx = x + 2 * i;
+            for (const cz of [nC - 0.6, nC + 0.6, pC - 0.7, pC + 0.7]) L.ctd.push([cx - 0.16, cz - 0.16, cx + 0.16, cz + 0.16]);
+            if (i % 2 === 1 || T[0] === 'TIE') {   // source tabs onto the rails
+              L.m1.push([cx - 0.2, Math.min(nC, vss), cx + 0.2, Math.max(nC, vss)]);
+              L.m1.push([cx - 0.2, Math.min(pC, vdd), cx + 0.2, Math.max(pC, vdd)]);
+            } else L.m1.push([cx - 0.2, Math.min(nC, pC) - 0.6, cx + 0.2, Math.max(nC, pC) + 0.6]);   // drains joined
           }
-          for (let i = 0; i <= n; i++) {
-            const cx = x + 0.5 + 2 * i, nC = nLo + 1.5, pC = pLo + 1.5;
-            L.ct.push([cx - 0.22, nC - 0.22, cx + 0.22, nC + 0.22]); L.ct.push([cx - 0.22, pC - 0.22, cx + 0.22, pC + 0.22]);
-            if (T[0] === 'TIE' || i % 2 === 0) {
-              L.m1.push([cx - 0.35, Math.min(nC, vss), cx + 0.35, Math.max(nC, vss)]);
-              L.m1.push([cx - 0.35, Math.min(pC, vdd), cx + 0.35, Math.max(pC, vdd)]);
-            } else {
-              L.m1.push([cx - 0.35, Math.min(nC, pC), cx + 0.35, Math.max(nC, pC)]);
-              if (r() < 0.5) { L.v1.push([cx - 0.25, z0 + 5.75, cx + 0.25, z0 + 6.25]); vias.push([cx, z0 + 6]); }
-            }
+          if (n > 1) L.m1.push([x + 1.6, pC - 0.2, x + w - 1.6, pC + 0.2]);
+          for (let i = 0; i <= n; i++) if (n < 4 || i % 2 === 0) {   // gate pins: poly pad, contact, M1 pin
+            const px = x + 1 + 2 * i;
+            L.poly.push([px - 0.38, gz - 0.38, px + 0.38, gz + 0.38]); L.ctp.push([px - 0.15, gz - 0.15, px + 0.15, gz + 0.15]);
+            L.m1.push([px - 0.3, gz - 0.24, px + 0.3, gz + 0.24]);
           }
         }
         x += w;
       }
     }
-    for (const [vx, vz] of vias) {
-      const z1 = clamp(vz + (r() < 0.5 ? -1 : 1) * (6 + r() * 30), 1, R * RH - 1);
-      L.m2.push([vx - 0.35, Math.min(vz, z1) - 0.35, vx + 0.35, Math.max(vz, z1) + 0.35]);
-      if (r() < 0.7) {
-        L.v2.push([vx - 0.3, z1 - 0.3, vx + 0.3, z1 + 0.3]);
-        const x1 = clamp(vx + (r() < 0.5 ? -1 : 1) * (8 + r() * 50), 1, W - 1);
-        L.m3.push([Math.min(vx, x1) - 0.45, z1 - 0.45, Math.max(vx, x1) + 0.45, z1 + 0.45]);
+    // signal routing: a layer of wires on regular tracks, each end dropping a via onto a landing
+    // stub of the layer below (the stub runs in the lower layer's own direction)
+    function route(name, via, below, horiz, pitch, wd, occ, lmin, lspan, vs, skip) {
+      const span = horiz ? W : ZM, across = horiz ? ZM : W;
+      for (let t = pitch / 2; t < across; t += pitch) {
+        if (skip && skip(t)) continue;
+        let p = r() * 10;
+        while (p < span - 2) {
+          const len = lmin + Math.pow(r(), 2.2) * lspan;
+          if (r() < occ) {
+            const a = p, b = Math.min(span - 1, p + len);
+            L[name].push(horiz ? [a, t - wd / 2, b, t + wd / 2] : [t - wd / 2, a, t + wd / 2, b]);
+            for (const e of [a + wd * 0.6, b - wd * 0.6]) {
+              const cx = horiz ? e : t, cz = horiz ? t : e;
+              L[via].push([cx - vs, cz - vs, cx + vs, cz + vs]);
+              const sw = vs * 1.25, sl = vs * 2 + 0.9;
+              L[below].push(horiz ? [cx - sw, cz - sl / 2, cx + sw, cz + sl / 2] : [cx - sl / 2, cz - sw, cx + sl / 2, cz + sw]);
+            }
+          }
+          p += len + 1 + r() * 3;
+        }
       }
     }
-    for (let x = 12; x < W; x += 48) L.m4.push([x - 1.6, 0, x + 1.6, R * RH]);
+    const STR = 40;   // M4 power stripes, every 40 tracks
+    route('m2', 'v1', 'm1', false, 1, 0.38, 0.34, 2, 40, 0.17);
+    route('m3', 'v2', 'm2', true, 1, 0.4, 0.26, 4, 90, 0.18);
+    route('m4', 'v3', 'm3', false, 2, 0.8, 0.2, 8, 150, 0.3, (t) => Math.abs(((t + STR / 2) % STR) - STR / 2) < 2.2);
+    for (let x = STR / 2; x < W; x += STR) {   // M4 power stripes, with via stacks onto the M1 rails below
+      L.m4.push([x - 0.8, 0, x + 0.8, ZM]);
+      for (let k = 0; k <= R; k++) for (const v of ['v1', 'v2', 'v3']) for (const dx of [-0.4, 0.4]) L[v].push([x + dx - 0.16, k * RH - 0.16, x + dx + 0.16, k * RH + 0.16]);
+    }
     return { L, cells };
   }
   const DEC_W = 480, DEC_R = 40, SC = 0.0006;   // decal: 480 tracks square; one track = 0.0006 scene units
   const cellsAll = genCells(DEC_W, DEC_R, 7);
-  const COLORS2D = { dn: '#5E6B66', dp: '#6E655C', poly: '#7E3A2A', ct: '#8E949B', m1: 'rgba(150,160,170,.55)', v1: '#A0A6AD', m2: 'rgba(190,125,85,.38)', v2: '#B08868', m3: 'rgba(200,135,92,.34)', m4: 'rgba(200,140,95,.18)' };
+  const COLORS2D = { dn: '#4E5B55', dp: '#5A534B', poly: '#6E3426', ctd: '#8E949B', ctp: '#8E949B', m1: 'rgba(196,138,100,.42)', v1: '#A87A5C', m2: 'rgba(200,132,92,.4)', v2: '#B08868', m3: 'rgba(206,140,98,.38)', v3: '#B08868', m4: 'rgba(204,140,96,.34)' };
   const decalTex = canvasTex(phone ? 1024 : 2048, phone ? 1024 : 2048, (g, w) => {
-    const k = w / DEC_W; g.fillStyle = '#2F3740'; g.fillRect(0, 0, w, w);
-    for (const name of ['dn', 'dp', 'poly', 'ct', 'm1', 'v1', 'm2', 'v2', 'm3', 'm4']) {
+    const k = w / DEC_W; g.fillStyle = '#262C32'; g.fillRect(0, 0, w, w);
+    for (const name of ['dn', 'dp', 'poly', 'ctd', 'ctp', 'm1', 'v1', 'm2', 'v2', 'm3', 'v3', 'm4']) {
       g.fillStyle = COLORS2D[name];
       for (const q of cellsAll.L[name]) g.fillRect(q[0] * k, q[1] * k, (q[2] - q[0]) * k, (q[3] - q[1]) * k);
     }
     const gr = g.createRadialGradient(w / 2, w / 2, w * 0.3, w / 2, w / 2, w * 0.5); gr.addColorStop(0, 'rgba(47,55,64,0)'); gr.addColorStop(1, 'rgba(42,51,47,1)');
     g.fillStyle = gr; g.fillRect(0, 0, w, w);
   });
+  /* fine surface detail for the metal and poly: a canvas height field turned into a normal map,
+     and a matching roughness map */
+  const detail = (() => {
+    const N = 256, r = rng(13), hgt = new Float32Array(N * N);
+    for (let i = 0; i < 2600; i++) {   // grains
+      const cx = r() * N, cy = r() * N, rad = 1 + r() * 3.5, a = (r() - 0.5) * 0.9;
+      for (let y = Math.floor(cy - rad); y <= cy + rad; y++) for (let x = Math.floor(cx - rad); x <= cx + rad; x++) {
+        const d = Math.hypot(x - cx, y - cy) / rad; if (d < 1) hgt[((y + N) % N) * N + ((x + N) % N)] += a * (1 - d * d);
+      }
+    }
+    for (let y = 0; y < N; y++) { const s = (r() - 0.5) * 0.35; for (let x = 0; x < N; x++) hgt[y * N + x] += s; }   // polishing streaks
+    const nc = document.createElement('canvas'); nc.width = nc.height = N; const ng = nc.getContext('2d'); const nd = ng.createImageData(N, N);
+    const rc = document.createElement('canvas'); rc.width = rc.height = N; const rg = rc.getContext('2d'); const rd = rg.createImageData(N, N);
+    const H = (x, y) => hgt[((y + N) % N) * N + ((x + N) % N)];
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const dx = (H(x + 1, y) - H(x - 1, y)) * 1.6, dy = (H(x, y + 1) - H(x, y - 1)) * 1.6, l = Math.hypot(dx, dy, 1), o = (y * N + x) * 4;
+      nd.data[o] = (-dx / l * 0.5 + 0.5) * 255; nd.data[o + 1] = (-dy / l * 0.5 + 0.5) * 255; nd.data[o + 2] = (1 / l * 0.5 + 0.5) * 255; nd.data[o + 3] = 255;
+      const v = clamp(0.78 + H(x, y) * 0.35 + (r() - 0.5) * 0.12) * 255; rd.data[o] = rd.data[o + 1] = rd.data[o + 2] = v; rd.data[o + 3] = 255;
+    }
+    ng.putImageData(nd, 0, 0); rg.putImageData(rd, 0, 0);
+    const mk = (c) => { const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = maxAniso; return t; };
+    return { normal: mk(nc), rough: mk(rc) };
+  })();
 
   /* ---- die photos, one per redraw: same cell size, smaller die */
   const SIZES = [2.0, 1.55, 1.2, 0.98, 0.8];
@@ -780,42 +839,73 @@ function initGL() {
   const stitches = new THREE.InstancedMesh(ballGeo, goldMat, WIRES); dieG.add(stitches);
   for (let w = 0; w < WIRES; w++) { dummy.position.set(tipPos[w * 3], tipPos[w * 3 + 1], tipPos[w * 3 + 2]); dummy.rotation.set(0, 0, 0); dummy.scale.set(1.4, 0.35, 1.4); dummy.updateMatrix(); stitches.setMatrixAt(w, dummy.matrix); }
 
-  // 3D gate patch: the centre of the close-up, built in layers
-  const PW0 = 206, PW1 = 274, PZ0 = 18 * RH, PZ1 = 23 * RH;
+  // 3D gate patch: the centre of the close-up, thin layers on a dark dielectric, all instanced
+  const PW0 = phone ? 120 : 96, PW1 = phone ? 360 : 384, PZ0 = (phone ? 10 : 8) * RH, PZ1 = (phone ? 31 : 33) * RH;
   const clip = (q) => { const a = Math.max(q[0], PW0), b = Math.max(q[1], PZ0), c = Math.min(q[2], PW1), d = Math.min(q[3], PZ1); return c > a && d > b ? [a, b, c, d] : null; };
+  const metal = (hex, rough, irid) => new THREE.MeshPhysicalMaterial({ color: hex, metalness: 1, roughness: rough, roughnessMap: detail.rough, normalMap: detail.normal, normalScale: new THREE.Vector2(0.35, 0.35), iridescence: irid, iridescenceIOR: 1.6, iridescenceThicknessMinimum: 180, iridescenceThicknessMaximum: 480 });
+  const cuVia = metal(0xb98262, 0.4, 0);
+  const wMat = new THREE.MeshPhysicalMaterial({ color: 0x9da3a9, metalness: 1, roughness: 0.42 });
+  // name, explode level, bottom, top (tracks); wires are far thinner than they are wide
   const LAYERS = [
-    ['dn', 0, 0, 0.35, new THREE.MeshPhysicalMaterial({ color: 0x84918b, metalness: 0.2, roughness: 0.42 })],
-    ['dp', 0, 0, 0.35, new THREE.MeshPhysicalMaterial({ color: 0x93877a, metalness: 0.2, roughness: 0.42 })],
-    ['poly', 1, 0.35, 1.05, new THREE.MeshPhysicalMaterial({ color: 0x9a412b, metalness: 0.1, roughness: 0.38, clearcoat: 0.4, clearcoatRoughness: 0.2 })],
-    ['ct', 2, 0.35, 2.3, new THREE.MeshPhysicalMaterial({ color: 0xaab0b8, metalness: 1, roughness: 0.32 })],
-    ['m1', 3, 2.3, 3.0, new THREE.MeshPhysicalMaterial({ color: 0xd59068, metalness: 1, roughness: 0.36 })],
-    ['v1', 4, 3.0, 3.8, new THREE.MeshPhysicalMaterial({ color: 0xaab0b8, metalness: 1, roughness: 0.32 })],
-    ['m2', 5, 3.8, 4.5, new THREE.MeshPhysicalMaterial({ color: 0xd9935f, metalness: 1, roughness: 0.34 })],
-    ['v2', 6, 4.5, 5.3, new THREE.MeshPhysicalMaterial({ color: 0xaab0b8, metalness: 1, roughness: 0.32 })],
-    ['m3', 7, 5.3, 6.1, new THREE.MeshPhysicalMaterial({ color: 0xdf9a62, metalness: 1, roughness: 0.32 })],
+    ['dn', 0, 0, 0.05, new THREE.MeshPhysicalMaterial({ color: 0x55645c, metalness: 0.15, roughness: 0.55, iridescence: 0.2, iridescenceIOR: 1.5, iridescenceThicknessMinimum: 250, iridescenceThicknessMaximum: 520 })],
+    ['dp', 0, 0, 0.05, new THREE.MeshPhysicalMaterial({ color: 0x655c52, metalness: 0.15, roughness: 0.55, iridescence: 0.2, iridescenceIOR: 1.5, iridescenceThicknessMinimum: 250, iridescenceThicknessMaximum: 520 })],
+    ['poly', 1, 0.05, 0.24, new THREE.MeshPhysicalMaterial({ color: 0x7c3a28, metalness: 0.25, roughness: 0.5, roughnessMap: detail.rough, normalMap: detail.normal, normalScale: new THREE.Vector2(0.25, 0.25) })],
+    ['m1', 2, 0.9, 1.07, metal(0xc58a66, 0.42, 0.22)],
+    ['m2', 3, 1.5, 1.69, metal(0xc8875f, 0.4, 0.2)],
+    ['m3', 4, 2.1, 2.31, metal(0xcc8e66, 0.38, 0.2)],
+    ['m4', 5, 2.8, 3.1, metal(0xc38461, 0.4, 0.18)],
   ];
-  const patch = new THREE.Group(); patch.scale.setScalar(SC); patch.position.set(-240 * SC, DIE_TOP + 0.00004, -240 * SC); patch.visible = false; dieG.add(patch);
+  // vias and contacts: name, from level, to level, bottom, top; they stretch when the layers part
+  const VIAS = [['ctd', 0, 2, 0.05, 0.9, wMat], ['ctp', 1, 2, 0.24, 0.9, wMat], ['v1', 2, 3, 1.07, 1.5, cuVia], ['v2', 3, 4, 1.69, 2.1, cuVia], ['v3', 4, 5, 2.31, 2.8, cuVia]];
+  const patch = new THREE.Group(); patch.scale.setScalar(SC); patch.position.set(-240 * SC, DIE_TOP + 0.00025, -240 * SC); patch.visible = false; dieG.add(patch);
   const unitBox = new THREE.BoxGeometry(1, 1, 1);
-  const layerMesh = []; const LGAP = 8.5;
+  const upBox = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+  const layerMesh = [], viaMesh = []; const LGAP = 1.7;
+  const TOP = {};   // top of each layer, by name
   const segs = []; // wires that carry pulses
+  const CX = 240, CZ = 244;   // the middle of the view
+  const near = (x, z) => (a, b) => Math.hypot((a.x0 + a.x1) / 2 - x, (a.z0 + a.z1) / 2 - z) - Math.hypot((b.x0 + b.x1) / 2 - x, (b.z0 + b.z1) / 2 - z);
+  const nand = cellsAll.cells.filter((c) => c.type === 'NAND').sort(near(CX - 6, CZ + 4))[0];
+  // a stepped cutaway: each metal layer starts a little further right on screen, so the cells
+  // under the highlighted gate show, then M1 along the rows, then M2, M3 and M4 above them
+  const U = (x, z) => 0.74 * x - 0.67 * z, UG = U((nand.x0 + nand.x1) / 2, (nand.z0 + nand.z1) / 2);
+  const UMIN = { m1: UG + 7, v1: UG + 21, m2: UG + 21, v2: UG + 35, m3: UG + 35, v3: UG + 49, m4: UG + 49 };
+  const cut = (name) => (q) => {
+    q = clip(q); const u0 = UMIN[name]; if (!q || u0 === undefined) return q;
+    const w = q[2] - q[0], d = q[3] - q[1];
+    if (w > 2.5 * d) { const xc = (u0 + 0.67 * (q[1] + q[3]) / 2) / 0.74; return q[2] > xc + 0.3 ? [Math.max(q[0], xc), q[1], q[2], q[3]] : null; }
+    if (d > 2.5 * w) { const zc = (0.74 * (q[0] + q[2]) / 2 - u0) / 0.67; return q[1] < zc - 0.3 ? [q[0], q[1], q[2], Math.min(q[3], zc)] : null; }
+    return U((q[0] + q[2]) / 2, (q[1] + q[3]) / 2) > u0 ? q : null;
+  };
+  const tie = cellsAll.cells.filter((c) => (c.type === 'TIE' || c.type === 'INV') && c !== nand && U((c.x0 + c.x1) / 2, (c.z0 + c.z1) / 2) > UMIN.m1 + 3 && U((c.x0 + c.x1) / 2, (c.z0 + c.z1) / 2) < UMIN.m2 - 3).sort(near(CX - 4, CZ - 26))[0];
   for (const [name, L, y0, y1, mat] of LAYERS) {
-    const rects = cellsAll.L[name].map(clip).filter(Boolean);
+    TOP[name] = y1;
+    const rects = cellsAll.L[name].map(cut(name)).filter(Boolean);
     const m = new THREE.InstancedMesh(unitBox, mat, rects.length);
-    rects.forEach((q, i) => { dummy.position.set((q[0] + q[2]) / 2, (y0 + y1) / 2, (q[1] + q[3]) / 2); dummy.rotation.set(0, 0, 0); dummy.scale.set(q[2] - q[0], y1 - y0, q[3] - q[1]); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); });
+    rects.forEach((q, i) => { dummy.position.set((q[0] + q[2]) / 2, (y0 + y1) / 2 + (i % 3) * 0.002, (q[1] + q[3]) / 2); dummy.rotation.set(0, 0, 0); dummy.scale.set(q[2] - q[0], y1 - y0, q[3] - q[1]); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); });
     m.userData.L = L; patch.add(m); layerMesh.push(m);
-    if (name === 'm3' || name === 'm2') for (const q of rects) if (Math.max(q[2] - q[0], q[3] - q[1]) > 10) segs.push([q[0], q[1], q[2], q[3], L, y1]);
+    if (name === 'm3' || name === 'm2') for (const q of rects) if (Math.max(q[2] - q[0], q[3] - q[1]) > 14 && Math.hypot((q[0] + q[2]) / 2 - CX, (q[1] + q[3]) / 2 - CZ) < 60) segs.push([q[0], q[1], q[2], q[3], L, y1]);
   }
-  const sub = new THREE.Mesh(new THREE.BoxGeometry(PW1 - PW0 + 4, 3, PZ1 - PZ0 + 4), new THREE.MeshPhysicalMaterial({ color: 0x3c444d, metalness: 0.5, roughness: 0.34, iridescence: 0.5, iridescenceIOR: 1.8, iridescenceThicknessMinimum: 300, iridescenceThicknessMaximum: 600 }));
+  for (const [name, La, Lb, y0, y1, mat] of VIAS) {
+    const all = cellsAll.L[name].map(cut(name)).filter(Boolean);
+    // contacts where M1 is cut away stay short studs; the rest reach up to M1 and stretch with it
+    const groups = name.startsWith('ct') ? [[all.filter((q) => U((q[0] + q[2]) / 2, (q[1] + q[3]) / 2) < UMIN.m1), La, 0.3], [all.filter((q) => U((q[0] + q[2]) / 2, (q[1] + q[3]) / 2) >= UMIN.m1), Lb, y1 - y0]] : [[all, Lb, y1 - y0]];
+    for (const [rects, Lt, h] of groups) {
+      const m = new THREE.InstancedMesh(upBox, mat, rects.length);
+      rects.forEach((q, i) => { dummy.position.set((q[0] + q[2]) / 2, 0, (q[1] + q[3]) / 2); dummy.rotation.set(0, 0, 0); dummy.scale.set(q[2] - q[0], 1, q[3] - q[1]); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); });
+      m.userData = { La, Lb: Lt, y0, h }; patch.add(m); viaMesh.push(m);
+    }
+  }
+  const sub = new THREE.Mesh(new THREE.BoxGeometry(PW1 - PW0 + 4, 3, PZ1 - PZ0 + 4), new THREE.MeshPhysicalMaterial({ color: 0x1c2228, metalness: 0.35, roughness: 0.32, roughnessMap: detail.rough, iridescence: 0.3, iridescenceIOR: 1.8, iridescenceThicknessMinimum: 300, iridescenceThicknessMaximum: 640 }));
   sub.position.set((PW0 + PW1) / 2, -1.5, (PZ0 + PZ1) / 2); patch.add(sub);
-  const NP = Math.min(phone ? 26 : 44, segs.length);
-  const pulseP = new THREE.InstancedMesh(unitBox, new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.58, 0.06).multiplyScalar(2.4) }), NP); patch.add(pulseP);
-  const pr = rng(9); const pData = []; for (let i = 0; i < NP; i++) pData.push({ s: segs[(pr() * segs.length) | 0], sp: 0.18 + pr() * 0.35, o: pr(), dir: pr() < 0.5 ? 1 : -1 });
+  const NP = Math.min(phone ? 22 : 40, segs.length);
+  const pulseP = new THREE.InstancedMesh(unitBox, new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.58, 0.06).multiplyScalar(1.6) }), NP); patch.add(pulseP);
+  const pr = rng(9); const pData = []; for (let i = 0; i < NP; i++) pData.push({ s: segs[(pr() * segs.length) | 0], sp: 0.05 + pr() * 0.08, o: pr(), dir: pr() < 0.5 ? 1 : -1 });
   // a highlight round one NAND gate, and the cell to point at for weights
-  const cellIn = (c) => c.x0 >= PW0 + 8 && c.x1 <= PW1 - 8 && c.z0 >= PZ0 + RH && c.z1 <= PZ1 - RH;
-  const nand = cellsAll.cells.find((c) => c.type === 'NAND' && cellIn(c)) || cellsAll.cells.find(cellIn);
-  const tie = cellsAll.cells.find((c) => c.type === 'TIE' && cellIn(c) && c !== nand) || cellsAll.cells.find((c) => c.type === 'INV' && cellIn(c));
-  const hl = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(nand.x1 - nand.x0 + 0.6, 1.4, RH - 0.6)), new THREE.LineBasicMaterial({ color: new THREE.Color(1, 0.66, 0.1).multiplyScalar(3) }));
-  hl.position.set((nand.x0 + nand.x1) / 2, 0.7, (nand.z0 + nand.z1) / 2); patch.add(hl);
+  const hl = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(nand.x1 - nand.x0 + 0.4, 1.2, RH - 0.6)), new THREE.LineBasicMaterial({ color: new THREE.Color(1, 0.66, 0.1).multiplyScalar(1.5), depthTest: false, transparent: true }));
+  hl.renderOrder = 5; hl.position.set((nand.x0 + nand.x1) / 2, 0.6, (nand.z0 + nand.z1) / 2); patch.add(hl);
+  const cuSeg = cellsAll.L.m3.map(cut('m3')).filter((q) => q && q[2] - q[0] > 20 && U(q[0] + 6, q[1]) > UMIN.m3 && U(q[0] + 6, q[1]) < UMIN.m3 + 30).sort((a, b) => Math.hypot((a[0] + a[2]) / 2 - CX - 22, a[1] - CZ + 22) - Math.hypot((b[0] + b[2]) / 2 - CX - 22, b[1] - CZ + 22))[0];
+  const siRect = cellsAll.L.dn.slice().sort((a, b) => Math.hypot(a[0] - CX + 20, a[1] - CZ - 24) - Math.hypot(b[0] - CX + 20, b[1] - CZ - 24))[0];
 
   // ch4 pulses on the bond wires: sensor signals in on one side, the prediction out on the other
   const IN_W = []; for (let i = 0; i < LEADS; i += 1) IN_W.push(LEADS + i);   // side 1 is -x
@@ -890,11 +980,11 @@ function initGL() {
   const lWire = addLabel('Gold wires', 'l np', dieG, [-0.9, DIE_TOP + 0.2, 1.0], W1);
   const lPins = addLabel('Pins: sensors in, prediction out', 'r', chip, [HB + 0.6, 0.05, -1.4], W1);
   const lBase = addLabel('Base', 'l np', base, [-HB, -0.1, HB - 0.4], W1);
-  const mGate = addLabel('One logic gate', 'r', patch, [(nand.x0 + nand.x1) / 2, 1, (nand.z0 + nand.z1) / 2], W3);
-  const mWeight = addLabel('A weight, wired in', 'l', patch, [(tie.x0 + tie.x1) / 2, 2.6, (tie.z0 + tie.z1) / 2], W3);
-  const mCu = addLabel('Copper wires carry the bits', 'r np', patch, [PW1 - 30, 6, PZ0 + 20], W3);
-  const mSi = addLabel('Transistors in silicon', 'l np', patch, [PW0 + 16, 0.4, PZ1 - 14], W3);
-  const bitL = []; for (let i = 0; i < (phone ? 2 : 4); i++) { const s = pData[i * 3 % NP].s; bitL.push({ l: addLabel('1', 'bit', patch, [(s[0] + s[2]) / 2, s[5], (s[1] + s[3]) / 2], W3), s, L: s[4], k: i }); }
+  const mGate = addLabel('One logic gate', 'r', patch, [(nand.x0 + nand.x1) / 2, 0.6, (nand.z0 + nand.z1) / 2], W3);
+  const mWeight = addLabel('A weight, wired in', 'l', patch, [(tie.x0 + tie.x1) / 2, TOP.m1, (tie.z0 + tie.z1) / 2], W3);
+  const mCu = addLabel('Copper wires carry the bits', 'r np', patch, [(cuSeg[0] + cuSeg[2]) / 2, TOP.m3, (cuSeg[1] + cuSeg[3]) / 2], W3);
+  const mSi = addLabel('Transistors in silicon', 'l np', patch, [(siRect[0] + siRect[2]) / 2, TOP.dn, (siRect[1] + siRect[3]) / 2], W3);
+  const bitSegs = pData.map((p) => p.s).filter((s) => Math.hypot((s[0] + s[2]) / 2 - (cuSeg[0] + cuSeg[2]) / 2, (s[1] + s[3]) / 2 - cuSeg[1]) > 30); const bitL = []; for (let i = 0; i < Math.min(phone ? 2 : 4, bitSegs.length); i++) { const s = bitSegs[i * 3 % bitSegs.length]; bitL.push({ l: addLabel('1', 'bit', patch, [(s[0] + s[2]) / 2, s[5], (s[1] + s[3]) / 2], W3), s, L: s[4], k: i }); }
   const lIn = addLabel('Sensor signals in', 'l', dieG, [-1.5, PART + 0.05, -0.6], W4);
   const lOut = addLabel('Prediction out', 'r', chip, [HB + 0.45, 0.02, leadU(8)], W4);
   // device labels go on chips that land in the open part of the screen; picked again when the view changes
@@ -903,7 +993,7 @@ function initGL() {
   let pickedAt = -1;
   function pickField(k) {
     if (Math.abs(k - pickedAt) < 0.04) return; pickedAt = k;
-    camera.updateMatrixWorld(); const ph = isPhone(); const x0 = ph ? 80 : Math.min(W * 0.42, 620) + 30, x1 = W - (ph ? 125 : 260), y0 = ph ? H * 0.42 : 150, y1 = H - 50;
+    camera.updateMatrixWorld(); const ph = isPhone(); const x0 = ph ? 80 : Math.min(W * 0.5, 760) + 30, x1 = W - (ph ? 125 : 260), y0 = ph ? H * 0.42 : 150, y1 = H - 50;
     const pts = [];
     for (const p of fieldCand) { tv.set(p[2], 0.75 * p[4] + 0.1, p[3]).project(camera); const x = (tv.x * 0.5 + 0.5) * W, y = (-tv.y * 0.5 + 0.5) * H; if (x > x0 && x < x1 && y > y0 && y < y1) pts.push([x, y, p]); }
     pts.sort((a, b) => Math.hypot(a[0] - (x0 + x1) / 2, a[1] - (y0 + y1) / 2) - Math.hypot(b[0] - (x0 + x1) / 2, b[1] - (y0 + y1) / 2));
@@ -919,7 +1009,7 @@ function initGL() {
     { t: [0, 0.3, 0], az: 0.78, el: 0.5, d: 18.5, ox: 0.16, oy: 0.02, yaw: 0, ap: 0.006 },
     { t: [0, 1.75, 0], az: 0.95, el: 0.5, d: 27, ox: 0.15, oy: 0.0, yaw: 0.3, ap: 0.006 },
     { t: [0, DIE_TOP, 0], az: 0.62, el: 1.18, d: 3.9, ox: 0.19, oy: 0.0, yaw: 0, ap: 0.01 },
-    { t: [0, DIE_TOP + 0.013, 0], az: 0.74, el: 0.5, d: 0.088, ox: 0.17, oy: 0.0, yaw: 0, ap: 0.02 },
+    { t: [0, DIE_TOP + 0.013, 0], az: 0.74, el: 0.8, d: 0.092, ox: 0.17, oy: 0.0, yaw: 0, ap: 0.02 },
     { t: [0, 0.4, 0], az: -0.55, el: 0.7, d: 16.5, ox: 0.13, oy: 0.03, yaw: 0, ap: 0.008 },
     { t: [0, 0, 0], az: 0.6, el: 0.8, d: 74, ox: 0.1, oy: -0.03, yaw: 0, ap: 0.03 },
   ];
@@ -1001,17 +1091,18 @@ function initGL() {
     const em = smooth(2.72, 3.12, rw) * (1 - smooth(3.4, 3.72, rw));
     if (patch.visible) {
       for (const m of layerMesh) m.position.y = m.userData.L * LGAP * em;
-      hl.position.y = 0.7 + LGAP * em; hl.visible = em > 0.3;
+      for (const m of viaMesh) { const u = m.userData; m.position.y = u.y0 + u.La * LGAP * em; m.scale.y = u.h + (u.Lb - u.La) * LGAP * em; }
+      hl.position.y = 0.6 + LGAP * em; hl.visible = em > 0.3;
       for (let j = 0; j < NP; j++) {
         const p = pData[j], s = p.s; let ph = (REDUCE ? p.o : (t * p.sp + p.o) % 1); if (p.dir < 0) ph = 1 - ph;
-        const horiz = (s[2] - s[0]) > (s[3] - s[1]); const yy = s[5] + 0.25 + s[4] * LGAP * em;
-        if (horiz) { dummy.position.set(lerp(s[0] + 1.5, s[2] - 1.5, ph), yy, (s[1] + s[3]) / 2); dummy.scale.set(3.2, 0.5, 1.02); }
-        else { dummy.position.set((s[0] + s[2]) / 2, yy, lerp(s[1] + 1.5, s[3] - 1.5, ph)); dummy.scale.set(0.8, 0.5, 3.2); }
+        const horiz = (s[2] - s[0]) > (s[3] - s[1]); const yy = s[5] + 0.03 + s[4] * LGAP * em;
+        if (horiz) { dummy.position.set(lerp(s[0] + 1.5, s[2] - 1.5, ph), yy, (s[1] + s[3]) / 2); dummy.scale.set(2.4, 0.08, s[3] - s[1] + 0.06); }
+        else { dummy.position.set((s[0] + s[2]) / 2, yy, lerp(s[1] + 1.5, s[3] - 1.5, ph)); dummy.scale.set(s[2] - s[0] + 0.06, 0.08, 2.4); }
         dummy.rotation.set(0, 0, 0); dummy.updateMatrix(); pulseP.setMatrixAt(j, dummy.matrix);
       }
       pulseP.instanceMatrix.needsUpdate = true;
-      for (const bl of bitL) { bl.l.pos.y = bl.s[5] + bl.L * LGAP * em + 0.6; const v = REDUCE ? (bl.k % 2) : (Math.floor(t * 1.3 + bl.k * 0.7) % 2); const txt = v ? '1' : '0'; if (bl.l.el.lastChild.textContent !== txt) bl.l.el.lastChild.textContent = txt; }
-      mGate.pos.y = 1 + LGAP * em; mWeight.pos.y = 2.6 + 3 * LGAP * em; mCu.pos.y = 6 + 7 * LGAP * em;
+      for (const bl of bitL) { bl.l.pos.y = bl.s[5] + bl.L * LGAP * em + 0.1; const v = REDUCE ? (bl.k % 2) : (Math.floor(t * 1.3 + bl.k * 0.7) % 2); const txt = v ? '1' : '0'; if (bl.l.el.lastChild.textContent !== txt) bl.l.el.lastChild.textContent = txt; }
+      mGate.pos.y = 0.6 + LGAP * em; mWeight.pos.y = TOP.m1 + 2 * LGAP * em; mCu.pos.y = TOP.m3 + 4 * LGAP * em;
     }
     // chapter 4: signals moving on the bond wires
     const pw = 1 - smooth(0.25, 0.5, Math.abs(k - 4));

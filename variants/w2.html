@@ -1033,110 +1033,212 @@ function initStory() {
     for (const x of [-7.3, 2.8]) { const b = new THREE.Mesh(brk, M.steel); b.position.set(x, 0.65, 2.95); b.castShadow = true; root3.add(b); }
   }
 
-  /* ---------------- the gates, rising out of the die */
+  /* ---------------- the gates: standard-cell rows under a thin metal stack, as under a microscope */
   const S = 0.0005;
   const patch = new THREE.Group(); patch.position.set(0, DIE_TOP + 0.00002, 0); patch.scale.setScalar(S); chip.add(patch);
   const tagLocal = {};
-  const m2Tracks = [], m3Tracks = [];
+  const bitSegs = []; // wires a bit can ride: dir (0 along x, 1 along z), cross position, start, end, top, width
+  // layer stack, local units [bottom, top]: every wire is far wider than it is tall
+  const GY = { diff: [0, 0.05], poly: [0.05, 0.15], cont: [0.05, 0.46], rail: [0.46, 0.64], m1: [0.46, 0.64], via1: [0.64, 0.9], m2: [0.9, 1.1], via2: [1.1, 1.38], m3: [1.38, 1.6], via3: [1.6, 1.95], m4: [1.95, 2.3] };
   {
+    // canvas-made surface detail: copper grain (normal map) and blotchy polish (roughness map)
+    const N = 256, hr0 = rng(31), hf = new Float32Array(N * N);
+    for (let i = 0; i < 1600; i++) {
+      const cx = hr0() * N, cy = hr0() * N, rad = 1.5 + hr0() * 5, a = (hr0() - 0.5), r2 = rad * rad;
+      for (let dy = -Math.ceil(rad); dy <= rad; dy++) for (let dx = -Math.ceil(rad); dx <= rad; dx++) {
+        const d2 = dx * dx + dy * dy; if (d2 >= r2) continue;
+        const x = (Math.floor(cx) + dx + N) % N, y = (Math.floor(cy) + dy + N) % N; hf[y * N + x] += a * (1 - d2 / r2);
+      }
+    }
+    for (let i = 0; i < N * N; i++) hf[i] += (hr0() - 0.5) * 0.12;
+    const nc = makeCanvas(N, N), ng = nc.getContext('2d'), ni = ng.createImageData(N, N);
+    const rc = makeCanvas(N, N), rg = rc.getContext('2d'), ri = rg.createImageData(N, N);
+    const at = (x, y) => hf[((y + N) % N) * N + ((x + N) % N)];
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const nx = (at(x - 1, y) - at(x + 1, y)) * 1.6, ny = (at(x, y - 1) - at(x, y + 1)) * 1.6, l = Math.hypot(nx, ny, 1), o = (y * N + x) * 4;
+      ni.data[o] = (nx / l * 0.5 + 0.5) * 255; ni.data[o + 1] = (ny / l * 0.5 + 0.5) * 255; ni.data[o + 2] = (1 / l * 0.5 + 0.5) * 255; ni.data[o + 3] = 255;
+      const v = clamp(0.5 + (at(x, y) + at(x + 2, y) + at(x, y + 2) + at(x - 2, y - 2)) * 0.03, 0.35, 0.65) * 255;
+      ri.data[o] = v; ri.data[o + 1] = v; ri.data[o + 2] = v; ri.data[o + 3] = 255;
+    }
+    ng.putImageData(ni, 0, 0); rg.putImageData(ri, 0, 0);
+    const nrm = texFrom(nc, renderer, false), rgh = texFrom(rc, renderer, false);
+    for (const tx of [nrm, rgh]) { tx.wrapS = tx.wrapT = THREE.RepeatWrapping; }
+    // instanced boxes get their detail uv from their position in the patch, so long wires do not stretch it
+    const worldUV = (m) => {
+      m.onBeforeCompile = (sh) => {
+        sh.vertexShader = sh.vertexShader.replace('#include <uv_vertex>', `#include <uv_vertex>
+#ifdef USE_INSTANCING
+  vec2 wuv = (instanceMatrix * vec4(position, 1.0)).xz * 0.7;
+  #ifdef USE_NORMALMAP
+  vNormalMapUv = wuv;
+  #endif
+  #ifdef USE_ROUGHNESSMAP
+  vRoughnessMapUv = wuv;
+  #endif
+#endif`);
+      };
+      m.customProgramCacheKey = () => 'wuv';
+      return m;
+    };
+    const metal = (color, rough, ns, env = 0.85) => worldUV(new THREE.MeshStandardMaterial({ color, metalness: 1, roughness: rough * 2, roughnessMap: rgh, normalMap: nrm, normalScale: new THREE.Vector2(ns, ns), envMapIntensity: env }));
+    const tung = metal(0x8d9298, 0.4, 0.2);
+
     const r = rng(9);
-    const L = { diff: [], poly: [], cont: [], m1: [], via1: [], m2: [], via2: [], m3: [] };
-    const box = (arr, x, y, z, sx, sy, sz) => arr.push(x, y, z, sx, sy, sz);
-    const X0 = -76, X1 = 76, Z0 = -60, ROWS = 15, RH = 8;
+    const L = { diff: [], poly: [], cont: [], rail: [], m1: [], via1: [], m2: [], via2: [], m3: [], via3: [], m4: [] };
+    const put = (k, x, z, sx, sz, layer = k) => { const [a, b] = GY[layer]; L[k].push(x, (a + b) / 2, z, sx, b - a, sz); };
+    const X0 = -76, X1 = 76, Z0 = -60, ROWS = 15, RH = 8, PP = 0.9, Z1 = Z0 + ROWS * RH;
+    const M1K = 8, M1P = 0.76, M1Z = 1.34; // metal-1 tracks inside a row
+    const m1z = (z) => { const row = clamp(Math.floor((z - Z0) / RH), 0, ROWS - 1), z0 = Z0 + row * RH; return z0 + M1Z + clamp(Math.round((z - z0 - M1Z) / M1P), 0, M1K - 1) * M1P; };
+    const m2x = (x) => X0 + PP + Math.round((x - X0 - PP) / PP) * PP;
+    const M3P = 1.05, m3z = (z) => Z0 + 0.6 + clamp(Math.round((z - Z0 - 0.6) / M3P), 0, Math.floor((Z1 - Z0 - 1.2) / M3P)) * M3P;
+    // walk one routing track: wires of varied length with gaps between them
+    const walk = (a0, a1, sMin, sMax, gMin, gMax, fn) => {
+      let a = a0 + r() * gMax;
+      while (a < a1 - sMin) { const len = Math.min(a1 - a, sMin + r() * r() * (sMax - sMin)); fn(a, a + len); a += len + gMin + r() * (gMax - gMin); }
+    };
+    // a delayered window, as a failure-analysis lab would strip it: each metal layer is etched
+    // back over a smaller terrace than the one above, so the cells, poly and contacts show at its heart
+    const WC = [-1, 0], WIN = { m1: [11, 7.5], m2: [17, 11.5], m3: [23, 15.5], m4: [30, 20] };
+    const inWin = (k, x, z) => Math.abs(x - WC[0]) < WIN[k][0] && Math.abs(z - WC[1]) < WIN[k][1];
+    // a straight run along x (dir 0) or z (dir 1) at cross position c, kept only outside layer k's window
+    const runOut = (k, dir, c, a, b, fn) => {
+      const w = WIN[k], lo = WC[dir] - w[dir], hi = WC[dir] + w[dir];
+      if (Math.abs(c - WC[1 - dir]) >= w[1 - dir] || b <= lo || a >= hi) { fn(a, b); return; }
+      if (lo - a > 0.3) fn(a, lo);
+      if (b - hi > 0.3) fn(hi, b);
+    };
+    const STRAPS = [-62, -38, -14, 10, 34, 58];
+    const nearStrap = (x, m) => STRAPS.some(s => Math.abs(x - s) < m);
     const types = [
-      { n: 'inv', w: 3, f: 1 }, { n: 'nand', w: 4, f: 2 }, { n: 'nor', w: 4, f: 2 }, { n: 'nand', w: 4, f: 2 }, { n: 'aoi', w: 6, f: 3 },
-      { n: 'xor', w: 7, f: 4 }, { n: 'dff', w: 14, f: 8 }, { n: 'tie', w: 2, f: 1 }, { n: 'tie', w: 2, f: 1 }, { n: 'buf', w: 4, f: 2 },
+      { n: 'inv', w: 2 }, { n: 'nand', w: 3 }, { n: 'nor', w: 3 }, { n: 'nand', w: 3 }, { n: 'aoi', w: 5 },
+      { n: 'xor', w: 6 }, { n: 'dff', w: 12 }, { n: 'tie', w: 2 }, { n: 'buf', w: 3 }, { n: 'fill', w: 1 },
     ];
     for (let row = 0; row < ROWS; row++) {
       const z0 = Z0 + row * RH, flip = row % 2;
-      // power rails
-      box(L.m1, 0, 1.9, z0 + 0.6, X1 - X0, 0.6, 1.2);
-      let x = X0 + 1;
-      while (x < X1 - 3) {
-        const t = types[Math.floor(r() * types.length)];
-        const w = Math.min(t.w, X1 - 1 - x);
-        if (w < 2) break;
-        const cx = x + w / 2;
-        const pz = flip ? z0 + 2.2 : z0 + 5.6, nz = flip ? z0 + 5.6 : z0 + 2.2;
-        box(L.diff, cx, 0.15, pz, w - 0.8, 0.3, 2.2);
-        box(L.diff, cx, 0.15, nz, w - 0.8, 0.3, 2.2);
-        const f = Math.max(1, Math.min(t.f, Math.floor(w - 1)));
-        for (let k = 0; k < f; k++) {
-          const px = x + (k + 1) * w / (f + 1);
-          box(L.poly, px, 0.5, z0 + 3.9, 0.42, 0.4, 6.4);
-          if (k < f - 1 || f === 1) { const cxx = f === 1 ? px + 0.9 : px + w / (f + 1) / 2; box(L.cont, cxx, 0.95, pz, 0.45, 1.3, 0.45); box(L.cont, cxx, 0.95, nz, 0.45, 1.3, 0.45); }
-        }
-        // local metal1: output strap and an input stub
-        const ox = x + w - 0.9;
-        box(L.m1, ox, 1.9, z0 + 3.9, 0.7, 0.6, 4.4);
-        box(L.cont, ox, 0.95, pz, 0.45, 1.3, 0.45);
-        box(L.m1, x + 1.1, 1.9, z0 + 3.9, 1.2, 0.6, 0.7);
-        if (r() < 0.75) box(L.via1, ox, 2.8, z0 + 3.9 + (r() - 0.5) * 2, 0.55, 1.2, 0.55);
-        if (t.n === 'nand' && !tagLocal.nand && row === 7 && x > -10 && x < 8) tagLocal.nand = [cx, 2.2, z0 + 4];
-        if (t.n === 'xor' && !tagLocal.xor && row === 10 && x > 4 && x < 24) tagLocal.xor = [cx, 2.2, z0 + 4];
-        if (t.n === 'dff' && !tagLocal.dff && row === 8 && x < -6 && x > -34) tagLocal.dff = [cx, 2.2, z0 + 4];
-        if (t.n === 'tie' && !tagLocal.weights && row === 5 && x > -4 && x < 18) tagLocal.weights = [cx, 2.2, z0 + 4];
-        x += w + (r() < 0.2 ? 1 : 0);
+      const pz = flip ? z0 + 5.4 : z0 + 2.6, nz = flip ? z0 + 2.6 : z0 + 5.4, pd = 2.3, nd = 1.7;
+      // the polysilicon grating, one stripe per pitch, a few cut between the P and N halves
+      for (let x = X0 + PP / 2; x < X1; x += PP) {
+        if (r() < 0.14) { put('poly', x, pz, 0.2, pd + 0.6); put('poly', x, nz, 0.2, nd + 0.6); }
+        else put('poly', x, z0 + 4, 0.2, 6.2);
       }
-      if (flip || row === ROWS - 1) box(L.m1, 0, 1.9, z0 + RH - 0.6, X1 - X0, 0.6, 1.2);
+      // cells: diffusion islands under the grating, contacts between the gate fingers
+      let x = X0;
+      while (x < X1 - PP) {
+        const t = types[Math.floor(r() * types.length)];
+        const w = Math.min(t.w, Math.floor((X1 - x) / PP));
+        if (w < 1) break;
+        const cw = w * PP, cx = x + cw / 2;
+        if (t.n !== 'fill' && w > 1) {
+          put('diff', cx, pz, cw - 0.3, pd); put('diff', cx, nz, cw - 0.3, nd);
+          for (let k = 0; k <= w; k++) {
+            const gx = x + k * PP;
+            if (k > 0 && k < w ? r() < 0.8 : r() < 0.45) { put('cont', gx + (k === 0 ? 0.2 : k === w ? -0.2 : 0), pz + (r() < 0.5 ? -0.5 : 0.5), 0.18, 0.18); }
+            if (k > 0 && k < w ? r() < 0.8 : r() < 0.45) { put('cont', gx + (k === 0 ? 0.2 : k === w ? -0.2 : 0), nz + (r() < 0.5 ? -0.35 : 0.35), 0.18, 0.18); }
+            if (k < w && r() < 0.45) put('cont', gx + PP / 2, z0 + 4, 0.18, 0.18);
+          }
+        }
+        const tp = [cx, GY.m4[1], z0 + 4];
+        if (t.n === 'nand' && !tagLocal.nand && row === 7 && x > -10 && x < 8) tagLocal.nand = tp;
+        if (t.n === 'xor' && !tagLocal.xor && row === 10 && x > 4 && x < 24) tagLocal.xor = tp;
+        if (t.n === 'dff' && !tagLocal.dff && row === 8 && x < -6 && x > -34) tagLocal.dff = tp;
+        if (t.n === 'tie' && !tagLocal.weights && row === 5 && x > -4 && x < 18) tagLocal.weights = tp;
+        x += cw;
+      }
+      // metal 1 runs along the row
+      for (let k = 0; k < M1K; k++) walk(X0 + 0.3, X1 - 0.3, 0.9, 9, 0.6, 3.6, (a, b) => runOut('m1', 0, z0 + M1Z + k * M1P, a, b, (u, v) => { put('m1', (u + v) / 2, z0 + M1Z + k * M1P, v - u, 0.28); if (v - u > 4) bitSegs.push(0, z0 + M1Z + k * M1P, u, v, GY.m1[1], 0.28); }));
     }
-    tagLocal.nand = tagLocal.nand || [-6, 2.2, -2]; tagLocal.xor = tagLocal.xor || [20, 2.2, 14]; tagLocal.dff = tagLocal.dff || [-30, 2.2, -18]; tagLocal.weights = tagLocal.weights || [30, 2.2, -26];
-    // metal2: vertical tracks over several rows
-    for (let xx = X0 + 2; xx < X1 - 1; xx += 2.6) {
-      if (r() < 0.45) continue;
-      const a = Z0 + Math.floor(r() * 10) * RH * 0.5, len = 12 + r() * 60, b = Math.min(Z0 + ROWS * RH - 1, a + len);
-      box(L.m2, xx, 3.8, (a + b) / 2, 0.9, 0.8, b - a);
-      box(L.via1, xx, 2.8, a + 0.5, 0.55, 1.2, 0.55); box(L.via1, xx, 2.8, b - 0.5, 0.55, 1.2, 0.55);
-      m2Tracks.push(xx, a, b);
+    tagLocal.nand = tagLocal.nand || [-6, GY.m4[1], -4]; tagLocal.xor = tagLocal.xor || [20, GY.m4[1], 24]; tagLocal.dff = tagLocal.dff || [-30, GY.m4[1], 4]; tagLocal.weights = tagLocal.weights || [8, GY.m4[1], -16];
+    // power rails between the rows, VDD and VSS alternating; the straps above drop stacked vias onto them
+    for (let b = 0; b <= ROWS; b++) {
+      const z = Z0 + b * RH;
+      runOut('m1', 0, z, X0, X1, (u, v) => put('rail', (u + v) / 2, z, v - u, b % 2 ? 0.95 : 0.8));
+      for (const s of STRAPS) for (const dx of [-0.42, 0.42]) for (const dz of [-0.2, 0.2]) {
+        const x = s + dx, zz = z + dz;
+        if (!inWin('m1', x, zz)) put('via1', x, zz, 0.22, 0.22);
+        if (!inWin('m2', x, zz)) put('via2', x, zz, 0.24, 0.24);
+        if (!inWin('m3', x, zz)) put('via3', x, zz, 0.28, 0.28);
+      }
+      for (const s of STRAPS) { if (!inWin('m2', s, z)) put('m2', s, z, 1.3, 0.85); if (!inWin('m3', s, z)) put('m3', s, z, 1.3, 0.85); }
     }
-    // metal3: horizontal, wider, sparse
-    for (let zz = Z0 + 3; zz < Z0 + ROWS * RH - 2; zz += 4.2) {
-      if (r() < 0.5) continue;
-      const a = X0 + r() * 60, b = Math.min(X1 - 1, a + 30 + r() * 90);
-      box(L.m3, (a + b) / 2, 5.9, zz, b - a, 1.0, 1.4);
-      for (let k = 0; k < 3; k++) box(L.via2, a + 1 + r() * (b - a - 2), 4.8, zz, 0.7, 1.2, 0.7);
-      m3Tracks.push(zz, a, b);
+    // metal 2 runs across the rows, vias down to metal 1 where a wire ends
+    for (let xx = X0 + PP; xx < X1 - 0.5; xx += PP) {
+      if (r() < 0.3 || nearStrap(xx, 1.0)) continue;
+      walk(Z0 + 0.4, Z1 - 0.4, 1.6, 24, 2, 11, (a, b) => {
+        const za = m1z(a), zb = m1z(b); if (zb - za < 0.7) return;
+        runOut('m2', 1, xx, za - 0.15, zb + 0.15, (u, v) => { put('m2', xx, (u + v) / 2, 0.3, v - u); if (v - u > 5) bitSegs.push(1, xx, u, v, GY.m2[1], 0.3); });
+        for (const zv of [za, zb]) if (!inWin('m1', xx, zv)) put('via1', xx, zv, 0.22, 0.22);
+      });
     }
+    // metal 3 along the rows again, wider pitch
+    for (let zz = Z0 + 0.6; zz < Z1 - 0.5; zz += M3P) {
+      if (r() < 0.4) continue;
+      walk(X0 + 0.5, X1 - 0.5, 2, 40, 3, 16, (a, b) => {
+        const xa = m2x(a), xb = m2x(b); if (xb - xa < 1) return;
+        runOut('m3', 0, zz, xa - 0.17, xb + 0.17, (u, v) => { put('m3', (u + v) / 2, zz, v - u, 0.34); if (v - u > 8) bitSegs.push(0, zz, u, v, GY.m3[1], 0.34); });
+        for (const xv of [xa, xb]) if (!inWin('m2', xv, zz)) put('via2', xv, zz, 0.24, 0.24);
+      });
+    }
+    // metal 4 across, sparse and wider, aluminium-toned, with the power straps
+    for (let xx = X0 + 1.2; xx < X1 - 1; xx += 2.4) {
+      if (r() < 0.55 || nearStrap(xx, 1.6)) continue;
+      walk(Z0 + 0.5, Z1 - 0.5, 5, 70, 3, 18, (a, b) => {
+        const za = m3z(a), zb = m3z(b); if (zb - za < 2) return;
+        runOut('m4', 1, xx, za - 0.31, zb + 0.31, (u, v) => { put('m4', xx, (u + v) / 2, 0.62, v - u); if (v - u > 8) bitSegs.push(1, xx, u, v, GY.m4[1], 0.62); });
+        for (const zv of [za, zb]) if (!inWin('m3', xx, zv)) put('via3', xx, zv, 0.3, 0.3);
+      });
+    }
+    for (const s of STRAPS) runOut('m4', 1, s, Z0, Z1, (u, v) => put('m4', s, (u + v) / 2, 1.5, v - u));
+
     const mats = {
-      diff: new THREE.MeshStandardMaterial({ color: 0x4c6a55, roughness: 0.55 }),
-      poly: new THREE.MeshPhysicalMaterial({ color: 0xa8432f, roughness: 0.42, clearcoat: 0.3 }),
-      cont: new THREE.MeshStandardMaterial({ color: 0x9ea4ab, metalness: 1, roughness: 0.35 }),
-      m1: new THREE.MeshStandardMaterial({ color: 0xc9805a, metalness: 1, roughness: 0.38, envMapIntensity: 0.7 }),
-      via1: new THREE.MeshStandardMaterial({ color: 0x9ea4ab, metalness: 1, roughness: 0.35 }),
-      m2: new THREE.MeshStandardMaterial({ color: 0xd8946c, metalness: 1, roughness: 0.32, envMapIntensity: 0.7 }),
-      via2: new THREE.MeshStandardMaterial({ color: 0x9ea4ab, metalness: 1, roughness: 0.35 }),
-      m3: new THREE.MeshStandardMaterial({ color: 0xe0a47c, metalness: 1, roughness: 0.28, envMapIntensity: 0.7 }),
+      diff: new THREE.MeshStandardMaterial({ color: 0x55635b, roughness: 0.6, metalness: 0.15 }),
+      poly: worldUV(new THREE.MeshStandardMaterial({ color: 0x75483f, roughness: 1.1, roughnessMap: rgh, normalMap: nrm, normalScale: new THREE.Vector2(0.1, 0.1), metalness: 0.05 })),
+      cont: tung, via1: tung, via2: tung, via3: tung,
+      rail: metal(0xb27052, 0.36, 0.08),
+      m1: metal(0xa96a4f, 0.4, 0.08),
+      m2: metal(0xbb7958, 0.34, 0.08),
+      m3: metal(0xc68a68, 0.3, 0.07),
+      m4: metal(0x7f858a, 0.48, 0.1, 0.45),
     };
     const unit = new THREE.BoxGeometry(1, 1, 1);
     for (const k of Object.keys(L)) {
       const a = L[k], n = a.length / 6; if (!n) continue;
-      const im = new THREE.InstancedMesh(unit, mats[k], n); im.castShadow = true; im.receiveShadow = true;
+      const im = new THREE.InstancedMesh(unit, mats[k], n); im.castShadow = k !== 'diff' && k !== 'poly'; im.receiveShadow = true;
       for (let i = 0; i < n; i++) { m4.compose(v3.set(a[i * 6], a[i * 6 + 1], a[i * 6 + 2]), q.identity(), s3.set(a[i * 6 + 3], a[i * 6 + 4], a[i * 6 + 5])); im.setMatrixAt(i, m4); }
       patch.add(im);
     }
-    // a thin dielectric floor under the cells, same silicon tone as the die
-    const fl = new THREE.Mesh(new THREE.PlaneGeometry(X1 - X0 + 6, ROWS * RH + 6), new THREE.MeshPhysicalMaterial({ color: 0x2a3442, metalness: 0.3, roughness: 0.3, iridescence: 0.6, iridescenceIOR: 1.3, iridescenceThicknessMinimum: 200, iridescenceThicknessMaximum: 500 }));
-    fl.rotation.x = -Math.PI / 2; fl.position.set(0, 0.01, Z0 + ROWS * RH / 2); fl.receiveShadow = true; patch.add(fl);
+    // the dark dielectric field under the cells, faintly iridescent, grained by the same maps
+    const fn = nrm.clone(); fn.repeat.set(90, 72); fn.needsUpdate = true;
+    const fl = new THREE.Mesh(new THREE.PlaneGeometry(X1 - X0 + 6, ROWS * RH + 6), new THREE.MeshPhysicalMaterial({ color: 0x161c23, metalness: 0.2, roughness: 0.75, normalMap: fn, normalScale: new THREE.Vector2(0.05, 0.05), iridescence: 0.45, iridescenceIOR: 1.3, iridescenceThicknessMinimum: 220, iridescenceThicknessMaximum: 480 }));
+    fl.rotation.x = -Math.PI / 2; fl.position.set(0, 0.002, Z0 + ROWS * RH / 2); fl.receiveShadow = true; patch.add(fl);
   }
-  // bits: glowing pulses riding the metal tracks
+  // bits: short glowing pulses riding the metal wires
   const NB = PHONE ? 90 : 170;
   const bitMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.5, 14, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color(5.0, 2.6, 0.6) }), NB);
   bitMesh.frustumCulled = false; patch.add(bitMesh);
-  const haloMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.5, 16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.55, 0.12), transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false }), NB);
+  const haloMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.5, 16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.55, 0.12), transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false }), NB);
   haloMesh.frustumCulled = false; patch.add(haloMesh);
-  const bitTrack = new Int16Array(NB), bitPhase = new Float32Array(NB), bitSpeed = new Float32Array(NB), bitKind = new Uint8Array(NB);
+  const bitTrack = new Int32Array(NB), bitPhase = new Float32Array(NB), bitSpeed = new Float32Array(NB);
   {
-    const r = rng(77), n2 = m2Tracks.length / 3, n3 = m3Tracks.length / 3;
-    for (let i = 0; i < NB; i++) { const k = r() < 0.55 ? 0 : 1; bitKind[i] = k; bitTrack[i] = Math.floor(r() * (k ? n3 : n2)); bitPhase[i] = r(); bitSpeed[i] = 0.12 + r() * 0.25; }
+    // most bits ride wires near where the camera settles for the Bits chapter
+    const r = rng(77), ns = bitSegs.length / 6;
+    for (let i = 0; i < NB; i++) {
+      let j = 0;
+      for (let tries = 0; tries < 60; tries++) {
+        j = Math.floor(r() * ns) * 6;
+        const mid = (bitSegs[j + 2] + bitSegs[j + 3]) / 2, mx = bitSegs[j] ? bitSegs[j + 1] : mid, mz = bitSegs[j] ? mid : bitSegs[j + 1];
+        if (r() < Math.exp(-((mx - 8) ** 2 + (mz - 4) ** 2) / 1800)) break;
+      }
+      bitTrack[i] = j; bitPhase[i] = r(); bitSpeed[i] = (0.6 + r() * 1.4) / (bitSegs[j + 3] - bitSegs[j + 2]);
+    }
   }
   function updateBits(t, on) {
     const vis = on > 0.01; bitMesh.visible = vis; haloMesh.visible = vis; if (!vis) return;
     for (let i = 0; i < NB; i++) {
-      const f = (bitPhase[i] + t * bitSpeed[i]) % 1;
-      if (bitKind[i] === 0) { const j = bitTrack[i] * 3, x = m2Tracks[j], a = m2Tracks[j + 1], b = m2Tracks[j + 2]; m4.compose(v3.set(x, 4.3, a + (b - a) * f), q.identity(), s3.set(0.5 * on, 0.5 * on, 1.6 * on)); }
-      else { const j = bitTrack[i] * 3, z = m3Tracks[j], a = m3Tracks[j + 1], b = m3Tracks[j + 2]; m4.compose(v3.set(a + (b - a) * f, 6.5, z), q.identity(), s3.set(1.7 * on, 0.55 * on, 0.55 * on)); }
+      const j = bitTrack[i], f = (bitPhase[i] + t * bitSpeed[i]) % 1, p = bitSegs[j + 2] + (bitSegs[j + 3] - bitSegs[j + 2]) * f, y = bitSegs[j + 4] + 0.05, w = bitSegs[j + 5] * 1.25 * on;
+      if (bitSegs[j]) m4.compose(v3.set(bitSegs[j + 1], y, p), q.identity(), s3.set(w, 0.14 * on, 1.2 * on));
+      else m4.compose(v3.set(p, y, bitSegs[j + 1]), q.identity(), s3.set(1.2 * on, 0.14 * on, w));
       bitMesh.setMatrixAt(i, m4);
-      s3.multiplyScalar(1.9); m4.compose(v3, q, s3); haloMesh.setMatrixAt(i, m4);
+      s3.multiplyScalar(1.6); s3.y *= 0.6; m4.compose(v3, q, s3); haloMesh.setMatrixAt(i, m4);
     }
     bitMesh.instanceMatrix.needsUpdate = true; haloMesh.instanceMatrix.needsUpdate = true;
   }

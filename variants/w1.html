@@ -610,6 +610,7 @@ import { EffectComposer } from '../vendor/addons/postprocessing/EffectComposer.j
 import { RenderPass } from '../vendor/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../vendor/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/addons/postprocessing/OutputPass.js';
+import { BokehPass } from '../vendor/addons/postprocessing/BokehPass.js';
 
 const H = document.documentElement;
 const S = window.__story;
@@ -715,6 +716,48 @@ const usT = tex(usC);
 const ventC = cv(256, 160); { const g = ventC.getContext('2d'); g.fillStyle = '#05080c'; g.fillRect(0, 0, 256, 160); g.lineWidth = 2; g.strokeStyle = '#ffd34d'; g.beginPath(); for (let x = 0; x < 190; x++) { const y = 50 - (x % 60 < 20 ? 28 : x % 60 < 40 ? 28 - (x % 60 - 20) * 1.4 : 0); x ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); g.strokeStyle = '#4fd8ff'; g.beginPath(); for (let x = 0; x < 190; x++) { const y = 115 - Math.max(0, Math.sin(x / 60 * 6.283)) * 26; x ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); g.fillStyle = '#ffd34d'; g.font = '700 30px sans-serif'; g.fillText('18', 200, 56); g.fillStyle = '#4fd8ff'; g.fillText('5', 210, 118); }
 const ventT = tex(ventC);
 
+// canvas-made detail maps: a height canvas becomes a normal map; grey canvases double as roughness maps
+function heightToNormal(src, str = 2) {
+  const w = src.width, h = src.height, d = src.getContext('2d').getImageData(0, 0, w, h).data;
+  const c = cv(w, h), g = c.getContext('2d'), o = g.createImageData(w, h), od = o.data;
+  const Hh = (x, y) => d[((((y + h) % h) * w) + ((x + w) % w)) * 4] / 255;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const dx = (Hh(x + 1, y) - Hh(x - 1, y)) * str, dy = (Hh(x, y + 1) - Hh(x, y - 1)) * str, l = Math.hypot(dx, dy, 1), i = (y * w + x) * 4;
+    od[i] = (-dx / l * 0.5 + 0.5) * 255; od[i + 1] = (dy / l * 0.5 + 0.5) * 255; od[i + 2] = (0.5 / l + 0.5) * 255; od[i + 3] = 255;
+  }
+  g.putImageData(o, 0, 0); return c;
+}
+function blurred(src, px) { const c = cv(src.width, src.height), g = c.getContext('2d'); g.filter = `blur(${px}px)`; g.drawImage(src, 0, 0); g.filter = 'none'; return c; }
+// fine woven fabric
+const fabH = cv(256, 256);
+{ const g = fabH.getContext('2d'), r = rng(61); g.fillStyle = '#808080'; g.fillRect(0, 0, 256, 256);
+  for (let y = 0; y < 256; y += 4) for (let x = 0; x < 256; x += 4) { const over = ((x + y) >> 2) % 2; g.fillStyle = over ? `rgba(255,255,255,${0.35 + r() * 0.2})` : `rgba(0,0,0,${0.3 + r() * 0.2})`; g.fillRect(x, y + (over ? 0 : 1), over ? 4 : 3, over ? 3 : 2); }
+  for (let i = 0; i < 40; i++) { g.fillStyle = `rgba(${r() < 0.5 ? '0,0,0' : '255,255,255'},.12)`; g.fillRect(0, r() * 256, 256, 1); } }
+const fabN = tex(heightToNormal(blurred(fabH, 0.6), 3), false, [7, 7]);
+// waffle blanket colour
+const blanketC = cv(256, 256);
+{ const g = blanketC.getContext('2d'); g.fillStyle = '#9bb6d1'; g.fillRect(0, 0, 256, 256); g.fillStyle = 'rgba(255,255,255,.16)'; for (let y = 0; y < 256; y += 16) for (let x = 0; x < 256; x += 16) g.fillRect(x + 2, y + 2, 12, 12); g.fillStyle = 'rgba(30,50,80,.25)'; g.fillRect(0, 26, 256, 5); g.fillRect(0, 36, 256, 2); }
+const blanketT = tex(blanketC, true, [3, 3]);
+const waffleN = tex(heightToNormal(blurred((() => { const c = cv(128, 128), g = c.getContext('2d'); g.fillStyle = '#444'; g.fillRect(0, 0, 128, 128); g.fillStyle = '#ccc'; for (let y = 0; y < 128; y += 8) for (let x = 0; x < 128; x += 8) g.fillRect(x + 1, y + 1, 6, 6); return c; })(), 1), 2.2), false, [24, 24]);
+// orange-peel wall paint and plastic grain
+const paintH = blurred(noiseCanvas(30000, '#808080', 0.7, 512, 9), 1.4);
+const paintN = tex(heightToNormal(paintH, 1.6), false, [4, 3]);
+const paintR = tex(noiseCanvas(9000, '#d8d8d8', 0.25, 256, 19), false, [4, 3]);
+const grainN = tex(heightToNormal(blurred(noiseCanvas(26000, '#808080', 0.9, 256, 23), 0.7), 1.2), false, [6, 6]);
+const grainR = tex(noiseCanvas(12000, '#c4c4c4', 0.3, 256, 29), false, [5, 5]);
+// sheet vinyl tiles with seams and wear, and wood grain relief
+const tileH = cv(512, 512);
+{ const g = tileH.getContext('2d'); g.drawImage(blurred(noiseCanvas(9000, '#a0a0a0', 0.4, 512, 33), 0.8), 0, 0); g.fillStyle = '#202020'; g.fillRect(0, 0, 512, 3); g.fillRect(0, 0, 3, 512); g.fillRect(255, 0, 2, 512); g.fillRect(0, 255, 512, 2); }
+const tileN = tex(heightToNormal(tileH, 2.2), false, [3.2, 2.8]);
+const tileR = tex(noiseCanvas(16000, '#9a9a9a', 0.45, 512, 37), false, [3.2, 2.8]);
+const woodN = tex(heightToNormal(blurred(woodC, 0.8), 2.5), false, [2.2, 2.2]);
+// soft contact shadow
+const blobC = cv(128, 128);
+{ const g = blobC.getContext('2d'), gr = g.createRadialGradient(64, 64, 4, 64, 64, 64); gr.addColorStop(0, 'rgba(0,0,0,.85)'); gr.addColorStop(0.45, 'rgba(0,0,0,.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); }
+const blobT = tex(blobC);
+const mBlob = new THREE.MeshBasicMaterial({ map: blobT, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, toneMapped: false });
+const PLANE_Y = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+
 // live patient-monitor screen (shared by every monitor screen)
 const scrC = cv(512, 320), scrG = scrC.getContext('2d');
 const scrT = tex(scrC);
@@ -739,20 +782,21 @@ function drawScreen(t) {
 drawScreen(0);
 
 // ---------- materials
-const mWhite = P({ color: '#eceeee', roughness: 0.36, clearcoat: 0.4, clearcoatRoughness: 0.3 });
-const mGreyPl = P({ color: '#c3c9ce', roughness: 0.45, clearcoat: 0.2 });
+const mWhite = P({ color: '#e6e8e8', roughness: 0.5, roughnessMap: grainR, normalMap: grainN, normalScale: new THREE.Vector2(0.18, 0.18), clearcoat: 0.25, clearcoatRoughness: 0.4 });
+const mGreyPl = P({ color: '#c3c9ce', roughness: 0.55, roughnessMap: grainR, normalMap: grainN, normalScale: new THREE.Vector2(0.2, 0.2), clearcoat: 0.15 });
 const mBluePl = P({ color: '#6f8ea8', roughness: 0.45, clearcoat: 0.25 });
 const mDarkPl = P({ color: '#2b3038', roughness: 0.48, clearcoat: 0.2 });
 const mRubber = Sd({ color: '#17191c', roughness: 0.86 });
 const mChrome = Sd({ color: '#e2e6ea', metalness: 1, roughness: 0.14 });
 const mSteel = P({ color: '#b8bfc6', metalness: 1, roughness: 0.32, anisotropy: 0.7 });
 const mAlu = P({ color: '#c9ced3', metalness: 1, roughness: 0.38, anisotropy: 0.5 });
-const mMattress = P({ color: '#4f7f9f', roughness: 0.48, clearcoat: 0.5, clearcoatRoughness: 0.35 });
-const mSheet = P({ color: '#dcdcd6', roughness: 0.92, sheen: 1, sheenColor: '#ffffff', sheenRoughness: 0.55 });
-const mBlanket = P({ color: '#93b1cf', roughness: 0.96, sheen: 1, sheenColor: '#dce9f6', sheenRoughness: 0.5 });
+const FN = (s) => new THREE.Vector2(s, s);
+const mMattress = P({ color: '#4f7f9f', roughness: 0.5, normalMap: grainN, normalScale: FN(0.3), clearcoat: 0.4, clearcoatRoughness: 0.35 });
+const mSheet = P({ color: '#dcdcd6', roughness: 0.92, normalMap: fabN, normalScale: FN(0.7), sheen: 1, sheenColor: '#ffffff', sheenRoughness: 0.55 });
+const mBlanket = P({ map: blanketT, roughness: 0.96, normalMap: waffleN, normalScale: FN(0.8), sheen: 1, sheenColor: '#dce9f6', sheenRoughness: 0.5 });
 const mWood = Sd({ map: woodT2, color: '#e2c09a', roughness: 0.5 });
-const mCushion = P({ color: '#7d8f7a', roughness: 0.9, sheen: 0.8, sheenColor: '#c9d6c4' });
-const mVinylSeat = P({ color: '#3d6f8c', roughness: 0.42, clearcoat: 0.45 });
+const mCushion = P({ color: '#7d8f7a', roughness: 0.9, normalMap: fabN, normalScale: FN(0.9), sheen: 0.8, sheenColor: '#c9d6c4' });
+const mVinylSeat = P({ color: '#3d6f8c', roughness: 0.46, normalMap: grainN, normalScale: FN(0.45), clearcoat: 0.45 });
 const mGlass = LITE ? P({ color: '#dceaf2', roughness: 0.05, transparent: true, opacity: 0.22, depthWrite: false })
   : P({ color: '#ffffff', roughness: 0.03, transmission: 1, thickness: 0.006, ior: 1.5 });
 const mBag = LITE ? P({ color: '#e8f2f6', roughness: 0.2, transparent: true, opacity: 0.5 })
@@ -768,7 +812,7 @@ const mAmberLed = Sd({ color: '#a60', emissive: '#ffb86b', emissiveIntensity: 2.
 const mCut = Sd({ color: '#2d3a4b', roughness: 0.9 });
 const mSkirt = Sd({ color: '#5d6773', roughness: 0.6 });
 const mPlinth = P({ color: '#1c2738', roughness: 0.55, clearcoat: 0.3 });
-const mFabric = P({ color: '#9fb7c7', roughness: 0.95, sheen: 1, sheenColor: '#e3eef5', side: THREE.DoubleSide });
+const mFabric = P({ color: '#9fb7c7', roughness: 0.95, normalMap: fabN, normalScale: FN(0.8), sheen: 1, sheenColor: '#e3eef5', side: THREE.DoubleSide });
 const mLeaf = P({ color: '#3f7a46', roughness: 0.6, sheen: 0.5, sheenColor: '#9fd39b', side: THREE.DoubleSide });
 const mPot = P({ color: '#c46e4a', roughness: 0.7 });
 const mTeal = P({ color: '#2f6f73', roughness: 0.5, clearcoat: 0.3 });
@@ -799,10 +843,22 @@ function starBase(g, x, z, Rr = 0.28, s = 0.8) {
   for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2 + 0.3; const leg = box(g, mSteel, Rr, 0.035, 0.05, x + Math.cos(a) * Rr / 2, 0.11 * s, z - Math.sin(a) * Rr / 2, 0.012); leg.rotation.y = a; caster(g, x + Math.cos(a) * Rr, z - Math.sin(a) * Rr, s); }
   cyl(g, mSteel, 0.05, 0.06, 0.05, x, 0.12 * s, z);
 }
+const mBumper = P({ color: '#d9dcdc', roughness: 0.4, normalMap: grainN, normalScale: FN(0.2), clearcoat: 0.3 });
+const mOutlet = P({ color: '#f1f1ee', roughness: 0.45 });
+function blob(g, x, z, w, d, op = 0.55, ry = 0) { const m = new THREE.Mesh(PLANE_Y, op === 0.55 ? mBlob : Object.assign(mBlob.clone(), { opacity: op / 0.55 })); m.position.set(x, 0.003, z); m.scale.set(w, 1, d); m.rotation.y = ry; m.renderOrder = 1; g.add(m); return m; }
+function cable(g, mat, pts, r = 0.004, seg = 48) { return tube(g, mat, pts, r, seg, 6, { cs: false }); }
+function outlet(g, x, y, z, rx = 0, ry = 0) { const o = grp(g, x, y, z, ry); box(o, mOutlet, 0.08, 0.08, 0.012, 0, 0, 0, 0.004, { cs: false }); for (const s of [-1, 1]) box(o, mDarkPl, 0.008, 0.016, 0.004, s * 0.014, 0.006, 0.007, 0.001, { cs: false }); box(o, mDarkPl, 0.01, 0.01, 0.004, 0, -0.016, 0.007, 0.002, { cs: false }); return o; }
 function shell(g, c) {
-  const fl = P({ color: c.floor, map: c.wood ? woodT : vinylT, roughness: c.wood ? 0.45 : 0.36, clearcoat: 0.4, clearcoatRoughness: 0.28 });
+  const fl = P({ color: c.floor, map: c.wood ? woodT : vinylT, normalMap: c.wood ? woodN : tileN, normalScale: FN(c.wood ? 0.6 : 0.5), roughnessMap: c.wood ? null : tileR, roughness: c.wood ? 0.45 : 0.42, clearcoat: c.wood ? 0.5 : 0.35, clearcoatRoughness: 0.28 });
   box(g, fl, RW, 0.14, RD, 0, -0.07, 0, 0.02);
-  const wm = Sd({ color: c.wall, roughness: 0.9 }), wm2 = Sd({ color: c.wall2, roughness: 0.9 });
+  const wo = { roughness: 0.88, roughnessMap: paintR, normalMap: paintN, normalScale: FN(0.35) };
+  const wm = P({ color: c.wall, ...wo }), wm2 = P({ color: c.wall2, ...wo });
+  // impact-protection rails at hip height along both walls
+  box(g, mBumper, RW - 0.12, 0.12, 0.035, 0.06, 0.9, -RD / 2 + 0.118, 0.012);
+  box(g, mAlu, RW - 0.12, 0.012, 0.02, 0.06, 0.96, -RD / 2 + 0.13, 0.004, { cs: false });
+  box(g, mBumper, 0.035, 0.12, RD - 0.14, -RW / 2 + 0.118, 0.9, 0.07, 0.012);
+  box(g, mAlu, 0.02, 0.012, RD - 0.14, -RW / 2 + 0.13, 0.96, 0.07, 0.004, { cs: false });
+  outlet(g, 1.85, 0.32, -RD / 2 + 0.106); outlet(g, -1.0, 0.32, -RD / 2 + 0.106);
   box(g, wm, RW, WH, 0.1, 0, WH / 2, -RD / 2 + 0.05, 0.015);
   box(g, wm2, 0.1, WH, RD - 0.1, -RW / 2 + 0.05, WH / 2, 0.05, 0.015);
   box(g, mCut, RW + 0.004, 0.024, 0.104, 0, WH, -RD / 2 + 0.05, 0.004, { cs: false });
@@ -862,7 +918,17 @@ function bed(g, x, z, ry = 0) {
     box(b, mWhite, 0.04, 0.24, 0.62, sx * (Wd / 2 + 0.03), 0.82, -0.52, 0.018);
     box(b, mGreyPl, 0.046, 0.06, 0.4, sx * (Wd / 2 + 0.03), 0.86, -0.52, 0.012);
     box(b, mWhite, 0.04, 0.2, 0.56, sx * (Wd / 2 + 0.03), 0.79, 0.42, 0.018);
+    // steel side-rail tubes and the chassis frame
+    const xr = sx * (Wd / 2 + 0.055);
+    tube(b, mSteel, [V(xr, 0.72, -0.83), V(xr, 0.97, -0.8), V(xr, 0.975, -0.52), V(xr, 0.97, -0.24), V(xr, 0.72, -0.21)], 0.011, 40, 10);
+    tube(b, mSteel, [V(xr, 0.7, 0.14), V(xr, 0.91, 0.17), V(xr, 0.915, 0.42), V(xr, 0.91, 0.67), V(xr, 0.7, 0.7)], 0.011, 40, 10);
+    cyl(b, mSteel, 0.014, 0.014, L - 0.3, sx * (Wd / 2 - 0.1), 0.3, 0, { rx: Math.PI / 2 }, 20);
+    box(b, mDarkPl, 0.012, 0.05, 0.09, xr + sx * 0.01, 0.86, -0.52, 0.004, { cs: false });
   }
+  // clipboard hooked on the footboard, nurse-call handset on the rail
+  const cb = grp(b, -0.22, 0.86, L / 2 + 0.035); cb.rotation.x = 0.08;
+  box(cb, mWood, 0.22, 0.3, 0.006, 0, 0, 0, 0.002); box(cb, P({ color: '#f8f8f4', roughness: 0.9 }), 0.2, 0.26, 0.002, 0, -0.01, 0.004, 0.0005, { cs: false }); box(cb, mChrome, 0.08, 0.02, 0.01, 0, 0.13, 0.006, 0.003);
+  box(b, mGreyPl, 0.05, 0.12, 0.025, -(Wd / 2 + 0.075), 0.86, -0.38, 0.01);
   return b;
 }
 function ivPole(g, x, z, pump = true) {
@@ -936,6 +1002,23 @@ const icu = room('Intensive care', 0, 0, { floor: '#c9d0d4', wall: '#e8ebea', wa
   cyl(g, mChrome, 0.022, 0.022, 1.1, 0.66, 0.68, -1.2, null, 32);
   box(g, mSteel, 0.07, 0.1, 0.07, 0.66, 1.25, -1.2, 0.012);
   box(g, mGreyPl, 0.22, 0.12, 0.08, 0.66, 0.92, -1.2, 0.02);
+  // contact shadows
+  blob(g, -0.3, -0.42, 1.25, 2.3, 0.6); blob(g, -1.1, -1.25, 0.6, 0.6); blob(g, -1.6, -0.25, 0.7, 0.7, 0.6, 0.4); blob(g, 1.4, 0.75, 0.75, 0.75, 0.6, -0.9);
+  blob(g, 0.66, -1.2, 0.65, 0.65); blob(g, 0.62, 0.35, 0.6, 0.35);
+  // tissue box and kidney dish on the overbed table, sanitiser and sharps bin on the wall
+  box(g, P({ color: '#9fc6d8', roughness: 0.7 }), 0.13, 0.07, 0.11, 0.86, 0.95, 0.36, 0.008); box(g, P({ color: '#ffffff', roughness: 0.95, sheen: 1 }), 0.05, 0.03, 0.03, 0.86, 0.995, 0.36, 0.01, { cs: false });
+  { const kd = put(g, new THREE.SphereGeometry(0.06, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2.6), P({ color: '#c8d0d6', metalness: 1, roughness: 0.3, side: THREE.DoubleSide }), 0.65, 0.945, 0.28, { rx: Math.PI }); kd.scale.set(1.5, 0.45, 0.8); }
+  const sn = grp(g, -RW / 2 + 0.13, 1.25, 1.62, Math.PI / 2); box(sn, mWhite, 0.11, 0.2, 0.08, 0, 0, 0, 0.02); box(sn, mBluePl, 0.06, 0.03, 0.02, 0, -0.04, 0.045, 0.006); box(sn, P({ color: '#bfe1f0', roughness: 0.15, transparent: true, opacity: 0.6 }), 0.05, 0.08, 0.004, 0, 0.04, 0.041, 0.002, { cs: false });
+  const sb = grp(g, -1.8, 1.05, -RD / 2 + 0.15); box(sb, P({ color: '#f2c230', roughness: 0.45, clearcoat: 0.3 }), 0.2, 0.24, 0.12, 0, 0, 0, 0.012); box(sb, P({ color: '#c8322b', roughness: 0.4 }), 0.21, 0.035, 0.13, 0, 0.13, 0, 0.01);
+  const gl = grp(g, -RW / 2 + 0.14, 1.4, -0.95, Math.PI / 2); box(gl, mSteel, 0.62, 0.14, 0.1, 0, 0, 0, 0.006); for (let i = 0; i < 3; i++) box(gl, P({ color: ['#6f9ad6', '#7fb4e0', '#c79ad6'][i], roughness: 0.6 }), 0.19, 0.12, 0.09, -0.2 + i * 0.2, 0.01, 0.01, 0.006);
+  // floor bin with pedal
+  const bn = grp(g, 1.75, 0, -0.95); cyl(bn, mSteel, 0.13, 0.12, 0.42, 0, 0.21, 0, null, 40); cyl(bn, mDarkPl, 0.133, 0.133, 0.03, 0, 0.43, 0, null, 40); box(bn, mDarkPl, 0.08, 0.015, 0.06, 0, 0.02, 0.14, 0.004); blob(g, 1.75, -0.95, 0.4, 0.4);
+  // cables: monitor and ventilator power to the wall, nurse call to the bed, IV line to the patient
+  const mCord = P({ color: '#2a2e33', roughness: 0.55 }), mCordW = P({ color: '#dfe3e6', roughness: 0.45 }), mLine = P({ color: '#e8f2f6', roughness: 0.15, transparent: true, opacity: 0.75 });
+  cable(g, mCord, [V(0.7, 0.9, -1.2), V(0.78, 0.5, -1.25), V(0.95, 0.02, -1.3), V(1.4, 0.01, -1.55), V(1.82, 0.25, -RD / 2 + 0.13), V(1.85, 0.3, -RD / 2 + 0.12)], 0.0045, 64);
+  cable(g, mCord, [V(-1.66, 0.95, -0.4), V(-1.7, 0.4, -0.5), V(-1.6, 0.01, -0.9), V(-1.2, 0.01, -1.6), V(-1.02, 0.3, -RD / 2 + 0.13)], 0.0045, 64);
+  cable(g, mCordW, [V(-0.95, 1.42, -RD / 2 + 0.15), V(-0.92, 1.1, -1.5), V(-0.85, 0.75, -1.0), V(-0.84, 0.86, -0.4)], 0.003, 48);
+  cable(g, mLine, [V(-1.15, 1.7, -1.25), V(-1.0, 1.15, -1.2), V(-0.9, 0.9, -0.95), V(-0.7, 0.82, -0.55), V(-0.55, 0.8, -0.35)], 0.0025, 64);
 });
 // Newborn care
 room('Newborn care', 0, -4.15, { floor: '#d6cab9', wall: '#efe5d8', wall2: '#e6d7c2', light: '#ffd2a0', lum: 7 }, (g) => {
@@ -956,6 +1039,8 @@ room('Newborn care', 0, -4.15, { floor: '#d6cab9', wall: '#efe5d8', wall2: '#e6d
   box(c, mGlass, 0.62, 0.24, 0.38, 0, 0.82, 0, 0.05, { cs: false }); box(c, mSheet, 0.56, 0.04, 0.32, 0, 0.73, 0, 0.015);
   chair(g, 1.3, 0.7, -0.7, mCushion);
   plant(g, -1.7, 1.2);
+  blob(g, -0.45, -0.7, 1.2, 0.85, 0.6); blob(g, 1.1, -1.05, 0.75, 0.55); blob(g, 1.3, 0.7, 0.7, 0.7); blob(g, -1.7, 1.2, 0.45, 0.45); blob(g, -0.45, -1.45, 0.35, 0.35);
+  cable(g, P({ color: '#2a2e33', roughness: 0.55 }), [V(-0.1, 0.4, -0.75), V(0.1, 0.01, -1.0), V(0.6, 0.01, -1.6), V(1.0, 0.32, -RD / 2 + 0.12)], 0.0045, 48);
 });
 // Operating room
 room('Operating room', -4.75, -4.15, { floor: '#8fb7b1', wall: '#d6e3e1', wall2: '#c9d9d6', light: '#f2f7ff', lum: 10 }, (g) => {
@@ -985,6 +1070,8 @@ room('Operating room', -4.75, -4.15, { floor: '#8fb7b1', wall: '#d6e3e1', wall2:
   for (let i = 0; i < 7; i++) box(it, mChrome, 0.012, 0.006, 0.2, -0.24 + i * 0.07, 0.89, 0, 0.003, { cs: false });
   liteMonitor(g, 1.45, 1.75, -1.65, -0.3, 0.5, 0.32);
   doorLeft(g, 0.9);
+  blob(g, 0.1, -0.1, 0.9, 2.2, 0.5); blob(g, -1.45, -1.15, 0.9, 0.75, 0.6, 0.3); blob(g, 1.15, 0.75, 0.85, 0.65);
+  for (const s of [-1, 1]) cable(g, P({ color: s < 0 ? '#2a2e33' : '#3e6fb0', roughness: 0.5 }), [V(-1.2, 0.9, -0.95 + s * 0.05), V(-0.95, 0.4, -0.6), V(-0.6, 0.01, -0.3 + s * 0.1), V(-0.25, 0.4, -0.15), V(-0.1, 0.78, -0.1 + s * 0.15)], 0.004, 56);
 });
 // Clinic
 room('Clinic', 4.75, -4.15, { floor: '#cbc4b8', wall: '#e9e8e2', wall2: '#d5e0e6', light: '#ffe6c8', lum: 7 }, (g) => {
@@ -1012,6 +1099,8 @@ room('Clinic', 4.75, -4.15, { floor: '#cbc4b8', wall: '#e9e8e2', wall2: '#d5e0e6
   put(g, ct, mFabric, -1.25, 1.12, 0.15, { ry: 0 });
   cyl(g, mChrome, 0.012, 0.012, 1.9, -1.2, 2.1, 0.15, { rz: Math.PI / 2 });
   doorLeft(g, 1.1);
+  blob(g, -0.85, -1.25, 2.1, 0.9, 0.6); blob(g, 0.35, -0.95, 0.75, 0.8, 0.6, -0.3); blob(g, 1.35, -1.3, 1.3, 0.75); blob(g, 1.3, -0.55, 0.7, 0.7);
+  const lr = grp(g, -RW / 2 + 0.25, 1.6, -0.3, Math.PI / 2); box(lr, mWhite, 0.26, 0.34, 0.06, 0, 0, 0, 0.01); box(lr, P({ color: '#9fd6c8', roughness: 0.6 }), 0.22, 0.12, 0.05, 0, 0.08, 0.01, 0.006); box(lr, P({ color: '#e5e0d2', roughness: 0.6 }), 0.22, 0.12, 0.05, 0, -0.07, 0.01, 0.006);
 });
 // Dialysis
 room('Dialysis', -4.75, 0, { floor: '#c0c8cd', wall: '#e3e7ea', wall2: '#d3dde4', light: '#ffe0bd', lum: 7.5 }, (g) => {
@@ -1034,6 +1123,8 @@ room('Dialysis', -4.75, 0, { floor: '#c0c8cd', wall: '#e3e7ea', wall2: '#d3dde4'
   }
   plant(g, 1.7, 1.25);
   doorLeft(g, 1.0);
+  for (const sx of [-1, 1]) { blob(g, sx * 0.95, -0.55, 0.95, 1.2, 0.6); blob(g, sx * 0.95 + 0.62, -1.2, 0.65, 0.65); }
+  blob(g, 1.7, 1.25, 0.45, 0.45);
 });
 // Home
 room('Home', 4.75, 0, { floor: '#c49a70', wood: true, wall: '#efe7da', wall2: '#dfd0b8', light: '#ffc98e', lum: 7 }, (g) => {
@@ -1065,10 +1156,12 @@ room('Home', 4.75, 0, { floor: '#c49a70', wood: true, wall: '#efe7da', wall2: '#
   plant(g, 1.75, -1.45);
   chair(g, 1.25, 0.3, -1.1, mCushion);
   doorLeft(g, 1.2);
+  blob(g, -0.55, -1.3, 2.1, 1.0, 0.6); blob(g, -0.55, -0.35, 1.05, 0.65, 0.45); blob(g, 0.6, -1.35, 0.5, 0.45); blob(g, 1.25, 0.3, 0.75, 0.75); blob(g, -1.75, -1.45, 0.4, 0.4); blob(g, 1.75, -1.45, 0.45, 0.45);
+  const mg = grp(g, -0.7, 0.44, -0.3); cyl(mg, P({ color: '#c75b3f', roughness: 0.35, clearcoat: 0.6 }), 0.035, 0.032, 0.08, 0, 0.04, 0, null, 32); box(mg, P({ color: '#f3efe6', roughness: 0.8 }), 0.16, 0.012, 0.22, -0.18, 0.006, 0.02, 0.003);
 });
 
 // ---------- hero bedside monitor (parts explode)
-const mShell = P({ color: '#eef0f0', roughness: 0.32, clearcoat: 0.55, clearcoatRoughness: 0.22, thickness: 0.006, ior: 1.46, transmission: 0 });
+const mShell = P({ color: '#eceeee', roughness: 0.4, roughnessMap: grainR, normalMap: grainN, normalScale: new THREE.Vector2(0.14, 0.14), clearcoat: 0.55, clearcoatRoughness: 0.22, thickness: 0.006, ior: 1.46, transmission: 0 });
 const mShellLite = mShell;
 const mSeam = Sd({ color: '#4c5560', roughness: 0.6 });
 const mPrint = Sd({ color: '#06080b', roughness: 0.3 });
@@ -1138,19 +1231,21 @@ const pcbT = tex(pcbC), pcbMR = tex(pcbM, false);
 const mPcbTop = P({ map: pcbT, roughnessMap: pcbMR, metalnessMap: pcbMR, roughness: 1, metalness: 1, clearcoat: 0.6, clearcoatRoughness: 0.35 });
 const mPcbEdge = Sd({ color: '#0f3a29', roughness: 0.5 });
 
-// chip marking
-function markCanvas(lines, size = 512, alpha = false) {
-  const c = cv(size, size), g = c.getContext('2d'), r = rng(2);
+// chip marking: laser-etched pin-one dot, a logo square, a dot code and date bars (no words)
+function markCanvas(seed, size = 512, alpha = false, style = 0) {
+  const c = cv(size, size), g = c.getContext('2d'), r = rng(seed), u = size / 100;
   if (!alpha) { g.fillStyle = '#18191c'; g.fillRect(0, 0, size, size); for (let i = 0; i < 9000; i++) { g.fillStyle = `rgba(255,255,255,${r() * 0.05})`; g.fillRect(r() * size, r() * size, 1.4, 1.4); } }
-  g.fillStyle = alpha ? 'rgba(0,0,0,.6)' : '#0e0f11'; g.beginPath(); g.arc(size * 0.13, size * 0.13, size * 0.045, 0, 6.283); g.fill();
-  g.fillStyle = alpha ? 'rgba(210,212,216,.95)' : '#8d9196'; g.textAlign = 'left';
-  g.font = `700 ${size * 0.1}px sans-serif`; g.fillText(lines[0], size * 0.12, size * 0.5);
-  g.font = `600 ${size * 0.075}px sans-serif`; g.fillText(lines[1], size * 0.12, size * 0.64); g.fillText(lines[2], size * 0.12, size * 0.76);
+  g.fillStyle = alpha ? 'rgba(0,0,0,.6)' : '#0e0f11'; g.beginPath(); g.arc(13 * u, 13 * u, 4.5 * u, 0, 6.283); g.fill();
+  const ink = alpha ? 'rgba(210,212,216,.9)' : '#8d9196'; g.fillStyle = ink; g.strokeStyle = ink;
+  if (style !== 2) { g.lineWidth = 2.2 * u; g.strokeRect(14 * u, 34 * u, 20 * u, 20 * u); g.fillRect(20 * u, 40 * u, 8 * u, 8 * u); }
+  const dm = style === 1 ? 12 : 10, cs = (style === 2 ? 3.4 : 2.4) * u, x0 = style === 2 ? 30 * u : 44 * u, y0 = style === 2 ? 30 * u : 32 * u;
+  for (let i = 0; i < dm; i++) for (let j = 0; j < dm; j++) if (i === 0 || j === dm - 1 || (j === 0 && i % 2 === 0) || (i === dm - 1 && j % 2 === 1) || r() < 0.45) g.fillRect(x0 + i * cs, y0 + j * cs, cs * 0.92, cs * 0.92);
+  if (style !== 2) for (let k = 0; k < 2; k++) { let x = 14 * u; while (x < 84 * u) { const w = (2 + r() * 5) * u; g.fillRect(x, (66 + k * 9) * u, w, 4 * u); x += w + (1 + r() * 2) * u; } }
   return c;
 }
-const NAME = (window.SITE_NAME || '').toUpperCase();
-const markT = tex(markCanvas([NAME, 'CM1-2330H', '2647  A1  KOR'], 512));
-const markFieldT = tex(markCanvas([NAME, 'CM1', '2647'], 256, true));
+const markT = tex(markCanvas(2, 512));
+const markFieldT = tex(markCanvas(3, 256, true));
+const markFieldTs = [markFieldT, tex(markCanvas(5, 256, true, 1)), tex(markCanvas(8, 256, true, 2))];
 
 // die texture: pad ring, analog input block, standard-cell sea, output block
 const DIE = 0.0042, DC = 2048;
@@ -1249,7 +1344,16 @@ function buildMonitor(par) {
   box(sens, mPcbEdge, 0.0016, 0.14, 0.05, 0.158, 0.0, -0.004, 0.0004);
   const ringC = ['#3ecf6e', '#3f86e0', '#e04b4b', '#f2c94c'];
   for (let i = 0; i < 4; i++) { const y = 0.075 - i * 0.042; cyl(sens, mDarkPl, 0.01, 0.01, 0.026, 0.172, y, -0.004, { rz: Math.PI / 2 }, 40); cyl(sens, Sd({ color: ringC[i], roughness: 0.35 }), 0.0115, 0.0115, 0.004, 0.18, y, -0.004, { rz: Math.PI / 2 }, 40); cyl(sens, mRubber, 0.006, 0.006, 0.002, 0.1855, y, -0.004, { rz: Math.PI / 2, cs: false }, 24); }
-  return { m, parts, chip, W, Hm };
+  // patient cables plugged into the side connectors (hidden once the case opens)
+  const leads = grp(m); const bootC = ['#3ecf6e', '#3f86e0', '#e04b4b', '#f2c94c'];
+  for (let i = 0; i < 4; i++) { const y = 0.075 - i * 0.042, o = i * 0.012;
+    cyl(leads, Sd({ color: bootC[i], roughness: 0.4 }), 0.008, 0.009, 0.022, 0.198, y, -0.004, { rz: Math.PI / 2, cs: false }, 24);
+    tube(leads, P({ color: i === 3 ? '#cfd6dc' : '#3a3f45', roughness: 0.5 }), [V(0.208, y, -0.004), V(0.235 + o * 0.5, y - 0.02, 0.0), V(0.262 + o, y - 0.2, 0.02 + o), V(0.21 + o, -0.42 - o, 0.03), V(0.05, -0.5 - o * 0.5, 0.01), V(0.02, -0.72, 0.0)], i === 3 ? 0.0042 : 0.0026, 64, 8, { cs: false }); }
+  box(leads, mDarkPl, 0.03, 0.04, 0.03, 0.03, -0.52, 0.0, 0.008);
+  // rating sticker and vent slots on the side
+  box(leads, P({ color: '#f6f6f2', roughness: 0.7 }), 0.002, 0.04, 0.05, -W / 2 - 0.001, -0.07, -0.02, 0.0008, { cs: false });
+  { const vl = []; for (let i = 0; i < 7; i++) vl.push(-W / 2 - 0.0005, 0.07 - i * 0.011, -0.025, 0.002, 0.004, 0.04); inst(leads, UNITB, mSeam, vl, { cs: false }); }
+  return { m, parts, chip, W, Hm, leads };
 }
 
 function buildChip(top, cx, cz) {
@@ -1299,83 +1403,138 @@ function buildChip(top, cx, cz) {
 }
 
 // ---------- the gate-level patch (units: 1 unit = 4 micrometres, y up)
+// A delayered standard-cell block as seen under a microscope: rows of cells between alternating
+// power rails, poly gates at a fixed pitch over diffusion, contacts, then five thin metal layers,
+// each routed in one direction, stripped back in a ragged staircase so every level shows.
 const PS = 4e-6;
-const mSi = P({ color: '#5b6474', metalness: 0.35, roughness: 0.34, iridescence: 0.4, iridescenceThicknessMinimum: 200, iridescenceThicknessMaximum: 500 });
-const mPdiff = P({ color: '#9b8c86', roughness: 0.42, metalness: 0.2 });
-const mNdiff = P({ color: '#7e8ea6', roughness: 0.42, metalness: 0.2 });
-const mPoly = P({ color: '#a2483a', roughness: 0.4, metalness: 0.15, clearcoat: 0.3 });
-const mW = P({ color: '#a3a9b1', metalness: 1, roughness: 0.32 });
-const mM1 = P({ color: '#c97d50', metalness: 1, roughness: 0.3 });
-const mM2 = P({ color: '#d0875a', metalness: 1, roughness: 0.26 });
-const mM3 = P({ color: '#c98552', metalness: 1, roughness: 0.3 });
-const mM4 = P({ color: '#d39468', metalness: 1, roughness: 0.24 });
-const mPulse = Sd({ color: '#0a3', emissive: '#5be49b', emissiveIntensity: 3.2 });
-const mGlow = Sd({ color: '#0a3', emissive: '#5be49b', emissiveIntensity: 3.2 });
-const NAND = { pa: null, pb: null, out: null, x: -1.8, z0: 6, anchors: {} };
+// metal grain and polish streaks, a dielectric mottle, all drawn on canvases
+const metalH = cv(256, 256);
+{ const g = metalH.getContext('2d'), r = rng(71); g.fillStyle = '#808080'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 1600; i++) { const v = 90 + r() * 80; g.fillStyle = `rgba(${v},${v},${v},.5)`; g.beginPath(); g.arc(r() * 256, r() * 256, 1 + r() * 3.5, 0, 6.283); g.fill(); }
+  for (let i = 0; i < 90; i++) { g.fillStyle = `rgba(${r() < 0.5 ? '0,0,0' : '255,255,255'},${0.05 + r() * 0.1})`; g.fillRect(0, r() * 256, 256, 0.6 + r()); } }
+const metalN = tex(heightToNormal(blurred(metalH, 0.5), 2.4), false);
+const metalR = tex((() => { const c = cv(256, 256), g = c.getContext('2d'); g.drawImage(metalH, 0, 0); g.fillStyle = 'rgba(150,150,150,.45)'; g.fillRect(0, 0, 256, 256); return c; })(), false);
+const dielC = cv(512, 512);
+{ const g = dielC.getContext('2d'), r = rng(73); g.fillStyle = '#1a1f2b'; g.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 260; i++) { const x = r() * 512, y = r() * 512, rr = 20 + r() * 90, gr = g.createRadialGradient(x, y, 0, x, y, rr); const t = r(); gr.addColorStop(0, t < 0.33 ? 'rgba(70,60,110,.18)' : t < 0.66 ? 'rgba(40,90,95,.16)' : 'rgba(110,80,60,.12)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(x - rr, y - rr, rr * 2, rr * 2); }
+  for (let i = 0; i < 20000; i++) { g.fillStyle = `rgba(255,255,255,${r() * 0.05})`; g.fillRect(r() * 512, r() * 512, 1, 1); } }
+const dielT = tex(dielC, true, [3, 3]);
+const dielN = tex(heightToNormal(blurred(noiseCanvas(20000, '#808080', 0.6, 256, 79), 1), 1), false, [10, 10]);
+const MN = (s) => new THREE.Vector2(s, s);
+const mSi = P({ map: dielT, color: '#ffffff', metalness: 0.25, roughness: 0.32, normalMap: dielN, normalScale: MN(0.15), iridescence: 0.6, iridescenceIOR: 1.45, iridescenceThicknessMinimum: 260, iridescenceThicknessMaximum: 640, clearcoat: 0.5, clearcoatRoughness: 0.2 });
+const mPdiff = P({ color: '#5d5a6c', roughness: 0.5, metalness: 0.3, roughnessMap: metalR, iridescence: 0.35, iridescenceThicknessMinimum: 300, iridescenceThicknessMaximum: 520 });
+const mNdiff = P({ color: '#4c5d68', roughness: 0.5, metalness: 0.3, roughnessMap: metalR, iridescence: 0.35, iridescenceThicknessMinimum: 300, iridescenceThicknessMaximum: 520 });
+const mPoly = P({ color: '#8a675d', roughness: 0.42, metalness: 0.35, normalMap: metalN, normalScale: MN(0.3), iridescence: 0.3, iridescenceThicknessMinimum: 240, iridescenceThicknessMaximum: 460 });
+const mW = P({ color: '#8f959d', metalness: 1, roughness: 0.42 });
+const cu = (c, r) => P({ color: c, metalness: 1, roughness: r, roughnessMap: metalR, normalMap: metalN, normalScale: MN(0.45), iridescence: 0.18, iridescenceThicknessMinimum: 120, iridescenceThicknessMaximum: 380 });
+const mRail = cu('#a86d50', 0.42);
+const mM1 = cu('#b37455', 0.44), mM2 = cu('#bc7e5b', 0.4), mM3 = cu('#b4774f', 0.42);
+const mM4 = cu('#b98a69', 0.38);
+const mM5 = P({ color: '#b6bbc1', metalness: 1, roughness: 0.48, roughnessMap: metalR, normalMap: metalN, normalScale: MN(0.6) });
+const mPulse = Sd({ color: '#0a3', emissive: '#5be49b', emissiveIntensity: 1.8 });
+const mGlow = Sd({ color: '#0a3', emissive: '#5be49b', emissiveIntensity: 1.6 });
+const NAND = { pa: null, pb: null, out: null, anchors: {}, center: V() };
 const PULSE_TR = [];
 let pulses = null;
+// slight per-instance tone variation so long runs of wire do not look cloned
+function instT(par, geo, mat, list, seed, spread = 0.12, o) {
+  const im = inst(par, geo, mat, list, o); const r = rng(seed), c = new THREE.Color();
+  for (let i = 0; i < im.count; i++) { const v = 1 - spread / 2 + r() * spread; c.setRGB(v, v * (0.99 + r() * 0.02), v); im.setColorAt(i, c); }
+  im.instanceColor.needsUpdate = true; return im;
+}
 function buildPatch() {
-  const g = new THREE.Group(); const L = { pd: [], nd: [], poly: [], ct: [], m1: [], v1: [], m2: [], v2: [], m3: [], v3: [], m4: [] };
-  const r = rng(11); const HALF = 26, RH = 6, PP = 1.2;
+  const g = new THREE.Group();
+  const L = { pd: [], nd: [], poly: [], ct: [], rail: [], m1: [], v1: [], m2: [], v2: [], m3: [], v3: [], m4: [], v4: [], m5: [] };
+  const r = rng(11); const HALF = 30, RH = 2.4, PP = 0.36, NR = 25;
   const add = (a, x0, x1, y0, y1, z0, z1) => a.push((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, x1 - x0, y1 - y0, z1 - z0);
-  box(g, mSi, 2 * HALF + 14, 2, 2 * HALF + 14, 0, -1, 0, 0.4);
+  const Y = { d: [0, 0.016], p: [0.016, 0.056], ct: [0.016, 0.1], m1: [0.1, 0.158], v1: [0.158, 0.24], m2: [0.24, 0.306], v2: [0.306, 0.39], m3: [0.39, 0.466], v3: [0.466, 0.56], m4: [0.56, 0.66], v4: [0.66, 0.78], m5: [0.78, 0.92] };
+  // ragged delayering edges: each layer survives only behind its line
+  const edge = (base, x, s) => base + 1.1 * Math.sin(x * 0.29 + s) + 0.7 * Math.sin(x * 0.83 + s * 2.1) + 0.35 * Math.sin(x * 2.3 + s * 3.7);
+  const cut2 = (x) => edge(1.2, x, 0.4), cut3 = (x) => edge(-3.6, x, 1.3), cut4 = (x) => edge(-8.6, x, 2.2), cut5 = (x) => edge(-14, x, 3.1);
+  put(g, new THREE.BoxGeometry(2 * HALF + 8, 1, 2 * HALF + 8), mSi, 0, -0.5, 0);
+  const NROW = 14, NX = -1.4;
   const mPA = mPoly.clone(), mPB = mPoly.clone(), mOut = mM1.clone();
-  for (let row = 0; row < 9; row++) {
-    const z0 = -HALF + row * RH; const flip = row % 2 === 1;
-    add(L.m1, -HALF - 5, HALF + 5, 0.78, 1.12, z0 - 0.45, z0 + 0.45);
-    if (row === 8) break;
-    const pB = flip ? [z0 + 1.0, z0 + 2.6] : [z0 + 3.4, z0 + 5.0], nB = flip ? [z0 + 3.4, z0 + 5.0] : [z0 + 1.0, z0 + 2.6];
+  for (let row = 0; row <= NR; row++) {
+    const z0 = -HALF + row * RH;
+    add(L.rail, -HALF - 2, HALF + 2, Y.m1[0], Y.m1[1] + 0.006, z0 - 0.16, z0 + 0.16);
+    if (row === NR) break;
+    const flip = row % 2 === 1;
+    const pB = flip ? [z0 + 0.32, z0 + 1.0] : [z0 + 1.4, z0 + 2.08], nB = flip ? [z0 + 1.4, z0 + 2.08] : [z0 + 0.32, z0 + 1.0];
+    const pm = (pB[0] + pB[1]) / 2, nm = (nB[0] + nB[1]) / 2;
     const railP = flip ? z0 : z0 + RH, railN = flip ? z0 + RH : z0;
-    let x = -HALF - 3;
-    while (x < HALF + 3) {
-      const isNand = row === 5 && x <= NAND.x && x + 6 > NAND.x && !NAND.done;
-      let nf = 1 + Math.floor(r() * 4);
-      if (isNand) { if (x < NAND.x) { const w0 = NAND.x - x; if (w0 >= 1.2) { cellFill(x, w0); } x = NAND.x; } nf = 2; }
+    const tracks = []; for (let t = 0; t < 7; t++) tracks.push(z0 + 0.42 + t * 0.26);
+    let x = -HALF - 1;
+    while (x < HALF + 1) {
+      const isNand = row === NROW && !NAND.done && x + 7 * PP > NX;
+      const nf = isNand ? 2 : 1 + Math.floor(r() * (r() < 0.2 ? 9 : 5));
       const w = (nf + 1) * PP;
-      const pm = (pB[0] + pB[1]) / 2, nm = (nB[0] + nB[1]) / 2;
-      add(L.pd, x + 0.3, x + w - 0.3, 0, 0.16, pB[0], pB[1]); add(L.nd, x + 0.3, x + w - 0.3, 0, 0.16, nB[0], nB[1]);
+      // diffusion islands with a break at each cell edge, and a dummy poly on the break
+      const split = nf > 3 && r() < 0.4;
+      if (split) { const xs = x + Math.ceil(nf / 2) * PP + PP / 2; add(L.pd, x + 0.1, xs - 0.08, Y.d[0], Y.d[1], pB[0], pB[1]); add(L.pd, xs + 0.08, x + w - 0.1, Y.d[0], Y.d[1], pB[0], pB[1]); }
+      else add(L.pd, x + 0.1, x + w - 0.1, Y.d[0], Y.d[1], pB[0], pB[1]);
+      add(L.nd, x + 0.1, x + w - 0.1, Y.d[0], Y.d[1], nB[0] + (r() < 0.3 ? 0.18 : 0), nB[1]);
+      add(L.poly, x - 0.035, x + 0.035, Y.p[0], Y.p[1], z0 + 0.22, z0 + RH - 0.22);
       for (let f = 1; f <= nf; f++) {
         const px = x + f * PP;
-        if (isNand) { const pm2 = put(g, UNIT, f === 1 ? mPA : mPB, px, 0.3, z0 + 3); pm2.scale.set(0.34, 0.3, 4.6); add(L.ct, px - 0.2, px + 0.2, 0.42, 0.8, z0 + 2.8, z0 + 3.2); add(L.m1, px - 0.32, px + 0.32, 0.8, 1.1, z0 + 2.65, z0 + 3.35); }
-        else { add(L.poly, px - 0.17, px + 0.17, 0.16, 0.44, z0 + 0.7, z0 + 5.3); if (r() < 0.5) { add(L.ct, px - 0.2, px + 0.2, 0.44, 0.8, z0 + 2.8, z0 + 3.2); add(L.m1, px - 0.32, px + 0.32, 0.8, 1.1, z0 + 2.62, z0 + 3.38); } }
+        if (isNand) {
+          const pg = put(g, UNITB, f === 1 ? mPA : mPB, px, (Y.p[0] + Y.p[1]) / 2, z0 + RH / 2, { cs: false }); pg.scale.set(0.09, Y.p[1] - Y.p[0], RH - 0.44);
+          add(L.ct, px - 0.04, px + 0.04, Y.ct[0], Y.ct[1], z0 + 1.28, z0 + 1.36); add(L.m1, px - 0.07, px + 0.07, Y.m1[0], Y.m1[1], z0 + 1.25, z0 + 1.39);
+        } else {
+          add(L.poly, px - 0.036, px + 0.036, Y.p[0], Y.p[1], z0 + 0.22, z0 + RH - 0.22);
+          if (r() < 0.55) { const gz = z0 + RH / 2 + (r() - 0.5) * 0.12; add(L.ct, px - 0.04, px + 0.04, Y.ct[0], Y.ct[1], gz - 0.04, gz + 0.04); }
+        }
       }
       if (isNand) {
-        const gx = (gi) => x + (gi + 0.5) * PP;
-        for (const gi of [0, 1, 2]) add(L.ct, gx(gi) - 0.18, gx(gi) + 0.18, 0.16, 0.8, pm - 0.18, pm + 0.18);
-        for (const gi of [0, 2]) add(L.ct, gx(gi) - 0.18, gx(gi) + 0.18, 0.16, 0.8, nm - 0.18, nm + 0.18);
-        for (const gi of [0, 2]) add(L.m1, gx(gi) - 0.22, gx(gi) + 0.22, 0.8, 1.1, Math.min(pm, railP), Math.max(pm, railP));
-        add(L.m1, gx(0) - 0.22, gx(0) + 0.22, 0.8, 1.1, Math.min(nm, railN), Math.max(nm, railN));
-        const o1 = put(g, UNIT, mOut, gx(1), 0.95, (pm + nm) / 2); o1.scale.set(0.44, 0.3, Math.abs(pm - nm) + 0.4);
-        const o2 = put(g, UNIT, mOut, (gx(1) + gx(2)) / 2, 0.95, nm); o2.scale.set(gx(2) - gx(1) + 0.44, 0.3, 0.44);
-        NAND.pa = mPA; NAND.pb = mPB; NAND.out = mOut; NAND.done = true; NAND.z0 = z0; NAND.pm = pm; NAND.nm = nm; NAND.w = w; NAND.cx = x;
-        NAND.anchors = { a: V(x + PP, 0.5, z0 + 5.3), b: V(x + 2 * PP, 0.5, z0 + 5.3), out: V(gx(2), 1.1, nm), cell: V(x, 1.0, z0 + 0.2) };
-        const fr = [[x - 0.05, x + w + 0.05, z0 + 0.15, z0 + 0.3], [x - 0.05, x + w + 0.05, z0 + RH - 0.3, z0 + RH - 0.15], [x - 0.05, x + 0.1, z0 + 0.15, z0 + RH - 0.15], [x + w - 0.1, x + w + 0.05, z0 + 0.15, z0 + RH - 0.15]];
-        for (const [a0, a1, b0, b1] of fr) { const q = put(g, UNIT, mGlow, (a0 + a1) / 2, 1.35, (b0 + b1) / 2, { cs: false }); q.scale.set(a1 - a0, 0.06, b1 - b0); }
+        const gx = (gi) => x + (gi + 0.5) * PP, yC = Y.ct, ym = Y.m1;
+        for (const gi of [0, 1, 2]) for (const dz of [-0.15, 0.15]) add(L.ct, gx(gi) - 0.04, gx(gi) + 0.04, yC[0], yC[1], pm + dz - 0.04, pm + dz + 0.04);
+        for (const gi of [0, 2]) for (const dz of [-0.15, 0.15]) add(L.ct, gx(gi) - 0.04, gx(gi) + 0.04, yC[0], yC[1], nm + dz - 0.04, nm + dz + 0.04);
+        for (const gi of [0, 2]) add(L.m1, gx(gi) - 0.06, gx(gi) + 0.06, ym[0], ym[1], Math.min(pm - 0.22, railP), Math.max(pm + 0.22, railP));
+        add(L.m1, gx(0) - 0.06, gx(0) + 0.06, ym[0], ym[1], Math.min(nm - 0.22, railN), Math.max(nm + 0.22, railN));
+        // output net: P drain (middle) to N drain (right)
+        const ol = []; const oz = z0 + 1.1;
+        add(ol, gx(1) - 0.06, gx(1) + 0.06, ym[0] + 0.002, ym[1] + 0.004, Math.min(oz, pm) - 0.06, Math.max(oz, pm) + 0.22);
+        add(ol, gx(1) - 0.06, gx(2) + 0.06, ym[0] + 0.002, ym[1] + 0.004, oz - 0.06, oz + 0.06);
+        add(ol, gx(2) - 0.06, gx(2) + 0.06, ym[0] + 0.002, ym[1] + 0.004, nm - 0.22, oz + 0.06);
+        add(ol, gx(2) + 0.06, gx(2) + 1.2, ym[0] + 0.002, ym[1] + 0.004, nm - 0.06, nm + 0.06);
+        inst(g, UNITB, mOut, ol, { cs: false });
+        NAND.pa = mPA; NAND.pb = mPB; NAND.out = mOut; NAND.done = true;
+        NAND.anchors = { a: V(x + PP, Y.p[1], z0 + RH - 0.24), b: V(x + 2 * PP, Y.p[1], z0 + RH - 0.24), out: V(gx(2) + 1.0, Y.m1[1], nm), cell: V(x, Y.m1[1], z0 + 0.25) };
+        NAND.center.set(x + w / 2, 0.1, z0 + RH / 2);
+        const t = 0.035, fy = 0.2, fr = [[x - 0.06, x + w + 0.06, z0 + 0.2, z0 + 0.2 + t], [x - 0.06, x + w + 0.06, z0 + RH - 0.2 - t, z0 + RH - 0.2], [x - 0.06, x - 0.06 + t, z0 + 0.2, z0 + RH - 0.2], [x + w + 0.06 - t, x + w + 0.06, z0 + 0.2, z0 + RH - 0.2]];
+        const fl = []; for (const [a0, a1, b0, b1] of fr) add(fl, a0, a1, fy, fy + 0.012, b0, b1); inst(g, UNITB, mGlow, fl, { cs: false });
       } else {
-        for (let gi = 0; gi <= nf; gi++) { const cxp = x + (gi + 0.5) * PP; if (r() < 0.75) add(L.ct, cxp - 0.18, cxp + 0.18, 0.16, 0.8, pm - 0.18, pm + 0.18); if (r() < 0.6) add(L.ct, cxp - 0.18, cxp + 0.18, 0.16, 0.8, nm - 0.18, nm + 0.18); }
-        const go = x + (Math.floor(r() * (nf + 1)) + 0.5) * PP; add(L.m1, go - 0.2, go + 0.2, 0.8, 1.1, Math.min(pm, nm) - 0.2, Math.max(pm, nm) + 0.2);
-        const gr = x + 0.5 * PP; add(L.m1, gr - 0.2, gr + 0.2, 0.8, 1.1, Math.min(pm, railP), Math.max(pm, railP));
+        for (let gi = 0; gi <= nf; gi++) { const cxp = x + (gi + 0.5) * PP; for (const [m, on] of [[pm, 0.8], [nm, 0.65]]) if (r() < on) { const two = r() < 0.6; for (const dz of two ? [-0.15, 0.15] : [0]) add(L.ct, cxp - 0.04, cxp + 0.04, Y.ct[0], Y.ct[1], m + dz - 0.04, m + dz + 0.04); } }
+        // local M1 along the row on the cell's own tracks, plus a rail tap
+        const nt = 1 + Math.floor(r() * 3);
+        for (let k = 0; k < nt; k++) { const tz = tracks[Math.floor(r() * tracks.length)]; const a = x + PP * 0.5 + Math.floor(r() * nf) * PP; const b = Math.min(x + w + (r() < 0.25 ? PP * 3 : 0), a + PP * (1 + Math.floor(r() * (nf + 1)))); add(L.m1, a - 0.04, b + 0.04, Y.m1[0], Y.m1[1], tz - 0.04, tz + 0.04); add(L.ct, a - 0.04, a + 0.04, Y.ct[0], Y.ct[1], tz - 0.04, tz + 0.04); }
+        const tap = x + 0.5 * PP; add(L.m1, tap - 0.05, tap + 0.05, Y.m1[0], Y.m1[1], Math.min(pm, railP), Math.max(pm, railP));
       }
       x += w;
     }
-    function cellFill(x0, w0) { add(L.pd, x0 + 0.3, x0 + w0 - 0.3, 0, 0.16, pB[0], pB[1]); add(L.nd, x0 + 0.3, x0 + w0 - 0.3, 0, 0.16, nB[0], nB[1]); }
   }
-  // M2 horizontal tracks (back two thirds), M3 vertical (back half), M4 straps (far back)
-  for (let z = -HALF + 0.6; z < HALF; z += PP) {
-    const cut = 2 + r() * 4; if (z > cut) continue;
-    let x = -HALF - 2 + r() * 6;
-    while (x < HALF) { const len = 3 + r() * 16; const x1 = Math.min(HALF + 3, x + len); add(L.m2, x, x1, 1.55, 1.92, z - 0.2, z + 0.2); add(L.v1, x + 0.05, x + 0.45, 1.1, 1.55, z - 0.18, z + 0.18); add(L.v1, x1 - 0.45, x1 - 0.05, 1.1, 1.55, z - 0.18, z + 0.18); if (len > 7) PULSE_TR.push([0, z, 1.74, x, x1]); x = x1 + 1 + r() * 4; }
+  // M2 runs across the rows (z), M3 along them (x), M4 across, M5 wide straps along; vias where they meet
+  const P2 = 0.3, P3 = 0.36, P4 = 0.9, P5 = 3.2;
+  for (let x = -HALF + 0.15; x < HALF; x += P2) {
+    let z = -HALF - 1 + r() * 2; const zc = cut2(x);
+    while (z < zc) { const len = 0.5 + Math.pow(r(), 2.2) * 16; const z1 = Math.min(zc, z + len); if (z1 - z > 0.35) { add(L.m2, x - 0.05, x + 0.05, Y.m2[0], Y.m2[1], z, z1); for (const zv of [z + 0.06, z1 - 0.06]) add(L.v1, x - 0.05, x + 0.05, Y.v1[0], Y.v1[1], zv - 0.05, zv + 0.05); if (z1 - z > 7 && PULSE_TR.length < 400) PULSE_TR.push([1, x, Y.m2[1], z, z1, 0.1]); } z = z1 + 0.3 + r() * (r() < 0.3 ? 4 : 1.2); }
   }
-  for (let x = -HALF + 0.8; x < HALF + 2; x += 1.6) {
-    const cut = -8 + r() * 4; let z = -HALF - 2 + r() * 4;
-    while (z < cut) { const len = 3 + r() * 12; const z1 = Math.min(cut, z + len); if (z1 - z > 1) { add(L.m3, x - 0.25, x + 0.25, 2.4, 2.88, z, z1); add(L.v2, x - 0.2, x + 0.2, 1.92, 2.4, z + 0.1, z + 0.5); add(L.v2, x - 0.2, x + 0.2, 1.92, 2.4, z1 - 0.5, z1 - 0.1); if (z1 - z > 6) PULSE_TR.push([1, x, 2.64, z, z1]); } z = z1 + 1 + r() * 3; }
+  for (let z = -HALF + 0.2; z < HALF; z += P3) {
+    let x = -HALF - 1 + r() * 2;
+    while (x < HALF + 1) { const len = 0.6 + Math.pow(r(), 2) * 20; const x1 = Math.min(HALF + 1, x + len); const xm = (x + x1) / 2; if (z < cut3(xm) && x1 - x > 0.4) { if (!NAND.wire && z > -4.8 && z < -2.8 && xm > -3 && xm < 0.5 && x1 - x > 1.5) NAND.wire = V(xm, Y.m3[1], z); add(L.m3, x, x1, Y.m3[0], Y.m3[1], z - 0.065, z + 0.065); for (const xv of [x + 0.07, x1 - 0.07]) add(L.v2, xv - 0.055, xv + 0.055, Y.v2[0], Y.v2[1], z - 0.055, z + 0.055); if (x1 - x > 8) PULSE_TR.push([0, z, Y.m3[1], x, x1, 0.13]); } x = x1 + 0.35 + r() * (r() < 0.3 ? 5 : 1.5); }
   }
-  for (const zc of [-23, -17.5]) { add(L.m4, -HALF - 6, HALF + 6, 3.4, 4.15, zc - 0.75, zc + 0.75); for (let x = -HALF + 1.6; x < HALF; x += 3.2) add(L.v3, x - 0.25, x + 0.25, 2.88, 3.4, zc - 0.25, zc + 0.25); }
-  inst(g, UNIT, mPdiff, L.pd); inst(g, UNIT, mNdiff, L.nd); inst(g, UNIT, mPoly, L.poly); inst(g, UNITB, mW, L.ct);
-  inst(g, UNIT, mM1, L.m1); inst(g, UNITB, mW, L.v1); inst(g, UNIT, mM2, L.m2); inst(g, UNITB, mW, L.v2); inst(g, UNIT, mM3, L.m3); inst(g, UNITB, mW, L.v3); inst(g, UNIT, mM4, L.m4);
-  pulses = new THREE.InstancedMesh(UNIT, mPulse, 46); pulses.castShadow = false; pulses.frustumCulled = false; g.add(pulses);
+  for (let x = -HALF + 0.4; x < HALF; x += P4) {
+    let z = -HALF - 1 + r() * 2; const zc = cut4(x);
+    while (z < zc) { const len = 1.5 + Math.pow(r(), 1.6) * 18; const z1 = Math.min(zc, z + len); if (z1 - z > 0.8) { add(L.m4, x - 0.17, x + 0.17, Y.m4[0], Y.m4[1], z, z1); for (const zv of [z + 0.12, z1 - 0.12]) add(L.v3, x - 0.08, x + 0.08, Y.v3[0], Y.v3[1], zv - 0.08, zv + 0.08); } z = z1 + 0.5 + r() * 2; }
+  }
+  for (let z = -HALF + 1; z < HALF; z += P5) { for (let x = -HALF - 2; x < HALF + 2; x += 0.02) { if (z < cut5(x)) { let x1 = x; while (x1 < HALF + 2 && z < cut5(x1)) x1 += 0.1; add(L.m5, x, x1, Y.m5[0], Y.m5[1], z - 0.6, z + 0.6); for (let xv = x + 0.4; xv < x1 - 0.3; xv += P4) for (const dz of [-0.3, 0.3]) add(L.v4, xv - 0.12, xv + 0.12, Y.v4[0], Y.v4[1], z + dz - 0.12, z + dz + 0.12); x = x1; } } }
+  instT(g, UNITB, mPdiff, L.pd, 1, 0.1, { cs: false }); instT(g, UNITB, mNdiff, L.nd, 2, 0.1, { cs: false }); instT(g, UNITB, mPoly, L.poly, 3, 0.14); inst(g, UNITB, mW, L.ct, { cs: false });
+  instT(g, UNITB, mRail, L.rail, 4, 0.08); instT(g, UNITB, mM1, L.m1, 5); inst(g, UNITB, mW, L.v1, { cs: false });
+  instT(g, UNITB, mM2, L.m2, 6); inst(g, UNITB, mW, L.v2, { cs: false }); instT(g, UNITB, mM3, L.m3, 7); inst(g, UNITB, mW, L.v3, { cs: false });
+  instT(g, UNITB, mM4, L.m4, 8); inst(g, UNITB, mW, L.v4, { cs: false }); instT(g, UNITB, mM5, L.m5, 9, 0.06);
+  NAND.count = Object.values(L).reduce((s, a) => s + a.length / 6, 0);
+  pulses = new THREE.InstancedMesh(UNITB, mPulse, 36); pulses.castShadow = false; pulses.frustumCulled = false; g.add(pulses);
   const r2 = rng(5); pulses.userData.p = [];
-  for (let i = 0; i < 46; i++) pulses.userData.p.push({ tr: PULSE_TR[Math.floor(r2() * PULSE_TR.length)], ph: r2(), sp: 0.18 + r2() * 0.3 });
+  for (let i = 0; i < 36; i++) pulses.userData.p.push({ tr: PULSE_TR[Math.floor(r2() * PULSE_TR.length)], ph: r2(), sp: 0.12 + r2() * 0.2 });
   const outer = new THREE.Group(); outer.add(g); g.scale.setScalar(PS); outer.userData.inner = g;
   return outer;
 }
@@ -1387,29 +1546,66 @@ const EXP = { glass: V(0, 0.03, 0.36), bezel: V(0, 0.0, 0.25), display: V(0, 0.0
 const shellMats = [mShell];
 
 // ---------- the field of finished chips (end of the story)
+// A tray of mixed packages: leaded quad packs, leadless quads, small outlines, ball-grid parts,
+// ceramic parts with gold lids and a few bare dies, in many sizes, each with abstract laser marks.
 const field = grp(scene, 3000, 0, 0);
 const FC = 56, FR = 40, FP = 0.011;
-{ const c = cv(128, 128), g = c.getContext('2d'); g.fillStyle = '#23272d'; g.fillRect(0, 0, 128, 128); g.fillStyle = '#15181c'; g.fillRect(14, 14, 100, 100); g.strokeStyle = '#363b43'; g.lineWidth = 4; g.strokeRect(12, 12, 104, 104); g.fillStyle = '#2b3037'; g.fillRect(0, 60, 14, 8); g.fillRect(114, 60, 14, 8);
+{ const c = cv(128, 128), g = c.getContext('2d'); g.fillStyle = '#23272d'; g.fillRect(0, 0, 128, 128); g.fillStyle = '#15181c'; g.fillRect(10, 10, 108, 108); g.strokeStyle = '#363b43'; g.lineWidth = 3; g.strokeRect(8, 8, 112, 112); g.fillStyle = '#2b3037'; g.fillRect(0, 60, 10, 8); g.fillRect(118, 60, 10, 8); g.fillStyle = '#1c2026'; g.fillRect(40, 40, 48, 48);
   const t = tex(c, true, [FC, FR]); const tb = tex(c, false, [FC, FR]);
-  box(field, P({ map: t, bumpMap: tb, bumpScale: 3, roughness: 0.62, clearcoat: 0.2 }), FC * FP, 0.004, FR * FP, 0, -0.002, 0, 0.001); }
-const fieldChips = new THREE.InstancedMesh(rb(1, 1, 1, 0.08, 2), mEpoxy, FC * FR);
-const fieldMarks = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), Sd({ map: markFieldT, transparent: true, roughness: 0.7, color: '#a4a8ad', depthWrite: false }), FC * FR);
-const LABELLED = [[-15, -8, 'Bedside monitor'], [-5, -11, 'Infusion pump'], [7, -9, 'Newborn incubator'], [16, -5, 'Ventilator'], [-18, 2, 'Defibrillator'], [-6, 1, 'Dialysis machine'], [5, 3, 'Glucose monitor'], [15, 6, 'Sleep apnoea machine'], [-11, 10, 'Ultrasound scanner'], [8, 11, 'Oxygen concentrator']];
+  box(field, P({ map: t, bumpMap: tb, bumpScale: 3, roughness: 0.66, normalMap: grainN, normalScale: new THREE.Vector2(0.3, 0.3), clearcoat: 0.15 }), FC * FP, 0.004, FR * FP, 0, -0.002, 0, 0.001); }
+const mSub = P({ color: '#2f3a2a', roughness: 0.5, clearcoat: 0.5, clearcoatRoughness: 0.3 });
+const mCer = P({ color: '#a39d90', roughness: 0.7, normalMap: grainN, normalScale: new THREE.Vector2(0.3, 0.3) });
+const mBare = P({ color: '#3f4868', metalness: 0.6, roughness: 0.22, iridescence: 0.85, iridescenceIOR: 1.6, iridescenceThicknessMinimum: 220, iridescenceThicknessMaximum: 620 });
+const LABELLED = [[-17, -1, 'Bedside monitor', -40, -40], [-7, -8, 'Infusion pump', 40, -40], [5, -10, 'Newborn incubator', -40, -44], [-15, 8, 'Defibrillator', -36, -46], [-5, 2, 'Dialysis machine', 40, -44], [3, -2, 'Ventilator', 40, -40], [-8, 6, 'Ultrasound scanner', 40, -42], [0, 3, 'Glucose monitor', 40, -40]];
 const fieldAnchors = [];
-{ const r = rng(23), col = new THREE.Color(); let n = 0;
+{ const r = rng(23), col = new THREE.Color();
+  const L = { ep: [], sub: [], cer: [], lid: [], bare: [], lead: [], pad: [], mk: [[], [], []] };
+  let cx = 0, cz = 0, cr = 0, cs = 1, sn = 0;
+  // push a part in the chip's local frame (rotated by cr around the pocket centre)
+  const pushL = (arr, lx, y, lz, sx, sy, sz, extra) => { arr.push(cx + lx * cs - lz * sn, y, cz + lx * sn + lz * cs, sx, sy, sz, cr, extra === undefined ? -1 : extra); };
   for (let i = 0; i < FC; i++) for (let j = 0; j < FR; j++) {
     const gx = i - FC / 2 + 0.5, gz = j - FR / 2 + 0.5;
-    const lab = LABELLED.find(l => l[0] === Math.round(gx - 0.5) && l[1] === Math.round(gz - 0.5));
-    const s = [0.55, 0.7, 0.85, 1.0][Math.floor(r() * 4)] * 0.0085;
-    const sz = r() < 0.3 ? s * 0.7 : s;
-    const h = lab ? 0.0011 : 0.0009;
-    PO.set(gx * FP, h / 2 + (lab ? 0.0012 : 0), gz * FP); Q.identity(); SC.set(s, h, sz); M4.compose(PO, Q, SC); fieldChips.setMatrixAt(n, M4);
-    PO.y = h + 0.000006 + (lab ? 0.0012 : 0); SC.set(s * 0.86, 1, sz * 0.86); M4.compose(PO, Q, SC); fieldMarks.setMatrixAt(n, M4);
-    const v = 0.08 + r() * 0.05; col.setRGB(v, v, v * 1.08); if (r() < 0.06) col.setRGB(0.5, 0.5, 0.52); fieldChips.setColorAt(n, col);
-    if (lab) { fieldAnchors.push([V(gx * FP, h + 0.0012, gz * FP), lab[2]]); for (const [w, d, x, z] of [[s + 0.002, 0.0004, 0, (sz + 0.0016) / 2], [s + 0.002, 0.0004, 0, -(sz + 0.0016) / 2], [0.0004, sz + 0.002, (s + 0.0016) / 2, 0], [0.0004, sz + 0.002, -(s + 0.0016) / 2, 0]]) { const q = box(field, mGlow, w, 0.0002, d, gx * FP + x, 0.0002, gz * FP + z, 0.0001, { cs: false }); } }
-    n++;
+    const lab = LABELLED.find(l => l[0] === i - FC / 2 && l[1] === j - FR / 2);
+    const u = r();
+    if (!lab && u < 0.045) continue;
+    cx = gx * FP + (r() - 0.5) * 0.0008; cz = gz * FP + (r() - 0.5) * 0.0008; cr = (r() - 0.5) * 0.08; cs = Math.cos(cr); sn = Math.sin(cr);
+    const lift = lab ? 0.0012 : 0, tone = 0.025 + r() * 0.035, mk = Math.floor(r() * 3);
+    const type = lab ? (fieldAnchors.length % 2 ? 'bga' : 'qfp') : u < 0.25 ? 'qfp' : u < 0.47 ? 'qfn' : u < 0.66 ? 'soic' : u < 0.85 ? 'bga' : u < 0.9 ? 'cer' : 'bare';
+    if (type === 'qfp') {
+      const s = lab ? 0.0072 : 0.0042 + r() * 0.0034, h = 0.0012, n = Math.max(6, Math.round(s / 0.00065));
+      pushL(L.ep, 0, lift + h / 2 + 0.0002, 0, s, h, s, tone); pushL(L.mk[mk], 0, lift + h + 0.0002 + 0.000006, 0, s * 0.84, 1, s * 0.84);
+      for (let side = 0; side < 4; side++) for (let k = 0; k < n; k++) { const off = (k - (n - 1) / 2) * (s * 0.86 / n), out = s / 2 + 0.0005; const lx = side < 2 ? (side ? -out : out) : off, lz = side < 2 ? off : (side === 2 ? out : -out); pushL(L.lead, lx, lift + 0.00018, lz, side < 2 ? 0.0011 : 0.00018, 0.00012, side < 2 ? 0.00018 : 0.0011); }
+    } else if (type === 'qfn') {
+      const s = 0.0026 + r() * 0.0036, h = 0.00075, n = Math.max(3, Math.round(s / 0.0005));
+      pushL(L.ep, 0, h / 2, 0, s, h, s, tone + 0.02); pushL(L.mk[mk], 0, h + 0.000006, 0, s * 0.84, 1, s * 0.84);
+      for (let side = 0; side < 4; side++) for (let k = 0; k < n; k++) { const off = (k - (n - 1) / 2) * (s * 0.8 / n), out = s / 2; const lx = side < 2 ? (side ? -out : out) : off, lz = side < 2 ? off : (side === 2 ? out : -out); pushL(L.pad, lx, 0.0001, lz, side < 2 ? 0.0004 : 0.00022, 0.0002, side < 2 ? 0.00022 : 0.0004); }
+    } else if (type === 'soic') {
+      const w = 0.0036 + r() * 0.0044, d = 0.0032 + r() * 0.0008, h = 0.0014, n = Math.max(3, Math.round(w / 0.00127));
+      pushL(L.ep, 0, h / 2 + 0.0002, 0, w, h, d, tone); pushL(L.mk[mk], 0, h + 0.0002 + 0.000006, 0, w * 0.86, 1, d * 0.8);
+      for (const sd of [-1, 1]) for (let k = 0; k < n; k++) pushL(L.lead, (k - (n - 1) / 2) * 0.00127 * Math.min(1, w * 0.86 / (n * 0.00127)), 0.00022, sd * (d / 2 + 0.0006), 0.0004, 0.00014, 0.0013);
+    } else if (type === 'bga') {
+      const s = lab ? 0.0078 : 0.0045 + r() * 0.0042, m = s * (0.68 + r() * 0.16);
+      pushL(L.sub, 0, lift + 0.0003, 0, s, 0.0004, s); pushL(L.ep, 0, lift + 0.0005 + 0.0004, 0, m, 0.0008, m, tone + 0.01); pushL(L.mk[mk], 0, lift + 0.0013 + 0.000006, 0, m * 0.84, 1, m * 0.84);
+    } else if (type === 'cer') {
+      const s = 0.0048 + r() * 0.0034;
+      pushL(L.cer, 0, 0.0008, 0, s, 0.0016, s); pushL(L.lid, 0, 0.00165, 0, s * 0.62, 0.00018, s * 0.62);
+    } else {
+      const s = 0.0018 + r() * 0.0022; pushL(L.bare, 0, 0.0002, 0, s, 0.0004, s * (0.8 + r() * 0.2));
+    }
+    if (lab) { const s = type === 'qfp' ? 0.0072 + 0.0024 : 0.0078; fieldAnchors.push([V(cx, lift + 0.0014, cz), lab[2], lab[3], lab[4]]);
+      for (const [w, d, x, z] of [[s + 0.002, 0.0004, 0, (s + 0.0016) / 2], [s + 0.002, 0.0004, 0, -(s + 0.0016) / 2], [0.0004, s + 0.002, (s + 0.0016) / 2, 0], [0.0004, s + 0.002, -(s + 0.0016) / 2, 0]]) box(field, mGlow, w, 0.0002, d, cx + x, 0.0002, cz + z, 0.0001, { cs: false }); }
   }
-  fieldChips.castShadow = true; fieldChips.receiveShadow = true; fieldChips.computeBoundingSphere(); fieldMarks.computeBoundingSphere(); field.add(fieldChips, fieldMarks); }
+  const mk = (geo, mat, list, shadow) => {
+    const n = list.length / 8; if (!n) return null; const im = new THREE.InstancedMesh(geo, mat, n);
+    for (let k = 0; k < n; k++) { const o = k * 8; PO.set(list[o], list[o + 1], list[o + 2]); E.set(0, -list[o + 6], 0); Q.setFromEuler(E); SC.set(list[o + 3], list[o + 4], list[o + 5]); M4.compose(PO, Q, SC); im.setMatrixAt(k, M4); if (list[o + 7] >= 0) { const v = list[o + 7]; col.setRGB(v, v, v * 1.08); im.setColorAt(k, col); } }
+    im.castShadow = shadow; im.receiveShadow = true; im.computeBoundingSphere(); field.add(im); return im;
+  };
+  const epG = rb(1, 1, 1, 0.08, 2);
+  mk(epG, P({ color: '#ffffff', roughness: 0.58, normalMap: grainN, normalScale: new THREE.Vector2(0.25, 0.25), clearcoat: 0.15, clearcoatRoughness: 0.6 }), L.ep, true);
+  mk(UNITB, mSub, L.sub, true); mk(epG, mCer, L.cer, true); mk(UNITB, P({ color: '#c9a650', metalness: 1, roughness: 0.42 }), L.lid, false); mk(UNITB, mBare, L.bare, true);
+  mk(UNITB, mTin, L.lead, false); mk(UNITB, mSilverPl, L.pad, false);
+  L.mk.forEach((lst, q) => mk(PLANE_Y, Sd({ map: markFieldTs[q], transparent: true, roughness: 0.7, color: '#a4a8ad', depthWrite: false }), lst, false));
+}
 
 // ---------- move the whole room world so the gate patch sits at the origin (float precision)
 scene.updateMatrixWorld(true);
@@ -1426,7 +1622,7 @@ const KF = [
   { t: W2(MON.m, V(0, 0.0, 0)), d: 1.0, az: 0.45 + 0.4, el: 0.14, q: QI, fx: 0.14, fy: 0 },
   { t: W2(MON.m, V(0, -0.01, 0.06)), d: 1.3, az: 0.45 + 0.95, el: 0.3, q: QI, fx: 0.08, fy: 0 },
   { t: W2(MON.chip.chip, V(0.0003, 0.001, 0)), d: 0.036, az: 2.5, el: 0.95, q: qChip, fx: 0.12, fy: 0 },
-  { t: W2(MON.chip.patch.userData.inner, V(-1, 1.4, 6)), d: 0.000125, az: Math.PI + 0.4, el: 0.62, q: qChip, fx: 0.1, fy: 0 },
+  { t: W2(MON.chip.patch.userData.inner, NAND.center), d: 0.000082, az: Math.PI + 0.4, el: 0.62, q: qChip, fx: 0.1, fy: 0 },
   { t: W2(field, V(0, 0, 0.004)), d: 0.42, az: 0.45, el: 0.95, q: QI, fx: 0.1, fy: 0 },
 ];
 for (const f of KF) { f.dir = V(Math.sin(f.az) * Math.cos(f.el), Math.sin(f.el), Math.cos(f.az) * Math.cos(f.el)).applyQuaternion(f.q).normalize(); f.up = V(0, 1, 0).applyQuaternion(f.q); }
@@ -1455,17 +1651,20 @@ tag('Small fine-tuned model', MON.chip.chip, dieL(1250, 1000), 130, -110, 3.78, 
 tag('Prediction out', MON.chip.chip, dieL(1675, 1675), 120, 90, 3.78, 4.32);
 tag('Gold bond wires', MON.chip.chip, V(-0.0026, 0.0012, 0.0012), -140, 100, 3.78, 4.32, '', !LITE);
 const IN = MON.chip.patch.userData.inner;
-const tA = tag('A <b>1</b>', IN, NAND.anchors.a, -50, -46, 4.7, 5.32, 'bit');
-const tB = tag('B <b>1</b>', IN, NAND.anchors.b, 40, -54, 4.7, 5.32, 'bit');
+const tA = tag('A <b>1</b>', IN, NAND.anchors.a, -40, -80, 4.7, 5.32, 'bit');
+const tB = tag('B <b>1</b>', IN, NAND.anchors.b, 40, -76, 4.7, 5.32, 'bit');
 const tO = tag('Out <b>0</b>', IN, NAND.anchors.out, 60, 30, 4.7, 5.32, 'bit');
-tag('One NAND gate: four transistors', IN, NAND.anchors.cell, -60, 50, 4.7, 5.32, 'key', !LITE);
-tag('Copper wiring', IN, V(8, 2.9, -12), 40, -40, 4.7, 5.32, '', !LITE);
-fieldAnchors.forEach(([v, n], i) => tag(n, field, v, (i % 2 ? 1 : -1) * (36 + (i % 3) * 10), -42 - (i % 4) * 12, 5.62, 7, 'dev', !LITE || i % 2 === 0));
+tag('One NAND gate: four transistors', IN, NAND.anchors.cell, -50, 84, 4.7, 5.32, 'key', !LITE);
+tag('Copper wiring', IN, NAND.wire || V(6, 0.47, -9), 40, -40, 4.7, 5.32, '', !LITE);
+fieldAnchors.forEach(([v, n, dx, dy], i) => tag(n, field, v, dx, dy, 5.62, 7, 'dev', !LITE || i % 2 === 0));
 
 // ---------- post-processing
 const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: LITE ? 2 : 4 });
 const composer = new EffectComposer(renderer, rt);
 composer.addPass(new RenderPass(scene, camera));
+// a little depth of field, only while the camera is down at the gates
+const dof = new BokehPass(scene, camera, { focus: 1, aperture: 0, maxblur: 0.004 }); dof.enabled = false;
+composer.addPass(dof);
 const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.3, 0.3, 1.7);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
@@ -1526,8 +1725,12 @@ function render(k, t, dt) {
   const inner = MON.chip.patch.userData.inner; inner.scale.set(PS, PS * Math.max(0.001, grow), PS); MON.chip.patch.visible = grow > 0.001;
   scene.environmentIntensity = lerp(0.3, 0.75, sm(0.5, 2.2, k));
   hemi.intensity = lerp(0.25, 0.4, sm(0.5, 2.2, k));
-  bloom.strength = k > 4.4 && k < 5.6 ? 0.6 : 0.26;
-  renderer.toneMappingExposure = 1.0 - 0.14 * sm(1.2, 2.0, k) * (1 - sm(3.4, 3.9, k));
+  // exposure and bloom held down on the white plastic so the exploded parts read
+  const parts3 = sm(2.2, 2.7, k) * (1 - sm(3.4, 3.9, k));
+  bloom.strength = k > 4.4 && k < 5.6 ? 0.22 : lerp(0.16, 0.03, Math.max(parts3, sm(1.4, 2.0, k) * (1 - sm(3.4, 3.9, k))));
+  bloom.threshold = lerp(1.7, 3.0, parts3);
+  renderer.toneMappingExposure = 1.0 - 0.16 * sm(1.2, 2.0, k) * (1 - sm(3.4, 3.9, k)) - 0.12 * parts3;
+  MON.leads.visible = k < 2.4;
   // live screens
   if (k < 3.6 && t - lastScr > 0.066) { lastScr = t; drawScreen(t); }
   // gate truth table and travelling bits
@@ -1538,10 +1741,13 @@ function render(k, t, dt) {
       NAND.out.emissive.set(O ? '#5be49b' : '#000'); NAND.out.emissiveIntensity = O ? 1.6 : 0;
       tA.el.innerHTML = 'A <b>' + A + '</b>'; tB.el.innerHTML = 'B <b>' + B + '</b>'; tO.el.innerHTML = 'Out <b>' + O + '</b>'; }
     const pl = pulses.userData.p;
-    for (let i = 0; i < pl.length; i++) { const p = pl[i], tr2 = p.tr; const f = ((t * p.sp + p.ph) % 1); const s = tr2[3] + (tr2[4] - tr2[3]) * f; if (tr2[0] === 0) { M4.makeScale(1.3, 0.42, 0.5); M4.setPosition(s, tr2[2], tr2[1]); } else { M4.makeScale(0.56, 0.52, 1.3); M4.setPosition(tr2[1], tr2[2], s); } pulses.setMatrixAt(i, M4); }
+    for (let i = 0; i < pl.length; i++) { const p = pl[i], tr2 = p.tr; const f = ((t * p.sp + p.ph) % 1); const s = tr2[3] + (tr2[4] - tr2[3]) * f; if (tr2[0] === 0) { M4.makeScale(0.7, 0.012, tr2[5] + 0.01); M4.setPosition(s, tr2[2] + 0.006, tr2[1]); } else { M4.makeScale(tr2[5] + 0.01, 0.012, 0.7); M4.setPosition(tr2[1], tr2[2] + 0.006, s); } pulses.setMatrixAt(i, M4); }
     pulses.instanceMatrix.needsUpdate = true;
   }
   const d = placeCamera(k, t);
+  const dk = sm(4.55, 4.85, k) * (1 - sm(5.25, 5.45, k));
+  dof.enabled = dk > 0.01;
+  if (dof.enabled) { dof.uniforms.focus.value = d; dof.uniforms.aperture.value = dk * 0.018 / d; dof.uniforms.maxblur.value = 0.0045 * dk; }
   scene.updateMatrixWorld();
   // tags
   const sc = LITE ? 0.6 : 1;
@@ -1565,7 +1771,7 @@ function render(k, t, dt) {
   composer.render(dt);
 }
 S.render = render;
-window.__w1 = { scene, camera, renderer, KF };
+window.__w1 = { scene, camera, renderer, KF, TAGS, NAND };
 }
 </script>
 <script src="../assets/waitlist-config.js"></script>

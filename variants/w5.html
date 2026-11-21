@@ -47,9 +47,12 @@ html.past .bar { background: rgba(238,241,244,.82); backdrop-filter: blur(12px);
 .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font: 700 21px/1 var(--display); letter-spacing: .01em; }
 .brand svg { width: 26px; height: 26px; }
 .bar nav { display: flex; align-items: center; gap: 22px; font-size: 15px; font-weight: 500; }
-.bar nav a:not(.btn) { text-decoration: none; opacity: .8; }
-.bar nav a:not(.btn):hover { opacity: 1; }
+.bar nav a:not(.btn) { text-decoration: none; padding: 9px 14px; border-radius: 999px; background: rgba(238,241,244,.72); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 6px 18px -12px rgba(10,20,30,.5); transition: background .4s; }
+.bar nav a:not(.btn):hover { background: rgba(238,241,244,.95); }
 html.dark-top .bar { color: #E9EEF4; }
+html.dark-top .bar nav a:not(.btn) { background: rgba(10,17,27,.62); }
+html.dark-top .bar nav a:not(.btn):hover { background: rgba(10,17,27,.85); }
+html.past .bar nav a:not(.btn) { background: none; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
 
 .btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; font: 600 16px/1 var(--text); color: #F4F6F8; background: var(--ink); border-radius: 999px; padding: 13px 22px; box-shadow: 0 1px 0 rgba(255,255,255,.15) inset, 0 10px 24px -12px rgba(16,24,34,.6); transition: transform .2s, background .2s; }
 .btn:hover { background: #2A3643; transform: translateY(-1px); }
@@ -106,7 +109,7 @@ html.gl .fallback { display: none; }
 .rail li.on button::after { background: var(--signal); border-color: var(--signal); transform: scale(1.25); }
 
 /* graph panels */
-.viz { position: absolute; margin: 0; right: clamp(150px, 13vw, 210px); top: 50%; width: min(600px, 44vw); transform: translateY(-50%); opacity: 0; visibility: hidden; color: #DDE5EE; }
+.viz { position: absolute; margin: 0; right: clamp(150px, 13vw, 210px); top: 50%; width: min(560px, 40vw); transform: translateY(-50%); opacity: 0; visibility: hidden; color: #DDE5EE; }
 .viz canvas { display: block; width: 100%; height: min(440px, 52vh); }
 #check-cv { height: min(270px, 34vh); }
 .viz figcaption { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; font-size: 15px; line-height: 1.45; margin-top: 10px; }
@@ -497,6 +500,10 @@ function makeCheck(canvas, numEl) {
       const c = first + n;
       const x = W - Rr - (c * step - off) - cell;
       if (x < L - cell || x > W) continue;
+      // fade in at the left edge and out at the right, so no column is cut in half
+      const fade = clamp((x - L) / (step * 1.2), 0, 1) * clamp((W - Rr - 6 - x - cell) / (step * 1.2), 0, 1);
+      if (fade <= 0) continue;
+      g.globalAlpha = fade;
       const b = bit(c);
       const checked = x + cell / 2 < scanX;
       for (let l = 0; l < 2; l++) {
@@ -512,6 +519,7 @@ function makeCheck(canvas, numEl) {
         g.beginPath(); g.moveTo(cx - 6, cy); g.lineTo(cx - 1.5, cy + 4.5); g.lineTo(cx + 7, cy - 5); g.stroke();
       }
     }
+    g.globalAlpha = 1;
     g.restore();
     // the comparison line
     g.strokeStyle = 'rgba(143,227,212,.55)'; g.lineWidth = 1; g.setLineDash([4, 4]);
@@ -792,83 +800,187 @@ function build() {
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), new THREE.ShadowMaterial({ color: 0x0B1420, opacity: 0.22 }));
   ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
 
-  // ------------------------------------------------ inside the die: standard cells, metal stack, vias (instanced)
+  // ------------------------------------------------ inside the die: a delayered patch of standard-cell logic, as under a microscope
+  // rows of cells between alternating power rails; poly gates at a fixed pitch over diffusion, contacts;
+  // then thin metal layers, each routed one way (M1 and M3 along the rows, M2 and M4 across), with vias.
+  // The stack is etched back in steps, so the bare cells show at lower left and the full stack at upper right.
   const patch = new THREE.Group(); Ldie.add(patch);
-  const PATCH_X = 0.105, P = 0.3, T = P / 84;
-  patch.position.set(PATCH_X, DIE_TOP + 0.0005, 0);
-  const unit = rbox(1, 1, 1, 2, 0.16);
-  const L = { diff: [], poly: [], ct: [], m1: [], v1: [], m2: [], v2: [], m3: [] };
-  const add = (list, x, y, z, sx, sy, sz) => list.push(x, y, z, sx, sy, sz);
-  const ROWS = 8, rowH = 10 * T, z0 = -ROWS * rowH / 2;
+  const PATCH_X = 0.105;
+  patch.position.set(PATCH_X, DIE_TOP + 0.0004, 0);
+  const PX = 0.6, PZ = 0.6;
+  const PP = 0.0015, rowH = 8 * PP, ROWS = Math.floor(PZ / rowH), z0 = -ROWS * rowH / 2, xL = -PX / 2, xR = PX / 2;
+  const XS = { m1: -0.02, v1: 0.015, m2: 0.015, v2: 0.05, m3: 0.05, v3: 0.095, m4: 0.095 };
+  const Y = { // [bottom, height]; every wire is far lower than it is wide
+    diff: [0, 0.00004], poly: [0.00004, 0.00009], ct: [0, 0.0003],
+    m1: [0.0003, 0.00011], v1: [0.00041, 0.00023], m2: [0.00064, 0.00012], v2: [0.00076, 0.00026], m3: [0.00102, 0.00015], v3: [0.00117, 0.0003], m4: [0.00147, 0.00026],
+  };
+  const LY = {}; for (const k of Object.keys(Y)) LY[k] = [];
+  const box = (name, xa, xb, za, zb) => { const [b, h] = Y[name]; LY[name].push((xa + xb) / 2, b + h / 2, (za + zb) / 2, xb - xa, h, zb - za); };
+  const xw = (name, xa, xb, z, w) => { xa = Math.max(xa, XS[name] ?? xL); if (xb - xa > w) box(name, xa, xb, z - w / 2, z + w / 2); };
+  const zw = (name, x, za, zb, w) => { if (x - w / 2 >= (XS[name] ?? xL)) box(name, x - w / 2, x + w / 2, za, zb); };
+  const sq = (name, x, z, s) => { if (x - s / 2 >= (XS[name] ?? xL)) box(name, x - s / 2, x + s / 2, z - s / 2, z + s / 2); };
   const R = rng(5150);
   const cells = [];
-  for (let r = 0; r <= ROWS; r++) add(L.m1, 0, 0.0042, z0 + r * rowH, P * 0.98, 0.0012, T * 1.5);
+  const g1 = rowH / 8;
+  for (let r = 0; r <= ROWS; r++) xw('m1', xL, xR, z0 + r * rowH, 0.001);
   for (let r = 0; r < ROWS; r++) {
     const zb = z0 + r * rowH, flip = r % 2;
-    let x = -P / 2 + T * 1.5;
-    while (x < P / 2 - T * 4) {
-      const w = [3, 4, 4, 5, 6, 6, 8][Math.floor(R() * 7)]; const cw = w * T;
-      if (x + cw > P / 2 - T) break;
-      const cx = x + cw / 2;
-      const zp = zb + rowH * (flip ? 0.3 : 0.7), zn = zb + rowH * (flip ? 0.7 : 0.3);
-      add(L.diff, cx, 0.0005, zp, cw - T * 0.9, 0.0008, T * 2.7);
-      add(L.diff, cx, 0.0005, zn, cw - T * 0.9, 0.0008, T * 2.1);
-      const nf = Math.max(1, Math.floor(w / 2));
-      for (let j = 0; j < nf; j++) {
-        const fx = x + (j + 1) * cw / (nf + 1);
-        add(L.poly, fx, 0.0014, zb + rowH * 0.5, T * 0.55, 0.0011, rowH * 0.76);
-        if (j < nf) { const kx = fx + cw / (nf + 1) / 2; if (kx < x + cw - T * 0.6) { add(L.ct, kx, 0.0027, zp, T * 0.55, 0.0028, T * 0.55); add(L.ct, kx, 0.0027, zn, T * 0.55, 0.0028, T * 0.55); } }
+    const zP = zb + rowH * (flip ? 0.3 : 0.7), zN = zb + rowH * (flip ? 0.7 : 0.3), hP = rowH * 0.3, hN = rowH * 0.22;
+    let x = xL + R() * PP * 4;
+    while (x < xR - PP * 3) {
+      const w = [2, 3, 3, 4, 4, 5, 6, 6, 8, 10][Math.floor(R() * 10)], cw = w * PP;
+      if (x + cw > xR) break;
+      if (R() < 0.06) { x += cw; continue; }
+      box('diff', x + PP * 0.22, x + cw - PP * 0.22, zP - hP / 2, zP + hP / 2);
+      box('diff', x + PP * 0.22, x + cw - PP * 0.22, zN - hN / 2, zN + hN / 2);
+      for (let j = 1; j < w; j++) {
+        const px = x + j * PP;
+        box('poly', px - PP * 0.13, px + PP * 0.13, zb + rowH * 0.11, zb + rowH * 0.89);
+        if (R() < 0.35) { box('poly', px - PP * 0.26, px + PP * 0.26, zb + rowH * 0.5 - PP * 0.26, zb + rowH * 0.5 + PP * 0.26); sq('ct', px, zb + rowH * 0.5, PP * 0.26); }
       }
-      add(L.m1, cx, 0.0045, zb + rowH * (0.42 + R() * 0.16), cw - T * 1.2, 0.0010, T * 0.9);
-      if (R() < 0.6) add(L.m1, x + T, 0.0045, zb + rowH * (flip ? 0.75 : 0.25), T * 0.9, 0.0010, rowH * 0.42);
-      cells.push({ x: cx, z: zb + rowH * 0.5, w: cw, r });
+      for (let j = 0; j < w; j++) {
+        const kx = x + (j + 0.5) * PP;
+        if (R() < 0.7) sq('ct', kx, zP, PP * 0.3);
+        if (R() < 0.7) sq('ct', kx, zN, PP * 0.3);
+        if (R() < 0.3) sq('ct', kx, zP + (flip ? -1 : 1) * hP * 0.3, PP * 0.3);
+      }
+      const nm = 1 + Math.floor(R() * 3);
+      for (let q = 0; q < nm; q++) {
+        const t = 1 + Math.floor(R() * 7), a = x + (Math.floor(R() * (w - 1)) + 0.5) * PP;
+        const b = Math.min(xR, a + PP * (1 + Math.floor(R() * (w + (R() < 0.25 ? 6 : 0)))));
+        xw('m1', a - 0.0002, b + 0.0002, zb + t * g1, 0.00042);
+      }
+      cells.push({ x: x + cw / 2, z: zb + rowH / 2, w: cw, r });
       x += cw;
     }
   }
+  // M2, across the rows; ends land on M1 tracks through vias
+  const P2 = 0.0014, P3 = 0.0018, P4 = 0.0042, zE = -z0;
+  const snapZ = (z) => z0 + Math.round((z - z0) / g1) * g1;
+  for (let x = xL + P2 / 2; x < xR; x += P2) {
+    if (x < XS.m2) continue;
+    let z = z0 + R() * 0.01;
+    while (z < zE) {
+      const za = snapZ(z), zb = Math.min(zE, snapZ(z + 0.003 + R() * R() * 0.07));
+      if (zb - za > g1 && R() < 0.6) { zw('m2', x, za - 0.00022, zb + 0.00022, 0.00048); if (R() < 0.85) sq('v1', x, za, 0.00038); if (R() < 0.85) sq('v1', x, zb, 0.00038); }
+      z = zb + 0.0012 + R() * 0.008;
+    }
+  }
+  // M3, along the rows again
   const m3w = [];
-  for (let i = 0; i < 74; i++) {
-    const tx = Math.round((R() - 0.5) * 76) * T, r0 = Math.floor(R() * (ROWS - 2)), r1 = Math.min(ROWS, r0 + 2 + Math.floor(R() * 4));
-    const za = z0 + r0 * rowH + rowH * 0.5, zb2 = z0 + r1 * rowH - rowH * 0.5;
-    add(L.m2, tx, 0.0078, (za + zb2) / 2, T * 0.85, 0.0013, zb2 - za + T);
-    add(L.v1, tx, 0.0059, za, T * 0.7, 0.0026, T * 0.7); add(L.v1, tx, 0.0059, zb2, T * 0.7, 0.0026, T * 0.7);
+  const snapX = (x) => xL + P2 / 2 + Math.round((x - xL - P2 / 2) / P2) * P2;
+  for (let z = z0 + P3 / 2; z < zE; z += P3) {
+    let x = XS.m3 + R() * 0.006;
+    while (x < xR) {
+      const xa = snapX(x), xb = Math.min(xR - 0.001, snapX(x + 0.004 + R() * R() * 0.11));
+      if (xb - xa > P2 && R() < 0.56) { xw('m3', xa - 0.0003, xb + 0.0003, z, 0.00066); if (R() < 0.85) sq('v2', xa, z, 0.00048); if (R() < 0.85) sq('v2', xb, z, 0.00048); if (xb - xa > 0.025) m3w.push([xa, xb, z]); }
+      x = xb + 0.0018 + R() * 0.01;
+    }
   }
-  for (let i = 0; i < 13; i++) {
-    const z = z0 + (0.6 + R() * (ROWS - 1.2)) * rowH, xa = (R() - 0.5) * P * 0.6 - P * 0.18, len = P * (0.35 + R() * 0.5), xb = Math.min(P / 2 - T * 2, xa + len);
-    add(L.m3, (xa + xb) / 2, 0.0118, z, xb - xa, 0.0019, T * 1.3);
-    m3w.push([xa, xb, z]);
-    const l2 = L.m2;
-    for (let j = 0; j < l2.length; j += 6) { const x2 = l2[j], zc = l2[j + 2], zl = l2[j + 5] / 2; if (x2 > xa && x2 < xb && z > zc - zl && z < zc + zl && R() < 0.55) add(L.v2, x2, 0.0098, z, T * 0.8, 0.0026, T * 0.8); }
+  // M4, the top layer, across: aluminium, wider, with a power strap every so often
+  const snapZ3 = (z) => z0 + P3 / 2 + Math.round((z - z0 - P3 / 2) / P3) * P3;
+  for (let x = XS.m4 + P4 / 2, i = 0; x < xR - P4; x += P4, i++) {
+    if (i % 9 === 4) { zw('m4', x + P4 / 2, z0, zE, 0.0056); x += P4; continue; }
+    let z = z0 + R() * 0.02;
+    while (z < zE) {
+      const za = snapZ3(z), zb = Math.min(zE, snapZ3(z + 0.01 + R() * R() * 0.16));
+      if (zb - za > P3 && R() < 0.55) { zw('m4', x, za - 0.0004, zb + 0.0004, 0.0015); sq('v3', x, za, 0.0007); sq('v3', x, zb, 0.0007); }
+      z = zb + 0.003 + R() * 0.02;
+    }
   }
+
+  // detail maps, drawn on canvas: tileable value noise into normal, roughness and film-thickness maps
+  function hfield(S, seed, oct) {
+    const RR = rng(seed), h = new Float32Array(S * S);
+    for (const [n, amp] of oct) {
+      const gr = new Float32Array(n * n); for (let i = 0; i < n * n; i++) gr[i] = RR();
+      for (let y = 0; y < S; y++) {
+        const fy = y * n / S, y0 = Math.floor(fy), ty = fy - y0, sy = ty * ty * (3 - 2 * ty), y1 = (y0 + 1) % n;
+        for (let x = 0; x < S; x++) {
+          const fx = x * n / S, x0 = Math.floor(fx), tx = fx - x0, sx = tx * tx * (3 - 2 * tx), x1 = (x0 + 1) % n;
+          const a = gr[y0 * n + x0], b = gr[y0 * n + x1], c = gr[y1 * n + x0], d = gr[y1 * n + x1];
+          const top = a + (b - a) * sx, bot = c + (d - c) * sx;
+          h[y * S + x] += amp * (top + (bot - top) * sy);
+        }
+      }
+    }
+    return h;
+  }
+  function normalMap(h, S, k, rep) {
+    const c = mk(S), g = c.getContext('2d'), im = g.createImageData(S, S), d = im.data;
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const dx = (h[y * S + (x + 1) % S] - h[y * S + (x - 1 + S) % S]) * k, dy = (h[((y + 1) % S) * S + x] - h[((y - 1 + S) % S) * S + x]) * k;
+      const l = Math.hypot(dx, dy, 1), o = (y * S + x) * 4;
+      d[o] = (-dx / l * 0.5 + 0.5) * 255; d[o + 1] = (dy / l * 0.5 + 0.5) * 255; d[o + 2] = (1 / l * 0.5 + 0.5) * 255; d[o + 3] = 255;
+    }
+    g.putImageData(im, 0, 0); return tex(c, false, rep);
+  }
+  function greenMap(h, S, lo, hi, rep) {
+    let mn = Infinity, mx = -Infinity; for (const v of h) { if (v < mn) mn = v; if (v > mx) mx = v; }
+    const c = mk(S), g = c.getContext('2d'), im = g.createImageData(S, S), d = im.data;
+    for (let i = 0; i < S * S; i++) { const o = i * 4; d[o] = 0; d[o + 1] = (lo + (hi - lo) * (h[i] - mn) / (mx - mn)) * 255; d[o + 2] = 0; d[o + 3] = 255; }
+    g.putImageData(im, 0, 0); return tex(c, false, rep);
+  }
+  const NS = PH ? 256 : 512;
+  const hD = hfield(NS, 31, [[6, 1], [24, 0.35], [96, 0.18], [256, 0.1]]), hDn = hfield(NS, 33, [[96, 1], [NS / 2, 0.6]]);
+  const hM = hfield(NS, 37, [[48, 1], [160, 0.7], [NS / 2, 0.5]]);
+  const dielN = normalMap(hDn, NS, 2, 5), dielR = greenMap(hD, NS, 0.34, 0.5, 5), film = greenMap(hfield(NS, 41, [[3, 1], [7, 0.45]]), NS, 0, 1, 1);
+  const metN = normalMap(hM, NS, 3, 1), metR = greenMap(hM, NS, 0.24, 0.5, 1);
+
+  const cu = new THREE.MeshStandardMaterial({ color: 0xC2835E, metalness: 1, roughness: 1, roughnessMap: metR, normalMap: metN, normalScale: new THREE.Vector2(0.35, 0.35) });
+  const al = new THREE.MeshStandardMaterial({ color: 0xAEB3BA, metalness: 1, roughness: 1, roughnessMap: metR, normalMap: metN, normalScale: new THREE.Vector2(0.5, 0.5) });
+  const tung = new THREE.MeshStandardMaterial({ color: 0x8F969E, metalness: 1, roughness: 0.4 });
   const pmat = {
-    diff: new THREE.MeshStandardMaterial({ color: 0x41557A, roughness: 0.55, metalness: 0.25 }),
-    poly: new THREE.MeshStandardMaterial({ color: 0xA8452F, roughness: 0.42, metalness: 0.15 }),
-    ct: new THREE.MeshStandardMaterial({ color: 0xA9AFB6, roughness: 0.32, metalness: 1 }),
-    m1: new THREE.MeshStandardMaterial({ color: 0xB97E5A, roughness: 0.3, metalness: 1 }),
-    v1: new THREE.MeshStandardMaterial({ color: 0xA9AFB6, roughness: 0.32, metalness: 1 }),
-    m2: new THREE.MeshStandardMaterial({ color: 0xD49364, roughness: 0.26, metalness: 1 }),
-    v2: new THREE.MeshStandardMaterial({ color: 0xA9AFB6, roughness: 0.32, metalness: 1 }),
-    m3: new THREE.MeshStandardMaterial({ color: 0xE2A774, roughness: 0.22, metalness: 1 }),
+    diff: new THREE.MeshStandardMaterial({ color: 0x46524F, roughness: 0.6, metalness: 0.3, normalMap: metN, normalScale: new THREE.Vector2(0.2, 0.2) }),
+    poly: new THREE.MeshStandardMaterial({ color: 0x8C5A48, roughness: 0.42, metalness: 0.4 }),
+    ct: tung, v1: tung, v2: tung, v3: tung, m1: cu, m2: cu, m3: cu, m4: al,
   };
-  for (const name of Object.keys(L)) {
-    const list = L[name], n = list.length / 6; if (!n) continue;
+  const tone = { m1: 0.78, m2: 0.9, m3: 1, m4: 1, diff: 1, poly: 1 };
+  const unit = new THREE.BoxGeometry(1, 1, 1);
+  const icol = new THREE.Color();
+  for (const name of Object.keys(LY)) {
+    const list = LY[name], n = list.length / 6; if (!n) continue;
     const im = new THREE.InstancedMesh(unit, pmat[name], n);
-    for (let i = 0; i < n; i++) { const o = i * 6; M4.compose(tmpP.set(list[o], list[o + 1], list[o + 2]), tmpQ.identity(), tmpS.set(list[o + 3], list[o + 4], list[o + 5])); im.setMatrixAt(i, M4); }
+    const tn = tone[name];
+    for (let i = 0; i < n; i++) {
+      const o = i * 6; M4.compose(tmpP.set(list[o], list[o + 1], list[o + 2]), tmpQ.identity(), tmpS.set(list[o + 3], list[o + 4], list[o + 5])); im.setMatrixAt(i, M4);
+      if (tn) { const j = tn * (0.93 + R() * 0.1); im.setColorAt(i, icol.setRGB(j, j * (0.98 + R() * 0.03), j)); }
+    }
+    im.frustumCulled = false;
     patch.add(im);
   }
-  // three gates to name, and the travelling bits
-  const near = cells.slice().sort((a, b) => (a.x * a.x + a.z * a.z) - (b.x * b.x + b.z * b.z));
+  // dark dielectric under it all, and a thin glass step at each etched-back layer (faint thin-film colour)
+  const dielMat = new THREE.MeshPhysicalMaterial({ color: 0x1A212C, metalness: 0, roughness: 1, roughnessMap: dielR, normalMap: dielN, normalScale: new THREE.Vector2(0.12, 0.12), clearcoat: 0.3, clearcoatRoughness: 0.3, iridescence: 0.4, iridescenceIOR: 1.46, iridescenceThicknessMap: film, iridescenceThicknessMinimum: 260, iridescenceThicknessMaximum: 700 });
+  const base = new THREE.Mesh(unit, dielMat); base.scale.set(PX + 0.02, 0.0002, PZ + 0.02); base.position.y = -0.0001; patch.add(base);
+  const glass = new THREE.MeshPhysicalMaterial({ color: 0x2A3442, metalness: 0, roughness: 0.38, transparent: true, opacity: 0.2, depthWrite: false, iridescence: 0.6, iridescenceIOR: 1.46, iridescenceThicknessMap: film, iridescenceThicknessMinimum: 300, iridescenceThicknessMaximum: 820 });
+  for (const lv of ['m2', 'm3', 'm4']) {
+    const top = Y[lv][0] - 0.00001, g = new THREE.Mesh(unit, glass);
+    g.scale.set(xR - XS[lv] + 0.001, 0.00005, ROWS * rowH); g.position.set((xR + XS[lv]) / 2, top - 0.000025, 0); patch.add(g);
+  }
+
+  // three gates to name (in the bare cells, where their transistors show), and the travelling bits
+  const gx = XS.m1 - 0.024;
+  const near = cells.filter((c) => c.w >= 4 * PP && c.x < XS.m1 - 0.006 && c.x > XS.m1 - 0.06).sort((a, b) => Math.hypot(a.x - gx, a.z) - Math.hypot(b.x - gx, b.z));
   const picks = [];
-  for (const c of near) { if (c.w < 4 * T) continue; if (picks.every((p) => Math.hypot(p.x - c.x, p.z - c.z) > 0.07)) picks.push(c); if (picks.length === 3) break; }
-  const hiMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.35, 1.6, 1.4), transparent: true, opacity: 0.24, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending });
+  for (const c of near) { if (picks.every((p) => Math.hypot(p.x - c.x, p.z - c.z) > 0.02)) picks.push(c); if (picks.length === 3) break; }
+  const hiMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.25, 1.2, 1.05), transparent: true, opacity: 0.2, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending });
   const hiLine = new THREE.LineBasicMaterial({ color: new THREE.Color(0.6, 1.9, 1.7), toneMapped: false, transparent: true, opacity: 0.95 });
   const edge = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
-  const box1 = new THREE.BoxGeometry(1, 1, 1);
+  const box1 = unit;
   for (const c of picks) {
-    const m = new THREE.Mesh(box1, hiMat); m.position.set(c.x, 0.004, c.z); m.scale.set(c.w, 0.008, rowH * 0.94); patch.add(m);
+    const m = new THREE.Mesh(box1, hiMat); m.position.set(c.x, 0.00022, c.z); m.scale.set(c.w, 0.00045, rowH * 0.9); patch.add(m);
     const l = new THREE.LineSegments(edge, hiLine); l.position.copy(m.position); l.scale.copy(m.scale); patch.add(l);
   }
-  const PULSES = 3 * m3w.length;
-  const pulses = new THREE.InstancedMesh(box1, new THREE.MeshBasicMaterial({ color: new THREE.Color(18, 9, 3.2), toneMapped: false }), PULSES);
+  // the labelled wire: a long M3 run passing near the middle of the view, labelled just past where M3 begins
+  const BX = XS.m3 + 0.015, BZ = 0.035;
+  const busList = m3w.filter((w) => w[0] < BX - 0.004 && w[1] > BX + 0.02);
+  const busWire = (busList.length ? busList : m3w).reduce((a, b) => (Math.abs(b[2] - BZ) < Math.abs(a[2] - BZ) ? b : a));
+  const busX = clamp(BX, busWire[0], busWire[1]);
+  const pulseWires = m3w.filter((w) => Math.abs(w[2]) < 0.12).slice(0, 60);
+  if (!pulseWires.includes(busWire)) pulseWires.push(busWire);
+  const PULSES = 2 * pulseWires.length, PULSE_Y = Y.m3[0] + Y.m3[1] + 0.00002;
+  const pulses = new THREE.InstancedMesh(box1, new THREE.MeshBasicMaterial({ color: new THREE.Color(5.5, 2.6, 1.0), toneMapped: false }), PULSES);
+  pulses.frustumCulled = false;
   patch.add(pulses);
   const pulseSeed = new Float32Array(PULSES).map(() => R());
 
@@ -968,7 +1080,6 @@ function build() {
   const gateKinds = ['NAND', 'XOR', 'NOR'];
   const gateFn = { NAND: (a, b) => 1 - (a & b), NOR: (a, b) => 1 - (a | b), XOR: (a, b) => a ^ b };
   const gtags = picks.map((c, i) => { const kind = gateKinds[i]; const t = mkTag('gtag', `${SYM[kind]}<b>${kind} gate</b><span>1 1 &rarr; 0</span>`); t.kind = kind; t.c = c; t.bits = t.el.querySelector('span'); return t; });
-  const busWire = m3w.reduce((a, b) => (b[1] - b[0] > a[1] - a[0] ? b : a));
   const bitsTag = mkTag('gtag', '<b style="grid-column:1/3">Bits on this wire</b><span style="grid-column:1/3">0 1 1 0 1 0 0 1</span>');
   bitsTag.bits = bitsTag.el.querySelector('span');
   const colTags = gtags.concat([bitsTag]);
@@ -987,8 +1098,8 @@ function build() {
     [0, 0.28, 0, 0.78, 0.40, 11, 0.15, 0.03, 0, 0, 0, 0, 0, 0, 1, 0, 0],
     [0, 0.95, 0, 0.62, 0.36, 14.0, 0.03, 0.0, 1, 0, 0, 0, 0, 0, 0.3, 0, 0],
     [0, 0.9, 0, 0.95, 0.80, 0.33, 0.12, 0.02, 1, 1, 1, 1, 0, 1, 0, 1, 0],
-    [0, 0.28, 0, 0.70, 0.50, 13.5, -0.2, 0.10, 0, 0, 1, 0, 0, 0, 0.3, 0, 0],
-    [0, 0.28, 0, 1.0, 0.55, 14.5, -0.24, 0.08, 0, 0, 1, 0, 0, 0, 0, 0, 1],
+    [0, 0.28, 0, 0.70, 0.50, 15, -0.26, 0.10, 0, 0, 1, 0, 0, 0, 0.3, 0, 0],
+    [0, 0.28, 0, 1.0, 0.55, 17, -0.28, 0.08, 0, 0, 1, 0, 0, 0, 0, 0, 1],
     [-5, 0, -10, 0.60, 0.58, 50, 0.0, 0.0, 0, 0, 0, 0, 1, 1, 0, 0, 0],
   ];
   const PHO = { oy: [0.17, 0.1, 0.06, 0.3, 0.3, 0.06], d: [1.75, 1.7, 1.45, 1.6, 1.6, 1.2] };
@@ -1113,8 +1224,8 @@ function build() {
     // pulses along the top metal
     if (patch.visible) {
       for (let i = 0; i < PULSES; i++) {
-        const w = m3w[i % m3w.length], f = reduce ? pulseSeed[i] : (pulseSeed[i] + t * (0.18 + pulseSeed[i] * 0.1)) % 1;
-        M4.compose(tmpP.set(lerp(w[0], w[1], f), 0.0131, w[2]), tmpQ.identity(), tmpS.set(0.011, 0.0012, T * 1.1));
+        const w = pulseWires[i % pulseWires.length], f = reduce ? pulseSeed[i] : (pulseSeed[i] + t * (0.18 + pulseSeed[i] * 0.1)) % 1;
+        M4.compose(tmpP.set(lerp(w[0], w[1], f), PULSE_Y, w[2]), tmpQ.identity(), tmpS.set(0.0035, 0.00003, 0.0007));
         pulses.setMatrixAt(i, M4);
       }
       pulses.instanceMatrix.needsUpdate = true;
@@ -1144,15 +1255,18 @@ function build() {
     if (gateO > 0.01) {
       if (t - lastGate > 1.1 && !reduce) { lastGate = t; gtags.forEach((g, i) => { gateIn[i][0] = Math.random() < 0.5 ? 1 : 0; gateIn[i][1] = Math.random() < 0.5 ? 1 : 0; const [a, b] = gateIn[i]; g.bits.textContent = `${a} ${b} → ${gateFn[g.kind](a, b)}`; }); }
       if (t - lastBits > 0.14 && !reduce) { lastBits = t; bitsArr.shift(); bitsArr.push(Math.random() < 0.5 ? 1 : 0); bitsTag.bits.textContent = bitsArr.join(' '); }
-      for (const g of gtags) { v3.set(g.c.x, 0.008, g.c.z); patch.localToWorld(v3); toScreen(v3); g.ax = v3.x; g.ay = v3.y; }
-      v3.set(lerp(busWire[0], busWire[1], 0.35), 0.013, busWire[2]); patch.localToWorld(v3); toScreen(v3); bitsTag.ax = v3.x; bitsTag.ay = v3.y;
+      for (const g of gtags) { v3.set(g.c.x, 0.0004, g.c.z); patch.localToWorld(v3); toScreen(v3); g.ax = v3.x; g.ay = v3.y; }
+      v3.set(busX, PULSE_Y, busWire[2]); patch.localToWorld(v3); toScreen(v3); bitsTag.ax = v3.x; bitsTag.ay = v3.y;
       colTags.sort((a, b) => a.ay - b.ay);
       const gap = ph ? 58 : 74, yMin = ph ? 96 : 110, yMax = ph ? H * 0.5 : H - 120;
       let y = yMin - gap;
       for (const g of colTags) { g.ly = Math.max(clamp(g.ay, yMin, yMax), y + gap); y = g.ly; }
       const over = y - yMax; if (over > 0) for (const g of colTags) g.ly -= over;
-      const cx = ph ? W - 48 : W * 0.66;
-      for (const g of colTags) setTag(g, gateO, g.ax, g.ay, cx, g.ly, ph ? -1 : 1);
+      // on a phone the cards stand right-aligned just clear of the rail, their leads reaching left to the gates
+      for (const g of colTags) {
+        if (ph && !g.w) { g.w = g.el.offsetWidth; g.h = g.el.offsetHeight; }
+        setTag(g, gateO, g.ax, g.ay, ph ? W - 56 - g.w : W * 0.66, g.ly, 1);
+      }
     } else { for (const g of gtags) setTag(g, 0); setTag(bitsTag, 0); }
     const oO = 1 - smooth(0.12, 0.4, Math.abs(k - 4));
     if (oO > 0.01) { v3.copy(outAt); Lframe.localToWorld(v3); toScreen(v3); setTag(outTag, oO, v3.x, v3.y, v3.x + (ph ? 30 : 60), v3.y + (ph ? 60 : 80), 1); } else setTag(outTag, 0);
