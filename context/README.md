@@ -4,6 +4,7 @@ Everything collected for the hackathon, one line per file.
 
 ## Top level
 
+- `ant-context.md`: Antonio's consolidated notes: event essentials, the main chip idea with comparators, potential judges and mentors, sponsors, the Manchester prize, past winners, the field, and every other idea, 21 Nov 2026.
 - `judging-criteria-slide.jpeg`: photo of the judging criteria slide, 21 Nov 2026, opening talk.
 
 ## granola/
