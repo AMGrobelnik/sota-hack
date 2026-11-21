@@ -2,9 +2,13 @@
 
 **Result: done.** The golden equivalence of the spike chip is proved in **3.3 to 3.8 s** wall (3 runs), and of the
 3-head fusion chip in **8.4 to 8.9 s** (3 runs), with `scripts/golden_proof.py --engines iprove`. Through the lab's
-True)` with both proposed patches applied: spike 4.0 to 4.4 s, 3-head chip about 12 s.=own `prove(golden=True)` with both proposed patches applied: spike 4.0 to 4.4 s, 3-head chip 10.9 to 12.1 s.=True)` with both proposed patches applied: spike 4.0 to 4.4 s, 3-head chip about 12 s.
-Today's lab code cannot prove the spike at all (it reports a false failure after 47 s, see "Why"). Target was
-under 5 minutes.
+own `prove(golden=True)` with both proposed patches applied: spike 4.0 to 4.4 s, 3-head chip 10.9 to 12.1 s.
+The lab code at 021f68d cannot prove the spike at all (it reports a false failure after 47 s, see "Why").
+Target was under 5 minutes.
+
+**On the lab's new commit b77cc76** (which contains both patches, byte for byte): the lab's own
+`prove(golden=True)` proves the spike in **3.7 to 3.9 s** and the 3-head chip in **9.1 to 9.6 s** (3 runs each),
+the lab's golden-proof tests pass, and all mutated golden models are caught (see "Lab's new commit").
 
 ## How it was measured
 
@@ -82,7 +86,7 @@ Seconds are wall clock of the method, including miter building; "limit" is the r
 | chain, P1 &cec + bitwuzla race | spike | 4.9 to 5.5 s | proved | 3 |
 | chain, P1 &cec only | spike | 7.6 to 9.1 s | proved | 3 |
 | chain, P1 bitwuzla only | spike | 5.3 to 9.5 s | proved | 3 |
-| chain, P1 &cec only | 3-head | 132 to 143 s | proved | 2 |
+| chain, P1 &cec only | 3-head | 132 to 158 s | proved | 3 |
 | chain, P1 &cec + bitwuzla, split | 3-head | 175 s | proved | 1 |
 | chain, P1 &cec, split per output | 3-head | 274 s | proved | 1 |
 | chain, P1 &cec, whole | 3-head | 352 s | proved | 1 |
@@ -160,7 +164,7 @@ It does not show:
 - that `emit/golden.py` itself is right: it is independent of the production emitter but written by the same
   lab, and both sides are read by the same Yosys front end, so a shared front-end bug would not show.
 
-## Is the lab patch needed?
+## Is the lab patch needed? (both are in the lab since b77cc76)
 
 - `proposed/formal.patch`: **yes**. Part 1 (the `[63:0]` port fix in `emit/golden.py`) is needed for any
   golden proof of the spike; without it the lab reports a false failure. Part 2 adds
@@ -173,7 +177,25 @@ It does not show:
 
 ## Lab's new commit
 
-Not landed yet: `origin/ant/chip-lab` was still at 021f68d at the last fetch (21:31 UTC). When it lands with the golden fix, the re-run is `golden_proof.py <id> --engines iprove` and `lab_golden.py <id>` on both chips.
+Landed as b77cc76 on `origin/ant/chip-lab` (seen 21:35 UTC) and merged into `m3/formal` (normal merge,
+`uv sync --locked --extra dev --extra sim --extra ingest`). Its `verify/formal.py` and `emit/golden.py` are
+identical to the lab files with `formal.patch` and `formal-iprove.patch` applied (`diff`, no output), so both
+patches are now in the lab and nothing more is needed from this package. No `chiplab workers` were running in
+this worktree, and the golden proof runs in-process, so there was nothing to restart.
+
+Re-run on b77cc76, same machine, load average 17 to 20:
+
+| Check | Design | Time | Result | Runs |
+|---|---|---|---|---|
+| lab `tests/test_formal_golden.py` | - | 2.9 s | 3 passed | 1 |
+| lab golden (`lab_golden.py`) | spike | 3.7 to 3.9 s | proved | 3 |
+| lab golden (`lab_golden.py`) | 3-head | 9.1 to 9.6 s | proved | 3 |
+| chain iprove + 3 mutants | spike | 3.2 s | proved, all caught | 1 |
+| chain iprove + 3 mutants | 3-head | 8.4 s | proved, all caught | 1 |
+
+Both designs were rebuilt through the merged lab first (`scripts/setup_designs.py`): same design ids, same
+gate counts. Commands: `scripts/check_iprove.sh <worktree>/chiplab` (log `results/formal-recheck-b77cc76.log`)
+and `golden_proof.py <id> --engines iprove --mutants`.
 
 ## Files
 
@@ -185,4 +207,4 @@ Not landed yet: `origin/ant/chip-lab` was still at 021f68d at the last fetch (21
 - `scripts/repro_lab.py`, `scripts/lab_golden.py`, `scripts/check_patch.sh`, `scripts/check_iprove.sh`: lab
   reproduction and patch checks. `scripts/iprove.sh`, `scripts/remeasure.sh`: the timed repeat runs.
 - `results/all.jsonl`: every run's raw result (home path replaced with ~).
-- Time used: about 35 minutes of the 2-hour box (first log 20:59 UTC).
+- Time used: about 45 minutes of the 2-hour box (first log 20:59 UTC, last run 21:38 UTC).

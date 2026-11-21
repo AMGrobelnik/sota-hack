@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 HOME = str(Path.home())
 NAMES = ["formal-repro-spike", "formal-check-iprove", "formal-lab-golden-spike", "formal-lab-golden-fuse3",
-         "formal-iprove", "formal-remeasure", "formal-setup2"]
+         "formal-iprove", "formal-remeasure", "formal-setup2", "formal-recheck-b77cc76", "formal-setup3"]
 
 for n in NAMES:
     (ROOT / "results" / f"{n}.log").write_text((Path(sys.argv[1]) / f"{n}.log").read_text().replace(HOME, "~"))
