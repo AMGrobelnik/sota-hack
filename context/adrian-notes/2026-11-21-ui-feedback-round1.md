@@ -79,3 +79,11 @@ Paraphrased from the team; asked for: five round-3 variants.
 - Say why a smaller chip matters.
 - Idea: show numbers on how many medical devices are built each year (only sourced figures are to be used).
 - Planned as well: a "How it works" page.
+
+## Product name and repo layout (Sat 21 Nov, evening)
+
+- The platform is called ChipIn (capital C, capital I, one word); the domain is chipin.space.
+- Pages already published keep the earlier name; every new variant uses ChipIn.
+- The logo is undecided: several logo options are to be tried and the team picks.
+- The interface lives on the branch amg/frontend and the backend on the branch amg/backend; they are not connected yet.
+- The backend is a trimmed copy of the AI Inventor backend: OpenRouter access (also used for summarising, as in AI Inventor; no free-model handling), the Claude agent backend, and runs on the Mac and on RunPod (on demand and flex). Only the parts that are needed go into the public repo.
