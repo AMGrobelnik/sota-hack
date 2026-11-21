@@ -7,3 +7,4 @@
 - `2026-11-21-sensor-datasets.md`: open datasets for second-device case studies (radar, red/IR light, neonatal NIRS, thermal, camera), research note.
 - `2026-11-21-demo-use-cases.md`: final demo use cases: Incubator Watch (radar plus thermal) and neonatal EEG brain monitor; adult wearable on the roadmap; definitions, data, metrics, open decisions.
 - `2026-11-21-build-brief.md`: build brief for Adrian: both case studies end to end (what, why, data, simulation, search, outputs, results) and what the dashboard should show.
+- `2026-11-21-sponsor-placements.md`: where and how to name the sponsors on the landing page and dashboard, with ready-to-paste HTML.
