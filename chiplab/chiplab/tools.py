@@ -23,24 +23,49 @@ class ToolError(RuntimeError):
     pass
 
 
-def tool(summary: str, params: dict):
-    """Register a tool. params: {name: "type — meaning (default)"} for docs and AGENT.md."""
+CONTEXT_ARGS = {"run_id": "str — dashboard run to emit events into (optional)",
+                "session_id": "str — calling agent session (optional; used for quotas and the leaderboard)",
+                "round": "int — design round, copied onto dashboard events (optional)"}
+
+
+def tool(summary: str, params: dict, lane: str = "cpu", cacheable: bool = False):
+    """Register a tool. params: {name: "type — meaning (default)"} for docs and AGENT.md.
+
+    lane: which job queue runs it asynchronously (cpu | gpu | docker | inline). cacheable: deterministic given its
+    args (design ids are content hashes), so results are reused across agents. Every tool also accepts the
+    CONTEXT_ARGS (run_id, session_id, round) and `force` to bypass the cache.
+    """
     def deco(fn):
         name = fn.__name__
 
         @wraps(fn)
         def wrapper(**kw):
-            t0 = time.time()
+            from chiplab import cache, events
+            ctx = {k: kw.pop(k) for k in list(kw) if k in CONTEXT_ARGS}
+            force = bool(kw.pop("force", False))
+            t0, c0 = time.time(), time.process_time()
+            res = cache.get(name, kw) if cacheable and not force else None
+            if res is not None:
+                res = dict(res, cached=True)
+            else:
+                try:
+                    res = fn(**kw)
+                    res.setdefault("status", "ok")
+                except Exception as e:  # every failure is a logged, structured answer
+                    res = {"status": "error", "error": f"{type(e).__name__}: {e}"}
+                    if os.environ.get("CHIPLAB_DEBUG"):
+                        res["traceback"] = traceback.format_exc()
+                res = _jsonable(res)
+                res.setdefault("cost", {}).update({"wall_s": round(time.time() - t0, 3), "cpu_s_host": round(time.process_time() - c0, 3)})
+                if cacheable:
+                    cache.put(name, kw, res)
+            log.log_call(name, {**kw, **ctx}, res, time.time() - t0)
             try:
-                res = fn(**kw)
-                res.setdefault("status", "ok")
-            except Exception as e:  # every failure is a logged, structured answer
-                res = {"status": "error", "error": f"{type(e).__name__}: {e}"}
-                if os.environ.get("CHIPLAB_DEBUG"):
-                    res["traceback"] = traceback.format_exc()
-            log.log_call(name, kw, res, time.time() - t0)
+                events.for_tool(name, {**kw, **ctx}, res)
+            except Exception:  # events must never break a tool
+                pass
             return res
-        TOOLS[name] = {"fn": wrapper, "summary": summary, "params": params}
+        TOOLS[name] = {"fn": wrapper, "summary": summary, "params": {**params}, "lane": lane, "cacheable": cacheable}
         return wrapper
     return deco
 
@@ -106,7 +131,7 @@ def _recordings(task: dict):
        "dataset labels, negative class first, e.g. {\"neg\":[\"N\"],\"pos\":[\"A\"]}",
        "split": "dict — {fractions:[.7,.15,.15], seed:0, algo:'stratified-v1'}", "clinical_floor": "dict — e.g. "
        "{worst_subject_sensitivity: .9, specificity: .9}", "budgets": "dict — {max_gates, max_luts, max_area_um2, ...}",
-       "test_budget": "int — how many times the sealed test set may be scored (default 5)"})
+       "test_budget": "int — how many times the sealed test set may be scored (default 5)"}, lane="inline")
 def define_task(name: str, classes: dict, dataset: str | None = None, simulator: dict | None = None,
                 split: dict | None = None, clinical_floor: dict | None = None, budgets: dict | None = None,
                 test_budget: int = 5, notes: str = "") -> dict:
@@ -148,7 +173,7 @@ def _view_path(view_id: str) -> Path:
 @tool("Turn a task's recordings into windows of frames with an off-chip front-end; returns a view_id. "
       "Window labels and the locked split come with it.",
       {"task_id": "str", "frontend": "dict — {name, params} front-end plugin, e.g. {name:'rr_intervals'}",
-       "window": "dict — {L: frames per window, stride, max_per_rec}"})
+       "window": "dict — {L: frames per window, stride, max_per_rec}"}, lane="cpu")
 def load_data(task_id: str, frontend: dict, window: dict) -> dict:
     from chiplab.data.windows import build_view
     from chiplab.plugins import registry
@@ -184,7 +209,7 @@ def load_data(task_id: str, frontend: dict, window: dict) -> dict:
       "sampling of a design space. Returns a proposal_id to train.",
       {"view_id": "str", "family": "str — model family plugin, e.g. 'intnn'", "sampler": "str — explicit|random|grid",
        "n": "int — number of candidates (random)", "seed": "int", "space": "dict — setting -> list of values "
-       "(family settings and encoding: L, encoder, bits, lo, hi, features)", "candidates": "list — explicit designs"})
+       "(family settings and encoding: L, encoder, bits, lo, hi, features)", "candidates": "list — explicit designs"}, lane="inline")
 def propose_designs(view_id: str, family: str, sampler: str = "random", n: int = 64, seed: int = 0,
                     space: dict | None = None, candidates: list | None = None) -> dict:
     from chiplab.plugins import registry
@@ -206,7 +231,7 @@ def propose_designs(view_id: str, family: str, sampler: str = "random", n: int =
 @tool("Train every candidate of a proposal at once on the GPU (population training). Scores on train/val only; "
       "the sealed test set is never touched. Returns per-candidate validation metrics and timing.",
       {"proposal_id": "str", "epochs": "int (family default)", "seed": "int", "device": "str — cuda|cpu|mps (auto)",
-       "teacher": "str — design or reference to distil from (optional)"})
+       "teacher": "str — design or reference to distil from (optional)"}, lane="gpu")
 def train_batch(proposal_id: str, epochs: int | None = None, seed: int = 0, device: str | None = None,
                 teacher: str | None = None, force: bool = False) -> dict:
     from chiplab.data.contract import View
@@ -240,7 +265,7 @@ def _design_dir(design_id: str) -> Path:
 
 @tool("Compile one trained candidate (or a raw chipir/1 document) to Verilog-2005 with its weights wired in. "
       "Returns a design_id used by every hardware and verification tool.",
-      {"batch_id": "str", "k": "int — candidate index in the batch", "ir": "dict — a chipir/1 document instead"})
+      {"batch_id": "str", "k": "int — candidate index in the batch", "ir": "dict — a chipir/1 document instead"}, lane="cpu", cacheable=True)
 def compile_verilog(batch_id: str | None = None, k: int | None = None, ir: dict | None = None) -> dict:
     from chiplab.emit.verilog import emit
     from chiplab.ir.schema import design_id as did, validate
@@ -278,7 +303,7 @@ def _verilator_lint(path: Path, top: str) -> dict:
 @tool("Synthesise a design. target=generic: gate count by type, logic depth, transistor estimate, gate netlist. "
       "target=xc7|ice40: lookup-table counts (same as count_luts).",
       {"design_id": "str", "target": "str — generic|xc7|ice40", "abc": "str — extra ABC flags, e.g. '-fast'",
-       "timeout": "int seconds (900)"})
+       "timeout": "int seconds (900)"}, lane="cpu", cacheable=True)
 def synthesize(design_id: str, target: str = "generic", effort: str = "fast", timeout: int = 900) -> dict:
     from chiplab.hw.yosys import count_luts as _luts, synth_generic
     d = _design_dir(design_id)
@@ -296,7 +321,7 @@ def synthesize(design_id: str, target: str = "generic", effort: str = "fast", ti
 
 
 @tool("Lookup-table count for an FPGA family: xc7 (6-input, Spartan-7 class, for comparison with published FPGA "
-      "designs) or ice40 (4-input, iCE40UP5K).", {"design_id": "str", "family": "str — xc7|ice40"})
+      "designs) or ice40 (4-input, iCE40UP5K).", {"design_id": "str", "family": "str — xc7|ice40"}, lane="cpu", cacheable=True)
 def count_luts(design_id: str, family: str = "xc7") -> dict:
     return synthesize.__wrapped__(design_id=design_id, target=family)
 
@@ -342,7 +367,7 @@ def _test_access(design_id: str, why: str) -> int:
 @tool("Verification level 1: run inputs through the gate netlist and compare with the integer model (and with the "
       "training framework's own decisions). inputs=val|test use real windows; test returns match counts only.",
       {"design_id": "str", "inputs": "str — val|test|random", "n": "int — random vectors (100000)",
-       "device": "str — numpy|cuda", "seed": "int"})
+       "device": "str — numpy|cuda", "seed": "int"}, lane="gpu", cacheable=True)
 def simulate(design_id: str, inputs: str = "val", n: int = 100000, device: str = "numpy", seed: int = 0) -> dict:
     from chiplab.verify.bitexact import check
     d = _design_dir(design_id)
@@ -369,7 +394,7 @@ def simulate(design_id: str, inputs: str = "val", n: int = 100000, device: str =
 
 @tool("Clinical referee: the chip's own decisions (gate netlist outputs) scored per window, per recording and per "
       "subject, with the worst subject. split=val is free; split=test spends the task's test budget.",
-      {"design_id": "str", "split": "str — val|test"})
+      {"design_id": "str", "split": "str — val|test"}, lane="cpu")
 def evaluate_clinical(design_id: str, split: str = "val") -> dict:
     from chiplab.referee.metrics import summary
     from chiplab.verify.bitexact import circuit_outputs
@@ -390,7 +415,7 @@ def evaluate_clinical(design_id: str, split: str = "val") -> dict:
 
 # ------------------------------------------------------------------------------------------------ overview
 
-@tool("Leaderboard of compiled designs: gates, depth, bit-exact status and validation metrics.", {"task_id": "str (optional)"})
+@tool("Leaderboard of compiled designs: gates, depth, bit-exact status and validation metrics.", {"task_id": "str (optional)"}, lane="inline")
 def leaderboard(task_id: str | None = None) -> dict:
     rows = []
     base = config.HOME / "designs"
@@ -410,12 +435,12 @@ def leaderboard(task_id: str | None = None) -> dict:
     return {"designs": rows, "test_scorings_total": tests}
 
 
-@tool("Events for the front end since a time (stage changes, candidate dots, check results).", {"since": "float — unix time (0)"})
+@tool("Events for the front end since a time (stage changes, candidate dots, check results).", {"since": "float — unix time (0)"}, lane="inline")
 def events(since: float = 0.0) -> dict:
     return {"events": log.read("events.jsonl", since=since)}
 
 
-@tool("List available plugins of every kind (datasets, frontends, families, simulators, targets).", {})
+@tool("List available plugins of every kind (datasets, frontends, families, simulators, targets).", {}, lane="inline")
 def plugins() -> dict:
     from chiplab.plugins import registry
     return {k: registry.available(k) for k in registry.KINDS}
