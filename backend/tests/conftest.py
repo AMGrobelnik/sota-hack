@@ -9,7 +9,13 @@ import pytest
 
 from chipin_backend.config import BackendConfig, load_config
 
-PAID_KEYS = ("OPENROUTER_API_KEY", "RUNPOD_API_KEY", "ANTHROPIC_API_KEY")
+PAID_KEYS = (
+    "OPENROUTER_API_KEY",
+    "RUNPOD_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "TINKER_API_KEY",
+    "CALLOSUM_API_KEY",
+)
 
 
 @pytest.fixture(autouse=True)

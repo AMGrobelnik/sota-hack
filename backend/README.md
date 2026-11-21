@@ -100,6 +100,36 @@ python -m chipin_backend.compute.runpod check      # pods and prices, read-only
 
 `ask` exits 1 when the model returned no text because it hit `--max-tokens`.
 
+## Providers
+
+The `openrouter` agent backend and `ask` can use any OpenAI-compatible
+provider listed under `providers:` in `config/backend.yaml`. Each entry is a
+base URL, the NAME of the environment variable that holds its key, and a
+default model. Pick one with `--provider`:
+
+```bash
+chipin-backend ask --provider tinker "Say hi in one sentence"
+chipin-backend run --provider tinker --model <model id> --prompt "..."
+chipin-backend serve --agent openrouter   # POST /api/runs accepts "provider" and "model"
+```
+
+| Provider | Key variable | Default model |
+| --- | --- | --- |
+| `openrouter` | `OPENROUTER_API_KEY` | as before |
+| `tinker` | `TINKER_API_KEY` | `thinkingmachines/Inkling-2-Mini` |
+| `callosum` | `CALLOSUM_API_KEY` | none |
+
+Keys come from the environment or `--env-file` only and are never printed or
+logged. A missing key stops the command with one line naming the variable.
+`GET /api/health` lists each provider by name with `configured` and
+`key_present`. Events and log lines that name a model also name the provider.
+
+Tinker's OpenAI-compatible endpoint is
+`https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1`; the
+Small model is `thinkingmachines/Inkling-2-Small`. `callosum` is a
+placeholder: it has no public endpoint, so it refuses to run until a base
+URL, model and key are filled in under `providers.callosum`.
+
 ## Summaries
 
 Every summary uses one OpenRouter model,
