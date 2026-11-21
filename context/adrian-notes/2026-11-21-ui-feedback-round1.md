@@ -50,3 +50,32 @@ From Adrian; to be done together with the next round of landing page variants, n
 - Show "N people on the waitlist" on the page, with a made-up number for now.
 - Add a world map of the countries people signed up from, with mock countries for now.
 - Open point: swap the made-up number and countries for the real ones from the store before the page is sent out.
+
+## Dashboards, late feedback on round 2 (Sat 21 Nov, about 19:45)
+
+Paraphrased from the team; applied to the round-3 dashboards.
+
+- Next to the big gate count, show how much smaller the chip is than what is typically needed.
+- Under the details, show how the gate count came down from round 1 to round 4.
+- Make the chip look live: current flowing from Sensor 1 and Sensor 2 through the chip.
+- Give the work a voice, as if one person were checking all the models at once ("Chipmonk is checking ...").
+- The small chip at the top right and the chip drawing of round-2 variant 5 were liked.
+- The signal should be a live feed.
+
+## Landing pages, round 2 feedback (Sat 21 Nov, about 19:50)
+
+Paraphrased from the team; asked for: five round-3 variants.
+
+- The view of many hospital rooms is liked; make it real: a newborn in the incubator, a patient on the operating table, a dialysis patient with the line in the arm, an intensive-care patient with an oxygen mask, someone at home.
+- Let the visitor click any room to zoom into it and on to its chip.
+- Bedside monitors: real readings (heart rate, oxygen saturation, respiration, blood pressure); they were too bright and looked fake.
+- Focus on the chip, bold and clear; no tour of the device parts; never cut the chip in half; no shelf of devices.
+- Current flowing through the sensor inputs and the chip is liked; make it smoother and more real.
+- A smaller zoom step from the fine-tuned model to the gates; the four transistors clearer; a smoother move from the gates to one chip per device.
+- Make it obvious that each chip is a different chip for a different device.
+- Remove: the model-matches-chip chapter, the small sensor/weights/gates/prediction panel, unexplained blue highlight boxes, the NAND and AND animation, labels crossed by a line.
+- Charts: put the explanation above or beside the graph; make the "good enough" line clear, perhaps adjustable.
+- Liked: example prompts typing themselves, the workflow row at the top, the run shown at the side (and where the training data comes from), the swarm of thousands of designs, the hospital from outside, "Build the next chip" and "Smaller, then smaller", the gate close-ups.
+- Say why a smaller chip matters.
+- Idea: show numbers on how many medical devices are built each year (only sourced figures are to be used).
+- Planned as well: a "How it works" page.
