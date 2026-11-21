@@ -5,6 +5,7 @@ Everything collected for the hackathon, one line per file.
 ## Top level
 
 - `judging-criteria-slide.jpeg`: photo of the judging criteria slide, 21 Nov 2026, opening talk.
+- `architecture-whiteboard.jpeg`: photo of the team's architecture sketch on the whiteboard, 21 Nov 2026, about 16:50.
 
 ## granola/
 
@@ -42,6 +43,7 @@ Everything collected for the hackathon, one line per file.
 - `adrian-notes/2026-11-21-fertility-evidence.md`: checked evidence for fertility medicine as a use case, 21 Nov, research note.
 - `adrian-notes/2026-11-21-team-idea-discussion.md`: shared team note on the chip idea discussion, 21 Nov (author not named in the file).
 - `adrian-notes/2026-11-21-newborn-eeg-test.md`: quick feasibility test of newborn seizure detection from EEG on the open Helsinki dataset, 21 Nov, research note.
+- `adrian-notes/2026-11-21-architecture-whiteboard.md`: description of the team's architecture sketch from the whiteboard, 21 Nov.
 - `adrian-notes/2026-11-21-whatsapp-group.md`: summary of the team's WhatsApp group, 21 Nov, research note.
 - `adrian-notes/data/`: structured JSON outputs behind the notes (idea panels, sponsors, past events, dialysis verification), research note.
 - `whatsapp/team-group-chat.md`: the team's WhatsApp group, 4 to 21 Nov, read-only export, 21 Nov.
