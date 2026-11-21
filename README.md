@@ -58,4 +58,4 @@ The checked evidence will be in `docs/evidence.md`.
 - `docs/idea.md`: the idea in full, with cautions and open questions.
 - `docs/environment.md`: the design environment: stages, views, first run.
 - `docs/evidence.md`: checked evidence on prior work, data and tools.
-- `context/` is not on `main`. Adrian's raw context (transcripts, Granola notes, the judging slide, research notes) is on the branch `amg/context`.
+- `context/notes/`: Oran's idea notes. Adrian's raw context is on the branch `amg/context`.
