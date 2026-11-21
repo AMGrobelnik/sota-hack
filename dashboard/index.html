@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Chipmonk dashboard, round 3</title>
+<title>ChipIn dashboard, round 4</title>
 <style>
   :root { color-scheme: dark; --bar: 44px; }
   * { box-sizing: border-box; }
@@ -20,6 +20,11 @@
   #alone, #back { color: #8ab4ff; text-decoration: none; white-space: nowrap; }
   #alone:hover, #back:hover { text-decoration: underline; }
   #stage { position: fixed; inset: var(--bar) 0 0 0; }
+  #card { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+  #card[hidden] { display: none; }
+  #card > div { border: 1px solid #333a45; border-radius: 12px; padding: 32px 48px; background: #14171c; }
+  #card h1 { margin: 0 0 12px; font-size: 22px; font-weight: 600; }
+  #card p { margin: 0; color: #9aa4b2; }
   iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; }
 </style>
 </head>
@@ -28,21 +33,22 @@
   <button id="prev" aria-label="Previous variant" aria-keyshortcuts="ArrowLeft">&#8592;</button>
   <div id="label" aria-live="polite"></div>
   <button id="next" aria-label="Next variant" aria-keyshortcuts="ArrowRight">&#8594;</button>
-  <span id="tag">Chipmonk</span>
+  <span id="tag">ChipIn</span>
   <a id="alone" target="_blank" rel="noopener">open alone</a>
+  <a class="rl" href="round3/">round 3</a>
   <a class="rl" href="round2/">round 2</a>
   <a class="rl" href="round1/">round 1</a>
   <a id="back" href="../">landing pages</a>
 </div>
-<div id="stage"><iframe id="frame" title="Variant"></iframe></div>
+<div id="stage"><iframe id="frame" title="Variant"></iframe><div id="card" hidden><div><h1></h1><p>Being finished</p></div></div></div>
 <script>
 (function () {
   var VARIANTS = [
-    { key: "f1", name: "Ask first" },
-    { key: "f2", name: "Three-step intake" },
-    { key: "f3", name: "Watch it think" },
-    { key: "f4", name: "Device in the room" },
-    { key: "f5", name: "Show your sources" }
+    { key: null, name: "Attach and go", note: "being finished" },
+    { key: "g2", name: "Guide me" },
+    { key: "g3", name: "Starts at once" },
+    { key: "g4", name: "What it means for a patient" },
+    { key: "g5", name: "Show your working" }
   ];
   var frame = document.getElementById("frame");
   var label = document.getElementById("label");
@@ -53,18 +59,22 @@
   // view in the hash of its iframe document, so the two never touch each other.
   function fromHash() {
     var n = parseInt(location.hash.replace("#", ""), 10);
-    return n >= 1 && n <= VARIANTS.length ? n - 1 : 0;
+    return n >= 1 && n <= VARIANTS.length ? n - 1 : 1;
   }
   function render() {
-    var v = VARIANTS[idx], url = "variants/" + v.key + ".html";
+    var v = VARIANTS[idx], url = v.key ? "variants/" + v.key + ".html" : "";
+    var card = document.getElementById("card");
     label.innerHTML = "";
     var b = document.createElement("b");
     b.textContent = (idx + 1) + " / " + VARIANTS.length;
     label.appendChild(b);
-    label.appendChild(document.createTextNode(v.name));
-    alone.href = url;
-    document.title = (idx + 1) + " " + v.name + " - Chipmonk dashboard";
-    if (frame.getAttribute("src") !== url) frame.src = url;
+    label.appendChild(document.createTextNode(v.name + (v.note ? " (" + v.note + ")" : "")));
+    card.hidden = !!v.key;
+    frame.hidden = !v.key;
+    card.querySelector("h1").textContent = v.name;
+    if (v.key) { alone.href = url; alone.hidden = false; } else { alone.removeAttribute("href"); alone.hidden = true; }
+    document.title = (idx + 1) + " " + v.name + " - ChipIn dashboard";
+    if (v.key && frame.getAttribute("src") !== url) frame.src = url;
   }
   function go(n) {
     idx = ((n % VARIANTS.length) + VARIANTS.length) % VARIANTS.length;
