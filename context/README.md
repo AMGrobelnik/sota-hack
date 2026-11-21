@@ -8,9 +8,9 @@ Everything collected for the hackathon, one line per file.
 
 ## granola/
 
-- `granola/2026-11-20-team-call.txt`: Granola notes of the team call, 20 Nov 2026 (dialysis graft idea).
-- `granola/2026-11-21-chip-design-for-medical-devices.txt`: Granola notes on the chip design for medical devices idea, 21 Nov 2026, team call.
-- `granola/2026-11-21-opening-talk.txt`: Granola notes of the opening talk, 21 Nov 2026.
+- `granola/2026-11-20-team-call.txt`: Granola notes of the team call, 20 Nov 2026 (dialysis graft idea). ([Granola note](https://notes.granola.ai/t/dd63b9e3-ebdd-46dd-9dc5-c3e29121c9dd))
+- `granola/2026-11-21-chip-design-for-medical-devices.txt`: Granola notes on the chip design for medical devices idea, 21 Nov 2026, team call. ([Granola note](https://notes.granola.ai/t/e0579615-069b-4548-9f57-8987eaefe39f))
+- `granola/2026-11-21-opening-talk.txt`: Granola notes of the opening talk, 21 Nov 2026. ([Granola note](https://notes.granola.ai/t/6b4908c9-e982-48cc-82d9-9bccfede29ad))
 
 ## transcripts/ (dictated at the event, speakers not separated, verbatim)
 
