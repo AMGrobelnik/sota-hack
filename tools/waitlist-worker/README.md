@@ -17,7 +17,8 @@ A Cloudflare Worker that stores waitlist sign-ups for the site in a D1 database
 - `GET /` returns `{"count": N}` (cached for 5 seconds).
 - `POST /` with JSON `{name, email, organisation, build, variant}` returns
   `{"ok": true, "count": N}`. The same email twice counts once.
-- CORS is allowed only for `https://amgrobelnik.github.io`.
+- CORS is allowed only for `https://chipin.space`, `https://www.chipin.space`
+  and `https://amgrobelnik.github.io`.
 - `GET /admin/export` and `DELETE /admin/signup?email=...` need the header
   `Authorization: Bearer <ADMIN_TOKEN>`; anything else answers 404.
 

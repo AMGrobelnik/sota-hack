@@ -1,16 +1,21 @@
 // Waitlist store for the SOTA hack site: a count, sign-ups, and an admin route.
 // Storage: one D1 database (binding DB). Secrets: ADMIN_TOKEN, IP_SALT.
 
-const ALLOWED_ORIGIN = "https://amgrobelnik.github.io";
+const ALLOWED_ORIGINS = new Set([
+  "https://chipin.space",
+  "https://www.chipin.space",
+  "https://amgrobelnik.github.io",
+]);
 const MAX_BODY = 4096;
 const RATE_LIMIT = 5; // sign-up attempts per IP hash per hour
 const HOUR_MS = 3600_000;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function cors(request) {
-  if (request.headers.get("Origin") !== ALLOWED_ORIGIN) return {};
+  const origin = request.headers.get("Origin");
+  if (!ALLOWED_ORIGINS.has(origin)) return {};
   return {
-    "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
+    "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Max-Age": "86400",

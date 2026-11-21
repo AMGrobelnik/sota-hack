@@ -14,6 +14,10 @@ check "POST first" "$(post)" '{"ok":true,"count":1}'
 check "POST again" "$(post)" '{"ok":true,"count":1}'
 hdr=$(curl -s -D - -o /dev/null -H "Origin: $ORIGIN" -H "Content-Type: application/json" -d "$BODY" "$BASE/" | grep -ci '^access-control-allow-origin: https://amgrobelnik.github.io')
 check "CORS allowed origin" "$hdr" "1"
+for o in https://chipin.space https://www.chipin.space; do
+  hdr=$(curl -s -D - -o /dev/null -H "Origin: $o" "$BASE/" | grep -ci "^access-control-allow-origin: $o")
+  check "CORS allowed origin $o" "$hdr" "1"
+done
 hdr=$(curl -s -D - -o /dev/null -H "Origin: https://evil.example" -H "Content-Type: application/json" -d "$BODY" "$BASE/" | grep -ci '^access-control')
 check "CORS other origin" "$hdr" "0"
 code=$(curl -s -o /dev/null -w '%{http_code}' -H "Content-Type: application/json" -d '{"name":"X","email":"not-an-email"}' "$BASE/")
