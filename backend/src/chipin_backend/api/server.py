@@ -15,7 +15,12 @@ Routes::
     GET  /api/runs/{id}/events?token=...&from=<seq>   (text/event-stream)
     POST /api/runs/{id}/messages     -> 202
     POST /api/runs/{id}/stop         -> 202
+    GET  /api/runs/{id}/files        -> {"files": [{"path", "size"}]} the agent's working folder
+    GET  /api/runs/{id}/file?path=workspace/report.md   -> the file as UTF-8 text
     POST /api/transcribe?lang=en     -> {"text", "model", "audio_seconds", "latency_ms"}
+
+A preflight from a public page to this loopback server (Chrome's Private
+Network Access) is answered with ``Access-Control-Allow-Private-Network``.
 """
 
 from __future__ import annotations
@@ -98,6 +103,8 @@ async def _cors_headers(request: web.Request, response: web.StreamResponse) -> N
         response.headers["Access-Control-Allow-Methods"] = ALLOW_METHODS
         response.headers["Access-Control-Allow-Headers"] = ALLOW_HEADERS
         response.headers["Access-Control-Max-Age"] = "600"
+        if request.headers.get("Access-Control-Request-Private-Network") == "true":
+            response.headers["Access-Control-Allow-Private-Network"] = "true"
 
 
 async def health(request: web.Request) -> web.Response:
@@ -150,6 +157,56 @@ async def stop_run(request: web.Request) -> web.Response:
     """Stop a running agent (a finished run stays as it is)."""
     item = await request.app[MANAGER].stop(request.match_info["run_id"])
     return _json({"id": item.id, "status": item.record["status"]}, status=202)
+
+
+async def list_files(request: web.Request) -> web.Response:
+    """Every file in the run's working folder, as run-folder paths (like artifact paths)."""
+    item = request.app[MANAGER].get(request.match_info["run_id"])
+    return _json(
+        {"files": workspace_files(item.run.path, item.run.workspace, request.app[SETTINGS].max_files)}
+    )
+
+
+async def read_file(request: web.Request) -> web.Response:
+    """One file of the run's working folder as UTF-8 text, cut at ``file_max_bytes``."""
+    item = request.app[MANAGER].get(request.match_info["run_id"])
+    target = workspace_file(item.run.path, item.run.workspace, request.query.get("path", ""))
+    limit = request.app[SETTINGS].file_max_bytes
+    with target.open("rb") as handle:
+        data = handle.read(limit + 1)
+    headers = {"Cache-Control": "no-store"}
+    if len(data) > limit:
+        data, headers["X-ChipIn-Truncated"] = data[:limit], "true"
+    return web.Response(
+        text=data.decode("utf-8", errors="replace"), content_type="text/plain", headers=headers
+    )
+
+
+def workspace_files(run_path: Path, workspace: Path, limit: int) -> list[dict[str, Any]]:
+    """Files under ``workspace`` (no hidden ones, no ``progress`` helper), first ``limit`` by path."""
+    if not workspace.is_dir():
+        return []
+    out: list[dict[str, Any]] = []
+    for path in sorted(workspace.rglob("*")):
+        rel = path.relative_to(workspace)
+        if any(part.startswith(".") for part in rel.parts) or str(rel) == "progress" or not path.is_file():
+            continue
+        out.append({"path": str(path.relative_to(run_path)), "size": path.stat().st_size})
+        if len(out) >= limit:
+            break
+    return out
+
+
+def workspace_file(run_path: Path, workspace: Path, rel: str) -> Path:
+    """The file ``rel`` (a run-folder path) if it is inside ``workspace``; else ``RequestError``."""
+    if not rel or "\x00" in rel:
+        raise RequestError("path is required")
+    target = (run_path / rel).resolve()
+    if not target.is_relative_to(workspace.resolve()):
+        raise RequestError("path must be inside the run's workspace folder")
+    if not target.is_file():
+        raise RequestError(f"no file {rel!r}", status=404)
+    return target
 
 
 def _start_seq(request: web.Request) -> int:
@@ -226,6 +283,8 @@ def create_app(
     app.router.add_get("/api/runs/{run_id}/events", stream_events)
     app.router.add_post("/api/runs/{run_id}/messages", post_message)
     app.router.add_post("/api/runs/{run_id}/stop", stop_run)
+    app.router.add_get("/api/runs/{run_id}/files", list_files)
+    app.router.add_get("/api/runs/{run_id}/file", read_file)
     add_transcribe_route(app, api.transcribe)
     if frontend is not None:
         app[FRONTEND] = frontend.resolve()

@@ -26,6 +26,8 @@ class ApiConfig(BaseModel):
     progress_poll_s: float = 0.5
     run_timeout_s: int = 14400
     stub_step_s: float = 0.4
+    max_files: int = 200
+    file_max_bytes: int = 524288
     presets: dict[Preset, Effort] = Field(
         default_factory=lambda: {"lite": "low", "pro": "high", "max": "xhigh", "ultra": "max"}
     )

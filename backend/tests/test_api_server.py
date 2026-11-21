@@ -146,6 +146,23 @@ async def test_preflight_from_an_allowed_origin(client: TestClient, origin: str)
     assert get.headers["Access-Control-Allow-Origin"] == origin
 
 
+async def test_preflight_from_the_public_site_allows_the_private_network(client: TestClient) -> None:
+    headers = {
+        "Origin": "https://chipin.space",
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Private-Network": "true",
+    }
+    resp = await client.options("/api/runs", headers=headers)
+    assert resp.status == 204
+    assert resp.headers["Access-Control-Allow-Private-Network"] == "true"
+    plain = await client.options(
+        "/api/runs", headers={**headers, "Access-Control-Request-Private-Network": ""}
+    )
+    assert "Access-Control-Allow-Private-Network" not in plain.headers
+    evil = await client.options("/api/runs", headers={**headers, "Origin": "https://evil.example"})
+    assert evil.status == 403 and "Access-Control-Allow-Private-Network" not in evil.headers
+
+
 @pytest.mark.parametrize(
     "origin", ["https://evil.example", "http://chipin.space", "https://chipin.space.evil.example", "null"]
 )
@@ -194,6 +211,8 @@ def test_serve_command_defaults() -> None:
     )
     assert load_api_config().port == 8797
     assert _parser().parse_args(["serve", "--config", "x.yaml"]).config == Path("x.yaml")
+    assert args.stub_step is None
+    assert _parser().parse_args(["serve", "--agent", "stub", "--stub-step", "3"]).stub_step == 3.0
 
 
 # ---- run lifecycle ----
@@ -324,6 +343,44 @@ async def test_files_and_answers_reach_the_brief(client: TestClient, config: Bac
     assert "wearer" in brief and "ecg.csv" in brief and "t,lead_ii" in brief and "NOT uploaded" in brief
 
 
+async def test_the_agents_files_are_listed_and_read(client: TestClient, config: BackendConfig) -> None:
+    run_id = await _start(client)
+    events = await _events(client, run_id)
+    listed = await client.get(f"/api/runs/{run_id}/files", headers=AUTH)
+    assert listed.status == 200
+    files = {f["path"]: f["size"] for f in (await listed.json())["files"]}
+    assert {"workspace/brief.md", "workspace/spec.md", "workspace/report.md"} <= set(files)
+    assert "workspace/progress" not in files, "the helper is not the agent's work"
+    report = next(e for e in events if e["type"] == "artifact")["path"]
+    resp = await client.get(f"/api/runs/{run_id}/file", params={"path": report}, headers=AUTH)
+    assert resp.status == 200 and resp.content_type == "text/plain"
+    assert "ChipIn report" in await resp.text()
+    assert files[report] == len((config.resolved_runs_dir() / run_id / report).read_bytes())
+    for bad, status in [
+        ("api.json", 400),
+        ("workspace/../api.json", 400),
+        ("../../etc/passwd", 400),
+        ("workspace/missing.md", 404),
+        ("", 400),
+    ]:
+        got = await client.get(f"/api/runs/{run_id}/file", params={"path": bad}, headers=AUTH)
+        assert got.status == status, bad
+    assert (await client.get(f"/api/runs/{run_id}/file", params={"path": report})).status == 401
+    assert (await client.get("/api/runs/20260101-000000-abcdef/files", headers=AUTH)).status == 404
+
+
+async def test_a_long_file_is_cut_and_marked(config: BackendConfig) -> None:
+    app = create_app(
+        _config(config), _api(0.01).model_copy(update={"file_max_bytes": 10}), token=TOKEN, agent="stub"
+    )
+    async with TestClient(TestServer(app)) as c:
+        run_id = await _start(c)
+        await _events(c, run_id)
+        resp = await c.get(f"/api/runs/{run_id}/file", params={"path": "workspace/report.md"}, headers=AUTH)
+        assert resp.headers["X-ChipIn-Truncated"] == "true"
+        assert len(await resp.text()) == 10
+
+
 # ---- stop and messages ----
 
 
@@ -340,6 +397,17 @@ async def test_stop_a_running_run(slow_client: TestClient, config: BackendConfig
     assert json.loads((config.resolved_runs_dir() / run_id / "run.json").read_text())["status"] == "stopped"
     again = await slow_client.post(f"/api/runs/{run_id}/stop", headers=AUTH)
     assert again.status == 202
+
+
+async def test_a_server_shutdown_says_why_the_run_stopped(config: BackendConfig) -> None:
+    c = await _client(config, 3.0)
+    async with c:
+        run_id = await _start(c)
+        resp = await c.get(f"/api/runs/{run_id}/events", params={"token": TOKEN})
+        await _read_stream(resp, until="stage")
+    record = json.loads((config.resolved_runs_dir() / run_id / API_RECORD_FILE).read_text())
+    assert record["status"] == "stopped"
+    assert "server" in record["summary"] and "user" not in record["summary"]
 
 
 async def test_a_user_message_reaches_the_agent(slow_client: TestClient) -> None:

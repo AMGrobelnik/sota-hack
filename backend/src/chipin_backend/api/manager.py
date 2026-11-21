@@ -95,6 +95,7 @@ class ApiRun:
     task: asyncio.Task[None] | None = None
     inner: asyncio.Task[AgentResult] | None = None
     stopping: bool = False
+    stop_reason: str = "stopped by the user"
 
     @property
     def id(self) -> str:
@@ -260,7 +261,7 @@ class RunManager:
         except asyncio.CancelledError:
             if not item.stopping:
                 raise
-            status, summary = "stopped", "stopped by the user"
+            status, summary = "stopped", item.stop_reason
         except Exception as exc:
             logger.exception("run {} failed in the runner", item.id)
             summary = f"{type(exc).__name__}: {exc}"
@@ -307,11 +308,12 @@ class RunManager:
             raise RequestError(f"the agent cannot take a message right now: {exc}", status=409) from None
         item.log.append("message", role="user", author="you", text=text)
 
-    async def stop(self, run_id: str) -> ApiRun:
+    async def stop(self, run_id: str, reason: str = "stopped by the user") -> ApiRun:
         """Ask a running agent to stop; a finished run is left as it is."""
         item = self.get(run_id)
         if item.task is not None and not item.task.done() and not item.stopping:
             item.stopping = True
+            item.stop_reason = reason
             item.log.append("status", text="ChipIn is stopping")
             if item.inner is not None:
                 item.inner.cancel()
@@ -321,7 +323,7 @@ class RunManager:
         """Stop every running agent and wait for its ``run.finished``."""
         live = self.running()
         for item in live:
-            await self.stop(item.id)
+            await self.stop(item.id, "stopped because the server on this Mac was shut down")
         if live:
             await asyncio.gather(*(i.task for i in live if i.task), return_exceptions=True)
         for item in self.runs.values():
@@ -382,7 +384,7 @@ def _brief(prompt: str, answers: dict[str, Any], files: list[dict[str, Any]]) ->
             "contents were NOT uploaded.\n",
         ]
         for f in files:
-            header = f" header: {clip(str(f['header']), 300)}" if f.get("header") else ""
+            header = f" header: {clip(str(f['header']), 1000)}" if f.get("header") else ""
             parts.append(f"- {f.get('name')} ({f.get('size', '?')} bytes){header}")
         parts.append("")
     return "\n".join(parts)

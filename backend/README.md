@@ -135,11 +135,18 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 - Browsers may call it from `https://chipin.space` and from
   `http://127.0.0.1` or `http://localhost` on any port; any other origin is
   refused. `--frontend <folder>` serves a static site at `/`, so a page
-  opened through the link needs no other setup.
+  opened through the link needs no other setup; open a dashboard as
+  `http://127.0.0.1:8797/dashboard/variants/g1.html#token=<token>`.
+- A page on `https://chipin.space` reaches this server with
+  `?api=http://127.0.0.1:8797` plus the token. Chrome asks first with a
+  Private Network Access preflight; the server answers it with
+  `Access-Control-Allow-Private-Network: true`.
 - `--agent claude` (the default) runs the `claude_cli` backend on the
   Mac's own Claude login; `--agent stub` runs a scripted agent with no model
   calls. Every run goes through `orchestrate.run_agent`, so it gets a
   `runs/<run_id>/` folder, a full `run.json` and the OpenRouter summary.
+- `--stub-step <seconds>` slows the stub's steps (default 0.4 s, about
+  10 s a run) so a demo can be followed, messaged and stopped.
 
 | Route or event                 | What it is                   |
 | ------------------------------ | ---------------------------- |
@@ -150,6 +157,9 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 | `GET /api/runs/{id}/events`    | the stream, `from=<seq>`     |
 | `POST /api/runs/{id}/messages` | `text` to the agent          |
 | `POST /api/runs/{id}/stop`     | stop the run                 |
+| `GET /api/runs/{id}/files`     | `path`, `size` per file      |
+| `GET /api/runs/{id}/file`      | `?path=`: one file as text   |
+| `POST /api/transcribe`         | one spoken phrase to text    |
 | `run.started`                  | prompt, agent, runner        |
 | `stage`                        | `name`, `state`, `reason`    |
 | `status`                       | one "ChipIn is ..." line     |
@@ -167,6 +177,17 @@ carries a short reason. The agent reports them with `./progress` in its
 working folder. `run.finished` carries the agent's last message as
 `summary` and, when OpenRouter wrote one, the three-bullet run summary as
 `bullets`. Presets map to agent effort: `lite`, `pro`, `max`, `ultra`.
+A run cut short ends `stopped`, its summary saying whether the user
+stopped it or the server was shut down.
+
+The files routes cover the agent's working folder only. Paths are
+run-folder paths such as `workspace/report.md`, the same as an `artifact`
+event's `path`; the `progress` helper and hidden files are not listed, a
+path outside `workspace/` is refused (400), and a file over
+`file_max_bytes` (512 KB) is cut, marked with `X-ChipIn-Truncated: true`.
+The brief's `files` entries carry `name`, `size` and an optional `header`
+line (up to 1,000 characters), and `answers` is any JSON object; the
+dashboards put their assumptions there as `answers.assumptions`.
 
 What is real today: the Claude agent runs on this Mac, works through the
 brief, writes files and a report, reports stages, messages, tools and cost,
