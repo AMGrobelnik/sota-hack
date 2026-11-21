@@ -124,6 +124,12 @@ logged. A missing key stops the command with one line naming the variable.
 `GET /api/health` lists each provider by name with `configured` and
 `key_present`. Events and log lines that name a model also name the provider.
 
+Inkling 2 (Thinking Machines) runs through OpenRouter by default: the ids
+`thinkingmachines/inkling-2-mini` and `thinkingmachines/inkling-2-small`, or
+the presets `inkling-mini` and `inkling-small` for `ask`. Both take tools and
+reasoning effort, so the agent's defaults need no change. The direct Tinker
+route below needs `TINKER_API_KEY`.
+
 Tinker's OpenAI-compatible endpoint is
 `https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1`; the
 Small model is `thinkingmachines/Inkling-2-Small`. `callosum` is a

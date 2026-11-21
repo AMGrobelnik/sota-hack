@@ -157,3 +157,26 @@ async def test_post_run_refuses_bad_provider_before_starting(config: BackendConf
             assert resp.status == 400
             assert expect in (await resp.json())["error"]
         assert (await (await c.get("/api/runs", headers=headers)).json())["runs"] == []
+
+
+@pytest.mark.parametrize(
+    ("preset", "model_id"),
+    [
+        ("inkling-mini", "thinkingmachines/inkling-2-mini"),
+        ("inkling-small", "thinkingmachines/inkling-2-small"),
+    ],
+)
+async def test_inkling_2_presets_and_ids_go_through_openrouter(
+    config: BackendConfig, monkeypatch: pytest.MonkeyPatch, preset: str, model_id: str
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
+    seen = _record(monkeypatch)
+    assert config.llm.presets[preset] == model_id
+    endpoint = resolve_provider(config.providers, "openrouter")
+    async with OpenRouterClient(config.llm, endpoint=endpoint) as client:
+        await client.chat([{"role": "user", "content": "hi"}], model=preset)
+        await client.chat([{"role": "user", "content": "hi"}], model=model_id)
+    for request in seen:
+        assert str(request.url) == "https://openrouter.ai/api/v1/chat/completions"
+        assert model_id.encode() in request.content
+    assert normalize_model(model_id) == f"openrouter/{model_id}"
