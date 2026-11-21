@@ -663,6 +663,19 @@ canvas.sig{display:block;width:100%;height:380px}
   .cwrap{padding:6px 12px 22px}
 }
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.001s!important;animation-iteration-count:1!important;transition-duration:.001s!important}}
+/* live mode only (a ChipIn backend on this Mac): never used by the simulated demo */
+.demo.click{pointer-events:auto;cursor:pointer}
+body.live-mode #ests,body.live-mode #gatebox,body.live-mode #pred3{display:none}
+.illus{position:absolute;left:0;top:0;z-index:3;font-size:11.5px;font-weight:500;color:var(--i600);background:rgb(255 255 255/.92);border:1px solid var(--hair);border-radius:99px;padding:2px 9px;pointer-events:none}
+.illus-l{font-size:12px;color:var(--i600);margin:4px 0 0}
+.sbar .sx.skip{color:var(--i550);text-decoration:line-through;text-decoration-color:var(--i300)}
+.wf li.skip .nd{border:2px dashed var(--i300);background:#fff}
+.wf li.skip .nm{color:var(--i600);font-weight:500}
+.verdict .nm2{color:var(--i550);font-weight:500}
+.nowline .link{margin-left:6px}
+.lfpre{white-space:pre-wrap;word-break:break-word;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--i800);background:#f8fafc;border:1px solid var(--hair);border-radius:10px;padding:10px 12px;max-height:62vh;overflow:auto;margin:6px 0 0}
+.lfrow{margin-top:6px}
+.txt code{font:12px ui-monospace,Menlo,monospace;background:#f1f5f9;border-radius:4px;padding:0 4px}
 </style>
 </head>
 <body>
@@ -674,6 +687,7 @@ canvas.sig{display:block;width:100%;height:380px}
 </div>
 <div class="demo">Simulated run, demo data</div>
 <div id="layer"></div>
+<script src="../live.js"></script>
 <script src="../voice.js"></script>
 <script type="module">
 'use strict';
@@ -934,8 +948,8 @@ runs.push(makeRun({ title: 'Early warning of oxygen drops in preterm newborns', 
 runs.push(makeRun({ title: 'Absence-seizure counter for a 2-channel EEG patch', uc: 'eeg', base: TOTAL, factor: 0.81, created: Date.now() - 6 * 86400e3, chanList: ['F7-T7', 'F8-T8'] }));
 runs.forEach(r => { if (r.data.kind === 'sim') r.data.assume = r.assume; });
 const byId = id => runs.find(r => r.id === id);
-const elapsed = r => Math.min(TOTAL, r.paused || r.base >= TOTAL ? r.base : r.base + (now() - r.anchor) / 1000);
-const status = r => elapsed(r) >= TOTAL ? 'done' : r.paused ? 'paused' : 'running';
+const elapsed = r => r.live ? liveSecs(r) : Math.min(TOTAL, r.paused || r.base >= TOTAL ? r.base : r.base + (now() - r.anchor) / 1000);
+const status = r => r.live ? liveStatus(r) : elapsed(r) >= TOTAL ? 'done' : r.paused ? 'paused' : 'running';
 
 function classify(text) {
   const s = text.toLowerCase();
@@ -1129,6 +1143,7 @@ function glyph(r) {
   const st = status(r);
   if (st === 'running') return '<span class="g"><span class="spin"></span></span>';
   if (st === 'done') return `<span class="g" style="color:var(--ok-t)">${ic('ccheck')}</span>`;
+  if (st === 'failed' || st === 'stopped') return `<span class="g" style="color:var(--bad-t)" title="${st === 'failed' ? 'Failed' : 'Stopped'}">${ic('x')}</span>`;
   return '';
 }
 function runRow(r) {
@@ -1170,7 +1185,7 @@ function renderSidebar() {
 function sbSig() { return runs.map(r => r.id + status(r) + r.starred + r.title + (r.titleAt > now())).join('|') + S.route.page + (S.route.id || '') + (S.route.view || '') + (S.route.vis || '') + S.renaming; }
 
 /* ---------------- start page ---------------- */
-function lastChip() { const d = runs.find(r => status(r) === 'done'); if (!d) return null; return { run: d, rd: roundsOf(d)[ROUNDS - 1] }; }
+function lastChip() { if (LIVE.on) return null; const d = runs.find(r => status(r) === 'done'); if (!d) return null; return { run: d, rd: roundsOf(d)[ROUNDS - 1] }; }
 function renderStart() {
   const pr = PRESETS.find(p => p.name === S.preset), m = MACHINES.find(x => x.name === S.machine), lc = lastChip();
   $('#main').innerHTML = `<div class="start"><div class="start-col">
@@ -1179,7 +1194,7 @@ function renderStart() {
         <h1 class="greet">What should we chip in on?</h1>
         <p>Describe a medical device and what it must detect. The scientists design the smallest chip that does the job.</p></div>
       <div class="hstage" id="hstage"><div class="gl-wait"></div><div class="labs"></div></div>
-      ${lc ? `<div class="hcap">Drawn from your last finished run<br><b>${fmt(lc.rd.gates)} gates</b>, opened to show the die</div>` : ''}
+      ${lc ? `<div class="hcap">Drawn from your last finished run<br><b>${fmt(lc.rd.gates)} gates</b>, opened to show the die</div>` : LIVE.on ? `<div class="hcap">Illustration: no run has built a chip yet</div>` : ''}
     </section>
     <form class="box" id="startform">
       <div class="tarow"><textarea id="prompt" rows="2" data-voice placeholder="For example: an EEG headband for children with epilepsy that flags a seizure as it starts" aria-label="Describe the device and what it must detect"></textarea></div>
@@ -1489,6 +1504,7 @@ function createRun() {
   const pr = PRESETS.find(p => p.name === S.preset), ans = finalAns(I), data = dataOf(I);
   const assume = I.assume || assumeFor(I.uc, I.kind, ans, data);
   if (data.kind === 'sim') data.assume = assume;
+  if (LIVE.on) { startLiveRun(I, { title, pr, ans, data, assume }); return; }
   const r = makeRun({ title, uc: I.uc, base: 0, anchor: now(), factor: 0.95 + Math.random() * 0.1, preset: pr.name, cands: pr.cands, machine: S.machine,
     line: S.adv.line, budget: S.adv.budget, scientists: S.adv.scientists, titleAt: now() + 1600, prompt: text, data, answers: ans, assume,
     chanList: I.uc === 'nirs' ? null : ans.chans || null, created: Date.now() });
@@ -1530,6 +1546,7 @@ function renderConfigure() {
 const tileHTML = inrail => `<button class="ctile${inrail ? ' inrail' : ''}" id="ctile" aria-label="Open the chip visual" title="Open the chip visual"><span class="ct-fig"><canvas id="ctcv" aria-hidden="true"></canvas><span class="ct-cap" aria-hidden="true"><span>sensors in</span><span>chip</span><span>answer out</span></span></span><span class="ct-t" id="cttxt"></span></button>`;
 function renderRun() {
   const run = byId(S.route.id), v = S.route.view;
+  if (run.live) liveWatch(run);
   $('#main').innerHTML = `<div class="top">
       <nav class="tabs">${[['overview', 'Overview'], ['chat', 'Chat'], ['visual', 'Visual']].map(([k, n]) => `<a href="${href(run.id, k, S.route.vis)}" class="${v === k ? 'on' : ''}">${n}</a>`).join('')}</nav>
       <span id="stpill"></span>
@@ -1547,6 +1564,7 @@ function renderRun() {
 function bindTile(run) { const tile = $('#ctile'); if (tile) tile.onclick = e => { e.stopPropagation(); go(href(run.id, 'visual', 'chip')); }; }
 function updateTop() {
   const run = byId(S.route.id); if (!run || !$('#clk')) return;
+  if (run.live) { liveTop(run); return; }
   const t = elapsed(run), st = status(run);
   $('#clk').textContent = clock(t);
   $('#clk').className = 'clock' + (st === 'running' ? ' live' : '');
@@ -1571,6 +1589,7 @@ function updateTop() {
 }
 function updateBody(force) {
   const run = byId(S.route.id); const v = S.route.view;
+  if (run.live) { liveBody(run, force); return; }
   const t = elapsed(run), ph = phase(t), { best } = bestAt(run, t);
   const base = [run.id, v, S.route.vis].join('|');
   if (force || S.base !== base) {
@@ -1772,7 +1791,7 @@ function drawFunnel(cv, run) {
       if (!RM && bw > 20) { const sx = fx0 + 6 + ((now() / 1600) % 1) * bw, gb = c.createLinearGradient(sx - 60, 0, sx, 0); gb.addColorStop(0, 'rgba(96,165,250,0)'); gb.addColorStop(1, 'rgba(96,165,250,.32)'); c.save(); c.beginPath(); c.roundRect(fx0 + 6, fy0 + 6, bw, fh - 12, 10); c.clip(); c.fillStyle = gb; c.fillRect(sx - 60, fy0 + 6, 60, fh - 12); c.restore(); }
       c.save(); c.beginPath(); c.rect(fx0 + 6, fy0 + 6, bw, fh - 12); c.clip();
       c.fillStyle = '#fff'; c.font = font(small ? 13 : 17, 600); c.textAlign = 'left';
-      if (k > .6) { const lh = small ? 14 : 18; c.fillText('Reference model', fx0 + 20, cy - lh * .9); c.font = font(small ? 11 : 13.5, 400); c.fillText(`about ${fmt(u.refGates)} gates,`, fx0 + 20, cy + lh * .3); c.fillText('far too big for a chip', fx0 + 20, cy + lh * 1.3); }
+      if (k > .6) { const lh = small ? 14 : 18; c.fillText('Reference model', fx0 + 20, cy - lh * .9); c.font = font(small ? 11 : 13.5, 400); c.fillText(run.ill ? 'size not measured,' : `about ${fmt(u.refGates)} gates,`, fx0 + 20, cy + lh * .3); c.fillText('far too big for a chip', fx0 + 20, cy + lh * 1.3); }
       c.restore();
     } else {
       // reading the data: a sweep runs across the grid, so the view is never still
@@ -1824,7 +1843,7 @@ function drawFunnel(cv, run) {
   c.fillStyle = '#edf1fc'; c.strokeStyle = '#b8c5ec'; c.lineWidth = 1.2;
   c.beginPath(); c.rect(xr, refT, refS, refS); c.fill(); c.stroke();
   c.textAlign = 'left'; c.fillStyle = '#272d45'; c.font = font(small ? 11.5 : 13, 600); c.fillText('Reference model', xr + 10, refT + (small ? 17 : 21));
-  c.fillStyle = '#454b63'; c.font = font(small ? 11 : 12.5, 500); c.fillText(`${fmt(u.refGates)} gates`, xr + 10, refT + (small ? 32 : 39));
+  c.fillStyle = '#454b63'; c.font = font(small ? 11 : 12.5, 500); c.fillText(run.ill ? 'size not measured' : `${fmt(u.refGates)} gates`, xr + 10, refT + (small ? 32 : 39));
   // the compiled 12 and the winner flying into place
   const slotY = k => cy - colH / 2 + k * gap;
   const blk = m => Math.max(5, Math.min(gap * .82, gap * .42 * Math.sqrt(m) * 1.1));
@@ -1864,11 +1883,11 @@ function drawFunnel(cv, run) {
     const lx = xr + Math.max(p.s, 14) + 16, ly = refB - Math.max(p.s, 14) / 2 - (small ? 18 : 24);
     c.strokeStyle = '#272d45'; c.lineWidth = 1; c.beginPath(); c.moveTo(xr + p.s + 2, refB - p.s / 2); c.lineTo(lx - 4, ly + 4); c.stroke();
     c.textAlign = 'left'; c.fillStyle = '#121830'; c.font = font(small ? 11 : 14, 700); c.fillText(`${st.end || status(run) === 'done' ? 'The chip' : 'Best chip so far'}`, lx, ly);
-    c.fillStyle = '#2a55d0'; c.font = font(small ? 11.5 : 13, 650); c.fillText(`${fmt(shown.gates)} gates`, lx, ly + (small ? 15 : 18));
+    c.fillStyle = '#2a55d0'; c.font = font(small ? 11.5 : 13, 650); c.fillText(run.ill ? 'gates not measured' : `${fmt(shown.gates)} gates`, lx, ly + (small ? 15 : 18));
     // the sentence that the picture proves
     const ratio = Math.round(u.refGates / shown.gates);
     c.textAlign = 'right'; c.fillStyle = '#2348b8'; c.font = font(small ? 12 : 14, 650);
-    if (!small) c.fillText(`${fmt(ratio)} times smaller than the reference model`, xr + refS, refB + (small ? 20 : 26));
+    if (!small) c.fillText(run.ill ? `Times smaller: ${NOT_MEASURED}` : `${fmt(ratio)} times smaller than the reference model`, xr + refS, refB + (small ? 20 : 26));
     c.fillStyle = '#4d536b'; c.font = font(small ? 10.5 : 12, 500);
     if (!small) c.fillText(`Areas drawn to scale${shown.r > 1 ? '; dashed: earlier rounds' : ''}`, xr + refS, refB + (small ? 35 : 44));
   } else {
@@ -1885,7 +1904,7 @@ function drawFunnel(cv, run) {
   } else cap(fx0, st.key === 'reference' ? 'Training the reference model' : run.data.kind === 'own' ? 'Reading your recordings' : 'Getting the data ready', true, 'left', '#0e7c70');
   c.textAlign = 'right'; c.font = font(small ? 10.5 : 13, 500); c.fillStyle = '#454b63';
   const shTop = small ? shownChip(R, st) : null;
-  c.fillText(small ? (shTop ? `${fmt(Math.round(u.refGates / shTop.gates))} times smaller, to scale` : 'One chip, to scale') : 'One chip, against the reference model', xr + refS, refT - 10);
+  c.fillText(small ? (shTop && !run.ill ? `${fmt(Math.round(u.refGates / shTop.gates))} times smaller, to scale` : 'One chip, to scale') : 'One chip, against the reference model', xr + refS, refT - 10);
 }
 
 /* ---- overview ---- */
@@ -1984,6 +2003,7 @@ function voice(run, t, ph, short) {
 }
 function openDetails(run) { openSources(run); }
 function openSources(run) {
+  if (run.live) { openLiveFiles(run); return; }
   const u = UC[run.uc], d = run.data;
   let data;
   if (d.kind === 'public') {
@@ -2041,6 +2061,7 @@ function applyChange(run, text, kind) {
   toast(!rp.r ? 'Noted for the report' : rp.r === 1 ? 'Applies from round 1; nothing to redo' : `${PRODUCT.short} re-runs from round ${rp.r}`);
 }
 function openImprove(run) {
+  if (run.live) { openLiveImprove(run); return; }
   const t = elapsed(run), P2 = S.impPending && S.impPending.run === run.id ? S.impPending : null;
   const its = improveItems(run).filter(x => x.at <= t || x.st);
   const later = improveItems(run).filter(x => x.at > t && !x.st).length;
@@ -2143,11 +2164,11 @@ function visSentence(run, key) {
 }
 function buildVisual(run) {
   const key = S.route.vis, vis = VIS.find(v => v.key === key);
-  const main = VIS.filter(v => !v.more), moreOn = vis.more;
+  const main = VIS.filter(v => !v.more), moreOn = vis.more, R = illOf(run);
   $('#body').innerHTML = `<div class="vis"><div class="visin">
     <div class="picker" role="tablist">${main.map(v => `<button role="tab" aria-selected="${v.key === key}" class="${v.key === key ? 'on' : ''}" data-vis="${v.key}">${v.name}</button>`).join('')}
       <button id="vmore" class="${moreOn ? 'on' : ''}" aria-haspopup="menu">${moreOn ? 'More: ' + vis.name : 'More'}${ic('chev')}</button></div>
-    <div class="vhead"><div><h2 class="vh">${vis.name}</h2><p class="vs">${visSentence(run, key)}</p></div></div>
+    <div class="vhead"><div><h2 class="vh">${vis.name}</h2><p class="vs">${visSentence(R, key)}</p>${run.live ? `<p class="illus-l">${ILLUS}</p>` : ''}</div></div>
     <div id="fig"></div>
   </div></div>`;
   $$('[data-vis]').forEach(b => b.onclick = () => go(href(run.id, 'visual', b.dataset.vis)));
@@ -2155,8 +2176,8 @@ function buildVisual(run) {
   if (vis.d3) {
     $('#fig').innerHTML = `<div class="stage" id="stage"><div class="gl-wait"><span><span class="spin"></span> Loading the 3D view</span></div><div class="labs"></div></div><div class="lleg" id="lleg"></div><div class="foot" id="vfoot"></div>`;
     const host = $('#stage');
-    const builder = { device: run.uc === 'gen' ? buildChip3D : buildDevice, chip: buildChip3D, finetune: buildFunnel3D }[key];
-    mount3D(host, M => builder(M, host, run), key, run);
+    const builder = { device: R.uc === 'gen' ? buildChip3D : buildDevice, chip: buildChip3D, finetune: buildFunnel3D }[key];
+    mount3D(host, M => builder(M, host, R), key, R);
   }
   $('#fig').onclick = e => { const p = e.target.closest('[data-pt]'); if (p) { S.ptSel = +p.dataset.pt; S.sig = ''; } };
 }
@@ -2208,7 +2229,7 @@ function nirsVal(s) {
 }
 function drawSignal() {
   const cv = $('#sig'); if (!cv) return;
-  const run = byId(S.route.id); if (!run) return;
+  const run = illOf(byId(S.route.id)); if (!run) return;
   const W = cv.clientWidth, H = cv.clientHeight, dpr = Math.min(2, devicePixelRatio || 1);
   if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
   const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);
@@ -3401,7 +3422,7 @@ document.addEventListener('click', e => {
     menu(rm, [
       { label: r.starred ? 'Unstar' : 'Star', icon: 'star', act: () => { r.starred = !r.starred; S.sbSig = ''; renderSidebar(); } },
       { label: 'Rename', icon: 'pencil', act: () => { S.renaming = r.id; S.sbSig = ''; renderSidebar(); } },
-      { label: 'Delete', icon: 'trash', act: () => confirmDelete(r) }
+      ...(r.live ? [] : [{ label: 'Delete', icon: 'trash', act: () => confirmDelete(r) }])
     ]);
     rm.setAttribute('aria-expanded', 'true');
     return;
@@ -3409,7 +3430,7 @@ document.addEventListener('click', e => {
   if (t.closest('#acct')) {
     menu(t.closest('#acct'), [
       { label: 'Configure', icon: 'settings', act: () => go('#/configure') },
-      { label: 'Usage', icon: 'chart', act: () => modal(`<div class="pad"><h3>Usage</h3><div class="kv"><span>Runs</span><span>${runs.length}</span></div><div class="kv"><span>Spend this month</span><span>$${(runs.reduce((s, r) => s + spend(elapsed(r)), 0)).toFixed(2)}</span></div></div>`) },
+      { label: 'Usage', icon: 'chart', act: () => modal(`<div class="pad"><h3>Usage</h3><div class="kv"><span>Runs</span><span>${runs.length}</span></div>${LIVE.on ? '' : `<div class="kv"><span>Spend this month</span><span>$${(runs.reduce((s, r) => s + spend(elapsed(r)), 0)).toFixed(2)}</span></div>`}</div>`) },
       { label: 'Help', icon: 'help', act: () => modal(`<div class="pad"><h3>How a run works</h3><p style="font-size:13.5px;line-height:1.6;color:var(--i700);margin:0">You describe the device and answer a few questions about data. The AI scientists set a clinical line, train a reference model, then repeat four rounds: propose chip designs, fine-tune them all at once, compile the best into logic gates, and check the circuit bit for bit before testing it on unseen patients. Write to them in Chat at any time to change course.</p></div>`) }
     ]);
     return;
@@ -3428,14 +3449,16 @@ document.addEventListener('click', e => {
       { label: 'Run settings', icon: 'sliders', act: () => runSettings(run) },
       { label: 'Sources', icon: 'db', act: () => openSources(run) },
       { label: 'Copy link', icon: 'link', act: () => { const u = location.href; (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(() => toast('Link copied'), () => toast('Link is in the address bar')); } },
-      { sep: true },
-      { label: 'Restart run', icon: 'restart', hint: 'Start this demo run again from the beginning', act: () => { run.base = 0; run.anchor = now(); run.paused = false; run.redirects = []; S.replay = null; S.open.clear(); S.sbSig = ''; render(); toast('Run restarted'); } }
+      ...(run.live ? (status(run) === 'running' ? [{ sep: true }, { label: 'Stop run', icon: 'x', hint: 'Ask the agent on this Mac to stop', act: () => liveStop(run) }] : []) : [{ sep: true },
+      { label: 'Restart run', icon: 'restart', hint: 'Start this demo run again from the beginning', act: () => { run.base = 0; run.anchor = now(); run.paused = false; run.redirects = []; S.replay = null; S.open.clear(); S.sbSig = ''; render(); toast('Run restarted'); } }])
     ], { align: 'right', width: 240 });
     b.setAttribute('aria-expanded', 'true');
     return;
   }
   if (t.closest('#pp')) {
-    const run = byId(S.route.id); if (status(run) === 'done') return;
+    const run = byId(S.route.id);
+    if (run.live) { if (status(run) === 'running') liveStop(run); return; }
+    if (status(run) === 'done') return;
     run.base = elapsed(run); run.anchor = now(); run.paused = !run.paused; S.sig = ''; updateTop(); updateBody(false); return;
   }
   if (!t.closest('.pop')) closeLayer();
@@ -3449,6 +3472,7 @@ function confirmDelete(r) {
   });
 }
 function runSettings(run) {
+  if (run.live) { liveSettings(run); return; }
   const u = UC[run.uc];
   drawer(`<h3>Run settings</h3><p class="dsub">Fixed once a run starts. Change the defaults for new runs in Configure.</p>
     <div class="kv"><span>Device type</span><span>${u.name}</span></div>
@@ -3460,6 +3484,358 @@ function runSettings(run) {
     <div class="kv"><span>Machine</span><span>${run.machine}</span></div>
     <div class="kv"><span>Scientists</span><span>${run.scientists}</span></div>
     <p style="margin-top:18px"><a class="link" href="#/configure">Open Configure</a></p>`);
+}
+
+/* ======================================================================
+   LIVE mode: a ChipIn backend on this Mac runs a real agent.
+   Chosen once at load (dashboard/live.js); a page with no backend never
+   calls it and stays the simulated demo above, untouched. In a live run
+   everything about the PROCESS comes from the run's event stream; the
+   chip pictures are drawn from a stand-in and labelled as illustrations.
+   ====================================================================== */
+const LIVE = { on: false, agent: null, why: '', conn: 'idle' };
+const ILLUS = 'Illustration: this run has not built a chip yet';
+const NOT_MEASURED = 'not measured in this run';
+const AGENT_WORDS = { claude: 'Claude agent', stub: 'stub agent, no model calls' };
+const LSTATE = { running: 'running', succeeded: 'done', failed: 'failed', stopped: 'stopped' };
+const METRIC_WORDS = { gates: 'Gates', candidates: 'Candidate designs', round: 'Rounds', patients_pass: 'Patients passed', patients_total: 'Patients checked' };
+const LiveAPI = () => window.ChipInLive;
+const illOf = r => r && r.live ? twinOf(r) : r;
+function twinOf(run) {
+  if (!run.twin) {
+    const d = run.data && run.data.kind === 'own' ? run.data : undefined;
+    run.twin = makeRun({ title: run.title, uc: run.uc, base: TOTAL, factor: 1, ...(d ? { data: d } : {}), chanList: run.chanList || null, answers: run.answers || {}, ill: true });
+  }
+  return run.twin;
+}
+function liveSecs(run) {
+  const st = run.st, a = Date.parse((st && st.startedAt) || run.startedAt || '') || run.created;
+  const b = Date.parse((st && st.finishedAt) || run.finishedAt || '') || (liveStatus(run) === 'running' ? Date.now() : a);
+  return Math.max(0, (b - a) / 1000);
+}
+function liveStatus(run) {
+  const st = run.st;
+  if (st && st.finished) return LSTATE[st.finished.status] || 'failed';
+  return LSTATE[run.status] || 'running';
+}
+const realClock = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), ss = s % 60; return h ? `${h}:${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}` : `${m}:${String(ss).padStart(2, '0')}`; };
+const usd = v => v == null ? '' : v < 0.01 ? `$${(+v).toFixed(4)}` : `$${(+v).toFixed(2)}`;
+function md(s) {
+  // the agent's text is markdown: escaped first, so it can never become HTML
+  return esc(s || '').replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
+}
+function titleOf(text) {
+  let t = String(text || 'Untitled run').replace(/\s+/g, ' ').replace(/^(a|an|the)\s+/i, '').split(/[.!?]/)[0];
+  if (t.length > 58) t = t.slice(0, 56).replace(/\s+\S*$/, '') + '...';
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+function liveRunOf(r) {
+  return { id: r.id, live: true, title: titleOf(r.prompt), prompt: r.prompt, uc: inferUC(r.prompt || ''), status: r.status, startedAt: r.started_at, finishedAt: r.finished_at,
+    created: Date.parse(r.started_at || '') || Date.now(), starred: false, titleAt: 0, machine: 'This Mac', preset: null, st: null, sub: null, ver: 0 };
+}
+async function initLive() {
+  const L = LiveAPI();
+  if (!L || !L.wanted()) return;
+  const demo = runs.splice(0); // never show demo runs while deciding
+  let c;
+  try { c = await L.connect(); } catch (e) { c = { ok: false, reason: 'unreachable' }; }
+  if (c.ok) {
+    try { (await L.listRuns()).forEach(r => runs.push(liveRunOf(r))); } catch (e) { c = { ok: false, reason: 'unreachable' }; }
+  }
+  if (!c.ok) {
+    runs.length = 0; runs.push(...demo);
+    LIVE.why = c.reason === 'bad-token' ? 'The ChipIn backend did not accept this link, so this is the simulated demo. Open the link it printed.'
+      : 'No ChipIn backend answered on this Mac, so this is the simulated demo.';
+    return;
+  }
+  LIVE.on = true; LIVE.conn = 'connected';
+  LIVE.agent = (c.defaults || {}).agent || 'claude';
+  document.body.classList.add('live-mode');
+  MACHINES.splice(0, MACHINES.length, { name: 'This Mac', icon: 'cpu', hint: `Runs the ${AGENT_WORDS[LIVE.agent] || LIVE.agent} here, on this Mac.` });
+  S.machine = 'This Mac';
+  ['Least agent effort', 'More agent effort', 'High agent effort', 'Most agent effort'].forEach((h, i) => { PRESETS[i].hint = h; });
+  liveBadge();
+  L.onStatus(s => { LIVE.conn = s; liveBadge(); S.sig = ''; if (s === 'disconnected') toast('The ChipIn backend on this Mac stopped answering.'); });
+}
+function liveBadge() {
+  const el = $('.demo'), who = AGENT_WORDS[LIVE.agent] || LIVE.agent, c = LIVE.conn;
+  el.textContent = c === 'disconnected' ? 'Live on this Mac: the backend is not answering. Reconnect' : c === 'reconnecting' ? 'Live on this Mac: reconnecting' : `Live on this Mac, ${who}`;
+  el.classList.toggle('click', c === 'disconnected');
+  el.onclick = c === 'disconnected' ? e => { e.stopPropagation(); reconnectDialog(); } : null;
+}
+async function refreshLiveRuns() {
+  let list; try { list = await LiveAPI().listRuns(); } catch (e) { return; }
+  for (const r of list.slice().reverse()) {
+    const have = byId(r.id);
+    if (have) { have.status = r.status; have.finishedAt = r.finished_at; } else runs.unshift(liveRunOf(r));
+  }
+  S.sbSig = '';
+}
+function liveWatch(run) {
+  if (run.sub) return;
+  run.sub = LiveAPI().watch(run.id, {
+    onEvent: () => { run.ver++; },
+    onFinished: f => { run.status = f.status; run.finishedAt = run.st.finishedAt; S.sbSig = ''; refreshLiveRuns(); }
+  });
+  run.st = run.sub.state;
+}
+function liveStop(run) {
+  LiveAPI().stopRun(run.id).then(() => toast('Asked the agent to stop'), e => toast(e.message));
+}
+function edfFacts(f) {
+  const E = f.edf;
+  if (!E) return f.tried ? 'EDF name, but the header could not be read' : '';
+  const dup = E.dups.length ? `; repeated signals: ${E.dups.map(i => E.labels[i]).join(', ')}` : '';
+  return `EDF header read in the browser: ${E.ns} signals at ${E.fs} Hz${E.mixed ? ' (mixed rates; most common shown)' : ''}, ${durWords(E.dur)} (${E.nrec} records of ${E.recDur} s), start ${E.start || '?'} on ${E.date || '?'}; signals: ${E.labels.join(', ')}${dup}`;
+}
+async function startLiveRun(I, o) {
+  const go2 = $('[data-ik="start"]') || $('[data-ik="skipall"]');
+  if (S.starting) return;
+  S.starting = true; if (go2) go2.disabled = true;
+  const answers = {};
+  for (const [k, v] of Object.entries(o.ans)) if (v !== undefined && v !== '' && !(k.startsWith('free_') && !String(v).trim())) answers[k] = v;
+  answers.data = o.data.kind === 'own' ? 'the user attached recordings (header facts below; contents not uploaded)'
+    : o.data.kind === 'public' ? `no recordings of their own; the page suggested the public dataset ${DATASETS[o.data.id].name} (${DATASETS[o.data.id].url}), which is not downloaded`
+    : 'no recordings; the user asked for simulated recordings from the stated assumptions';
+  answers.clinical_line = `${S.adv.line}% of events caught for the worst unseen patient`;
+  answers.gate_budget = S.adv.budget;
+  answers.assumptions = o.assume.map(a => `${a.k}: ${a.v}${a.changed ? ' (changed by the user)' : a.added ? ' (added by the user)' : ''}`);
+  const files = I.kind === 'own' ? I.files.filter(f => f.size || f.edf).map(f => ({ name: f.name, size: f.size, ...(edfFacts(f) ? { header: edfFacts(f) } : {}) })) : [];
+  toast('Starting the run on this Mac');
+  try {
+    const { id } = await LiveAPI().startRun({ prompt: I.text, preset: o.pr.name.toLowerCase(), machine: 'local', answers, files });
+    const r = liveRunOf({ id, prompt: I.text, status: 'running', started_at: new Date().toISOString() });
+    Object.assign(r, { title: o.title, uc: I.uc, preset: o.pr.name, data: o.data, assume: o.assume, answers: o.ans, chanList: I.uc === 'nirs' ? null : o.ans.chans || null, titleAt: now() + 1600 });
+    runs.unshift(r);
+    liveWatch(r);
+    S.intake = null;
+    go(href(r.id, 'overview'));
+  } catch (e) {
+    toast(`The run did not start: ${e.message}`);
+    if (go2) go2.disabled = false;
+  } finally { S.starting = false; }
+}
+function offlineHTML() {
+  return LIVE.conn === 'disconnected' ? `<span>The ChipIn backend on this Mac is not answering, so this run cannot be followed right now.</span><button class="link" data-reconnect="1">Reconnect</button>`
+    : LIVE.conn === 'reconnecting' ? `<span class="spin"></span><span>Lost the connection to the backend; trying again.</span>` : '';
+}
+function reconnectDialog() {
+  modal(`<div class="pad"><h3>Reconnect to the ChipIn backend</h3>
+    <p style="font-size:13.5px;line-height:1.55;color:var(--i700);margin:0 0 12px">The backend on this Mac stopped answering. Start it again if it is not running. A restarted backend prints a new link with a new session key: paste it here.</p>
+    <input id="rlink" placeholder="The link the backend printed" aria-label="The link the backend printed" style="width:100%;height:38px;border:1px solid var(--hair2);border-radius:9px;padding:0 10px;font-size:14px">
+    <p class="note" id="rmsg" style="min-height:18px"></p>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" id="rtry">Try again</button><button class="btn cob" id="rgo">Reconnect</button></div></div>`, () => {
+    const msg = $('#rmsg');
+    const attempt = async token => {
+      msg.textContent = 'Connecting...';
+      const c = await LiveAPI().connect(token ? { token } : {});
+      if (c.ok) { closeLayer(); toast('Reconnected to the backend'); await refreshLiveRuns(); S.sig = ''; return; }
+      msg.textContent = c.reason === 'unreachable' ? 'Still no answer from the backend on this Mac.' : c.reason === 'no-token' || c.reason === 'bad-token' ? 'The backend is back with a new session key: paste the link it printed.' : `Not connected (${c.reason}).`;
+    };
+    $('#rtry').onclick = () => attempt(null);
+    $('#rgo').onclick = () => { const t = LiveAPI().tokenFromLink($('#rlink').value); if (!t) { msg.textContent = 'That does not look like the link the backend printed.'; return; } attempt(t); };
+    $('#rlink').focus();
+  });
+}
+document.addEventListener('click', e => { if (e.target.closest('[data-reconnect]')) { e.stopPropagation(); reconnectDialog(); } }, true);
+
+/* live run page */
+function liveTop(run) {
+  const st = run.st, s = status(run), t = elapsed(run);
+  $('#clk').textContent = realClock(t);
+  $('#clk').className = 'clock' + (s === 'running' ? ' live' : '');
+  const n = st ? L_STAGES().filter(k => ['done', 'skipped'].includes(st.stages[k].state)).length : 0;
+  const p = (s === 'running' ? n / 7 * 100 : 100).toFixed(2) + '%';
+  const trk = $('#trk'); trk.className = 'track' + (s === 'running' ? '' : ' rest');
+  trk.firstElementChild.style.width = p; trk.lastElementChild.style.left = p;
+  const pp = $('#pp'), k = 'live' + s;
+  if (pp.dataset.i !== k) { pp.dataset.i = k; pp.innerHTML = `<svg viewBox="0 0 24 24">${s === 'running' ? '<rect x="6" y="6" width="12" height="12" rx="1.5"/>' : P.play}</svg>`; pp.setAttribute('aria-label', s === 'running' ? 'Stop run' : 'Run finished'); pp.title = s === 'running' ? 'Stop run' : ''; pp.disabled = s !== 'running'; pp.style.opacity = s === 'running' ? 1 : .4; }
+  const lw = s === 'running' && LIVE.conn === 'connected' ? '<span class="live"><i></i>LIVE</span>' : '';
+  if ($('#livebox').innerHTML !== lw) $('#livebox').innerHTML = lw;
+  const sw = s === 'done' ? '<span class="state done">Done</span>' : s === 'failed' ? '<span class="state paused">Failed</span>' : s === 'stopped' ? '<span class="state paused">Stopped</span>' : '';
+  if ($('#stpill').innerHTML !== sw) $('#stpill').innerHTML = sw;
+  const ib = $('#impn'); if (ib && ib.textContent !== '0') ib.textContent = '0';
+  const tt = $('#cttxt');
+  if (tt) {
+    const g = st && st.metrics.gates, key = 'g' + g;
+    if (tt.dataset.k !== key) { tt.dataset.k = key; tt.innerHTML = g != null ? `<b>${fmt(g)} gates</b><span>the agent's own figure</span>` : `<b>No chip yet</b><span>Gates: ${NOT_MEASURED}</span>`; }
+  }
+}
+const L_STAGES = () => LiveAPI().STAGES;
+function liveSig(run) { return [run.ver, status(run), LIVE.conn, Math.floor(elapsed(run) / 5), S.open.size].join('|'); }
+function liveBody(run, force) {
+  const v = S.route.view, base = [run.id, v, S.route.vis].join('|');
+  if (force || S.base !== base) {
+    S.base = base; S.sig = '';
+    if (v === 'overview') {
+      buildOverview(run);
+      $('.fwrap').insertAdjacentHTML('beforeend', `<span class="illus">${ILLUS}</span>`);
+      $('#replay').style.display = 'none';
+    } else if (v === 'visual') buildVisual(run);
+  }
+  if (v === 'overview') { const sig = liveSig(run); if (sig !== S.sig) { S.sig = sig; liveOverview(run); } }
+  else if (v === 'chat') { const sig = liveSig(run); if (force || sig !== S.sig) { S.sig = sig; liveChat(run, force); } }
+  else {
+    const R = twinOf(run), t = elapsed(R), ph = phase(t), { best } = bestAt(R, t), vis = VIS.find(x => x.key === S.route.vis);
+    visualTick(R, t, ph, best);
+    if (vis.d3) { const f = $('#vfoot'); if (f && f.textContent !== ILLUS) f.textContent = ILLUS; }
+  }
+}
+function liveVerdict(st) {
+  const m = st ? st.metrics : {}, parts = [];
+  parts.push(m.gates != null ? `Chip size: ${fmt(m.gates)} gates` : `Chip size: <span class="nm2">${NOT_MEASURED}</span>`);
+  parts.push(m.patients_pass != null ? `Patients passed: ${fmt(m.patients_pass)}${m.patients_total != null ? ` of ${fmt(m.patients_total)}` : ''}` : `Patients passed: <span class="nm2">${NOT_MEASURED}</span>`);
+  return parts.join('. ') + '.' + (m.gates != null || m.patients_pass != null ? ' <span class="nm2">The agent\'s own figures.</span>' : '');
+}
+function liveOverview(run) {
+  const st = run.st, s = status(run), names = L_STAGES();
+  const sx = i => {
+    const g = st ? st.stages[names[i]] : { state: 'pending' }, cut = g.state === 'started' && s !== 'running', cls = cut ? 'skip' : { done: 'done', started: 'now', skipped: 'skip' }[g.state] || '';
+    return `<span class="sx ${cls}" style="--c:${STCOL[i]}"${g.state === 'skipped' ? ` title="Not carried out: ${esc(g.reason || 'no reason given')}"` : cut ? ' title="Not finished: the run ended first"' : ''}>${STAGES[i]}</span>`;
+  };
+  $('#sbar').innerHTML = `${sx(0)}${sx(1)}<span class="loopb">${sx(2)}${sx(3)}${sx(4)}${sx(5)}${st && st.round ? `<span class="rn">Round ${st.round}</span>` : ''}</span>${sx(6)}`;
+  $('#verdict').innerHTML = liveVerdict(st);
+  const off = s === 'running' ? offlineHTML() : '';
+  const fin = st && st.finished;
+  $('#nowline').innerHTML = off || (fin ? `${fin.status === 'succeeded' ? ic('ccheck') : `<span style="color:var(--bad-t)">${ic('x')}</span>`}<span>${{ succeeded: 'Finished', failed: 'Failed', stopped: 'Stopped' }[fin.status] || 'Ended'}: ${esc(clip1(fin.summary || 'no summary'))}</span>`
+    : s === 'running' ? `<span class="spin"></span><span>${esc((st && st.statusLine) || 'ChipIn is starting on this Mac')}</span>` : `<span>${esc(run.status)}</span>`);
+  const ri = $('#railin'); if (ri) ri.innerHTML = liveRail(run);
+}
+const clip1 = s => { s = String(s).replace(/\s+/g, ' ').trim(); return s.length > 220 ? s.slice(0, 217) + '...' : s; };
+function liveRail(run) {
+  const st = run.st, names = L_STAGES(), t0 = Date.parse((st && st.startedAt) || run.startedAt || '') || run.created;
+  const rows = names.map((k, i) => {
+    const g = st ? st.stages[k] : { state: 'pending' }, cut = g.state === 'started' && status(run) !== 'running', cls = cut ? 'skip' : { done: 'done', started: 'cur', skipped: 'skip' }[g.state] || 'pend';
+    const at = g.at ? `<span class="tm">at ${realClock((Date.parse(g.at) - t0) / 1000)}</span>` : '';
+    const sb = g.state === 'skipped' ? `<div class="sb">Not carried out: ${esc(g.reason || 'no reason given')}</div>` : cut ? '<div class="sb">Not finished: the run ended first</div>' : g.state === 'started' ? '<div class="sb">In progress</div>' : '';
+    return `<li class="${cls}" style="--c:${STCOL[i]}"><i class="nd"></i><div class="l1"><span class="nm">${STAGES[i]}${g.round ? `, round ${g.round}` : ''}</span>${at}</div>${sb}</li>`;
+  });
+  const c = st && st.cost;
+  const costLine = `<div class="sb" style="font-size:12px;color:var(--i600);margin-top:2px">Elapsed ${realClock(elapsed(run))}. ${c ? `Cost ${usd(c.usd)}${c.tokens_in != null ? `, ${fmt(c.tokens_in || 0)} tokens in, ${fmt(c.tokens_out || 0)} out` : ''}.` : 'Cost: not reported yet.'}</div>`;
+  const m = st ? Object.entries(st.metrics) : [];
+  const figs = m.length ? `<section><h4>The agent's own figures<span class="rt2">${m.length}</span></h4><ul class="asml">${m.map(([k, v]) => `<li><b>${esc(METRIC_WORDS[k] || k)}:</b> ${esc(Number.isInteger(v) ? fmt(v) : typeof v === 'object' ? JSON.stringify(v) : String(v))}${st.metricUnits[k] ? ' ' + esc(st.metricUnits[k]) : ''}</li>`).join('')}</ul>
+    <p class="note" style="margin:6px 0 0">As the agent reported them in this run; the page has not checked them.</p></section>` : '';
+  const d = run.data;
+  const dataBtn = d ? `<button class="rbtn" data-rail="sources"><span class="mk2" style="background:var(--st-data)"></span><span><b>${d.kind === 'own' ? `Your recordings, ${esc(d.file)}` : d.kind === 'public' ? `Suggested: ${DATASETS[d.id].name}` : 'Simulated recordings asked for'}</b>${d.kind === 'own' ? (d.edf ? `${d.edf.ns} channels at ${fmt(d.edf.fs)} Hz, ${durWords(d.edf.dur)}. Only the header facts went to the agent.` : 'Only the name and size went to the agent.') : d.kind === 'public' ? 'Not downloaded; the agent knows its name only.' : 'The agent was told; it generates what it can.'}</span>${ic('chevr', 'chv2')}</button>` : '';
+  const arts = st ? st.artifacts : [];
+  const files = `<button class="rbtn lfrow" data-rail="sources"><span class="mk2" style="background:var(--st-rep)"></span><span><b>Files the agent wrote</b>${arts.length ? arts.map(a => esc(a.name)).join(', ') + '; open them as text' : 'The brief and the files in the run\'s folder, as text'}</span>${ic('chevr', 'chv2')}</button>`;
+  const A = run.assume || [];
+  return `<section><h4>How the run goes<span class="rt2">Started ${whenWords(t0)}</span></h4><ol class="wf">${rows.join('')}</ol>${costLine}</section>${figs}
+    <section><h4>Data and files</h4>${dataBtn}${files}</section>
+    ${A.length ? `<section><h4>Assumptions sent<span class="rt2">${A.length}</span></h4><ul class="asml">${A.map(a => `<li><b>${esc(a.k)}:</b> ${esc(a.v)}</li>`).join('')}</ul></section>` : ''}`;
+}
+function liveChat(run, force) {
+  const st = run.st, s = status(run), items = st ? st.items : [];
+  const first = !$('#feed');
+  const seen = S.seen[run.id] || (S.seen[run.id] = new Set());
+  const an = k => { const isNew = !seen.has(k); seen.add(k); return isNew && !first ? ' anim' : ''; };
+  let rows = items.map(it => {
+    const x = it.item;
+    if (it.kind === 'message') {
+      if (x.role === 'user') return `<div class="me${an('m' + x.seq)}">${esc(x.text)}</div>`;
+      return `<div class="msg${an('m' + x.seq)}"><span class="tile">${ic('sci')}</span><div><div class="who">${esc(x.author || PRODUCT.short)}</div><div class="txt">${md(x.text)}</div></div></div>`;
+    }
+    if (it.kind === 'tool') {
+      const k = 't' + x.call_id, open = S.open.has(k), pend = x.state === 'started' && s === 'running';
+      const g = pend ? '<span class="spin"></span>' : x.state === 'failed' ? `<span style="color:var(--bad-t)">${ic('x')}</span>` : ic('check');
+      return `<div class="tool${open ? ' open' : ''}${an(k)}"><button data-tool="${esc(k)}" aria-expanded="${open}"><span class="tg">${g}</span>${esc(x.summary || x.name || 'Tool')}${ic('chevr', 'chv')}</button>${open ? `<pre>${esc([x.name, x.summary, x.detail].filter(Boolean).join('\n'))}</pre>` : ''}</div>`;
+    }
+    return `<div class="msg${an('e' + x.seq)}"><span class="tile" style="color:var(--bad-t)">${ic('x')}</span><div><div class="who">Something went wrong</div><div class="txt">${esc(x.text)}</div></div></div>`;
+  }).join('');
+  const fin = st && st.finished;
+  if (fin) {
+    const rep = (st.artifacts.find(a => a.kind === 'report') || {}).path;
+    const last = st.messages.filter(m => m.role !== 'user').pop(), dupe = !!(last && fin.summary && last.text.trim() === fin.summary.trim());
+    rows += `<div class="msg${an('fin')}"><span class="tile">${ic(fin.status === 'succeeded' ? 'ccheck' : 'x')}</span><div><div class="who">Run ${{ succeeded: 'finished', failed: 'failed', stopped: 'stopped' }[fin.status] || 'ended'}</div><div class="txt">${dupe ? '' : md(fin.summary || '')}${fin.bullets ? `${dupe ? '' : '<br><br>'}<b>Run summary</b><br>${md(fin.bullets)}` : ''}${rep ? `<br><button class="link" data-lfopen="${esc(rep)}">Open the report</button>` : ''}</div></div></div>`;
+  }
+  if (run.sending) rows += `<div class="typing"><i></i><i></i><i></i>Sending your message to the agent</div>`;
+  let feed = $('#feed');
+  if (!feed) {
+    const off = s !== 'running';
+    $('#body').innerHTML = `<div class="chat"><div class="feed" id="feed"><div class="feedin" id="feedin"></div></div>
+      <div class="cwrap"><div class="cstat" id="cstat" aria-live="polite"></div><form class="box cbox${off ? ' off' : ''}" id="cform"><textarea id="cta" rows="1" data-voice ${off ? 'disabled' : ''} placeholder="${off ? 'This run is finished. Start a new run to try something else.' : 'Message the agent'}" aria-label="Message the agent"></textarea>
+      <button type="submit" class="send" id="csend" aria-label="Send" ${off ? 'disabled' : ''}>${ic('up')}</button></form></div></div>`;
+    feed = $('#feed');
+    const ta = $('#cta');
+    ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(200, ta.scrollHeight) + 'px'; $('#csend').classList.toggle('ready', !!ta.value.trim()); });
+    ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#cform').requestSubmit(); } });
+    $('#cform').addEventListener('submit', e => {
+      e.preventDefault(); const v = ta.value.trim(); if (!v || status(run) !== 'running') return;
+      run.sending = true; S.sig = '';
+      LiveAPI().sendMessage(run.id, v).then(() => { ta.value = ''; ta.dispatchEvent(new Event('input')); }, err => toast(`Not sent: ${err.message}`)).finally(() => { run.sending = false; run.ver++; });
+    });
+    $('#feedin').addEventListener('click', e => {
+      const o = e.target.closest('[data-lfopen]'); if (o) { e.stopPropagation(); openLiveFiles(run, o.dataset.lfopen); return; }
+      const b = e.target.closest('[data-tool]'); if (!b) return; const k = b.dataset.tool; S.open.has(k) ? S.open.delete(k) : S.open.add(k); liveChat(run, false);
+    });
+    force = true;
+  } else if (s !== 'running' && !$('#cta').disabled) {
+    $('#cta').disabled = true; $('#csend').disabled = true; $('#cform').classList.add('off'); $('#cta').placeholder = 'This run is finished. Start a new run to try something else.';
+  }
+  const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
+  $('#feedin').innerHTML = rows;
+  if (force || atBottom) feed.scrollTop = feed.scrollHeight;
+  const cs = $('#cstat');
+  if (cs) {
+    const w = s !== 'running' ? '' : offlineHTML() || `<span class="spin"></span><span>${esc((st && st.statusLine) || 'ChipIn is starting on this Mac')}</span>`;
+    if (cs.dataset.w !== w) { cs.dataset.w = w; cs.innerHTML = w; }
+  }
+}
+function dataFacts(run) {
+  const d = run.data;
+  if (!d) return '<p class="note">This run was started before this page was opened; its brief below says what it was given.</p>';
+  if (d.kind === 'own') {
+    const E = d.edf;
+    return `<div class="srcd"><h5>Your recordings</h5><div class="o">${esc(d.file)}, read on your computer. Only the header facts below went to the agent; the file was not uploaded.</div>
+      ${E ? `<div class="kv"><span>Channels in the file</span><span>${E.ns}</span></div><div class="kv"><span>Sampling rate</span><span>${fmt(E.fs)} Hz</span></div><div class="kv"><span>Length</span><span>${durWords(E.dur)} (${fmt(E.nrec)} records of ${E.recDur} s)</span></div>
+      <div class="kv"><span>Channels picked for the device</span><span>${esc((run.chanList || []).join(', '))}</span></div>` : `<div class="kv"><span>Size</span><span>${bytesWords(d.size || 0)}</span></div><div class="kv"><span>Header</span><span>Not an EDF file, not read</span></div>`}</div>`;
+  }
+  if (d.kind === 'public') return `<div class="srcd"><h5>Suggested: ${DATASETS[d.id].name}</h5><div class="o">Named in the brief; nothing was downloaded for this run.</div></div>`;
+  return `<div class="srcd"><h5>Simulated recordings asked for</h5><div class="o">The agent was asked to work from the stated assumptions.</div></div>`;
+}
+async function openLiveFiles(run, path) {
+  drawer(`<h3>Sources and files</h3><p class="dsub">What this run was given, and the files in its folder on this Mac, opened as text.</p>
+    <div class="dh">${ic('db')}Data</div>${dataFacts(run)}
+    <div class="dh">${ic('book')}Files in the run's folder</div><div id="lflist"><p class="note">Reading the folder...</p></div><div id="lfview"></div>`);
+  const list = $('#lflist'), view = $('#lfview');
+  const kindOf = p => ((run.st && run.st.artifacts.find(a => a.path === p)) || {}).kind;
+  const show = async p => {
+    view.innerHTML = `<p class="note">Opening ${esc(p.replace(/^workspace\//, ''))}...</p>`;
+    try {
+      const r = await LiveAPI().readFile(run.id, p);
+      if (!view.isConnected) return;
+      view.innerHTML = `<div class="dh">${ic('pencil')}${esc(p.replace(/^workspace\//, ''))}${r.truncated ? ' <span class="note">(first 512 KB)</span>' : ''}</div><pre class="lfpre">${esc(r.text)}</pre>`;
+      view.scrollIntoView({ block: 'start' });
+    } catch (e) { view.innerHTML = `<p class="note">Could not open it: ${esc(e.message)}</p>`; }
+  };
+  try {
+    const files = await LiveAPI().listFiles(run.id);
+    if (!list.isConnected) return;
+    list.innerHTML = files.length ? files.map(f => { const k = kindOf(f.path); return `<button class="rbtn lfrow" data-lf="${esc(f.path)}"><span class="mk2" style="background:${k === 'report' ? 'var(--st-rep)' : 'var(--st-data)'}"></span><span><b>${esc(f.path.replace(/^workspace\//, ''))}</b>${bytesWords(f.size)}${k ? `, marked by the agent as ${esc(k)}` : ''}</span>${ic('chevr', 'chv2')}</button>`; }).join('') : '<p class="note">No files yet.</p>';
+    list.onclick = e => { const b = e.target.closest('[data-lf]'); if (b) { e.stopPropagation(); show(b.dataset.lf); } };
+  } catch (e) { list.innerHTML = `<p class="note">Could not read the folder: ${esc(e.message)}</p>`; }
+  if (path) show(path);
+}
+function openLiveImprove(run) {
+  const A = run.assume || [], live = status(run) === 'running';
+  drawer(`<h3>Improve this run</h3><p class="dsub">All optional. What you add here goes to the running agent as a message; its answer appears in Chat.</p>
+    <div class="dh">${ic('pencil')}What ${PRODUCT.short} was told</div><div class="asm">${A.map(a => `<div class="ar"><div><div class="ak">${esc(a.k)}${a.changed ? '<span class="chg">Changed</span>' : ''}${a.added ? '<span class="chg">Added by you</span>' : ''}</div><div class="av2">${esc(a.v)}</div></div></div>`).join('') || '<p class="note">This run was started before this page was opened; its brief is under Sources and files.</p>'}
+      ${live ? `<div class="addasm"><input id="impadd" data-voice placeholder="Add or change an assumption" aria-label="Add or change an assumption"><button class="btn" data-ladd="1">Send to the agent</button></div>` : ''}</div>
+    ${live ? '' : '<p class="note">This run has ended; start a new run to change what it works from.</p>'}`);
+  const b = $('[data-ladd]');
+  if (b) b.onclick = e => {
+    e.stopPropagation(); const v = ($('#impadd').value || '').trim(); if (!v) return;
+    LiveAPI().sendMessage(run.id, `Please take this into account: ${v}`).then(() => { A.push({ k: 'Yours', v, added: true }); closeLayer(); toast('Sent to the agent; its answer appears in Chat'); }, err => toast(`Not sent: ${err.message}`));
+  };
+}
+function liveSettings(run) {
+  drawer(`<h3>Run settings</h3><p class="dsub">This run, as the backend on this Mac runs it.</p>
+    <div class="kv"><span>Agent</span><span>${esc(AGENT_WORDS[LIVE.agent] || LIVE.agent)}</span></div>
+    <div class="kv"><span>Machine</span><span>This Mac</span></div>
+    <div class="kv"><span>Preset</span><span>${esc(run.preset || 'as started')}</span></div>
+    <div class="kv"><span>Status</span><span>${esc(status(run))}</span></div>
+    <div class="kv"><span>Run id</span><span>${esc(run.id)}</span></div>
+    <div class="kv"><span>Rounds, gate budget, clinical line</span><span>Sent in the brief; the agent decides</span></div>`);
 }
 
 /* ---------------- render and tick ---------------- */
@@ -3484,7 +3860,7 @@ function drawTile() {
   const W = 46, H = 30, dpr = Math.min(2, devicePixelRatio || 1);
   if (cv.width !== W * dpr) { cv.width = W * dpr; cv.height = H * dpr; }
   const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);
-  const { best } = bestAt(run, elapsed(run)), x = 24, y = 15, s = 16, t = now() / 1000;
+  const { best } = run.live ? { best: null } : bestAt(run, elapsed(run)), x = 24, y = 15, s = 16, t = now() / 1000;
   if (!best) { chip2D(c, x, y, s, { ghost: 'rgba(71,85,105,.7)' }); return; }
   const yes = predYes(run, best), out = yes ? '239,68,68' : '16,185,129';
   [[10.5, '59,130,246', 0], [19.5, '139,92,246', 2]].forEach(([yy, col, ch]) => {
@@ -3502,16 +3878,18 @@ function drawTile() {
 (function loop() {
   if (S.route.page === 'run' && S.route.view !== 'visual') drawTile();
   if (S.route.page === 'run') {
-    if (S.route.view === 'overview') drawFunnel($('#fun'), byId(S.route.id));
+    if (S.route.view === 'overview') drawFunnel($('#fun'), illOf(byId(S.route.id)));
     else if (S.route.view === 'visual') { if (S.route.vis === 'signal') drawSignal(); frame3D(); }
   } else if (S.route.page === 'start') { frame3D();
   }
   requestAnimationFrame(loop);
 })();
 
+await initLive();
 S.route = parse();
 if (!location.hash) history.replaceState(null, '', '#/');
 render();
+if (LIVE.why) toast(LIVE.why);
 </script>
 </body>
 </html>
