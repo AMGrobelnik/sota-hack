@@ -1,6 +1,6 @@
 """Run the eight P2 layouts in parallel through the lab's own `chiplab layout` CLI (LibreLane in Docker).
 
-Each run is one `chiplab layout` process (its own work folder: runs/designs/<id>/layout_<pdk>), at most
+Each run is one `chiplab layout` process (through layout_cli.py, the CLI with the gf180 liberty fix) (its own work folder: runs/designs/<id>/layout_<pdk>), at most
 WORKERS at once (one per 12 GB of Docker engine memory). A failed run keeps its log tail and is retried once
 with a lower utilisation and a doubled clock period. Results go to m3/layouts/raw/<name>_<pdk>.json.
 
@@ -22,7 +22,7 @@ ONLY = set(sys.argv[3:])
 OUT = ROOT / "m3" / "layouts"
 RAW = OUT / "raw"
 RAW.mkdir(parents=True, exist_ok=True)
-CLI = str(ROOT / "chiplab" / ".venv" / "bin" / "chiplab")
+CLI = [str(ROOT / "chiplab" / ".venv" / "bin" / "python"), str(Path(__file__).resolve().parent / "layout_cli.py")]
 DESIGNS = json.loads((OUT / "designs.json").read_text())
 RUNS = [("spike", "gf180"), ("spike", "ihp"), ("torchlogix", "sky130"), ("torchlogix", "gf180"),
         ("torchlogix", "ihp"), ("fusion", "sky130"), ("fusion", "gf180"), ("fusion", "ihp")]
@@ -33,7 +33,7 @@ UTIL = 40
 def call(design_id: str, pdk: str, clock: float, util: int) -> tuple[dict, float, str]:
     args = {"design_id": design_id, "pdk": pdk, "clock_period_ns": clock, "core_util": util, "timeout": 5400}
     t0 = time.time()
-    p = subprocess.run([CLI, "layout", "--json", json.dumps(args)], capture_output=True, text=True, timeout=6000,
+    p = subprocess.run([*CLI, "layout", "--json", json.dumps(args)], capture_output=True, text=True, timeout=6000,
                        cwd=str(ROOT / "chiplab"))
     wall = round(time.time() - t0, 1)
     try:
@@ -75,7 +75,11 @@ def one(name: str, pdk: str) -> dict:
             break
         clock, util = clock * 2, 25  # retry: longer clock, lower density
     out = {"name": name, "pdk": pdk, "design_id": did, "attempts": attempts}
-    (RAW / f"{name}_{pdk}.json").write_text(json.dumps(out, indent=1, default=str))
+    prev = RAW / f"{name}_{pdk}.json"
+    if prev.exists():  # keep earlier failed tries on record
+        old = json.loads(prev.read_text())
+        out["earlier_attempts"] = old.get("earlier_attempts", []) + old["attempts"]
+    prev.write_text(json.dumps(out, indent=1, default=str))
     return out
 
 
