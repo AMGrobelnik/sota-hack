@@ -128,10 +128,10 @@ def test_create_request_for_cpu_gpu_and_volume() -> None:
     assert cpu["cmd"] == ["python", "-m", "x"] and cpu["env"] == {"K": "v"}
     assert cpu["ports"] == ["22/tcp", "8080/http"] and "dataCenterIds" not in cpu
     gpu = api.build_create_request(
-        PodSpec(name="w", image="img", machine="NVIDIA L4", data_center_id="EU-RO-1", cloud_type="COMMUNITY")
+        PodSpec(name="w", image="img", machine="NVIDIA L4", data_center_id="DC-TEST", cloud_type="COMMUNITY")
     )
     assert gpu["gpu"] == {"id": "NVIDIA L4", "count": 1} and gpu["cloud"] == "COMMUNITY"
-    assert gpu["dataCenterIds"] == ["EU-RO-1"]
+    assert gpu["dataCenterIds"] == ["DC-TEST"]
     with pytest.raises(ValueError, match="volume_mount_path"):
         api.build_create_request(PodSpec(name="w", image="i", machine="NVIDIA L4", network_volume_id="vol"))
     json.dumps(cpu)  # the dry-run file must be plain JSON
