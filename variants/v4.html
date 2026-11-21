@@ -1,0 +1,1207 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#C3D2F2">
+<title>A thousand chip designs, trained at once</title>
+<meta name="description" content="Describe a medical sensing device. AI scientists design the chip at its core: thousands of candidate designs train at once, and the best is compiled into logic gates and checked bit for bit.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cg fill='%23C99A3E'%3E%3Crect x='9' y='2' width='3' height='5' rx='1'/%3E%3Crect x='15' y='2' width='3' height='5' rx='1'/%3E%3Crect x='21' y='2' width='3' height='5' rx='1'/%3E%3Crect x='9' y='25' width='3' height='5' rx='1'/%3E%3Crect x='15' y='25' width='3' height='5' rx='1'/%3E%3Crect x='21' y='25' width='3' height='5' rx='1'/%3E%3C/g%3E%3Crect x='5' y='6' width='22' height='20' rx='4' fill='%2313214B'/%3E%3Crect x='11' y='11' width='10' height='10' rx='2' fill='%23FF5E57'/%3E%3C/svg%3E">
+<script>
+  /* The working name lives here and only here: the title, the logo, the footer and the chip's lid read it. */
+  window.SITE_NAME = 'Chipwright';
+  (function () {
+    var d = document.documentElement;
+    d.classList.add('js');
+    try {
+      var c = document.createElement('canvas');
+      var gl = c.getContext('webgl2') || c.getContext('webgl');
+      if (gl) {
+        d.classList.add('gl-cap');
+        var lose = gl.getExtension('WEBGL_lose_context');
+        if (lose) lose.loseContext();
+      }
+    } catch (e) { /* no WebGL: the static drawing stays */ }
+  })();
+</script>
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; color-scheme: light; }
+[hidden] { display: none !important; }
+
+:root {
+  --ink: #13214B;
+  --ink-2: #45507A;
+  --coral: #FF5E57;
+  --coral-deep: #C2332F;
+  --coral-tint: #FFE6E1;
+  --gold: #C99A3E;
+  --wafer: #E7E5F2;
+  --paper: #F4F5FB;
+  --line: rgba(19, 33, 75, .13);
+  --chip-bg: rgba(255, 255, 255, .94);
+  --chip-shadow: 0 0 0 1px rgba(19, 33, 75, .08), 0 8px 20px -12px rgba(19, 33, 75, .45);
+  --bar: 64px;
+  --bar-y: calc(var(--bar) + env(safe-area-inset-top, 0px));
+  --display: Futura, "Futura PT", "Century Gothic", "Avenir Next", "Trebuchet MS", sans-serif;
+  --text: "Avenir Next", Avenir, "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+  --shadow: 0 1px 2px rgba(19, 33, 75, .08), 0 22px 44px -22px rgba(19, 33, 75, .45);
+  --shadow-sm: 0 1px 2px rgba(19, 33, 75, .08), 0 10px 22px -14px rgba(19, 33, 75, .45);
+  --gutter: clamp(20px, 5vw, 72px);
+  --col-max: 1200px;
+  --colx: max(var(--gutter), calc((100% - var(--col-max)) / 2));
+
+  --fs-cap: 12px; --fs-xs: 13px; --fs-sm: 14px; --fs-ui: 15px; --fs-base: 16px; --fs-md: 18px;
+  --fs-lede: clamp(17px, .3vw + 15px, 21px);
+  --fs-lg: clamp(22px, .45vw + 18px, 28px);
+  --fs-h2: clamp(36px, 2.4vw + 26px, 80px);
+  --hs: clamp(36px, min(5.4vw, 9.4vh), 128px);
+
+  --sp-1: 8px; --sp-2: 16px; --sp-3: 24px; --sp-4: 32px; --sp-5: 48px; --sp-6: 64px;
+  --sp-sec: clamp(64px, 4vw + 5vh, 120px);
+  --r-lg: 22px; --r-md: 16px; --r-sm: 12px;
+}
+@media (min-width: 1800px) { :root { --col-max: 1360px; } }
+
+body { margin: 0; background: var(--paper); color: var(--ink); font: 400 var(--fs-base)/1.5 var(--text); overflow-x: hidden; }
+button { font: inherit; color: inherit; }
+a, button { -webkit-tap-highlight-color: transparent; }
+a { color: var(--ink); }
+p, li { text-wrap: pretty; }
+h1, h2, h3 { text-wrap: balance; }
+:focus-visible { outline: 3px solid var(--coral-deep); outline-offset: 3px; }
+a:not(.btn, .brand, .skip, .links a):focus-visible { outline-offset: 2px; border-radius: 4px; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.skip { position: absolute; left: -9999px; top: 8px; z-index: 90; background: #fff; color: var(--ink); padding: 10px 14px; border-radius: var(--r-sm); }
+.skip:focus { left: 12px; }
+
+/* ---------------------------------------------------------------- buttons */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 52px; padding: 0 24px; border: 0; border-radius: var(--r-sm);
+  background: var(--ink); color: #fff; text-decoration: none; cursor: pointer;
+  font: 600 var(--fs-base)/1 var(--text); letter-spacing: .005em;
+  box-shadow: 0 10px 22px -14px rgba(19, 33, 75, .6);
+  transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+@media (hover: hover) and (pointer: fine) { .btn:hover { background: #22336A; transform: translateY(-1px); box-shadow: 0 14px 28px -14px rgba(19, 33, 75, .7); } }
+.btn:active { transform: translateY(1px); box-shadow: 0 6px 14px -10px rgba(19, 33, 75, .6); }
+.btn-s { min-height: 44px; padding: 0 16px; font-size: var(--fs-ui); }
+.bar .btn, .bar .btn:hover, .bar .btn:active { box-shadow: none; }
+.btn-xl {
+  min-height: clamp(52px, calc(var(--hs) * .52), 68px); padding: 0 clamp(26px, calc(var(--hs) * .3), 40px);
+  font-size: clamp(16px, calc(var(--hs) * .13 + 6px), 22px); box-shadow: 0 14px 30px -14px rgba(19, 33, 75, .7);
+}
+.link {
+  display: inline-flex; align-items: center; min-height: 44px; font-weight: 600; font-size: var(--fs-ui);
+  color: var(--ink); text-decoration: underline; text-decoration-color: rgba(19, 33, 75, .3); text-underline-offset: 4px;
+  transition: text-decoration-color .15s ease;
+}
+@media (hover: hover) and (pointer: fine) { .link:hover { text-decoration-color: currentColor; } }
+
+/* ---------------------------------------------------------------- the top bar */
+.bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 60;
+  height: var(--bar-y); padding: env(safe-area-inset-top, 0px) var(--colx) 0;
+  display: flex; align-items: center; gap: var(--sp-3);
+  background: rgba(244, 245, 251, .78);
+  -webkit-backdrop-filter: blur(14px) saturate(150%); backdrop-filter: blur(14px) saturate(150%);
+  border-bottom: 1px solid rgba(19, 33, 75, .08);
+}
+.brand { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; color: var(--ink); text-decoration: none; font: 700 20px/1 var(--display); letter-spacing: -.01em; }
+.mark { width: 28px; height: 28px; flex: none; }
+.pill { display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border-radius: 8px; background: rgba(19, 33, 75, .07); color: var(--ink-2); font: 600 var(--fs-cap)/1 var(--text); }
+.links { display: flex; gap: 4px; margin-left: auto; }
+.links a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: var(--r-sm); text-decoration: none; font-weight: 500; font-size: var(--fs-ui); transition: background-color .15s ease; }
+@media (hover: hover) and (pointer: fine) { .links a:hover { background: rgba(19, 33, 75, .07); } }
+.menu { display: none; }
+
+/* ---------------------------------------------------------------- the flight: a field of chips, then one */
+.flight { position: relative; z-index: 2; height: 100svh; }
+html.gl-cap .flight { height: 640svh; }
+.stage { position: sticky; top: 0; height: 100svh; overflow: hidden; }
+.sky { position: absolute; inset: 0; background: linear-gradient(180deg, #A9BEEB 0%, #C3D2F2 30%, #E2DFF3 58%, #FFE3D6 100%); }
+.sun { position: absolute; right: -12vw; top: 26%; width: 70vw; height: 70vw; max-width: 1100px; max-height: 1100px; border-radius: 50%; background: radial-gradient(closest-side, rgba(255, 214, 196, .9), rgba(255, 227, 214, .45) 45%, rgba(255, 227, 214, 0)); }
+#gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: 0; transition: opacity .6s ease; }
+html.gl #gl { opacity: 1; }
+
+.fallback { position: absolute; left: 50%; bottom: calc(clamp(20px, 5vh, 48px) + 56px); width: min(520px, 80vw, 44vh); transform: translateX(-50%); }
+.fallback svg { display: block; width: 100%; height: auto; }
+html.gl .fallback { display: none; }
+
+.veil { position: absolute; inset: 0; z-index: 3; pointer-events: none; background: radial-gradient(ellipse 60% 46% at 50% 36%, rgba(244, 245, 251, .82), rgba(244, 245, 251, .5) 50%, rgba(244, 245, 251, 0) 100%); }
+.hero-pos { position: absolute; left: 0; right: 0; top: var(--bar-y); z-index: 4; display: flex; justify-content: center; padding: clamp(28px, 9vh, 120px) var(--gutter) 0; pointer-events: none; }
+.hero { width: 100%; max-width: 1180px; text-align: center; pointer-events: auto; will-change: transform, opacity; }
+.hero h1 { margin: 0; font: 700 var(--hs)/1 var(--display); letter-spacing: -.022em; color: var(--ink); }
+.hero h1 span { display: block; }
+.lede { margin: clamp(16px, 2.4vh, 28px) auto 0; max-width: 44ch; font: 500 var(--fs-lede)/1.45 var(--text); color: var(--ink-2); text-wrap: balance; }
+.hero-go { margin-top: clamp(20px, 3.6vh, 40px); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px 24px; }
+.hero-go .btn { grid-column: 2; }
+.hero-go .link { grid-column: 3; justify-self: start; }
+.cue { position: absolute; left: 50%; bottom: clamp(20px, 5vh, 48px); z-index: 4; width: 44px; height: 44px; margin-left: -22px; display: grid; place-items: center; border-radius: 50%; background: var(--chip-bg); box-shadow: var(--chip-shadow); color: var(--ink); }
+.cue svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.cue::after { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 2px rgba(19, 33, 75, .25); animation: ping 2.4s ease-out 3; }
+@keyframes ping { from { transform: scale(1); opacity: 1; } to { transform: scale(1.7); opacity: 0; } }
+
+/* the run's seven stages, told one at a time while the flight plays */
+.cap { position: absolute; z-index: 5; left: var(--colx); top: calc(var(--bar-y) + 20px); width: min(400px, calc(100% - 2 * var(--gutter))); margin: 0; padding: 0; list-style: none; opacity: 0; pointer-events: none; }
+.cap li { position: absolute; left: 0; right: 0; top: 0; padding: 18px 20px 18px; border-radius: var(--r-md); background: var(--chip-bg); box-shadow: var(--chip-shadow); opacity: 0; transform: translateY(8px); transition: opacity .3s ease, transform .36s cubic-bezier(.22, .8, .24, 1); }
+.cap li.on { opacity: 1; transform: none; }
+.cap-n { display: block; font-size: var(--fs-xs); font-weight: 600; color: var(--ink-2); }
+.cap b { display: block; margin-top: 2px; font: 700 var(--fs-lg)/1.1 var(--display); letter-spacing: -.01em; }
+.cap p { margin: 8px 0 0; font-size: var(--fs-ui); line-height: 1.45; color: var(--ink-2); }
+.cap q { display: block; margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: #F1F2F9; border: 1px solid var(--line); font-size: var(--fs-sm); line-height: 1.4; color: var(--ink); quotes: none; }
+.cap .live { display: block; margin-top: 10px; font-size: var(--fs-sm); font-weight: 700; color: var(--coral-deep); }
+
+.rail { position: absolute; z-index: 5; left: var(--colx); right: var(--colx); bottom: max(18px, env(safe-area-inset-bottom)); margin: 0; padding: 10px 14px 8px; list-style: none; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; border-radius: var(--r-sm); background: var(--chip-bg); box-shadow: var(--chip-shadow); opacity: 0; }
+.rail li { min-width: 0; font-size: var(--fs-xs); font-weight: 600; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rail i { display: block; height: 4px; margin-bottom: 6px; border-radius: 2px; background: #E4E7F1; overflow: hidden; }
+.rail i::before { content: ""; display: block; height: 100%; width: calc(var(--f, 0) * 100%); background: var(--ink); border-radius: 2px; }
+.rail li.on { color: var(--ink); }
+.rail li.on i::before { background: var(--coral); }
+
+.lbls { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
+.lbl { position: absolute; left: 0; top: 0; max-width: 240px; width: max-content; padding: 6px 10px; border-radius: 10px; background: var(--chip-bg); box-shadow: var(--chip-shadow); font-size: var(--fs-sm); font-weight: 600; line-height: 1.3; color: var(--ink); opacity: 0; text-align: center; will-change: transform, opacity; }
+.lbl::before { content: ""; position: absolute; left: 50%; top: -14px; width: 1px; height: 14px; background: rgba(19, 33, 75, .4); }
+.lbls.v .lbl { text-align: left; max-width: 150px; }
+.lbls.v .lbl::before { left: -14px; top: 50%; width: 14px; height: 1px; }
+
+/* ---------------------------------------------------------------- the question */
+.hook {
+  position: relative; z-index: 2; background: linear-gradient(180deg, #FFF1EA, #FFF8F4 70%, var(--paper));
+  padding: var(--sp-sec) var(--gutter) var(--sp-5); border-top: 1px solid rgba(194, 51, 47, .1);
+}
+.hook-in { max-width: var(--col-max); margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "h" "lede" "tiles" "fact"; }
+.hook-h { grid-area: h; margin: 0; max-width: 18ch; font: 500 clamp(30px, 1.4vw + 20px, 52px)/1.06 var(--display); letter-spacing: -.015em; }
+.hook-lede { grid-area: lede; margin: 16px 0 0; max-width: 46ch; font-size: var(--fs-lede); line-height: 1.45; color: var(--ink-2); }
+.hook-tiles { grid-area: tiles; list-style: none; margin: var(--sp-4) 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.hk-tile { display: flex; flex-direction: column; min-width: 0; padding: 18px 20px 20px; border-radius: var(--r-md); background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow-sm); }
+.hk-tile svg { width: 28px; height: 28px; margin-bottom: 12px; fill: none; stroke: var(--ink); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.hk-tile svg .c { stroke: var(--coral-deep); }
+.hk-t { margin: 0; font: 700 var(--fs-md)/1.22 var(--display); letter-spacing: -.005em; }
+.hk-s { margin: 6px 0 0; font-size: var(--fs-ui); line-height: 1.45; color: var(--ink-2); }
+.hook-fact { grid-area: fact; margin: var(--sp-4) 0 0; padding-top: var(--sp-2); border-top: 1px solid rgba(194, 51, 47, .16); font-size: var(--fs-ui); line-height: 1.5; color: var(--ink-2); max-width: 80ch; }
+.hook-fact b { color: var(--ink); }
+@media (min-width: 1100px) {
+  .hook-in { grid-template-columns: minmax(0, 1fr) minmax(0, 1.9fr); grid-template-rows: auto 1fr auto; grid-template-areas: "h tiles" "lede tiles" "fact fact"; column-gap: var(--sp-6); }
+  .hook-tiles { margin-top: 0; }
+}
+
+/* ---------------------------------------------------------------- shared section frame */
+.sec { position: relative; z-index: 2; padding: var(--sp-sec) var(--gutter) 0; }
+.sec-in { max-width: var(--col-max); margin: 0 auto; }
+.sec h2 { margin: 0; font: 700 var(--fs-h2)/1 var(--display); letter-spacing: -.022em; max-width: 20ch; }
+.sec-lede { margin: var(--sp-2) 0 0; max-width: 52ch; font-size: var(--fs-lede); line-height: 1.5; color: var(--ink-2); }
+.sub-h { margin: 56px 0 var(--sp-3); font: 700 var(--fs-lg)/1.15 var(--display); letter-spacing: -.01em; }
+.illus { display: inline-flex; align-items: center; min-height: 24px; padding: 0 9px; border-radius: 8px; background: #F1F2F9; border: 1px solid var(--line); font-size: var(--fs-cap); font-weight: 600; color: var(--ink-2); }
+
+/* ---------------------------------------------------------------- the device, in CSS 3D */
+.dev-grid { margin-top: var(--sp-5); display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: var(--sp-5); align-items: center; }
+.dev { --e: .3; position: relative; height: clamp(300px, 34vw, 440px); perspective: 1600px; display: grid; place-items: center; border-radius: var(--r-lg); background: radial-gradient(ellipse at 50% 60%, #fff 0%, #ECEBF6 70%); border: 1px solid var(--line); overflow: hidden; }
+.dev-stack { position: relative; width: min(340px, 64vw); aspect-ratio: 2 / 1; transform-style: preserve-3d; transform: rotateX(58deg) rotateZ(-30deg); }
+.dl { position: absolute; inset: 0; border-radius: 999px; transform-style: preserve-3d; transform: translateZ(calc(var(--z) * (var(--e) * 78px + 8px))); }
+.dl-shadow { --z: -1; background: rgba(19, 33, 75, .22); filter: blur(18px); transform: translateZ(-30px) scale(.92); }
+.dl-sense { --z: 0; background: linear-gradient(135deg, #FFE9DE, #F7D6C8); box-shadow: inset 0 0 0 1px rgba(194, 51, 47, .2), 0 1px 0 #E2B8A6; }
+.dl-sense i { position: absolute; top: 50%; width: 22%; aspect-ratio: 1; margin-top: -11%; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff, #C9CEDD 45%, #8F97B2); box-shadow: 0 0 0 3px rgba(255, 255, 255, .7); }
+.dl-sense i:first-child { left: 9%; }
+.dl-sense i:last-child { right: 9%; }
+.dl-core { --z: 1; inset: 14% 18%; border-radius: 26px; background: linear-gradient(135deg, #24357A, #172457); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); }
+.dl-core::before, .dl-core::after { content: ""; position: absolute; top: 50%; height: 2px; width: 28%; background: linear-gradient(90deg, var(--gold), #E8C77E); }
+.dl-core::before { left: 6%; }
+.dl-core::after { right: 6%; }
+.dl-core b { position: absolute; left: 50%; top: 50%; width: 30%; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 6px; background: #13214B; box-shadow: 0 0 0 3px #0E1838, 0 0 0 5px var(--gold); }
+.dl-core b::after { content: ""; position: absolute; inset: 26%; border-radius: 3px; background: var(--coral); box-shadow: 0 0 18px rgba(255, 94, 87, .8); }
+.dl-house { --z: 2; background: linear-gradient(135deg, rgba(255, 255, 255, .92), rgba(225, 223, 242, .86)); box-shadow: inset 0 0 0 1px rgba(19, 33, 75, .12), inset 0 -10px 24px rgba(19, 33, 75, .08); }
+.dl-house::after { content: ""; position: absolute; left: 12%; top: 14%; width: 40%; height: 18%; border-radius: 999px; background: rgba(255, 255, 255, .8); filter: blur(4px); }
+.parts { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-3); }
+.parts li { display: grid; grid-template-columns: 14px 1fr; column-gap: 14px; }
+.parts li::before { content: ""; grid-row: 1 / 3; width: 14px; height: 14px; margin-top: 5px; border-radius: 4px; background: var(--sw); box-shadow: inset 0 0 0 1px rgba(19, 33, 75, .2); }
+.parts b { font-size: var(--fs-md); }
+.parts span { color: var(--ink-2); }
+.dev-note { margin: var(--sp-4) 0 0; padding-top: var(--sp-2); border-top: 1px solid var(--line); color: var(--ink-2); }
+.dev-note b { color: var(--ink); }
+
+/* ---------------------------------------------------------------- the run */
+.runview { position: relative; margin: var(--sp-4) 0 0; padding: var(--sp-3); border-radius: var(--r-lg); background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow); }
+.rv-top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.rv-prompt { flex: 1 1 320px; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 8px 8px 16px; border-radius: var(--r-sm); background: #F6F7FC; border: 1px solid #CDD3E6; }
+.rv-prompt p { margin: 0; flex: 1; font-weight: 500; }
+.rv-prompt span { flex: none; display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border-radius: 9px; background: var(--ink); color: #fff; font-weight: 600; font-size: var(--fs-sm); }
+.rv-body { margin-top: var(--sp-3); display: grid; grid-template-columns: 180px minmax(0, 1fr) 220px; gap: var(--sp-3); }
+.rv-stages { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; align-content: start; }
+.rv-stages li { display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 0 10px; border-radius: 9px; font-size: var(--fs-sm); font-weight: 600; color: #8A91AE; }
+.rv-stages li::before { content: ""; width: 10px; height: 10px; border-radius: 50%; box-shadow: inset 0 0 0 2px #CDD3E6; }
+.rv-stages .done { color: var(--ink); }
+.rv-stages .done::before { background: var(--ink); box-shadow: none; }
+.rv-stages .now { color: var(--ink); background: var(--coral-tint); }
+.rv-stages .now::before { background: var(--coral); box-shadow: 0 0 0 4px rgba(255, 94, 87, .22); }
+.rv-curve { min-width: 0; padding: 12px 14px; border-radius: var(--r-md); background: #F8F8FD; border: 1px solid var(--line); }
+.rv-curve svg { display: block; width: 100%; height: auto; }
+.rv-curve figcaption, .rv-grid-w figcaption { display: flex; justify-content: space-between; gap: 12px; font-size: var(--fs-xs); font-weight: 600; color: var(--ink-2); }
+.rv-grid-w { padding: 12px 14px; border-radius: var(--r-md); background: #F8F8FD; border: 1px solid var(--line); }
+.rv-grid { margin-top: 10px; display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; }
+.rv-grid i { aspect-ratio: 1; border-radius: 3px; background: var(--ink); }
+.rv-grid i.w { background: transparent; box-shadow: inset 0 0 0 1px #CDD3E6; }
+.rv-grid i.m { background: #6B76A6; }
+.rv-grid i.b { background: var(--coral); box-shadow: 0 0 10px rgba(255, 94, 87, .6); }
+.rv-tag { position: absolute; right: 16px; top: -12px; }
+
+.flow { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--sp-3) 20px; counter-reset: st; }
+.flow li { position: relative; display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-sm); line-height: 1.45; color: var(--ink-2); }
+.flow li::after { content: ""; position: absolute; left: 44px; right: -14px; top: 17px; height: 2px; border-radius: 1px; background: #DCE1EF; }
+.flow li:last-child::after { display: none; }
+.flow .n { display: grid; place-items: center; width: 36px; height: 36px; margin-bottom: 8px; border-radius: 50%; background: var(--ink); color: #fff; font: 700 17px/1 var(--display); box-shadow: 0 0 0 5px var(--paper); position: relative; z-index: 1; }
+.flow li:nth-child(4) .n { background: var(--coral); }
+.flow b { font-size: var(--fs-md); color: var(--ink); line-height: 1.25; }
+
+/* ---------------------------------------------------------------- the first test */
+.test { margin-top: var(--sp-4); padding: var(--sp-4); border-radius: var(--r-lg); background: var(--ink); color: #fff; box-shadow: var(--shadow); }
+.test-k { margin: 0; font-size: var(--fs-ui); font-weight: 600; color: #C9D2EC; }
+.facts { list-style: none; margin: var(--sp-3) 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-4); }
+.facts li { padding-top: var(--sp-2); border-top: 1px solid rgba(255, 255, 255, .18); font-size: var(--fs-base); line-height: 1.45; color: #DCE2F3; }
+.facts b { display: block; margin-bottom: 8px; font: 700 clamp(30px, 1.6vw + 18px, 46px)/1 var(--display); letter-spacing: -.02em; color: #fff; font-variant-numeric: lining-nums tabular-nums; }
+.facts b em { font-style: normal; color: var(--coral); }
+.test-note { margin: var(--sp-4) 0 0; padding: 12px 16px; border-radius: var(--r-sm); background: rgba(255, 94, 87, .14); box-shadow: inset 0 0 0 1px rgba(255, 94, 87, .4); color: #fff; font-weight: 600; }
+
+/* ---------------------------------------------------------------- what will you build */
+.prompts { list-style: none; margin: var(--sp-4) 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.prompts li { display: grid; grid-template-columns: 56px 1fr; gap: 4px 16px; align-items: start; padding: 20px; border-radius: var(--r-md); background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow-sm); }
+.prompts svg { grid-row: 1 / 3; width: 56px; height: 56px; }
+.prompts b { font: 700 var(--fs-md)/1.25 var(--display); }
+.prompts p { margin: 0; color: var(--ink-2); }
+
+/* ---------------------------------------------------------------- team */
+.founders { list-style: none; margin: var(--sp-4) 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-4); }
+.founder { display: grid; align-content: start; justify-items: center; text-align: center; min-width: 0; }
+.face { position: relative; width: 160px; height: 160px; margin-bottom: 16px; border-radius: 50%; overflow: hidden; background: linear-gradient(140deg, #C3D2F2, #E2DFF3 55%, #FFE3D6); box-shadow: 0 0 0 4px #fff, 0 0 0 5px var(--line), 0 18px 30px -18px rgba(19, 33, 75, .55); }
+.face::before { content: attr(data-initials); position: absolute; inset: 0; display: grid; place-items: center; font: 700 44px/1 var(--display); letter-spacing: .02em; color: var(--ink); }
+.face img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.name { font-size: var(--fs-md); line-height: 1.3; font-weight: 700; }
+.role { font-size: var(--fs-sm); color: var(--ink-2); }
+.does { margin: 8px 0 0; max-width: 30ch; color: var(--ink-2); font-size: var(--fs-ui); }
+
+/* ---------------------------------------------------------------- closing band and footer */
+.cta { position: relative; z-index: 2; margin-top: var(--sp-sec); padding: 56px var(--gutter); background: linear-gradient(100deg, var(--paper) 0%, #DAE2F6 22%, #CDD8F4 45%, #E4DFF3 68%, #F7E3DE 88%, #E6E9F4 100%); }
+.cta-in { max-width: var(--col-max); margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-3) var(--sp-5); }
+.cta-t { margin: 0; font: 700 clamp(36px, 3.4vw, 56px)/1.1 var(--display); letter-spacing: -.022em; }
+.cta-go { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; }
+@media (min-width: 1024px) { .cta { padding: 88px var(--gutter); } }
+.foot { padding: 36px var(--colx) calc(40px + env(safe-area-inset-bottom)); background: #E6E9F4; color: var(--ink-2); font-size: var(--fs-sm); }
+.foot p { margin: 0 0 6px; max-width: 72ch; }
+.foot b { color: var(--ink); }
+
+/* ---------------------------------------------------------------- tablets */
+@media (max-width: 1100px) {
+  .rv-body { grid-template-columns: 160px minmax(0, 1fr); }
+  .rv-grid-w { grid-column: 1 / -1; }
+  .flow { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .flow li:nth-child(4)::after { display: none; }
+}
+@media (max-width: 1024px) {
+  .dev-grid { grid-template-columns: 1fr; }
+  .facts { grid-template-columns: 1fr; gap: var(--sp-3); }
+}
+
+/* ---------------------------------------------------------------- phones */
+@media (max-width: 760px) {
+  :root { --bar: 56px; --sp-sec: 72px; }
+  .bar { gap: 6px; }
+  .brand { font-size: 18px; }
+  .pill { display: none; }
+  .menu { display: grid; place-items: center; margin-left: auto; width: 44px; height: 44px; border: 0; border-radius: var(--r-sm); background: transparent; cursor: pointer; }
+  .menu svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+  .menu .m-close { display: none; }
+  .menu[aria-expanded="true"] .m-open { display: none; }
+  .menu[aria-expanded="true"] .m-close { display: inline; }
+  .links { display: none; position: absolute; left: 10px; right: 10px; top: calc(var(--bar-y) + 6px); flex-direction: column; gap: 2px; padding: 8px; border-radius: var(--r-md); background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .links.open { display: flex; }
+  .links a { font-size: var(--fs-base); }
+
+  .hero h1 span { display: inline; }
+  .hero-go { grid-template-columns: 1fr; justify-items: center; }
+  .hero-go .btn, .hero-go .link { grid-column: 1; justify-self: center; }
+  .veil { background: radial-gradient(ellipse 90% 52% at 50% 34%, rgba(244, 245, 251, .86), rgba(244, 245, 251, .55) 55%, rgba(244, 245, 251, 0) 100%); }
+  .cap li { padding: 14px 16px; }
+  .cap p { font-size: var(--fs-sm); }
+  .cap q { margin-top: 8px; }
+  .rail { padding: 8px 10px; gap: 4px; }
+  .rail li { font-size: 0; }
+  .rail li.on { position: absolute; right: 12px; bottom: 100%; margin-bottom: 6px; font-size: var(--fs-xs); padding: 4px 8px; border-radius: 8px; background: var(--chip-bg); box-shadow: var(--chip-shadow); }
+  .rail li.on i { display: none; }
+  .rail i { margin-bottom: 0; }
+  .rail { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .lbl { font-size: var(--fs-xs); padding: 5px 8px; }
+
+  .hook-tiles { grid-template-columns: 1fr; }
+  .sub-h { margin-top: 40px; margin-bottom: 20px; }
+  .rv-body { grid-template-columns: 1fr; }
+  .rv-stages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .runview { padding: var(--sp-2); }
+  .flow { grid-template-columns: 1fr; }
+  .flow li { display: grid; grid-template-columns: 36px 1fr; column-gap: 16px; }
+  .flow .n { grid-row: 1 / 3; margin: 0; }
+  .flow li::after { left: 17px; right: auto; top: 44px; bottom: -22px; width: 2px; height: auto; }
+  .flow li:nth-child(4)::after { display: block; }
+  .flow li:last-child::after { display: none; }
+  .test { padding: var(--sp-3) 20px; }
+  .prompts { grid-template-columns: 1fr; }
+  .founders { grid-template-columns: 1fr; gap: 16px; }
+  .founder { grid-template-columns: 96px 1fr; column-gap: 16px; justify-items: start; text-align: left; align-items: center; }
+  .face { grid-row: 1 / 4; width: 96px; height: 96px; margin: 0; }
+  .face::before { font-size: 30px; }
+  .name { align-self: end; font-size: var(--fs-base); }
+  .does { margin-top: 2px; font-size: var(--fs-sm); }
+  .cta { padding: 48px var(--gutter); }
+}
+
+/* ---------------------------------------------------------------- reduced motion: one still frame, all text in place */
+@media (prefers-reduced-motion: reduce) {
+  html.gl-cap .flight { height: 100svh; }
+  .cap, .rail, .lbls { display: none; }
+  .cue::after { animation: none; }
+  .dev { --e: .9 !important; }
+  .cap li, .btn, .link { transition: none; }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#question">Skip to the content</a>
+
+<header class="bar">
+  <a class="brand" href="#top">
+    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><g fill="#C99A3E"><rect x="9" y="2" width="3" height="5" rx="1"/><rect x="15" y="2" width="3" height="5" rx="1"/><rect x="21" y="2" width="3" height="5" rx="1"/><rect x="9" y="25" width="3" height="5" rx="1"/><rect x="15" y="25" width="3" height="5" rx="1"/><rect x="21" y="25" width="3" height="5" rx="1"/></g><rect x="5" y="6" width="22" height="20" rx="4" fill="#13214B"/><rect x="11" y="11" width="10" height="10" rx="2" fill="#FF5E57"/></svg>
+    <span data-name></span>
+  </a>
+  <span class="pill">Hackathon build</span>
+  <nav class="links" id="links" aria-label="Site">
+    <a href="#run">How it works</a>
+    <a href="#team">Team</a>
+    <a href="https://github.com/AMGrobelnik/sota-hack" target="_blank" rel="noopener noreferrer">GitHub</a>
+  </nav>
+  <button class="menu" type="button" id="menu" aria-expanded="false" aria-controls="links" aria-label="Menu">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path class="m-open" d="M4 8h16M4 16h16"/><path class="m-close" d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+  <a class="btn btn-s" href="../dashboard/">Try now</a>
+</header>
+
+<main>
+  <section class="flight" id="top" aria-label="Thousands of chip designs training at once, and the best one taken apart">
+    <div class="stage" id="stage">
+      <div class="sky" aria-hidden="true"><i class="sun"></i></div>
+      <canvas id="gl" aria-hidden="true"></canvas>
+
+      <!-- shown when WebGL is not available: the chip, taken apart, drawn flat -->
+      <div class="fallback" aria-hidden="true">
+        <svg viewBox="0 0 560 330">
+          <defs>
+            <linearGradient id="fb-lid" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#24357A"/><stop offset="1" stop-color="#13214B"/></linearGradient>
+            <linearGradient id="fb-die" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3B3F8E"/><stop offset=".5" stop-color="#25306C"/><stop offset="1" stop-color="#3A2F78"/></linearGradient>
+          </defs>
+          <ellipse cx="280" cy="300" rx="190" ry="22" fill="#13214B" opacity=".12"/>
+          <g transform="translate(280 250) matrix(.866 .5 -.866 .5 0 0)">
+            <rect x="-104" y="-104" width="208" height="208" rx="10" fill="#0E1838"/>
+            <g fill="#C99A3E"><rect x="-84" y="-84" width="16" height="16" rx="3"/><rect x="-50" y="-84" width="16" height="16" rx="3"/><rect x="-16" y="-84" width="16" height="16" rx="3"/><rect x="18" y="-84" width="16" height="16" rx="3"/><rect x="52" y="-84" width="16" height="16" rx="3"/><rect x="-84" y="52" width="16" height="16" rx="3"/><rect x="-50" y="52" width="16" height="16" rx="3"/><rect x="-16" y="52" width="16" height="16" rx="3"/><rect x="18" y="52" width="16" height="16" rx="3"/><rect x="52" y="52" width="16" height="16" rx="3"/></g>
+          </g>
+          <g transform="translate(280 196) matrix(.866 .5 -.866 .5 0 0)">
+            <rect x="-70" y="-70" width="140" height="140" rx="6" fill="url(#fb-die)"/>
+            <g stroke="#8E96D6" stroke-width="2" opacity=".55"><path d="M-56 -40h112M-56 -14h112M-56 12h112M-56 38h112"/></g>
+          </g>
+          <g transform="translate(280 140) matrix(.866 .5 -.866 .5 0 0)">
+            <rect x="-70" y="-70" width="140" height="140" rx="6" fill="#FAF8FF" opacity=".95"/>
+            <g fill="none" stroke="#13214B" stroke-width="3"><path d="M-48 -44h14a10 10 0 0 1 0 20h-14z"/><path d="M8 -44h14a10 10 0 0 1 0 20h-14z"/><path d="M-48 20h14a10 10 0 0 1 0 20h-14z"/><path d="M8 20h14a10 10 0 0 1 0 20h-14z"/></g>
+            <g fill="none" stroke="#FF5E57" stroke-width="3"><path d="M-24 -34h20v64h12M32 -34h12v64"/></g>
+          </g>
+          <g transform="translate(280 78) matrix(.866 .5 -.866 .5 0 0)">
+            <rect x="-96" y="-96" width="192" height="192" rx="12" fill="url(#fb-lid)"/>
+            <circle cx="-66" cy="-66" r="9" fill="#2E3F86"/>
+            <rect x="-24" y="-24" width="48" height="48" rx="6" fill="#FF5E57" opacity=".9"/>
+          </g>
+        </svg>
+      </div>
+
+      <div class="veil" id="veil" aria-hidden="true"></div>
+      <div class="hero-pos">
+        <div class="hero" id="hero">
+          <h1><span>A thousand chip designs,</span> <span>trained at once.</span></h1>
+          <p class="lede">Describe a medical sensing device. AI scientists design the chip at its core.</p>
+          <div class="hero-go">
+            <a class="btn btn-xl" href="../dashboard/">Try now</a>
+            <a class="link" href="https://github.com/AMGrobelnik/sota-hack" target="_blank" rel="noopener noreferrer">Read the code on GitHub</a>
+          </div>
+        </div>
+      </div>
+      <a class="cue" id="cue" href="#question" aria-label="Skip past the animation">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
+      </a>
+
+      <ol class="cap" id="cap" aria-label="The stages of a run">
+        <li><span class="cap-n">Stage 1 of 7</span><b>Spec</b><p>You write a prompt naming the device and its job.</p><q>A heart-rhythm patch that reads an ECG and flags an irregular rhythm.</q></li>
+        <li><span class="cap-n">Stage 2 of 7</span><b>Reference</b><p>The run sets up a model of the job. Every circuit is later checked against it.</p></li>
+        <li><span class="cap-n">Stage 3 of 7</span><b>Propose</b><p>AI agents propose chip designs for the job, many at a time.</p></li>
+        <li><span class="cap-n">Stage 4 of 7</span><b>Train</b><p>Thousands of candidates train at once, as one GPU batch. The weak ones fall away.</p><span class="live" id="live"></span></li>
+        <li><span class="cap-n">Stage 5 of 7</span><b>Compile</b><p>The best design becomes a circuit of logic gates, with the weights wired in.</p></li>
+        <li><span class="cap-n">Stage 6 of 7</span><b>Verify</b><p>The circuit is checked bit for bit against the model.</p></li>
+        <li><span class="cap-n">Stage 7 of 7</span><b>Report</b><p>You get back the smallest chip that does the job. You can watch every stage, pause and redirect.</p></li>
+      </ol>
+      <ol class="rail" id="rail" aria-hidden="true">
+        <li><i></i>Spec</li><li><i></i>Reference</li><li><i></i>Propose</li><li><i></i>Train</li><li><i></i>Compile</li><li><i></i>Verify</li><li><i></i>Report</li>
+      </ol>
+      <div class="lbls" id="lbls" aria-hidden="true">
+        <span class="lbl">Package</span>
+        <span class="lbl">Logic gates, weights wired in</span>
+        <span class="lbl">Silicon die</span>
+        <span class="lbl">Pins: signal in, answer out</span>
+        <span class="lbl">Base</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="hook" id="question" aria-labelledby="q-h" tabindex="-1">
+    <div class="hook-in">
+      <h2 class="hook-h" id="q-h">How many logic gates does a diagnosis need?</h2>
+      <p class="hook-lede">That is the question behind the project. The finished device holds no AI model: AI is used to find the circuit, then it is gone.</p>
+      <ul class="hook-tiles">
+        <li class="hk-tile">
+          <svg viewBox="0 0 28 28" aria-hidden="true"><rect x="7" y="7" width="14" height="14" rx="2"/><rect class="c" x="11" y="11" width="6" height="6" rx="1"/><path d="M11 3v4M17 3v4M11 21v4M17 21v4M3 11h4M3 17h4M21 11h4M21 17h4"/></svg>
+          <p class="hk-t">Small and low power</p>
+          <p class="hk-s">A wired circuit of logic gates needs little room and little energy.</p>
+        </li>
+        <li class="hk-tile">
+          <svg viewBox="0 0 28 28" aria-hidden="true"><path d="M4 11a14 14 0 0 1 20 0M8 15a8.5 8.5 0 0 1 12 0"/><circle cx="14" cy="20" r="1.6"/><path class="c" d="M5 5l18 18"/></svg>
+          <p class="hk-t">Works offline</p>
+          <p class="hk-s">It does its job on the device, with no network and no phone.</p>
+        </li>
+        <li class="hk-tile">
+          <svg viewBox="0 0 28 28" aria-hidden="true"><rect x="4" y="8" width="13" height="12" rx="2"/><path d="M8 14h5"/><path class="c" d="M17 14h7M21 11l3 3-3 3"/></svg>
+          <p class="hk-t">Only the answer comes out</p>
+          <p class="hk-s">There is no software that an update could change to send raw data out.</p>
+        </li>
+      </ul>
+      <p class="hook-fact"><b>The patient's signal never leaves the device.</b> The chip reads it, gives one answer, and keeps nothing else to send.</p>
+    </div>
+  </section>
+
+  <section class="sec" id="device" aria-labelledby="dev-h">
+    <div class="sec-in">
+      <h2 id="dev-h">Sensors, a housing and one small chip.</h2>
+      <p class="sec-lede">A medical sensing device has three parts. The chip at its core takes the sensor signal and does one job.</p>
+      <div class="dev-grid">
+        <div class="dev" id="dev" aria-hidden="true">
+          <div class="dev-stack">
+            <div class="dl dl-shadow"></div>
+            <div class="dl dl-sense"><i></i><i></i></div>
+            <div class="dl dl-core"><b></b></div>
+            <div class="dl dl-house"></div>
+          </div>
+        </div>
+        <div>
+          <ul class="parts">
+            <li style="--sw: linear-gradient(135deg, #fff, #E1DFF2)"><b>Housing</b><span>Holds the parts together.</span></li>
+            <li style="--sw: #FF5E57"><b>Core chip</b><span>Takes the sensor signal and gives one answer. This is the part we design.</span></li>
+            <li style="--sw: #F7D6C8"><b>Sensors</b><span>Pick up the signal, such as an ECG or an EEG.</span></li>
+          </ul>
+          <p class="dev-note"><b>An environment, not a chip company.</b> You describe the device. AI agents find the smallest chip that does its job.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="run" aria-labelledby="run-h">
+    <div class="sec-in">
+      <h2 id="run-h">From a prompt to a checked circuit.</h2>
+      <p class="sec-lede">You write a prompt naming the device and its job. AI agents propose designs, train them, compile the best and check it. You can watch every stage, pause and redirect.</p>
+
+      <figure class="runview" aria-label="Illustration of a run in progress">
+        <span class="illus rv-tag">Illustration</span>
+        <div class="rv-top">
+          <div class="rv-prompt"><p>A heart-rhythm patch that reads an ECG and flags an irregular rhythm.</p><span>Running</span></div>
+        </div>
+        <div class="rv-body">
+          <ol class="rv-stages">
+            <li class="done">Spec</li><li class="done">Reference</li><li class="done">Propose</li><li class="now">Train</li><li>Compile</li><li>Verify</li><li>Report</li>
+          </ol>
+          <figure class="rv-curve" style="margin:0">
+            <figcaption><span>Training error, every candidate</span><span>Best in coral</span></figcaption>
+            <svg id="curve" viewBox="0 0 600 240" aria-hidden="true"></svg>
+          </figure>
+          <figure class="rv-grid-w" style="margin:0">
+            <figcaption><span>Candidates in the batch</span></figcaption>
+            <div class="rv-grid" id="rvgrid" aria-hidden="true"></div>
+          </figure>
+        </div>
+      </figure>
+
+      <h3 class="sub-h">Seven stages</h3>
+      <ol class="flow">
+        <li><span class="n" aria-hidden="true">1</span><b>Spec</b><span>You name the device and its job.</span></li>
+        <li><span class="n" aria-hidden="true">2</span><b>Reference</b><span>A model of the job to check against.</span></li>
+        <li><span class="n" aria-hidden="true">3</span><b>Propose</b><span>AI agents propose chip designs.</span></li>
+        <li><span class="n" aria-hidden="true">4</span><b>Train</b><span>Thousands of candidates, one GPU batch.</span></li>
+        <li><span class="n" aria-hidden="true">5</span><b>Compile</b><span>The best becomes gates, weights wired in.</span></li>
+        <li><span class="n" aria-hidden="true">6</span><b>Verify</b><span>The circuit is checked bit for bit.</span></li>
+        <li><span class="n" aria-hidden="true">7</span><b>Report</b><span>The smallest chip that does the job.</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="sec" id="test" aria-labelledby="test-h">
+    <div class="sec-in">
+      <h2 id="test-h">A first run on a laptop.</h2>
+      <div class="test">
+        <p class="test-k">Early feasibility test, Saturday 21 November 2026</p>
+        <ul class="facts">
+          <li><b>2,330 gates</b>One small heart-rhythm detector became a circuit of 2,330 logic gates.</li>
+          <li><b>3,880 <em>of</em> 3,880</b>The circuit matched its model on all 3,880 test windows.</li>
+          <li><b>256 at once</b>256 candidate designs trained in one batch, at 1,626 per minute.</li>
+        </ul>
+        <p class="test-note">The detector's accuracy is not yet at clinical level.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="build" aria-labelledby="build-h">
+    <div class="sec-in">
+      <h2 id="build-h">What will you build?</h2>
+      <p class="sec-lede">Devices you could describe. These are example prompts, not results.</p>
+      <ul class="prompts">
+        <li>
+          <svg viewBox="0 0 56 56" aria-hidden="true"><rect x="4" y="16" width="48" height="24" rx="12" fill="#FFE9DE"/><path d="M10 28h9l3-7 5 14 4-11 3 4h12" fill="none" stroke="#C2332F" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <b>A heart-rhythm patch</b>
+          <p>Design the chip for a patch that reads an ECG and flags an irregular rhythm.</p>
+        </li>
+        <li>
+          <svg viewBox="0 0 56 56" aria-hidden="true"><path d="M10 34a18 18 0 0 1 36 0z" fill="#E2DFF3"/><g fill="#13214B"><circle cx="16" cy="28" r="2.6"/><circle cx="23" cy="21" r="2.6"/><circle cx="33" cy="21" r="2.6"/><circle cx="40" cy="28" r="2.6"/></g><path d="M8 44c4-4 6 4 10 0s6 4 10 0 6 4 10 0 6 4 10 0" fill="none" stroke="#C2332F" stroke-width="2.4" stroke-linecap="round"/></svg>
+          <b>A newborn brain monitor</b>
+          <p>Design the chip for a monitor that reads a newborn's EEG.</p>
+        </li>
+        <li>
+          <svg viewBox="0 0 56 56" aria-hidden="true"><circle cx="28" cy="28" r="20" fill="#FFE9DE"/><circle cx="28" cy="28" r="20" fill="none" stroke="#13214B" stroke-width="2.4" stroke-dasharray="4 5"/><path d="M28 12a16 16 0 0 1 14 8" fill="none" stroke="#C2332F" stroke-width="4" stroke-linecap="round"/></svg>
+          <b>A fertile-window sensor</b>
+          <p>Design the chip for a sensor that tracks the fertile window.</p>
+        </li>
+        <li>
+          <svg viewBox="0 0 56 56" aria-hidden="true"><path d="M12 32a16 16 0 0 1 32 0v4H12z" fill="#E2DFF3"/><circle cx="22" cy="26" r="4" fill="#FF5E57"/><circle cx="34" cy="26" r="4" fill="#13214B"/><path d="M14 44h28" stroke="#13214B" stroke-width="2.4" stroke-linecap="round"/></svg>
+          <b>A newborn brain-oxygen sensor</b>
+          <p>Design the chip for a sensor that watches a newborn's brain oxygen.</p>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="sec" id="team" aria-labelledby="team-h">
+    <div class="sec-in">
+      <h2 id="team-h">Who is building it</h2>
+      <ul class="founders">
+        <li class="founder">
+          <span class="face" data-initials="AMG"><img src="../assets/founders/adrian.jpg" alt="" width="160" height="160" loading="lazy" onerror="this.remove()"></span>
+          <span class="name">Adrian Mladenic Grobelnik</span>
+          <span class="role">Co-founder</span>
+          <p class="does">The AI-scientist environment and the GPU batch.</p>
+        </li>
+        <li class="founder">
+          <span class="face" data-initials="AA"><img src="../assets/founders/antonio.jpg" alt="" width="160" height="160" loading="lazy" onerror="this.remove()"></span>
+          <span class="name">Antonio Aciob</span>
+          <span class="role">Co-founder</span>
+          <p class="does">The interface: stages, live curve and chip view.</p>
+        </li>
+        <li class="founder">
+          <span class="face" data-initials="OB"><img src="../assets/founders/oran.jpg" alt="" width="160" height="160" loading="lazy" onerror="this.remove()"></span>
+          <span class="name">Oran Barak</span>
+          <span class="role">Co-founder</span>
+          <p class="does">The clinical side: which errors matter.</p>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="cta" aria-labelledby="cta-h">
+    <div class="cta-in">
+      <p class="cta-t" id="cta-h">Build the next chip.</p>
+      <div class="cta-go">
+        <a class="btn" href="../dashboard/">Try now</a>
+        <a class="link" href="https://github.com/AMGrobelnik/sota-hack" target="_blank" rel="noopener noreferrer">Read the code on GitHub</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <p><b data-name></b> was built at the Scientific Parallelism hackathon, London, 21 to 22 November 2026.</p>
+  <p>A research prototype. Nothing on this page is a clinical claim. The run view above is an illustration; the test figures are from one early laptop run.</p>
+  <p>3D drawn with three.js (MIT licence).</p>
+</footer>
+
+<script>
+(function () {
+  var NAME = window.SITE_NAME;
+  document.title = NAME + ': A thousand chip designs, trained at once';
+  document.querySelectorAll('[data-name]').forEach(function (el) { el.textContent = NAME; });
+
+  /* phone menu */
+  var menu = document.getElementById('menu'), links = document.getElementById('links');
+  menu.addEventListener('click', function () {
+    var open = menu.getAttribute('aria-expanded') !== 'true';
+    menu.setAttribute('aria-expanded', String(open));
+    links.classList.toggle('open', open);
+  });
+  links.addEventListener('click', function () { menu.setAttribute('aria-expanded', 'false'); links.classList.remove('open'); });
+
+  /* a small seeded random, so the illustration is the same on every visit */
+  var seed = 7;
+  function rnd() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+
+  /* the run view's curves: many faint candidates, one coral best with checkpoints */
+  var svg = document.getElementById('curve'), NS = 'http://www.w3.org/2000/svg';
+  function el(n, a) { var e = document.createElementNS(NS, n); for (var k in a) e.setAttribute(k, a[k]); return e; }
+  svg.appendChild(el('path', { d: 'M40 10V206H592', fill: 'none', stroke: '#CDD3E6', 'stroke-width': 1.5 }));
+  var ax = el('text', { x: 592, y: 230, 'text-anchor': 'end', fill: '#45507A', 'font-size': 13, 'font-weight': 600 }); ax.textContent = 'Training steps'; svg.appendChild(ax);
+  var ay = el('text', { x: 14, y: 12, transform: 'rotate(90 14 12)', fill: '#45507A', 'font-size': 13, 'font-weight': 600 }); ay.textContent = 'Error'; svg.appendChild(ay);
+  /* error falls from the top of the plot towards a floor (0 to 1, as a share of the height) */
+  function curve(floor, rate, noise) {
+    var d = '', pts = [];
+    for (var i = 0; i <= 44; i++) {
+      var x = 44 + i * 12.4, e = floor + (1 - floor) * Math.exp(-rate * i / 44);
+      var y = Math.min(204, Math.max(14, 200 - e * 186 + (rnd() - .5) * noise));
+      pts.push([x, y]); d += (i ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1);
+    }
+    return { d: d, pts: pts };
+  }
+  for (var c = 0; c < 26; c++) {
+    var k = curve(.25 + rnd() * .5, 2 + rnd() * 4, 10);
+    svg.appendChild(el('path', { d: k.d, fill: 'none', stroke: '#13214B', 'stroke-opacity': .13, 'stroke-width': 1.5 }));
+  }
+  var best = curve(.06, 6, 5);
+  svg.appendChild(el('path', { d: best.d, fill: 'none', stroke: '#FF5E57', 'stroke-width': 3, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
+  for (var p = 4; p < best.pts.length; p += 8) svg.appendChild(el('circle', { cx: best.pts[p][0], cy: best.pts[p][1], r: 5, fill: '#fff', stroke: '#FF5E57', 'stroke-width': 2.5 }));
+
+  /* the batch: 60 squares, ranked; the weakest drawn as empty outlines */
+  var grid = document.getElementById('rvgrid'), cells = '';
+  for (var g = 0; g < 60; g++) { var r = rnd(); cells += '<i class="' + (g === 23 ? 'b' : r < .45 ? 'w' : r < .75 ? 'm' : '') + '"></i>'; }
+  grid.innerHTML = cells;
+
+  /* the device section spreads its layers as it crosses the screen */
+  var dev = document.getElementById('dev');
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    var tick = false;
+    var upd = function () {
+      tick = false;
+      var b = dev.getBoundingClientRect(), vh = innerHeight;
+      var t = Math.min(1, Math.max(0, (vh - b.top) / (vh + b.height * .2)));
+      dev.style.setProperty('--e', (t * t * (3 - 2 * t)).toFixed(3));
+    };
+    addEventListener('scroll', function () { if (!tick) { tick = true; requestAnimationFrame(upd); } }, { passive: true });
+    upd();
+  }
+})();
+</script>
+
+<script type="module">
+import * as THREE from '../vendor/three.module.min.js';
+
+const $ = (s) => document.querySelector(s);
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const seg = (s, a, b) => clamp((s - a) / (b - a));
+const ease = (t) => (t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const lerp = (a, b, t) => a + (b - a) * t;
+
+const root = document.documentElement;
+const flight = $('#top'), stage = $('#stage'), canvas = $('#gl');
+const heroEl = $('#hero'), veil = $('#veil'), cue = $('#cue');
+const capEl = $('#cap'), caps = [...capEl.children], rail = $('#rail'), railItems = [...rail.children], live = $('#live');
+const lblWrap = $('#lbls'), lbls = [...lblWrap.children];
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function main() {
+  if (!root.classList.contains('gl-cap')) return;
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
+  } catch (e) {
+    root.classList.remove('gl-cap');
+    return;
+  }
+  const small = Math.min(innerWidth, innerHeight) < 620 || matchMedia('(pointer: coarse)').matches;
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, small ? 1.75 : 2));
+  renderer.setClearColor(0x000000, 0);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(35, 1, 0.5, 400);
+
+  /* ------------------------------------------------ seeded random */
+  let sd = 1234567;
+  const rnd = () => { sd = (sd * 16807) % 2147483647; return (sd - 1) / 2147483646; };
+
+  /* ------------------------------------------------ the wafer of candidates */
+  const G = 1.5, R = small ? 40 : 56;
+  const inst = [];
+  const n = Math.floor(R / G);
+  for (let i = -n; i <= n; i++) for (let j = -n; j <= n; j++) {
+    const x = i * G, z = j * G;
+    if (x * x + z * z > (R - 1.4) * (R - 1.4)) continue;
+    const best = i === 0 && j === 0;
+    inst.push(x, z, best ? 1 : rnd() * .999, rnd());
+  }
+  const COUNT = inst.length / 4;
+  const instAttr = new THREE.InstancedBufferAttribute(new Float32Array(inst), 4);
+
+  /* one chip: a body plus gold pins on all four sides, merged into one geometry */
+  function boxPart(w, h, d, x, y, z, part) {
+    const g = new THREE.BoxGeometry(w, h, d).toNonIndexed();
+    g.translate(x, y, z);
+    g.setAttribute('part', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count).fill(part), 1));
+    return g;
+  }
+  function merge(list) {
+    const out = new THREE.InstancedBufferGeometry();
+    for (const name of ['position', 'normal', 'uv', 'part']) {
+      const size = list[0].attributes[name].itemSize;
+      const total = list.reduce((a, g) => a + g.attributes[name].array.length, 0);
+      const arr = new Float32Array(total);
+      let o = 0;
+      for (const g of list) { arr.set(g.attributes[name].array, o); o += g.attributes[name].array.length; }
+      out.setAttribute(name, new THREE.BufferAttribute(arr, size));
+    }
+    return out;
+  }
+  const parts = [boxPart(0.9, 0.14, 0.9, 0, 0.1, 0, 0)];
+  const PINS = small ? 3 : 4;
+  for (let k = 0; k < PINS; k++) {
+    const t = (k + .5) / PINS * 0.7 - 0.35;
+    parts.push(boxPart(0.07, 0.03, 0.14, t, 0.06, 0.5, 1), boxPart(0.07, 0.03, 0.14, t, 0.06, -0.5, 1));
+    parts.push(boxPart(0.14, 0.03, 0.07, 0.5, 0.06, t, 1), boxPart(0.14, 0.03, 0.07, -0.5, 0.06, t, 1));
+  }
+  const chipGeo = merge(parts);
+  chipGeo.setAttribute('aInst', instAttr);
+  chipGeo.instanceCount = COUNT;
+
+  const U = {
+    uTime: { value: 0 }, uCut: { value: 0 }, uPulse: { value: .6 }, uHide: { value: 0 }, uBest: { value: 0 },
+    uFade: { value: 1 }, uFogNear: { value: 50 }, uFogFar: { value: 125 }, uR: { value: R }, uG: { value: G },
+  };
+  const COMMON = /* glsl */`
+    uniform float uTime, uCut, uPulse, uHide, uBest, uFade, uFogNear, uFogFar;
+    float culled(float sc){ float w = max(0.001, 0.2*(1.0-sc)); return clamp((uCut - sc)/w, 0.0, 1.0); }
+  `;
+  const fieldMat = new THREE.ShaderMaterial({
+    uniforms: U,
+    vertexShader: /* glsl */`
+      attribute float part;
+      attribute vec4 aInst;
+      ${COMMON}
+      varying vec3 vN; varying vec2 vUv; varying float vPart, vGlow, vDim, vA, vDist;
+      mat3 rot(vec3 a, float t){ a = normalize(a); float s = sin(t), c = cos(t), o = 1.0 - c;
+        return mat3(o*a.x*a.x+c, o*a.x*a.y+a.z*s, o*a.z*a.x-a.y*s,
+                    o*a.x*a.y-a.z*s, o*a.y*a.y+c, o*a.y*a.z+a.x*s,
+                    o*a.z*a.x+a.y*s, o*a.y*a.z-a.x*s, o*a.z*a.z+c); }
+      void main(){
+        float sc = aInst.z, sd = aInst.w;
+        float isBest = step(0.9999, sc);
+        float f = culled(sc) * (1.0 - isBest);
+        float sink = smoothstep(0.3, 1.0, f);
+        vec3 p = position * (1.0 - 0.3*sink);
+        float ang = sink * (0.5 + sd) * (sd > 0.5 ? 1.0 : -1.0);
+        mat3 Rm = rot(vec3(sin(sd*40.0), 0.0, cos(sd*40.0)), ang);
+        p = Rm * p; vec3 nn = Rm * normal;
+        p *= 1.0 - isBest*uHide;
+        vec3 wp = vec3(aInst.x, 0.0, aInst.y) + p;
+        wp.y -= sink*sink*1.2;
+        vec4 mv = modelViewMatrix * vec4(wp, 1.0);
+        gl_Position = projectionMatrix * mv;
+        vDist = -mv.z; vN = nn; vUv = uv; vPart = part;
+        float r = length(aInst.xy);
+        float beat = pow(0.5 + 0.5*sin(uTime*2.2 - r*0.07), 3.0);
+        float flick = 0.7 + 0.3*sin(uTime*6.0 + sd*60.0);
+        vGlow = uPulse*(0.12 + beat*flick)*(0.25 + 0.75*sc*sc)*(1.0 - smoothstep(0.0, 0.3, f)) + isBest*uBest;
+        vDim = smoothstep(0.0, 0.3, f);
+        vA = (1.0 - smoothstep(0.55, 1.0, f)) * uFade;
+      }`,
+    fragmentShader: /* glsl */`
+      ${COMMON}
+      varying vec3 vN; varying vec2 vUv; varying float vPart, vGlow, vDim, vA, vDist;
+      void main(){
+        if (vA < 0.02) discard;
+        vec3 N = normalize(vN);
+        vec3 L = normalize(vec3(0.45, 0.85, 0.35));
+        float lam = max(dot(N, L), 0.0);
+        float hemi = 0.5 + 0.5*N.y;
+        vec3 col; vec3 emit = vec3(0.0);
+        if (vPart < 0.5) {
+          col = vec3(0.10, 0.14, 0.32);
+          if (N.y > 0.6) {
+            vec2 q = abs(vUv - 0.5);
+            float die = 1.0 - smoothstep(0.25, 0.27, max(q.x, q.y));
+            col = mix(col, vec3(0.20, 0.23, 0.46), die);
+            float d1 = 1.0 - smoothstep(0.035, 0.05, length(vUv - vec2(0.16, 0.84)));
+            col = mix(col, vec3(0.34, 0.38, 0.62), d1);
+            emit = die * vGlow * vec3(1.0, 0.37, 0.33) * 1.8;
+          }
+        } else {
+          col = vec3(0.86, 0.68, 0.36);
+        }
+        vec3 amb = mix(vec3(0.93, 0.88, 0.90), vec3(0.76, 0.82, 0.96), hemi);
+        vec3 lit = col * (0.6*amb + 0.75*lam*vec3(1.0, 0.92, 0.86)) + emit;
+        lit = mix(lit, vec3(0.78, 0.78, 0.87), vDim*0.75);
+        float h = smoothstep(uFogNear*0.35, uFogFar, vDist);
+        lit = mix(lit, vec3(0.92, 0.88, 0.93), h*0.72);
+        float a = vA * (1.0 - smoothstep(uFogNear, uFogFar, vDist));
+        gl_FragColor = vec4(lit, a);
+      }`,
+  });
+  const field = new THREE.Mesh(chipGeo, fieldMat);
+  field.frustumCulled = false; field.renderOrder = 2;
+  scene.add(field);
+
+  /* soft shadows under each chip */
+  const shGeo = new THREE.InstancedBufferGeometry();
+  const quad = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  shGeo.index = quad.index;
+  shGeo.setAttribute('position', quad.attributes.position);
+  shGeo.setAttribute('uv', quad.attributes.uv);
+  shGeo.setAttribute('aInst', instAttr);
+  shGeo.instanceCount = COUNT;
+  const shadow = new THREE.Mesh(shGeo, new THREE.ShaderMaterial({
+    uniforms: U, transparent: true, depthWrite: false,
+    vertexShader: /* glsl */`
+      attribute vec4 aInst;
+      ${COMMON}
+      varying vec2 vUv; varying float vA, vDist;
+      void main(){
+        float isBest = step(0.9999, aInst.z);
+        float f = culled(aInst.z) * (1.0 - isBest);
+        vec3 wp = vec3(aInst.x + 0.12, 0.004, aInst.y + 0.1) + position * 1.5 * (1.0 - isBest*uHide);
+        vec4 mv = modelViewMatrix * vec4(wp, 1.0);
+        gl_Position = projectionMatrix * mv;
+        vUv = uv; vDist = -mv.z;
+        vA = (1.0 - smoothstep(0.1, 0.6, f)) * uFade;
+      }`,
+    fragmentShader: /* glsl */`
+      ${COMMON}
+      varying vec2 vUv; varying float vA, vDist;
+      void main(){
+        vec2 q = abs(vUv - 0.5) * 2.0;
+        float d = length(max(q - 0.45, 0.0)) / 0.55;
+        float a = (1.0 - smoothstep(0.0, 1.0, d)) * 0.22 * vA * (1.0 - smoothstep(uFogNear*0.6, uFogFar, vDist));
+        gl_FragColor = vec4(0.07, 0.11, 0.26, a);
+      }`,
+  }));
+  shadow.frustumCulled = false; shadow.renderOrder = 1;
+  scene.add(shadow);
+
+  /* the wafer itself: pale, with scribe lines between the chips and a bright rim */
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(R * 2 + 6, R * 2 + 6).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
+    uniforms: U, extensions: {},
+    vertexShader: /* glsl */`
+      varying vec3 vW; varying float vDist;
+      void main(){ vW = position; vec4 mv = modelViewMatrix * vec4(position, 1.0); vDist = -mv.z; gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: /* glsl */`
+      uniform float uFogNear, uFogFar, uR, uG, uFade;
+      varying vec3 vW; varying float vDist;
+      void main(){
+        float r = length(vW.xz);
+        float inside = 1.0 - smoothstep(uR - 0.25, uR, r);
+        if (inside < 0.01) discard;
+        vec3 base = vec3(0.905, 0.900, 0.952);
+        base += 0.03 * (vW.x - vW.z) / uR;
+        vec2 gc = vW.xz / uG;
+        vec2 gd = abs(fract(gc) - 0.5) / fwidth(gc);
+        float line = 1.0 - min(min(gd.x, gd.y), 1.0);
+        base = mix(base, vec3(0.78, 0.79, 0.90), line * 0.5 * (1.0 - smoothstep(12.0, 70.0, vDist)));
+        float rim = smoothstep(uR - 1.6, uR - 0.3, r);
+        base = mix(base, vec3(0.98, 0.96, 0.99), rim * 0.8);
+        float h = smoothstep(uFogNear*0.35, uFogFar, vDist);
+        base = mix(base, vec3(0.94, 0.89, 0.92), h * 0.7);
+        float a = inside * (1.0 - smoothstep(uFogNear, uFogFar, vDist));
+        gl_FragColor = vec4(base, a);
+      }`,
+  }));
+  ground.frustumCulled = false; ground.renderOrder = 0;
+  scene.add(ground);
+
+  /* ------------------------------------------------ light and reflections for the hero chip */
+  scene.add(new THREE.HemisphereLight(0xC3D2F2, 0xEEE9F0, 1.4));
+  const sun = new THREE.DirectionalLight(0xFFE3D6, 2.6); sun.position.set(6, 10, 5); scene.add(sun);
+  const fill = new THREE.DirectionalLight(0xA9BEEB, 1.0); fill.position.set(-6, 4, -3); scene.add(fill);
+  {
+    const pm = new THREE.PMREMGenerator(renderer);
+    const env = new THREE.Scene();
+    env.add(new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'varying vec3 vP; void main(){ float h = normalize(vP).y; vec3 top = vec3(.55,.64,.88), mid = vec3(.86,.84,.94), bot = vec3(.95,.82,.78); gl_FragColor = vec4(h > 0.0 ? mix(mid, top, h) : mix(mid, bot, -h), 1.0); }',
+    })));
+    const box = (w, h, c, x, y, z) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide })); m.position.set(x, y, z); m.lookAt(0, 0, 0); env.add(m); };
+    box(7, 3, new THREE.Color(4, 3.6, 3.3), 4, 7, 3);
+    box(5, 2, new THREE.Color(1.6, 1.8, 2.4), -6, 3, -2);
+    scene.environment = pm.fromScene(env, 0.03).texture;
+    pm.dispose();
+  }
+
+  /* ------------------------------------------------ painted surfaces for the hero chip's layers */
+  const maxAniso = renderer.capabilities.getMaxAnisotropy();
+  function paint(size, draw) {
+    const c = document.createElement('canvas'); c.width = c.height = size;
+    const g = c.getContext('2d'); draw(g, size);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = maxAniso;
+    return t;
+  }
+  const rr = (g, x, y, w, h, r) => { g.beginPath(); g.roundRect(x, y, w, h, r); };
+
+  const lidTex = paint(1024, (g, s) => {
+    const gr = g.createLinearGradient(0, 0, s, s); gr.addColorStop(0, '#26387E'); gr.addColorStop(1, '#13214B');
+    g.fillStyle = gr; g.fillRect(0, 0, s, s);
+    for (let i = 0; i < 9000; i++) { g.fillStyle = `rgba(255,255,255,${rnd() * .035})`; g.fillRect(rnd() * s, rnd() * s, 2, 2); }
+    g.fillStyle = '#0F1A3E'; g.beginPath(); g.arc(150, 150, 44, 0, 7); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,.18)'; g.lineWidth = 3; g.beginPath(); g.arc(150, 150, 44, 3.6, 5.6); g.stroke();
+    g.fillStyle = 'rgba(255,255,255,.86)'; g.font = '700 92px Futura, "Avenir Next", "Trebuchet MS", sans-serif';
+    g.textBaseline = 'alphabetic'; g.fillText(window.SITE_NAME, 140, 820);
+    g.fillStyle = '#FF5E57'; rr(g, 140, 860, 120, 16, 8); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,.1)'; g.lineWidth = 6; rr(g, 40, 40, s - 80, s - 80, 40); g.stroke();
+  });
+  const dieTex = paint(1024, (g, s) => {
+    g.fillStyle = '#1B1F4C'; g.fillRect(0, 0, s, s);
+    g.fillStyle = '#C99A3E';
+    for (let k = 0; k < 18; k++) { const p = 70 + k * ((s - 140) / 17) - 12; g.fillRect(p, 22, 24, 30); g.fillRect(p, s - 52, 24, 30); g.fillRect(22, p, 30, 24); g.fillRect(s - 52, p, 30, 24); }
+    const cols = ['#2C3A7A', '#3B4C96', '#283368', '#4A3F8C', '#33508F', '#3D3478'];
+    for (let y = 90; y < s - 90; y += 18) {
+      let x = 90;
+      while (x < s - 90) { const w = 14 + rnd() * 60; g.fillStyle = cols[(rnd() * cols.length) | 0]; g.fillRect(x, y, Math.min(w, s - 90 - x), 14); x += w + 4; }
+    }
+    g.fillStyle = 'rgba(120,130,220,.35)'; rr(g, 140, 150, 300, 240, 10); g.fill(); rr(g, 560, 560, 320, 280, 10); g.fill();
+    g.strokeStyle = 'rgba(232,199,126,.35)'; g.lineWidth = 3;
+    for (let k = 0; k < 26; k++) { g.beginPath(); const y = 100 + rnd() * (s - 200); g.moveTo(90, y); g.lineTo(s - 90, y); g.stroke(); }
+    const sh = g.createLinearGradient(0, 0, s, s); sh.addColorStop(0, 'rgba(255,120,170,.16)'); sh.addColorStop(.5, 'rgba(120,200,255,.06)'); sh.addColorStop(1, 'rgba(160,120,255,.18)');
+    g.fillStyle = sh; g.fillRect(0, 0, s, s);
+  });
+  const gateTex = paint(1024, (g, s) => {
+    g.fillStyle = 'rgba(250,248,255,.93)'; rr(g, 8, 8, s - 16, s - 16, 36); g.fill();
+    g.strokeStyle = 'rgba(19,33,75,.18)'; g.lineWidth = 4; rr(g, 8, 8, s - 16, s - 16, 36); g.stroke();
+    const N = 7, cell = (s - 120) / N;
+    const gate = (x, y, kind) => {
+      g.lineWidth = 5; g.strokeStyle = '#13214B'; g.fillStyle = '#fff';
+      g.beginPath();
+      if (kind === 0) { g.moveTo(x, y); g.lineTo(x + 28, y); g.arc(x + 28, y + 22, 22, -Math.PI / 2, Math.PI / 2); g.lineTo(x, y + 44); g.closePath(); }
+      else if (kind === 1) { g.moveTo(x, y); g.quadraticCurveTo(x + 40, y, x + 54, y + 22); g.quadraticCurveTo(x + 40, y + 44, x, y + 44); g.quadraticCurveTo(x + 14, y + 22, x, y); }
+      else { g.moveTo(x, y); g.lineTo(x + 44, y + 22); g.lineTo(x, y + 44); g.closePath(); }
+      g.fill(); g.stroke();
+      if (kind === 2) { g.beginPath(); g.arc(x + 50, y + 22, 6, 0, 7); g.fill(); g.stroke(); }
+    };
+    g.lineCap = 'round';
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+      const x = 60 + i * cell + 20, y = 60 + j * cell + 30;
+      if (i < N - 1) {
+        g.strokeStyle = rnd() < .45 ? '#FF5E57' : 'rgba(19,33,75,.45)'; g.lineWidth = 4;
+        const ty = 60 + ((j + (rnd() < .5 ? 1 : -1) + N) % N) * cell + 30 + (rnd() < .5 ? 10 : 34);
+        g.beginPath(); g.moveTo(x + 58, y + 22); g.lineTo(x + cell * .7, y + 22); g.lineTo(x + cell * .7, ty); g.lineTo(x + cell, ty); g.stroke();
+      }
+      if (rnd() < .35) { g.fillStyle = rnd() < .5 ? '#FF5E57' : '#13214B'; rr(g, x - 26, y + 6, 12, 12, 3); g.fill(); }
+      gate(x, y, (rnd() * 3) | 0);
+    }
+  });
+  const baseTex = paint(512, (g, s) => {
+    g.fillStyle = '#17214A'; g.fillRect(0, 0, s, s);
+    g.strokeStyle = 'rgba(201,154,62,.35)'; g.lineWidth = 3;
+    for (let k = 0; k < 14; k++) { g.beginPath(); const a = 40 + rnd() * (s - 80); g.moveTo(a, 40); g.lineTo(a, s / 2 + (rnd() - .5) * 100); g.lineTo(s - 40 - rnd() * 60, s / 2 + (rnd() - .5) * 100); g.stroke(); }
+    g.fillStyle = '#D2A64E';
+    for (let i = 0; i < 9; i++) for (let j = 0; j < 9; j++) { g.beginPath(); g.arc(48 + i * 52, 48 + j * 52, 13, 0, 7); g.fill(); }
+  });
+
+  /* ------------------------------------------------ the hero chip, built as five layers */
+  const chip = new THREE.Group(); chip.visible = false; scene.add(chip);
+  const navySide = new THREE.MeshStandardMaterial({ color: 0x172457, roughness: .5, metalness: .25 });
+  const gold = new THREE.MeshStandardMaterial({ color: 0xD9AE58, roughness: .28, metalness: 1 });
+  const layer = (obj, y) => { const g = new THREE.Group(); g.add(obj); g.userData.y = y; chip.add(g); return g; };
+
+  const lidMesh = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.12, 0.9), [navySide, navySide, new THREE.MeshStandardMaterial({ map: lidTex, roughness: .42, metalness: .2 }), navySide, navySide, navySide]);
+  const gateMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.76, 0.76).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: gateTex, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+  const scan = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.014, 0.022), new THREE.MeshBasicMaterial({ color: 0xFF5E57 }));
+  const scanGlow = new THREE.Mesh(new THREE.PlaneGeometry(0.78, 0.14).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xFF8A7A, transparent: true, opacity: .35, depthWrite: false }));
+  scan.add(scanGlow); scanGlow.position.y = 0.002; scan.visible = false; gateMesh.add(scan);
+  const dieSide = new THREE.MeshStandardMaterial({ color: 0x9AA0BE, roughness: .3, metalness: .8 });
+  const dieMesh = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.035, 0.62), [dieSide, dieSide, new THREE.MeshStandardMaterial({ map: dieTex, roughness: .25, metalness: .45 }), dieSide, dieSide, dieSide]);
+  const pinGroup = new THREE.Group();
+  {
+    const pg = new THREE.BoxGeometry(0.05, 0.022, 0.18);
+    const pg2 = new THREE.BoxGeometry(0.18, 0.022, 0.05);
+    for (let k = 0; k < 8; k++) {
+      const t = (k + .5) / 8 * 0.76 - 0.38;
+      for (const sgn of [1, -1]) {
+        const a = new THREE.Mesh(pg, gold); a.position.set(t, 0, sgn * 0.5); pinGroup.add(a);
+        const b = new THREE.Mesh(pg2, gold); b.position.set(sgn * 0.5, 0, t); pinGroup.add(b);
+      }
+    }
+    const pad = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.012, 0.66), gold); pinGroup.add(pad);
+  }
+  const baseSide = new THREE.MeshStandardMaterial({ color: 0x101a3d, roughness: .6, metalness: .1 });
+  const baseMesh = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.045, 1.0), [baseSide, baseSide, new THREE.MeshStandardMaterial({ map: baseTex, roughness: .45, metalness: .3 }), baseSide, baseSide, baseSide]);
+
+  /* order: top of the stack first, as they spread left to right (or top to bottom on a tall screen) */
+  const L = [layer(lidMesh, 0.115), layer(gateMesh, 0.085), layer(dieMesh, 0.072), layer(pinGroup, 0.068), layer(baseMesh, 0.022)];
+
+  /* ------------------------------------------------ camera path */
+  let W = 1, H = 1, aspect = 1, vmode = false, keys = [];
+  const tanV = Math.tan(THREE.MathUtils.degToRad(35 / 2));
+  const S = 2.2, CY = 4;
+  const fit = (hw, hh) => Math.max(hh / tanV, hw / (tanV * aspect));
+  const orbit = (d, el, az, look) => [look[0] + d * Math.cos(el) * Math.sin(az), look[1] + d * Math.sin(el), look[2] + d * Math.cos(el) * Math.cos(az)];
+  function buildKeys() {
+    const lookP = vmode ? [0.55 * S, CY + 0.25 * S, 0] : [0, CY - 0.1 * S, 0];
+    const dP = vmode ? fit(1.75 * S, 2.6 * S) : fit(3.5 * S, 1.35 * S);
+    const lookC = [0, CY, 0];
+    const dC = Math.max(7.5, fit(0.95 * S, 0.95 * S));
+    const k0 = vmode ? { p: [0, 16, 58], l: [0, 0, -44] } : { p: [0, 12, 64], l: [0, 0, -50] };
+    keys = [
+      { s: 0.00, ...k0 },
+      { s: 0.07, p: [k0.p[0], k0.p[1] - .5, k0.p[2] - 6], l: k0.l },
+      { s: 0.30, p: [0, 7, 24], l: [0, 0, -16] },
+      { s: 0.40, p: [0, 26, 30], l: [0, 0, -4] },
+      { s: 0.54, p: [0, 30, 22], l: [0, 0, 0] },
+      { s: 0.66, p: orbit(dC, 0.62, 0.35, lookC), l: lookC },
+      { s: 0.78, p: orbit(dP, vmode ? 0.3 : 0.46, 0, lookP), l: lookP },
+      { s: 0.90, p: orbit(dP, vmode ? 0.3 : 0.46, 0, lookP), l: lookP },
+      { s: 0.97, p: orbit(dC, 0.5, -0.55, lookC), l: lookC },
+      { s: 1.00, p: orbit(dC, 0.5, -0.6, lookC), l: lookC },
+    ];
+  }
+  const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
+  function camAt(s) {
+    let i = 0; while (i < keys.length - 2 && s > keys[i + 1].s) i++;
+    const a = keys[i], b = keys[i + 1], t = ease(seg(s, a.s, b.s));
+    camPos.set(lerp(a.p[0], b.p[0], t), lerp(a.p[1], b.p[1], t), lerp(a.p[2], b.p[2], t));
+    camLook.set(lerp(a.l[0], b.l[0], t), lerp(a.l[1], b.l[1], t), lerp(a.l[2], b.l[2], t));
+  }
+
+  function resize() {
+    W = stage.clientWidth; H = stage.clientHeight; aspect = W / H;
+    vmode = aspect < 0.9;
+    lblWrap.classList.toggle('v', vmode);
+    renderer.setSize(W, H, false);
+    camera.aspect = aspect; camera.updateProjectionMatrix();
+    buildKeys();
+  }
+
+  /* ------------------------------------------------ the selection, step by step */
+  function cutAt(s) {
+    const steps = [[.40, .44, 0, .7], [.45, .48, .7, .95], [.49, .51, .95, .99], [.52, .545, .99, 1.0]];
+    let c = 0;
+    for (const [a, b, from, to] of steps) { if (s >= a) c = lerp(from, to, ease(seg(s, a, b))); }
+    return c;
+  }
+  const leftWords = (c) => c < .02 ? 'Thousands in training' : c < .9 ? 'Thousands become hundreds' : c < .985 ? 'Dozens left' : c < .999 ? 'A few left' : 'One left';
+
+  /* ------------------------------------------------ per-frame update */
+  const v3 = new THREE.Vector3();
+  let sTarget = 0, sCur = 0, pointer = [0, 0], pSm = [0, 0], visible = true, raf = 0, last = performance.now(), clockT = 1.3;
+  let lastCap = -1, lastWord = '';
+  const stageAt = (s) => s < .15 ? 0 : s < .22 ? 1 : s < .30 ? 2 : s < .62 ? 3 : s < .80 ? 4 : s < .90 ? 5 : 6;
+  const STG = [[.07, .15], [.15, .22], [.22, .30], [.30, .62], [.62, .80], [.80, .90], [.90, 1]];
+
+  function readScroll() {
+    const top = flight.offsetTop, span = flight.offsetHeight - innerHeight;
+    sTarget = span > 0 ? clamp((scrollY - top) / span) : 0;
+  }
+
+  function frame(s, t) {
+    /* the statement lifts away */
+    const h = seg(s, 0.0, 0.06);
+    heroEl.style.transform = `translateY(${(-h * 70).toFixed(1)}px)`;
+    heroEl.style.opacity = (1 - h * 1.5).toFixed(3);
+    heroEl.style.visibility = h > .66 ? 'hidden' : 'visible';
+    veil.style.opacity = (1 - h).toFixed(3);
+    cue.style.opacity = (1 - seg(s, 0, .03)).toFixed(3);
+    cue.style.visibility = s > .03 ? 'hidden' : 'visible';
+
+    /* captions and rail */
+    const showUI = seg(s, .05, .09);
+    capEl.style.opacity = showUI.toFixed(3); rail.style.opacity = showUI.toFixed(3);
+    const st = stageAt(s);
+    if (st !== lastCap) { caps.forEach((c, i) => c.classList.toggle('on', i === st)); railItems.forEach((c, i) => c.classList.toggle('on', i === st)); lastCap = st; }
+    railItems.forEach((li, i) => li.firstChild.style.setProperty('--f', seg(s, STG[i][0], STG[i][1]).toFixed(3)));
+
+    /* the field: pulse, cut, hand over to the hero chip */
+    const cut = cutAt(s);
+    U.uTime.value = t;
+    U.uCut.value = cut;
+    U.uPulse.value = s < .30 ? lerp(.55, 1, seg(s, .2, .3)) : 1 - seg(s, .5, .56);
+    U.uBest.value = seg(s, .53, .56) * 1.4;
+    U.uHide.value = s >= .56 ? 1 : 0;
+    U.uFade.value = 1;
+    const w = leftWords(cut); if (w !== lastWord) { live.textContent = w; lastWord = w; }
+
+    /* the hero chip: lift, turn, spread, check, close */
+    const lift = ease(seg(s, .56, .66));
+    const ex = ease(seg(s, .67, .79)) * (1 - ease(seg(s, .90, .97)));
+    const ver = seg(s, .81, .89);
+    chip.visible = s >= .56;
+    if (chip.visible) {
+      chip.position.set(0, lerp(0, CY, lift), 0);
+      const sc = lerp(1, S, lift);
+      chip.scale.setScalar(sc);
+      const spin = lift * Math.PI * 1.5 + (1 - lift) * 0;
+      chip.rotation.set(0, (spin + Math.sin(t * .4) * .06) * (1 - ex), 0);
+      L.forEach((g, i) => {
+        const e = ease(clamp((ex - i * .06) / .76));
+        const sp = vmode ? 0.74 : 1.3;
+        const off = (i - 2) * sp;
+        g.position.set(vmode ? 0 : off * e, lerp(g.userData.y, vmode ? -off : 0, e), 0);
+        g.rotation.set(e * (vmode ? .25 : .5), e * Math.sin(t * .5 + i) * .12, 0);
+      });
+      scan.visible = ver > 0 && ver < 1 && ex > .9;
+      scan.position.set(0, 0.01, lerp(-0.37, 0.37, ver));
+    }
+
+    /* camera */
+    camAt(s);
+    pSm[0] += (pointer[0] - pSm[0]) * .05; pSm[1] += (pointer[1] - pSm[1]) * .05;
+    const idle = reduce ? 0 : 1;
+    camera.position.set(camPos.x + (Math.sin(t * .07) * 2.5 * (1 - seg(s, 0, .1)) + pSm[0] * .8) * idle, camPos.y + pSm[1] * .4 * idle, camPos.z);
+    camera.lookAt(camLook);
+    U.uFogNear.value = s < .35 ? 50 : 60; U.uFogFar.value = s < .35 ? 125 : 140;
+
+    renderer.render(scene, camera);
+
+    /* labels on the spread parts */
+    const lo = clamp((ex - .75) / .25) * (1 - seg(s, .89, .92));
+    L.forEach((g, i) => {
+      const el = lbls[i];
+      if (lo <= 0) { el.style.opacity = '0'; return; }
+      if (vmode) v3.set(0.62, 0, 0); else v3.set(0, -0.06, 0.62);
+      g.localToWorld(v3); v3.project(camera);
+      const x = (v3.x + 1) / 2 * W, y = (1 - v3.y) / 2 * H;
+      el.style.opacity = lo.toFixed(3);
+      el.style.transform = vmode ? `translate3d(${(x + 14).toFixed(1)}px, ${y.toFixed(1)}px, 0) translateY(-50%)` : `translate3d(${x.toFixed(1)}px, ${(y + 14).toFixed(1)}px, 0) translateX(-50%)`;
+    });
+  }
+
+  function loop(now) {
+    raf = 0;
+    const raw = (now - last) / 1000, dt = Math.min(.05, raw); last = now;
+    clockT += dt;
+    sCur += (sTarget - sCur) * (1 - Math.exp(-Math.min(.25, raw) * 7));
+    if (Math.abs(sTarget - sCur) < 1e-5) sCur = sTarget;
+    frame(sCur, clockT);
+    if (visible && !document.hidden) raf = requestAnimationFrame(loop);
+  }
+  const start = () => { if (!raf && visible && !document.hidden) { last = performance.now(); raf = requestAnimationFrame(loop); } };
+
+  resize();
+  if (reduce) {
+    const still = () => { resize(); frame(0, 1.3); };
+    still();
+    addEventListener('resize', still);
+  } else {
+    readScroll(); sCur = sTarget;
+    addEventListener('scroll', readScroll, { passive: true });
+    addEventListener('resize', () => { resize(); readScroll(); start(); });
+    if (matchMedia('(pointer: fine)').matches) addEventListener('pointermove', (e) => { pointer = [e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight * 2 - 1)]; }, { passive: true });
+    new IntersectionObserver((en) => { visible = en[0].isIntersecting; start(); }).observe(flight);
+    document.addEventListener('visibilitychange', start);
+    frame(sCur, clockT);
+    start();
+  }
+  root.classList.add('gl');
+}
+main();
+</script>
+</body>
+</html>
