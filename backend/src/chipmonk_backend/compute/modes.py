@@ -3,9 +3,8 @@
 ``local``: in this process (tests, dev, and the agent inside a worker pod).
 ``flex``: on a Mac the team owns, nothing rented. ``on_demand``: a rented
 RunPod worker pod per agent. Tiers are the hardware ladder ``cpu_basic <
-cpu_plus < gpu_basic < gpu_plus``. Adapted from AI Inventor's
-``aii_lib/execute_env/modes.py`` and ``aii_lib/compute_tiers.py``: compare a
-mode through these predicates, not with string literals elsewhere.
+cpu_plus < gpu_basic < gpu_plus``. Compare a mode through these predicates,
+not with string literals elsewhere.
 """
 
 from __future__ import annotations

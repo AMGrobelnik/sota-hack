@@ -3,13 +3,12 @@
 The key is ``RUNPOD_API_KEY``, read by name, sent only in the
 ``Authorization`` header, never put on a pod and never logged.
 
-Ported from AI Inventor's ``aii_runpod/deploy/runpod_api.py`` (``RunPodAPI``),
-``aii_lib/runpod_endpoints.py`` and ``aii_lib/runpod_rate_limit.py``. The base
-URL and every field name were checked against RunPod's published schema
+The client keeps the endpoint table and a rate limiter in this module. The
+base URL and every field name were checked against RunPod's published schema
 (``https://api.runpod.io/v2/openapi.json``, server ``https://api.runpod.io``,
 paths under ``/v2``) on 2026-11-21.
 
-API traps this client absorbs (from the source's RunPod notes):
+API traps this client absorbs:
 
 * ``status == RUNNING`` is not a running container: :attr:`PodInfo.is_running`
   also needs ``runtime.uptime``, which ``GET /pods`` (the listing) never

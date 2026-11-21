@@ -1,7 +1,4 @@
-"""Parsing the CLI's ``/cost`` dialog, and token totals from the transcript.
-
-Adapted from AI Inventor.
-"""
+"""Parsing the CLI's ``/cost`` dialog, and token totals from the transcript."""
 
 from __future__ import annotations
 

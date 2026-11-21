@@ -1,4 +1,1 @@
-"""Internals of the ``claude_cli`` backend: the PTY driver and its helpers.
-
-Adapted from AI Inventor.
-"""
+"""Internals of the ``claude_cli`` backend: the PTY driver and its helpers."""

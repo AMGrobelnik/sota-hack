@@ -2,11 +2,8 @@
 
 Today Flex runs the agent directly on the Mac host as the logged-in user
 (``compute.flex.isolation: host``), with the ``claude`` CLI logged in there.
-In AI Inventor, Flex ran every agent inside a macOS VM (``lume``) on an
-enrolled Mac that pulled work from the product server
-(``aii_lib/flex/``, ``aii_lib/execute_env/flex/``, ``execute_env/mac_guest/``,
-about 29k lines with Postgres tables and server routes). That isolation layer
-is deferred; a ``vm`` isolation value would be added here, behind the same
+Running each agent inside a macOS VM on the Mac is not built; a ``vm``
+isolation value would be added here, behind the same
 :class:`~chipmonk_backend.compute.base.Runner` interface.
 """
 

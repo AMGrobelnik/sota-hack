@@ -25,15 +25,12 @@ from dotenv import load_dotenv
 from loguru import logger
 
 from chipmonk_backend.agents.base import BACKENDS
-from chipmonk_backend.agents.types import AgentResult, AgentSpec, utc_now
+from chipmonk_backend.agents.types import AgentSpec, utc_now
 from chipmonk_backend.api.cli import add_serve_parser, run_serve
 from chipmonk_backend.config import BackendConfig, ComputeTier, RunMode, load_config
 from chipmonk_backend.llm import OpenRouterClient
-from chipmonk_backend.llm.keys import OPENROUTER_KEY_ENV, has_openrouter_key
-from chipmonk_backend.llm.summarise import Summary, label_output, load_summary_settings, summarise_run
 from chipmonk_backend.log import setup_logging
 from chipmonk_backend.orchestrate import LLM_CALLS_ENV, run_agent
-from chipmonk_backend.runs import RunDir
 
 
 def _common() -> argparse.ArgumentParser:
@@ -108,43 +105,14 @@ def main(argv: list[str] | None = None) -> int:
         name=args.name, prompts=prompts, backend=args.backend, model=args.model, timeout_s=args.timeout
     )
     try:
-        run, result = asyncio.run(run_agent(spec, config, run_mode=args.mode, tier=args.tier))
+        run, result = asyncio.run(
+            run_agent(spec, config, run_mode=args.mode, tier=args.tier, summary=not args.no_summary)
+        )
     except NotImplementedError as exc:
         logger.error("not built yet: {}", exc)
         return 2
-    if not args.no_summary:
-        asyncio.run(summarise_into_record(run, result))
     print(json.dumps({"run_dir": str(run.path), **result.to_dict()}, indent=2))
     return 1 if result.failed else 0
-
-
-async def summarise_into_record(run: RunDir, result: AgentResult) -> None:
-    """Summarise a finished run on OpenRouter and write it into ``run.json``.
-
-    ``result.summary["run"]`` is three bullets on the whole run; a final answer
-    longer than ``label_min_output_chars`` also gets ``output_label``. Each
-    carries its own cost. A summary that cannot be written is logged; it never
-    fails the run.
-    """
-    try:
-        settings = load_summary_settings()
-        if not has_openrouter_key():
-            logger.warning("no run summary: {} is not set", OPENROUTER_KEY_ENV)
-            summaries = {"run": Summary(error=f"{OPENROUTER_KEY_ENV} is not set").to_dict()}
-        else:
-            run_summary = await summarise_run(run.read_events(), result, settings=settings)
-            summaries = {"run": run_summary.to_dict()}
-            if len(result.final_text) > settings.label_min_output_chars:
-                summaries["output_label"] = (
-                    await label_output(result.final_text, settings=settings)
-                ).to_dict()
-        result.summary = summaries
-        run.update_record(result=result.to_dict())
-    except (OSError, ValueError, TypeError) as exc:
-        logger.error("run {}: summary not written: {}", run.run_id, exc)
-        return
-    cost = sum(float(entry.get("cost_usd") or 0.0) for entry in summaries.values())
-    logger.info("run {}: summary written (${:.6f})", run.run_id, cost)
 
 
 async def _ask(config: BackendConfig, question: str, *, model: str | None, max_tokens: int) -> int:

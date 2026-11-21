@@ -1,7 +1,6 @@
 """OpenRouter client for direct chat calls (no agent loop) and the model catalogue.
 
-Adapted from AI Inventor's OpenRouter call and search scripts, on async
-``httpx``: the cost of a call is the response's own ``usage.cost``, and every
+Built on async ``httpx``: the cost of a call is the response's own ``usage.cost``, and every
 paid call goes through :func:`chipmonk_backend.llm.retry.retry_paid_call`.
 """
 

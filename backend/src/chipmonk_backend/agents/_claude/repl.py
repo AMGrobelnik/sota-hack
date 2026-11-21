@@ -1,7 +1,6 @@
 """One ``claude`` REPL session under a PTY: spawn, type a turn, tail the transcript.
 
-Adapted from AI Inventor's Claude CLI driver (records, PTY writes, cost
-dialog). Synchronous on purpose: ``pexpect`` is blocking, so the backend runs this in a worker thread.
+Synchronous on purpose: ``pexpect`` is blocking, so the backend runs this in a worker thread.
 
 A turn is typed as one bracketed paste and ends at the transcript's
 ``system/turn_duration`` record, or at an API-error record (the CLI writes no

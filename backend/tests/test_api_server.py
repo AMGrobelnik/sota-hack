@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import subprocess
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 from aiohttp import ClientResponse
 from aiohttp.test_utils import TestClient, TestServer
@@ -22,6 +24,7 @@ from chipmonk_backend.api.server import TOKEN_HEADER, create_app, serve
 from chipmonk_backend.api.translate import Translator, tool_summary
 from chipmonk_backend.cli import _parser
 from chipmonk_backend.config import BackendConfig
+from chipmonk_backend.llm import summarise as summarise_mod
 from chipmonk_backend.runs import JsonlEventSink, RunDir, RunRecord
 
 TOKEN = "test-session-token"
@@ -234,6 +237,32 @@ async def test_run_lifecycle_with_the_stub(client: TestClient, config: BackendCo
     assert detail["finished_at"] and detail["started_at"]
     assert detail["cost"]["usd"] == 0.0
     assert "Stub run complete" in detail["summary"]
+    assert "bullets" not in detail, "no OpenRouter key in the tests: no run summary"
+
+
+async def test_run_summary_reaches_the_record_and_run_finished(
+    client: TestClient, config: BackendConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every run through run_agent is summarised, the dashboard's runs too."""
+    bullets = "- Task: a seizure wristband.\n- Stub stages all done.\n- Report written."
+    reply = {
+        "model": "openai/gpt-oss-120b",
+        "provider": "X",
+        "choices": [{"message": {"role": "assistant", "content": bullets}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "cost": 2e-5},
+    }
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json=reply))
+    monkeypatch.setenv("OPENROUTER_API_KEY", "fake-key-for-api-summary-test")
+    monkeypatch.setattr(
+        summarise_mod.httpx, "AsyncClient", functools.partial(httpx.AsyncClient, transport=transport)
+    )
+    run_id = await _start(client)
+    last = (await _events(client, run_id))[-1]
+    assert (last["type"], last["bullets"]) == ("run.finished", bullets)
+    assert "Stub run complete" in last["summary"], "the agent's last message stays the summary"
+    record = json.loads((config.resolved_runs_dir() / run_id / "run.json").read_text())
+    assert record["result"]["summary"]["run"]["text"] == bullets
+    assert record["llm_cost_usd"] == pytest.approx(2e-5)
 
 
 async def test_runs_listed_newest_first(client: TestClient) -> None:

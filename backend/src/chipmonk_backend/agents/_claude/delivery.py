@@ -1,7 +1,5 @@
 r"""Typing a prompt into the ``claude`` TUI whole, and proving the transcript got it.
 
-Adapted from AI Inventor.
-
 * A prompt goes in as ONE bracketed paste (``ESC[200~`` ... ``ESC[201~``);
   typed raw, the CLI guesses the paste's extent from how the PTY slices it
   and under load kept only the last slice.

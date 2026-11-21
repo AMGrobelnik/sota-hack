@@ -1,14 +1,13 @@
 """``on_demand`` mode: one RunPod worker pod per agent.
 
-Ported from AI Inventor ``aii_runpod/runpod_backend.py::RunPodEnv`` (tier
-chain and the owner's $/hr ceiling), ``pod_infra/worker_pod.py::WorkerPod.
-run_agent_job`` and ``_worker_pod/_spawn.py`` (create, healthcheck, submit,
-stream, result, terminate in ``finally``), ``pod_infra/pod_launcher.py`` and
-``availability.py`` (walk the chain, in-stock first, a stock reading orders
-but never vetoes), ``pod_liveness.py`` (a pod RunPod reports gone ends the
-wait) and ``_worker_pod/_leak.py`` (a failed terminate is kept for a retry).
-The server-routed client is replaced by :class:`RunPodAPI` and the database
-ledgers by ``RunRecord.compute`` in ``run.json``; the name prefix is what
+A tier maps to a chain of machine types under the owner's $/hr ceiling. The
+launcher walks the chain (in-stock first; a stock reading orders the chain
+but never vetoes a type), creates the pod, waits for its health check,
+submits the job, streams the events, fetches the result and terminates the
+pod in ``finally``. A pod that RunPod reports gone ends the wait, and a
+failed terminate is kept for a retry. RunPod is reached through
+:class:`RunPodAPI`; the pod's facts go into ``RunRecord.compute`` in
+``run.json``; the name prefix is what
 :func:`~chipmonk_backend.compute.runpod.reaper.reap_orphans` sweeps.
 """
 

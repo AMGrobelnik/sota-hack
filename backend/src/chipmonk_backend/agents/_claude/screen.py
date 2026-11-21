@@ -1,6 +1,6 @@
 """Reading the ``claude`` terminal: startup dialogs, the mode marker, held submits.
 
-Adapted from AI Inventor. The CLI renders a
+The CLI renders a
 blocking dialog on a config dir that has not answered it yet (the Bypass
 Permissions warning, the auto-mode offer). A prompt typed into a dialog never
 runs, so :class:`DialogPilot` answers each known dialog by its LABEL and the

@@ -8,8 +8,8 @@ Layout of one run::
         llm_calls.jsonl  # OpenRouter calls the agent made via ``ask`` (if enabled)
         workspace/     # the agent's working folder (default AgentSpec.workdir)
 
-:class:`JsonlEventSink` replaces AI Inventor's DBOS/Postgres event journal
-(``aii_lib/run/emit.py``) with an append-only file.
+:class:`JsonlEventSink` is the event journal: an append-only file, no
+database.
 """
 
 from __future__ import annotations

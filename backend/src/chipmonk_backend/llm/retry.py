@@ -1,6 +1,6 @@
 """Retry for paid calls: transient faults only, same model, bounded.
 
-Policy (adapted from AI Inventor's paid-call retry): retry HTTP
+Policy: retry HTTP
 :data:`TRANSIENT_STATUSES` and failures that happened before the request
 reached the provider, back off 1, 2, 4, 8 s (honouring ``Retry-After``), and
 re-raise the ORIGINAL error when attempts run out or the error is not transient.

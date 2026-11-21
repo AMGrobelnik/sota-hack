@@ -1,8 +1,7 @@
 """Orphan sweep: find (and only with ``dry_run=False`` terminate) our leftover pods.
 
-Ported from AI Inventor's ``.claude/skills/aii-runpod/scripts/
-aii_runpod_reap_orphans.py``: dry run by default, prefix mandatory, one
-failed terminate never stops the sweep. Never touches a pod whose name lacks
+Dry run by default, prefix mandatory, and one failed terminate never stops
+the sweep. Never touches a pod whose name lacks
 the prefix, and never touches volumes or templates.
 """
 

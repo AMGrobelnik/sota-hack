@@ -1,6 +1,6 @@
 """``local`` mode: run the agent in this process, on whatever machine this is.
 
-The same three lines as AI Inventor's ``LocalEnv``: pick the backend, run it.
+Pick the agent backend and run it.
 Also what a RunPod worker pod uses to run the job it was sent.
 """
 

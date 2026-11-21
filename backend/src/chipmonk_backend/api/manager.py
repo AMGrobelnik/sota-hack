@@ -109,7 +109,7 @@ class ApiRun:
     def detail_view(self) -> dict[str, Any]:
         """The run object of ``GET /api/runs/{id}``."""
         view = self.summary_view()
-        for key in ("summary", "cost"):
+        for key in ("summary", "bullets", "cost"):
             if self.record.get(key) is not None:
                 view[key] = self.record[key]
         return view
@@ -236,6 +236,7 @@ class RunManager:
         follow = asyncio.create_task(tailer.follow(self.api.progress_poll_s))
         status: ApiStatus = "failed"
         summary: str | None = None
+        bullets: str | None = None
         result: AgentResult | None = None
 
         def keep_runner(runner: Runner) -> None:
@@ -253,6 +254,7 @@ class RunManager:
             status = "failed" if result.failed else "succeeded"
             # The agent's last message, not final_text: claude_cli joins every turn's text there.
             summary = clip(result.error or translator.last_text or result.final_text, 600) or None
+            bullets = _bullets(result)
             if result.failed and not translator.error_emitted:
                 item.log.append("error", message=result.error or "the agent failed")
         except asyncio.CancelledError:
@@ -271,8 +273,10 @@ class RunManager:
                 if rel.lower() in {"report.md", "report.html"}:
                     self._artifact(tailer, rel, "report")
             cost = translator.cost
-            item.log.append("run.finished", status=status, summary=summary)
-            item.record.update(status=status, finished_at=utc_now(), summary=summary, cost=cost)
+            item.log.append("run.finished", status=status, summary=summary, bullets=bullets)
+            item.record.update(
+                status=status, finished_at=utc_now(), summary=summary, bullets=bullets, cost=cost
+            )
             item.save()
             logger.info("run {} {}", item.id, status)
 
@@ -322,6 +326,12 @@ class RunManager:
             await asyncio.gather(*(i.task for i in live if i.task), return_exceptions=True)
         for item in self.runs.values():
             item.log.wake()
+
+
+def _bullets(result: AgentResult) -> str | None:
+    """The three-bullet OpenRouter run summary, if one was written."""
+    run_summary = (result.summary or {}).get("run") or {}
+    return run_summary.get("text") or None
 
 
 def _close_record(run: RunDir, message: str) -> None:

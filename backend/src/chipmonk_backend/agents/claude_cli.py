@@ -1,6 +1,6 @@
 """``claude_cli`` backend: drives the interactive ``claude`` CLI under a PTY.
 
-This is NOT the Claude Agent SDK. As in AI Inventor's Claude CLI driver, the
+This is NOT the Claude Agent SDK. The
 backend spawns ``claude`` with ``pexpect``, types the prompts into its REPL,
 and reads the CLI's own session transcript
 (``$CLAUDE_CONFIG_DIR/projects/<cwd-slug>/<session-id>.jsonl``) to turn each

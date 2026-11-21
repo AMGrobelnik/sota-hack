@@ -4,7 +4,7 @@ Agents run with permissions bypassed, so whatever is in their environment is
 theirs. Only the names below pass through; everything else (RUNPOD_API_KEY
 above all) stays in the launcher. ``ANTHROPIC_API_KEY`` is scrubbed on purpose:
 the ``claude`` CLI would silently switch from the subscription login to paid
-API billing. Adapted from AI Inventor.
+API billing.
 """
 
 from __future__ import annotations

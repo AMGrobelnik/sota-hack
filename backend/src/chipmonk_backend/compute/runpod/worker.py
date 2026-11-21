@@ -18,12 +18,10 @@ the launcher generates and passes in the pod env as :data:`WORKER_TOKEN_ENV`
 proxy). A TTL watchdog ends the process at ``pod_timeout_s + 300``, which
 stops the agent but NOT the bill: see :func:`start_ttl_watchdog`.
 
-Ported from AI Inventor ``aii_lib/run/agent_worker_server.py`` (routes, SSE
-buffer and resume, result-after-stream), ``aii_runpod/comms/entrypoint.py``
-(TTL watchdog) and ``aii_runpod/comms/orchestrator_client.py`` (submit retries
-through the proxy, SSE reconnect with ``since``, result polling). The shared
-internal key and the server credential fetch are replaced by the per-pod
-token; the DBOS journal by the run folder's ``events.jsonl``.
+The server side holds the job routes, an SSE buffer that a client can resume
+from, and the result once the stream has ended. The client side submits with
+retries through RunPod's proxy, reconnects to the stream with ``since`` and
+polls for the result. Events are kept in the run folder's ``events.jsonl``.
 """
 
 from __future__ import annotations

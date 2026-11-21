@@ -1,4 +1,4 @@
-"""Summaries on OpenRouter models, the way AI Inventor writes them.
+"""Summaries on OpenRouter models: run summaries and output labels.
 
 One entry point, :func:`summarise`, walks a chain of provider tiers for ONE
 model (``summaries.yaml`` beside this file): each tier pins exactly one

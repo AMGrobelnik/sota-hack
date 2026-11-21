@@ -1,5 +1,5 @@
 """Where the ``claude`` CLI keeps its login, its per-folder state and its transcripts,
-and the folder trust a run grants itself for its own lifetime. Adapted from AI Inventor.
+and the folder trust a run grants itself for its own lifetime.
 """
 
 from __future__ import annotations

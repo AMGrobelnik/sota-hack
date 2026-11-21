@@ -4,8 +4,7 @@
 
 Every type round-trips through ``to_dict``/``from_dict`` as plain JSON, because
 On Demand mode ships a spec to a RunPod worker pod and streams events and the
-result back over HTTP. Adapted from AI Inventor, cut to the fields a Chipmonk
-agent needs.
+result back over HTTP. Only the fields a Chipmonk agent needs.
 """
 
 from __future__ import annotations

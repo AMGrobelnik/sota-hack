@@ -1,7 +1,7 @@
 """One agent run end to end: make the run folder, pick the runner, record the outcome.
 
-This is the thin replacement for AI Inventor's DBOS pipeline: no workflow
-engine, no database. Chipmonk's own steps (propose designs, fine-tune, compile,
+No workflow engine and no database: the run folder is the record.
+Chipmonk's own steps (propose designs, fine-tune, compile,
 verify) compose :func:`run_agent` calls.
 """
 
@@ -22,6 +22,8 @@ from chipmonk_backend.agents.types import AgentResult, AgentSpec, utc_now
 from chipmonk_backend.compute.base import Runner
 from chipmonk_backend.compute.factory import runner_for
 from chipmonk_backend.config import BackendConfig, ComputeTier, RunMode
+from chipmonk_backend.llm.keys import OPENROUTER_KEY_ENV, has_openrouter_key
+from chipmonk_backend.llm.summarise import label_output, load_summary_settings, summarise_run
 from chipmonk_backend.runs import RunDir, RunRecord
 
 #: Set in the agent's environment when the OpenRouter tool is on: where
@@ -57,6 +59,7 @@ async def run_agent(
     run_id: str | None = None,
     run: RunDir | None = None,
     on_runner: Callable[[Runner], None] | None = None,
+    summary: bool = True,
 ) -> tuple[RunDir, AgentResult]:
     """Run ``spec`` once and return its run folder and result.
 
@@ -64,6 +67,10 @@ async def run_agent(
     own files there first); otherwise one is created as ``run_id``.
     ``on_runner`` is handed the runner before the agent starts, for callers
     that pass messages to it.
+
+    A run that ends with a result is then summarised on OpenRouter into
+    ``result.summary`` (see :func:`summarise_into_record`) unless ``summary``
+    is false; the summary's cost is added to ``llm_cost_usd``.
 
     ``run.json`` moves ``running`` -> ``succeeded`` | ``failed`` | ``stopped``
     and ends with the resolved config, timings, the costs known and the
@@ -81,7 +88,10 @@ async def run_agent(
     async with _agent_slots(config.compute.max_concurrent_agents):
         if run is None:
             run = RunDir.create(config.resolved_runs_dir(), run_id)
-        return await _run_agent(spec, config, run, mode=mode, tier=chosen_tier, on_runner=on_runner)
+        run, result = await _run_agent(spec, config, run, mode=mode, tier=chosen_tier, on_runner=on_runner)
+    if summary:
+        await summarise_into_record(run, result)
+    return run, result
 
 
 async def _run_agent(
@@ -151,6 +161,34 @@ async def _run_agent(
     return run, result
 
 
+async def summarise_into_record(run: RunDir, result: AgentResult) -> None:
+    """Summarise a finished run on OpenRouter and write it into ``run.json``.
+
+    ``result.summary["run"]`` is three bullets on the whole run; a final answer
+    longer than ``label_min_output_chars`` also gets ``output_label``. Each
+    carries its own cost, which is added to the record's ``llm_cost_usd``.
+    Without an OpenRouter key this is skipped with one log line. A summary
+    that cannot be written is logged; it never fails the run.
+    """
+    if not has_openrouter_key():
+        logger.info("run {}: no OpenRouter summary ({} is not set)", run.run_id, OPENROUTER_KEY_ENV)
+        return
+    try:
+        settings = load_summary_settings()
+        run_summary = await summarise_run(run.read_events(), result, settings=settings)
+        summaries = {"run": run_summary.to_dict()}
+        if len(result.final_text) > settings.label_min_output_chars:
+            summaries["output_label"] = (await label_output(result.final_text, settings=settings)).to_dict()
+        cost = sum(float(entry.get("cost_usd") or 0.0) for entry in summaries.values())
+        result.summary = summaries
+        llm_cost = run.read_record().llm_cost_usd
+        run.update_record(result=result.to_dict(), llm_cost_usd=(llm_cost or 0.0) + cost)
+    except (OSError, ValueError, TypeError) as exc:
+        logger.error("run {}: summary not written: {}", run.run_id, exc)
+        return
+    logger.info("run {}: summary written (${:.6f})", run.run_id, cost)
+
+
 #: One semaphore per (event loop, limit): asyncio primitives belong to one loop.
 _SLOTS: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[int, asyncio.Semaphore]] = (
     weakref.WeakKeyDictionary()
@@ -178,4 +216,4 @@ def _finish(run: RunDir, started: float, **fields: Any) -> RunRecord:
     )
 
 
-__all__ = ["LLM_CALLS_ENV", "openrouter_tool_prompt", "run_agent"]
+__all__ = ["LLM_CALLS_ENV", "openrouter_tool_prompt", "run_agent", "summarise_into_record"]

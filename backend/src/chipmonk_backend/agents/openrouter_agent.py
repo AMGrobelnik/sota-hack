@@ -6,7 +6,7 @@ SDK is imported inside :meth:`OpenRouterAgentBackend.run` only, so the base
 install keeps working without the extra. Unlike ``claude_cli`` it needs only
 ``OPENROUTER_API_KEY``, which makes it the easy backend on RunPod pods.
 
-Adapted from AI Inventor's OpenHands agent, on paid OpenRouter models only.
+Built on the OpenHands SDK, on paid OpenRouter models only.
 
 The conversation runs in memory (no ``persistence_dir``): the SDK's saved state
 holds the LLM settings, API key included, and the workspace is the agent's own

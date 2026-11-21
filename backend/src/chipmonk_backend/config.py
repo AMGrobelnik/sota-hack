@@ -38,7 +38,7 @@ CONFIG_ENV_VAR = "CHIPMONK_CONFIG"
 #: Where an agent runs. ``local``: in this process on any host (tests, dev,
 #: and the agent process inside a RunPod worker pod). ``flex``: on a Mac the
 #: team owns, at no rental cost. ``on_demand``: one rented RunPod worker pod
-#: per agent. Same vocabulary as AI Inventor's ``execute_env.run_mode``.
+#: per agent.
 RunMode = Literal["local", "flex", "on_demand"]
 #: Hardware ladder, cheapest first. A GPU tier never falls back to a CPU host.
 ComputeTier = Literal["cpu_basic", "cpu_plus", "gpu_basic", "gpu_plus"]
@@ -129,8 +129,8 @@ class RunPodConfig(_Section):
 class FlexConfig(_Section):
     """Flex mode: agents run on a Mac the team owns."""
 
-    #: ``host``: directly on the Mac, as the logged-in user. AI Inventor's
-    #: macOS-VM isolation (``vm``) is deferred.
+    #: ``host``: directly on the Mac, as the logged-in user. A macOS-VM
+    #: isolation (``vm``) is not built yet.
     isolation: Literal["host"] = "host"
     require_macos: bool = True
 

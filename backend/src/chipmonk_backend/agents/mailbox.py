@@ -1,6 +1,6 @@
 """Messages injected into a running agent, queued until its next turn boundary.
 
-Adapted from AI Inventor: a thread-safe queue
+A thread-safe queue
 whose ``close`` and ``try_put`` are mutually exclusive, so a message can never
 slip in after the agent began tearing down (it would be silently lost).
 """

@@ -19,18 +19,34 @@ Built and proven by a real run on a Mac:
 - `openrouter` agent backend (OpenHands on any paid OpenRouter model): one
   real run wrote a file and reported its cost.
 - `ask`: one OpenRouter chat call, with its cost logged.
-- Run summaries: after `run`, an OpenRouter model writes three bullets on the
-  whole run into `run.json` (one real call, about $0.0001).
+- Run summaries: after every run through `orchestrate.run_agent` (the `run`
+  command and the local API server alike), an OpenRouter model writes three
+  bullets on the whole run into `run.json` (one real call, about $0.0001).
 - The `local` runner, and `flex` (the same, on a team Mac).
+- The local API server (`serve`) for the dashboards: see
+  "Local API for the dashboards".
 
 Built and tested, dry run only:
 
 - `on_demand` (RunPod): the runner, the worker, the API client and the
   leftover-pod reaper run against a fake RunPod and real local workers.
   Against RunPod itself only read-only calls and dry runs were made; no pod
-  has been created. A pod is created only when `compute.runpod.dry_run` is
-  false AND `compute.runpod.allow_paid_pods` is true. A pod gets no Claude
-  login and no API key, so only the `stub` backend runs there today.
+  has been created.
+
+### RunPod
+
+- Paid pods are off by default. The launcher refuses to create one unless
+  `compute.runpod.allow_paid_pods` is true, and `compute.runpod.dry_run`
+  (on by default) only writes the create request into the run folder.
+- Only the `stub` backend can run on a pod: a pod gets no Claude login and
+  no OpenRouter key, so the launcher refuses any other backend there.
+- The pod's timer ends the worker process, not the pod: the agent stops but
+  the pod, and its bill, keep running until something terminates it.
+- The launcher terminates its pod when the run ends, on every path. The
+  safety net is `python -m chipmonk_backend.compute.runpod reap --delete`;
+  by default it ends only pods older than the longest a live pod can run,
+  so it never ends a pod that a run still uses. Without `--delete` it only
+  reports.
 
 Every part has tests: `pytest` runs them all with no network and no keys;
 `pytest -m live` adds the real calls (Claude, OpenRouter), which cost money.
@@ -86,7 +102,7 @@ python -m chipmonk_backend.compute.runpod check      # pods and prices, read-onl
 
 ## Summaries
 
-As in AI Inventor, every summary uses one OpenRouter model,
+Every summary uses one OpenRouter model,
 `openai/gpt-oss-120b`, walked provider by provider: each tier pins one
 provider, the next tier is the fallback, and the whole walk has one time
 budget. The settings are in `src/chipmonk_backend/llm/summaries.yaml`.
@@ -96,8 +112,68 @@ budget. The settings are in `src/chipmonk_backend/llm/summaries.yaml`.
 - `result.summary.output_label`: a one-line label, added when the agent's
   final answer is longer than 300 characters.
 
-Each entry records its text, cost, tokens, model and provider. With no
-OpenRouter key the entry records why instead, and the run is unaffected.
+Each entry records its text, cost, tokens, model and provider; the cost is
+added to the record's `llm_cost_usd`. With no OpenRouter key the summary is
+skipped with one log line and the run is unaffected. `run --no-summary`
+skips it too.
+
+## Local API for the dashboards
+
+`serve` starts a local HTTP server that lets a dashboard page start a real
+agent run on this Mac and follow it live.
+
+```bash
+python -m chipmonk_backend serve --agent stub --frontend <site folder>
+python -m chipmonk_backend serve           # the Claude agent, port 8797
+```
+
+- It binds 127.0.0.1 only, on port 8797 (`--port` or
+  `src/chipmonk_backend/api/api.yaml` change it).
+- It prints one link, `http://127.0.0.1:8797/#token=<token>`. The token is
+  new at every start and is never written to disk. A page sends it in the
+  `X-ChipIn-Token` header; the event stream may pass it as `?token=`.
+- Browsers may call it from `https://chipin.space` and from
+  `http://127.0.0.1` or `http://localhost` on any port; any other origin is
+  refused. `--frontend <folder>` serves a static site at `/`, so a page
+  opened through the link needs no other setup.
+- `--agent claude` (the default) runs the `claude_cli` backend on the
+  Mac's own Claude login; `--agent stub` runs a scripted agent with no model
+  calls. Every run goes through `orchestrate.run_agent`, so it gets a
+  `runs/<run_id>/` folder, a full `run.json` and the OpenRouter summary.
+
+| Route or event                 | What it is                   |
+| ------------------------------ | ---------------------------- |
+| `GET /api/health`              | no token; version            |
+| `POST /api/runs`               | start: `prompt`, `preset`    |
+| `GET /api/runs`                | every run, newest first      |
+| `GET /api/runs/{id}`           | status, summary, cost        |
+| `GET /api/runs/{id}/events`    | the stream, `from=<seq>`     |
+| `POST /api/runs/{id}/messages` | `text` to the agent          |
+| `POST /api/runs/{id}/stop`     | stop the run                 |
+| `run.started`                  | prompt, agent, runner        |
+| `stage`                        | `name`, `state`, `reason`    |
+| `status`                       | one "ChipIn is ..." line     |
+| `message`                      | agent or user text           |
+| `tool`                         | a tool call, started or done |
+| `metric`                       | `key` and `value`            |
+| `artifact`                     | a file, such as the report   |
+| `cost`                         | agent cost and tokens        |
+| `error`                        | what went wrong              |
+| `run.finished`                 | status, summary, `bullets`   |
+
+Stages, in order: `spec`, `reference`, `propose`, `finetune`, `compile`,
+`verify`, `report`. Each is `started`, `done` or `skipped`; a skipped stage
+carries a short reason. The agent reports them with `./progress` in its
+working folder. `run.finished` carries the agent's last message as
+`summary` and, when OpenRouter wrote one, the three-bullet run summary as
+`bullets`. Presets map to agent effort: `lite`, `pro`, `max`, `ultra`.
+
+What is real today: the Claude agent runs on this Mac, works through the
+brief, writes files and a report, reports stages, messages, tools and cost,
+and takes messages and stop requests while it runs. What is not: there are
+no fine-tuning, gate-compiler or verifier tools yet, so an agent marks those
+stages skipped; attached files reach the agent as names and header lines
+only; runs on rented machines are not offered by this server.
 
 ## Layout
 
@@ -111,7 +187,8 @@ backend/
     log.py                   loguru: stderr plus logs/backend.log
     runs.py                  run folders: run.json, events.jsonl, workspace/
     orchestrate.py           run_agent(spec, config): one run end to end
-    cli.py                   chipmonk-backend run / ask / config
+    cli.py                   chipmonk-backend run / ask / serve / config
+    api/                     the local API server for the dashboards
     llm/                     OpenRouter client, key, retry, presets, summaries
     agents/                  AgentBackend interface and the backends
     compute/                 Runner interface: local, flex, on_demand
@@ -178,8 +255,9 @@ call) and `CHIPMONK_WORKER_TOKEN` (a pod's worker token).
 
 - AI Inventor's research pipeline and its workflow engine and database: a
   Chipmonk run is one agent and a folder, so `orchestrate.run_agent` does it.
-- The web server, accounts and credential handling: the interface lives on
-  its own branch and is not connected yet.
+- The product web server, accounts and credential handling: the interface
+  lives on its own branch; it reaches this backend only through the local
+  API server above.
 - Spend metering and budgets: each call's cost comes from the response and
   goes into the run record.
 - Free-model routing: Chipmonk uses paid OpenRouter models only.

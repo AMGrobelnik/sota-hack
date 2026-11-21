@@ -173,14 +173,21 @@ def test_run_command_writes_the_summary_into_the_record(
     summary = record["result"]["summary"]["run"]
     assert summary["text"] == BULLETS and summary["cost_usd"] == pytest.approx(5e-5)
     assert "output_label" not in record["result"]["summary"]  # the stub's answer is short
+    assert record["llm_cost_usd"] == pytest.approx(5e-5)
     assert FAKE_KEY not in (run_dir / "run.json").read_text()
 
 
-def test_run_command_without_a_key_records_why(config_file: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_run_without_a_key_skips_the_summary(config_file: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert cli.main(["run", "--config", str(config_file), "--prompt", "hello"]) == 0
     run_dir = Path(json.loads(capsys.readouterr().out)["run_dir"])
     record = json.loads((run_dir / "run.json").read_text())
-    assert record["result"]["summary"]["run"]["error"] == "OPENROUTER_API_KEY is not set"
+    assert record["result"]["summary"] is None and record["llm_cost_usd"] is None
+
+
+def test_no_summary_flag_makes_no_call(
+    config_file: Path, key: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """With a key but ``--no-summary``, no summary is made."""
     assert cli.main(["run", "--config", str(config_file), "--prompt", "hi", "--no-summary"]) == 0
     run_dir = Path(json.loads(capsys.readouterr().out)["run_dir"])
     assert json.loads((run_dir / "run.json").read_text())["result"]["summary"] is None
