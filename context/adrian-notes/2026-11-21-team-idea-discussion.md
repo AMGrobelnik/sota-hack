@@ -69,3 +69,7 @@ A Granola note Adrian shared at 14:56 on Sat 21 Nov 2026.
 - Part (c): privacy becomes a hardware property. The chip outputs only the answer and has no software that could be changed to send raw data.
 - Fertility candidate proposed by Claude (facts still being checked): a fertile-window chip inside a ring, patch or vaginal sensor. It outputs only "fertile today" and "ovulation confirmed".
 - Stated weakness: the signal is slow, so the battery saving is negligible. The claim rests on privacy and on how few gates it takes.
+
+## About 16:10
+
+- The team validated the idea with a person at the event (no details recorded yet). It is now choosing application domains and a project name.

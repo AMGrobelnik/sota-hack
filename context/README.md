@@ -40,6 +40,7 @@ Everything collected for the hackathon, one line per file.
 - `adrian-notes/2026-11-21-eeg-evidence.md`: checked evidence for EEG as a use case, 21 Nov, research note.
 - `adrian-notes/2026-11-21-fertility-evidence.md`: checked evidence for fertility medicine as a use case, 21 Nov, research note.
 - `adrian-notes/2026-11-21-team-idea-discussion.md`: shared team note on the chip idea discussion, 21 Nov (author not named in the file).
+- `adrian-notes/2026-11-21-newborn-eeg-test.md`: quick feasibility test of newborn seizure detection from EEG on the open Helsinki dataset, 21 Nov, research note.
 - `adrian-notes/2026-11-21-whatsapp-group.md`: summary of the team's WhatsApp group, 21 Nov, research note.
 - `adrian-notes/data/`: structured JSON outputs behind the notes (idea panels, sponsors, past events, dialysis verification), research note.
 - `whatsapp/team-group-chat.md`: the team's WhatsApp group, 4 to 21 Nov, read-only export, 21 Nov.
