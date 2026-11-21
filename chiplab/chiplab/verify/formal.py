@@ -9,6 +9,10 @@ Two proofs, chained:
   B. gate netlist == production RTL, by ABC combinational equivalence (`cec`, SAT sweeping).
 A and B together: gates == golden model for every input. If A is inconclusive, B alone is reported (synthesis
 proved; RTL == IR then rests on construction and tests/test_ir_fuzz.py).
+
+Default is B only (fast: well under a second of ABC on a 2.2k-gate chip). A is opt-in (golden=True): it finishes in
+seconds on small chips, but a 16-lane x 8-input matvec node of the spike chip did not finish in 10 min (SAT) or 60 s
+(ABC cec), so it is not yet usable for chips of that size.
 """
 from __future__ import annotations
 
@@ -48,7 +52,8 @@ def _cec(a: Path, b: Path, workdir: Path, timeout: int) -> tuple[bool | None, st
 
 def _node_subir(ir: dict, nd: dict, R: dict) -> dict:
     """IR with free inputs, clamped per lane to the node's input ranges, feeding a copy of node `nd`."""
-    keys = [k for k in ("src", "a", "b", "other") if k in nd] + (["srcs"] if "srcs" in nd else [])
+    op = nd["op"]  # which fields name source nodes ("b" is a bias list in matvec but an operand in add/sub)
+    keys = ["a", "b"] if op in ("add", "sub") else (["srcs"] if op == "concat" else ["src"] + (["other"] if "other" in nd else []))
     srcs = []
     for k in keys:
         srcs += nd[k] if k == "srcs" else [nd[k]]
@@ -109,7 +114,8 @@ def prove_rtl_vs_golden(ir: dict, workdir: Path, timeout: int = 600) -> dict:
             "seconds": round(time.time() - t0, 1)}
 
 
-def prove(ir: dict, port_info: dict, gate_verilog: Path, rtl: Path, workdir: Path, timeout: int = 600) -> dict:
+def prove(ir: dict, port_info: dict, gate_verilog: Path, rtl: Path, workdir: Path, timeout: int = 600,
+          golden: bool = False) -> dict:
     workdir.mkdir(parents=True, exist_ok=True)
     top = port_info["top"]
     t0 = time.time()
@@ -123,6 +129,9 @@ def prove(ir: dict, port_info: dict, gate_verilog: Path, rtl: Path, workdir: Pat
     if ok_b is not True:
         return {"proved": ok_b, "against": "production RTL", "method": "abc cec", "detail": out_b,
                 "seconds": round(time.time() - t0, 1), "verification_level": 2 if ok_b else (0 if ok_b is False else 1)}
+    if not golden:
+        return {"proved": True, "against": "production RTL (synthesis proved; RTL == IR by construction and fuzz tests)",
+                "method": "abc cec", "detail": out_b, "seconds": round(time.time() - t0, 1), "verification_level": 2}
     # A: production RTL == golden model of the IR, node by node
     a = prove_rtl_vs_golden(ir, workdir / "golden_nodes", timeout)
     if a["proved"] is True:

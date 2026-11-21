@@ -2,8 +2,8 @@
 # chipin.space chip lab installer for macOS (Apple Silicon or Intel) and Linux (x86_64 or arm64).
 #
 #   scripts/install.sh                 # everything: Python env, OSS CAD Suite, PDKs, LibreLane image, Tiny Tapeout tools
-#   scripts/install.sh --no-docker     # skip the LibreLane image (no layout, timing/power or TT harden)
-#   scripts/install.sh --no-pdk        # skip the PDK download (no area numbers)
+#   scripts/install.sh --skip-docker   # (or --no-docker) skip the LibreLane image (no layout, timing/power or TT harden)
+#   scripts/install.sh --skip-pdk      # (or --no-pdk) skip the PDK download (no area numbers)
 #   scripts/install.sh --pdks sky130   # only some PDKs (sky130 gf180mcu ihp-sg13g2)
 #   scripts/install.sh --mcp           # also install the optional MCP server extra
 #
@@ -22,9 +22,9 @@ PDKS="sky130 gf180mcu ihp-sg13g2"; DO_DOCKER=1; DO_PDK=1; DO_TT=1; EXTRAS="--ext
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --no-docker) DO_DOCKER=0 ;;
-    --no-pdk) DO_PDK=0 ;;
-    --no-tt) DO_TT=0 ;;
+    --no-docker|--skip-docker) DO_DOCKER=0 ;;
+    --no-pdk|--skip-pdk) DO_PDK=0 ;;
+    --no-tt|--skip-tt) DO_TT=0 ;;
     --pdks) PDKS="$2"; shift ;;
     --mcp) EXTRAS="$EXTRAS --extra mcp" ;;
     -h|--help) sed -n 2,13p "$0"; exit 0 ;;

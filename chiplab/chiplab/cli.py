@@ -46,7 +46,10 @@ def main(argv=None) -> int:
         t = _tools()[argv[0].replace("-", "_")]
         print(json.dumps({"summary": t["summary"], "params": t["params"]}, indent=1)); return 0
     if cmd == "agent_doc":
-        print(agent_doc()); return 0
+        from chiplab import docs
+        if "--write" in argv:
+            print(json.dumps({"written": docs.write()})); return 0
+        print(docs.agent_md()); return 0
     if cmd == "doctor":
         from chiplab.doctor import run
         r = run(); print(json.dumps(r, indent=1, default=str)); return 0 if r["ok"] else 1
