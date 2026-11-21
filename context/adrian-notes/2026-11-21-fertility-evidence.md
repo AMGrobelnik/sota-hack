@@ -73,3 +73,32 @@ The facts below were collected by one agent and each source was re-opened by a s
 - Do not quote Oura's 96.4% as an independent result, or set the 82%-within-2-days comparison against the calendar method as like-for-like.
 - Do not cite the Pearl Index as ovulation-detection accuracy.
 - Do not use the embryo record's 62.8 GB without stating its non-commercial licence.
+
+## Open data that downloads today (second search, Sat 21 Nov)
+
+One agent searched and confirmed each download with an HTTP request. No second agent re-checked it.
+
+| Name | People and samples | Signals and ground truth | Size | Access |
+| --- | --- | --- | --- | --- |
+| Mendeley 76gmpt3jfn, menstrual sleep-wake | 10 women | BBT, Apple Watch sleep; LH-test ovulation | 1.37 MB xlsx | CC BY 4.0; file 302 to S3 200, 1374324 bytes |
+| VISEM, Zenodo 2640506 | 85 participants | Not stated | One zip, 35,214,812,547 B | CC BY-NC 4.0; HTTP 200 |
+| TPEHG DB, PhysioNet tpehgdb 1.0.1 | 300 recordings | Not stated | 245.4 MB | ODC-By; zip 302 to S3 200, 257471447 B |
+| CTU-UHB | 552 CTGs | Labels: umbilical artery pH, pCO2, pO2, BE, BDecf, Apgar, oxygen need, seizures, NICU; delivery type, weight, sex | 38 MB | ODC-By; file 1001.dat 200, 76800 B |
+
+Page URLs:
+
+- Mendeley file: https://data.mendeley.com/public-files/datasets/76gmpt3jfn/files/8c6a9d75-1540-4fba-af53-935f5b3de675/file_downloaded
+- VISEM: https://zenodo.org/records/2640506
+- TPEHG DB: https://physionet.org/content/tpehgdb/1.0.1/
+- CTU-UHB: page URL not stated in the source
+
+Not usable today:
+
+- Colombo BBT (Padua): 36000 cycles, 1798 couples, CC BY 4.0, but it needs "Request access" and an application form.
+- QCycle on Open Humans: needs joining and consent.
+
+Not found:
+
+- Queries run: BBT wearable LH dataset on Zenodo, Figshare, Dryad and OSF; daily urinary LH E3G PdG open data; BBT ovulation dataset Kaggle; follicle ultrasound open dataset; TPEHG.
+- The repositories (Zenodo, Figshare, Dryad, OSF, Kaggle) were not searched directly. They appear only inside the queries.
+- The source does not list which of these queries found nothing. It points to a report that is not included here.
