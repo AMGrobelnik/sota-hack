@@ -92,6 +92,9 @@ class AgentsConfig(_Section):
     """Agent backends; a spec's ``backend`` overrides ``default_backend``."""
 
     default_backend: Literal["claude_cli", "openrouter", "stub"] = "claude_cli"
+    #: True = tell the agent it may call any OpenRouter model through
+    #: ``python -m chipmonk_backend ask``; each call's cost lands in the run record.
+    openrouter_tool: bool = False
     claude_cli: ClaudeCliConfig = Field(default_factory=ClaudeCliConfig)
     openrouter: OpenRouterAgentConfig = Field(default_factory=OpenRouterAgentConfig)
 

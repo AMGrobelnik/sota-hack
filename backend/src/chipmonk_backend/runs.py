@@ -3,8 +3,9 @@
 Layout of one run::
 
     <runs_dir>/<run_id>/
-        run.json       # RunRecord: status, mode, spec, result (rewritten atomically)
+        run.json       # RunRecord: status, mode, spec, config, result, timings, cost
         events.jsonl   # one AgentEvent per line, appended as they happen
+        llm_calls.jsonl  # OpenRouter calls the agent made via ``ask`` (if enabled)
         workspace/     # the agent's working folder (default AgentSpec.workdir)
 
 :class:`JsonlEventSink` replaces AI Inventor's DBOS/Postgres event journal
@@ -29,6 +30,7 @@ RunStatus = Literal["created", "running", "succeeded", "failed"]
 RECORD_FILE = "run.json"
 EVENTS_FILE = "events.jsonl"
 WORKSPACE_DIR = "workspace"
+LLM_CALLS_FILE = "llm_calls.jsonl"
 
 
 def new_run_id() -> str:
@@ -51,14 +53,40 @@ class RunRecord:
     error: str | None = None
     #: Free-form facts a runner records, e.g. pod id, machine, $/hr.
     compute: dict[str, Any] = field(default_factory=dict)
+    config: dict[str, Any] = field(default_factory=dict)  # resolved BackendConfig, no secrets
+    finished_at: str | None = None
+    duration_s: float | None = None  # wall clock of the whole run
+    agent_cost_usd: float | None = None  # as the agent backend reported it
+    llm_cost_usd: float | None = None  # OpenRouter calls the agent made via ``ask``
+    llm_calls: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         """Plain JSON-ready dict."""
         return asdict(self)
 
 
+def event_summary(event: AgentEvent, *, width: int = 160) -> str:
+    """One short line describing ``event``, for the console and the log file."""
+    data = event.data
+    if event.kind in ("text", "thinking"):
+        detail = data.get("text", "")
+    elif event.kind == "tool_call":
+        detail = f"{data.get('tool')} {json.dumps(data.get('input'), ensure_ascii=False)}"
+    elif event.kind == "tool_result":
+        detail = f"{'error ' if data.get('is_error') else ''}{data.get('output', '')}"
+    elif event.kind in ("status", "error"):
+        detail = data.get("message", "")
+    else:
+        detail = json.dumps(data, ensure_ascii=False)
+    flat = " ".join(str(detail).split())
+    return flat if len(flat) <= width else flat[: width - 3] + "..."
+
+
 class JsonlEventSink:
-    """Appends each event as one JSON line; thread-safe; never raises on write errors."""
+    """Appends each event as one JSON line and logs a one-line summary of it.
+
+    Thread-safe; never raises on write errors.
+    """
 
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -66,6 +94,7 @@ class JsonlEventSink:
 
     def emit(self, event: AgentEvent) -> None:
         """Append ``event``; an OSError is logged, not raised, so the agent keeps going."""
+        logger.info("[{}] {}: {}", event.agent, event.kind, event_summary(event))
         line = json.dumps(event.to_dict(), ensure_ascii=False)
         with self._lock:
             try:
@@ -109,6 +138,23 @@ class RunDir:
         """The agent's default working folder."""
         return self.path / WORKSPACE_DIR
 
+    @property
+    def llm_calls_path(self) -> Path:
+        """``llm_calls.jsonl``: one line per OpenRouter call the agent made via ``ask``."""
+        return self.path / LLM_CALLS_FILE
+
+    def read_llm_calls(self) -> list[dict[str, Any]]:
+        """Every ``ask`` call recorded so far (unreadable lines are skipped)."""
+        if not self.llm_calls_path.is_file():
+            return []
+        calls = []
+        for line in self.llm_calls_path.read_text(encoding="utf-8").splitlines():
+            try:
+                calls.append(json.loads(line))
+            except json.JSONDecodeError:
+                logger.warning("skipping a malformed line in {}", self.llm_calls_path)
+        return calls
+
     def event_sink(self) -> JsonlEventSink:
         """A sink appending to this run's ``events.jsonl``."""
         return JsonlEventSink(self.events_path)
@@ -134,11 +180,13 @@ class RunDir:
 
 __all__ = [
     "EVENTS_FILE",
+    "LLM_CALLS_FILE",
     "RECORD_FILE",
     "WORKSPACE_DIR",
     "JsonlEventSink",
     "RunDir",
     "RunRecord",
     "RunStatus",
+    "event_summary",
     "new_run_id",
 ]

@@ -37,12 +37,14 @@ lists leftover `chipmonk_worker_*` pods (`--delete` terminates them).
 ```text
 backend/
   config/backend.yaml        commented defaults; backend.local.yaml overlays it
+  config/example.yaml        a cheap end-to-end run (see "Run it")
+  examples/                  example prompts
   src/chipmonk_backend/
     config.py                schema and loader (YAML, local overlay, .env)
     log.py                   loguru: stderr plus logs/backend.log
     runs.py                  run folders: run.json, events.jsonl, workspace/
     orchestrate.py           run_agent(spec, config): one run end to end
-    cli.py                   chipmonk-backend run / config
+    cli.py                   chipmonk-backend run / ask / config
     llm/                     OpenRouter client, key, retry policy, presets
     agents/                  AgentBackend interface and the backends
     compute/                 Runner interface: local, flex, on_demand
@@ -104,6 +106,47 @@ pytest && ruff check .
 
 For `claude_cli`, install the `claude` CLI (version 2.1.322 or newer) and log
 in once with `claude`.
+
+## Run it
+
+One agent run, end to end, on this machine (from `backend/`, venv active):
+
+```bash
+python -m chipmonk_backend run --config config/example.yaml \
+    --prompt-file examples/seizure_eeg_prompt.md
+```
+
+`chipmonk-backend` is the same command. Any `--prompt "..."` works in place
+of `--prompt-file`. If the OpenRouter key lives in another env file, add
+`--env-file <path>`; keys are read by name and their values never printed.
+
+What happens:
+
+1. The config loads. `config/example.yaml` picks the `claude_cli` backend
+   (Sonnet, low effort), the `local` runner and `openrouter_tool: true`.
+2. A fresh folder `runs/<run_id>/` is made; the agent works in its
+   `workspace/`.
+3. Each agent event goes to the console, `logs/backend.log` and
+   `runs/<run_id>/events.jsonl` as it happens.
+4. With `openrouter_tool` on, the agent is told it can run
+   `python -m chipmonk_backend ask --model cheap "<question>"`. Each call
+   is logged to `runs/<run_id>/llm_calls.jsonl` with its cost.
+5. `runs/<run_id>/run.json` ends up holding the prompt, the resolved
+   config, the result and final answer, the timings and the costs. The
+   command prints the result as JSON. It exits 1 if the agent failed.
+
+Other commands:
+
+```bash
+python -m chipmonk_backend ask --model cheap "One EEG feature for seizures?"
+python -m chipmonk_backend run --backend stub --prompt "hello"   # no model
+python -m chipmonk_backend run --mode on_demand --tier gpu_basic --prompt "hi"
+python -m chipmonk_backend config                               # resolved config
+```
+
+`--mode flex` runs on a team Mac. `--mode on_demand` goes to RunPod; it
+stays a dry run (the pod request is saved, never sent) while
+`compute.runpod.dry_run` is true.
 
 ## Environment variables
 

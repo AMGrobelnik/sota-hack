@@ -7,12 +7,40 @@ verify) compose :func:`run_agent` calls.
 
 from __future__ import annotations
 
+import shlex
+import sys
+import time
+from dataclasses import replace
+
 from loguru import logger
 
-from chipmonk_backend.agents.types import AgentResult, AgentSpec
+from chipmonk_backend.agents.types import AgentResult, AgentSpec, utc_now
 from chipmonk_backend.compute.factory import runner_for
 from chipmonk_backend.config import BackendConfig, ComputeTier, RunMode
 from chipmonk_backend.runs import RunDir, RunRecord
+
+#: Set in the agent's environment when the OpenRouter tool is on: where
+#: ``python -m chipmonk_backend ask`` appends one JSON line per call.
+LLM_CALLS_ENV = "CHIPMONK_LLM_CALLS"
+
+
+def openrouter_tool_prompt(config: BackendConfig) -> str:
+    """The instructions that tell an agent how to call OpenRouter models from its shell."""
+    command = f"{shlex.quote(sys.executable)} -m chipmonk_backend ask"
+    presets = ", ".join(f"{name} ({model})" for name, model in config.llm.presets.items()) or "none"
+    return (
+        "You can ask other LLMs on OpenRouter for a second opinion or a cheap sub-task. "
+        f'Run in your shell: {command} --model <preset or OpenRouter model id> "<question>". '
+        f"It prints the answer. Presets: {presets}. Each call costs money; use it only when it helps."
+    )
+
+
+def _with_openrouter_tool(spec: AgentSpec, run: RunDir, config: BackendConfig) -> AgentSpec:
+    """``spec`` with the ``ask`` instructions and the call log path added."""
+    tool = openrouter_tool_prompt(config)
+    system_prompt = f"{spec.system_prompt}\n\n{tool}" if spec.system_prompt else tool
+    env = {**spec.env, LLM_CALLS_ENV: str(run.llm_calls_path)}
+    return replace(spec, system_prompt=system_prompt, env=env)
 
 
 async def run_agent(
@@ -25,23 +53,37 @@ async def run_agent(
 ) -> tuple[RunDir, AgentResult]:
     """Run ``spec`` once and return its run folder and result.
 
-    ``run.json`` moves ``running`` -> ``succeeded`` | ``failed``. An exception
-    from the runner (no machine, no key, wrong OS) is recorded as ``failed``
-    with the error and then re-raised.
+    ``run.json`` moves ``running`` -> ``succeeded`` | ``failed`` and ends with
+    the resolved config, timings and the costs known. An exception from the
+    runner (no machine, no key, wrong OS) is recorded as ``failed`` with the
+    error and then re-raised.
     """
     mode = run_mode or config.compute.run_mode
     chosen_tier = tier or config.compute.tier
     run = RunDir.create(config.resolved_runs_dir(), run_id)
-    record = RunRecord(run_id=run.run_id, run_mode=mode, agent=spec.to_dict(), tier=chosen_tier)
+    if config.agents.openrouter_tool:
+        if mode == "on_demand":
+            logger.warning("openrouter_tool is for local and flex runs; not offered on a pod")
+        else:
+            spec = _with_openrouter_tool(spec, run, config)
+    record = RunRecord(
+        run_id=run.run_id,
+        run_mode=mode,
+        agent=spec.to_dict(),
+        tier=chosen_tier,
+        config=config.model_dump(mode="json"),
+    )
     record.status = "running"
     run.write_record(record)
     logger.info("run {} started: agent={} mode={} tier={}", run.run_id, spec.name, mode, chosen_tier)
+    started = time.monotonic()
     runner = runner_for(config, mode)
     try:
         result = await runner.run(spec, run, tier=chosen_tier)
     except Exception as exc:
         record.status = "failed"
         record.error = f"{type(exc).__name__}: {exc}"
+        _finish(record, run, started)
         run.write_record(record)
         logger.exception("run {} failed in the runner", run.run_id)
         raise
@@ -50,9 +92,29 @@ async def run_agent(
     record.status = "failed" if result.failed else "succeeded"
     record.result = result.to_dict()
     record.error = result.error
+    record.agent_cost_usd = result.cost_usd
+    _finish(record, run, started)
     run.write_record(record)
-    logger.info("run {} {} (cost ${:.4f})", run.run_id, record.status, result.cost_usd)
+    logger.info(
+        "run {} {} in {:.1f}s (agent ${:.4f}, OpenRouter ${:.4f} over {} calls)",
+        run.run_id,
+        record.status,
+        record.duration_s,
+        result.cost_usd,
+        record.llm_cost_usd or 0.0,
+        record.llm_calls,
+    )
     return run, result
 
 
-__all__ = ["run_agent"]
+def _finish(record: RunRecord, run: RunDir, started: float) -> None:
+    """Stamp the end time, the wall clock and the agent's OpenRouter spend."""
+    record.finished_at = utc_now()
+    record.duration_s = round(time.monotonic() - started, 3)
+    calls = run.read_llm_calls()
+    record.llm_calls = len(calls)
+    costs = [call["cost_usd"] for call in calls if isinstance(call.get("cost_usd"), int | float)]
+    record.llm_cost_usd = sum(costs) if costs else None
+
+
+__all__ = ["LLM_CALLS_ENV", "openrouter_tool_prompt", "run_agent"]
