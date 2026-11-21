@@ -48,14 +48,12 @@ with the clinical line marked.
 
 Feasibility test done on Adrian's Mac (Sat 21 Nov): the whole chain runs. 256 tiny candidates train in one batch at about 1,600 per minute, about 59 times the one-at-a-time rate on the same GPU and about 29 times the one-at-a-time rate on the CPU. One small model was compiled to 2,330 gates and gives the same answer as the model on all 3,880 test windows. Its accuracy is still poor (F1 0.68 against 0.88 for the full-precision reference), and the best larger model did not finish synthesis in 11 minutes. Details and rerun commands: `spike/README.md`.
 
-The checked evidence will be in `docs/evidence.md`.
+The checked evidence will be in `ideas/evidence.md`.
 
 ## Layout
 
 - `README.md`: this page.
 - `BUILT-TODAY.md`: what was brought in and what was built at the event.
-- `docs/event.md`: dates, venue, rules, judging, prizes.
-- `docs/idea.md`: the idea in full, with cautions and open questions.
-- `docs/environment.md`: the design environment: stages, views, first run.
-- `docs/evidence.md`: checked evidence on prior work, data and tools.
+- `ideas/`: the idea, the design environment, the event rules, the checked evidence (`event.md`, `idea.md`, `environment.md`, `evidence.md`).
 - `context/`: raw context: transcripts, Granola notes, the judging slide, research notes.
+- `spike/`: feasibility test code and results.
