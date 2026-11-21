@@ -54,6 +54,13 @@ RUNNER_MODES: dict[str, RunMode] = {"local": "flex"}
 LOCAL_MACHINES = frozenset({"", "local", "flex", "mac", "this-mac"})
 #: ``machine`` values that mean a rented pod, which this server never starts.
 REMOTE_MACHINES = frozenset({"on_demand", "on-demand", "ondemand", "runpod", "cloud", "gpu"})
+#: How a user's message reaches the Claude agent: without the last line the
+#: resumed session answers the message and ends its turn, ending the run.
+USER_MESSAGE_PROMPT = (
+    "A message from the user arrived while you work:\n\n{text}\n\n"
+    "Answer it in one or two sentences and adjust the plan if it asks you to. Then carry on "
+    "with the remaining stages, reporting each with ./progress, until report.md is written."
+)
 
 
 class RequestError(ValueError):
@@ -301,7 +308,7 @@ class RunManager:
         if inject is None:
             raise RequestError("this runner cannot pass messages to the agent", status=501)
         try:
-            await inject(text)
+            await inject(USER_MESSAGE_PROMPT.format(text=text.strip()) if self.agent == "claude" else text)
         except NotImplementedError as exc:
             raise RequestError(str(exc), status=501) from None
         except RuntimeError as exc:

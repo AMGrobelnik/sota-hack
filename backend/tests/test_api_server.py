@@ -18,7 +18,7 @@ from aiohttp.test_utils import TestClient, TestServer
 from chipin_backend.agents.types import AgentEvent
 from chipin_backend.api.config import ApiConfig, load_api_config
 from chipin_backend.api.events import STAGES, EventLog
-from chipin_backend.api.manager import API_RECORD_FILE, RunManager
+from chipin_backend.api.manager import API_RECORD_FILE, ApiRun, RunManager
 from chipin_backend.api.progress import ProgressTailer, write_helper
 from chipin_backend.api.server import TOKEN_HEADER, create_app, serve
 from chipin_backend.api.translate import Translator, tool_summary
@@ -408,6 +408,35 @@ async def test_a_server_shutdown_says_why_the_run_stopped(config: BackendConfig)
     record = json.loads((config.resolved_runs_dir() / run_id / API_RECORD_FILE).read_text())
     assert record["status"] == "stopped"
     assert "server" in record["summary"] and "user" not in record["summary"]
+
+
+@pytest.mark.parametrize("agent", ["claude", "stub"])
+async def test_the_claude_agent_is_told_to_carry_on_after_a_message(
+    config: BackendConfig, tmp_path: Path, agent: str
+) -> None:
+    """A resumed Claude session would answer and end the run; the message says to go on."""
+    got: list[str] = []
+
+    class FakeRunner:
+        async def inject(self, text: str) -> None:
+            got.append(text)
+
+    manager = RunManager(_config(config), _api(0.01), agent=agent)  # type: ignore[arg-type]
+    run = RunDir(tmp_path / "run")
+    run.path.mkdir()
+    item = ApiRun(run, {}, EventLog(run.path / "events.jsonl", "run", asyncio.get_running_loop()))
+    item.task = asyncio.get_running_loop().create_future()  # type: ignore[assignment]
+    item.runner = FakeRunner()  # type: ignore[assignment]
+    manager.runs["run"] = item
+    await manager.message("run", "  Keep it under 3,000 gates.  ")
+    if agent == "claude":
+        assert "Keep it under 3,000 gates." in got[0] and "carry on" in got[0] and "report.md" in got[0]
+    else:
+        assert got == ["  Keep it under 3,000 gates.  "]
+    assert item.log.since(1)[-1]["text"] == "  Keep it under 3,000 gates.  ", (
+        "the chat shows what the user typed"
+    )
+    item.task.cancel()
 
 
 async def test_a_user_message_reaches_the_agent(slow_client: TestClient) -> None:
