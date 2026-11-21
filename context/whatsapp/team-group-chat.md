@@ -1,10 +1,10 @@
 Parallelism Hack (WhatsApp group), 2026-11-04 to 2026-11-21, 71 messages, exported read-only on Sat 21 Nov 2026
 
 2026-11-04 18:43  Antonio: Two people with a 100% win rate, crazy
-2026-11-04 19:01  Adrian: If it goes wrong we blame you.
-2026-11-04 19:01  Antonio: Dude, you’re so cracked how could it ever go wrong?
-2026-11-04 19:02  Antonio: You’ll carry us for the win fr
-2026-11-04 19:03  Adrian: Nah it'll be Oran, I'll just provide the 4 claude ultra plans, and you can steal all the food
+2026-11-04 19:01  Adrian: [personal message removed]
+2026-11-04 19:01  Antonio: [personal message removed]
+2026-11-04 19:02  Antonio: [personal message removed]
+2026-11-04 19:03  Adrian: [personal message removed]
 2026-11-04 19:04  Oran: Booommmmm
 2026-11-17 16:43  Oran: You guys still keen on doing this
 2026-11-17 16:44  Oran: If so lets chat on Thurs about plan
@@ -13,12 +13,12 @@ Parallelism Hack (WhatsApp group), 2026-11-04 to 2026-11-21, 71 messages, export
 2026-11-17 16:47  Adrian: [image] We can also meet at this event
 2026-11-17 16:48  Oran: You going to Oxford?
 2026-11-17 16:48  Adrian: Nevermind lool (edited)
-2026-11-17 16:49  Oran: Was planning on going to London on Friday anyway
-2026-11-17 16:49  Adrian: Changed location yesterday
-2026-11-17 16:49  Oran: Friday also works for me if easier
-2026-11-17 16:49  Adrian: U planning to go evening ye?
-2026-11-17 16:50  Oran: To London?
-2026-11-17 16:50  Oran: If so was gonna go during the day so i can see family
+2026-11-17 16:49  Oran: [personal message removed]
+2026-11-17 16:49  Adrian: [personal message removed]
+2026-11-17 16:49  Oran: [personal message removed]
+2026-11-17 16:49  Adrian: [personal message removed]
+2026-11-17 16:50  Oran: [personal message removed]
+2026-11-17 16:50  Oran: [personal message removed]
 2026-11-17 16:51  Oran: But also have an open ticket so can head anytime
 2026-11-17 17:00  Adrian: Fair enough, I'll try make time to meet on Thursday then. we'll see what antonio says
 2026-11-18 04:27  Antonio: Anytime works except this afternoon.
@@ -122,8 +122,8 @@ Parallelism Hack (WhatsApp group), 2026-11-04 to 2026-11-21, 71 messages, export
 2026-11-20 17:51  Oran: Can u send granola
 2026-11-20 17:52  Antonio: [removed]
 2026-11-20 19:05  Oran: [removed]
-2026-11-21 09:11  Oran: What we saying boys
-2026-11-21 09:11  Oran: Was low key tweaking last night so didn’t get much done
+2026-11-21 09:11  Oran: [personal message removed]
+2026-11-21 09:11  Oran: [personal message removed]
 2026-11-21 09:18  Antonio: Nah don’t worry, we have enough to pitch/discuss a few ideas
 2026-11-21 09:49  Oran: What time y boys getting there
 2026-11-21 09:49  Oran: Cause just looked and it only really starts at around 12
