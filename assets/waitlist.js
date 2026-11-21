@@ -1,12 +1,14 @@
-// Shows the real waitlist count from the store set in waitlist-config.js.
+// Shows the waitlist count (and hands the per-country numbers to waitlist-map.js).
 // Elements marked data-waitlist-count get the wording; their wrapper marked
-// data-waitlist-wrap (which starts hidden) is shown only once a real number arrives.
+// data-waitlist-wrap (which starts hidden) is shown only once a number is known.
+// Numbers come from window.WAITLIST.mock when that block exists (preview), else from the store.
 (function () {
   "use strict";
 
+  function cfg() { return window.WAITLIST || {}; }
+
   function endpoint() {
-    var cfg = window.WAITLIST || {};
-    return typeof cfg.endpoint === "string" ? cfg.endpoint.trim() : "";
+    return typeof cfg().endpoint === "string" ? cfg().endpoint.trim() : "";
   }
 
   function wording(n) {
@@ -15,6 +17,18 @@
 
   function validCount(n) {
     return typeof n === "number" && isFinite(n) && n >= 0 && Math.floor(n) === n;
+  }
+
+  function cleanCountries(list) {
+    var out = [];
+    if (!Array.isArray(list)) return out;
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i];
+      if (c && typeof c.code === "string" && validCount(c.count) && c.count > 0) {
+        out.push({ code: c.code.trim().toUpperCase(), count: c.count });
+      }
+    }
+    return out;
   }
 
   function show(n) {
@@ -32,16 +46,27 @@
     }
   }
 
+  // Publish {count, countries}; waitlist-map.js reads Waitlist.data and listens for "waitlist:data".
+  function publish(count, countries) {
+    if (!validCount(count)) return;
+    api.data = { count: count, countries: cleanCountries(countries) };
+    show(count);
+    document.dispatchEvent(new CustomEvent("waitlist:data", { detail: api.data }));
+  }
+
   function load() {
+    var m = cfg().mock;
+    if (m && validCount(m.count)) { publish(m.count, m.countries); return; }
     var url = endpoint();
     if (!url || !window.fetch) return;
     fetch(url, { method: "GET", headers: { Accept: "application/json" }, cache: "no-store" })
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (data) { if (data) show(data.count); })
+      .then(function (data) { if (data) publish(data.count, data.countries); })
       .catch(function () { /* store unreachable: the count stays hidden */ });
   }
 
-  window.Waitlist = { endpoint: endpoint, show: show, wording: wording, validCount: validCount };
+  var api = { endpoint: endpoint, show: show, wording: wording, validCount: validCount, data: null };
+  window.Waitlist = api;
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", load);
   else load();
