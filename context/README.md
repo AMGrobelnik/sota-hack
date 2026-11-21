@@ -1,0 +1,36 @@
+# Context
+
+Everything collected for the hackathon, one line per file.
+
+## Top level
+
+- `judging-criteria-slide.jpeg`: photo of the judging criteria slide, 21 Nov 2026, opening talk.
+
+## granola/
+
+- `granola/2026-11-20-team-call.txt`: Granola notes of the team call, 20 Nov 2026 (dialysis graft idea).
+- `granola/2026-11-21-chip-design-for-medical-devices.txt`: Granola notes on the chip design for medical devices idea, 21 Nov 2026, team call.
+- `granola/2026-11-21-opening-talk.txt`: Granola notes of the opening talk, 21 Nov 2026.
+
+## transcripts/ (dictated at the event, speakers not separated, verbatim)
+
+- `transcripts/2026-11-21-1401-biochip-hardware-idea.md`: spoken explanation of the biochip and existing-hardware idea, 21 Nov 2026, 14:01.
+- `transcripts/2026-11-21-1452-reuse-code-github.md`: spoken team talk about reusing prior code, saying what is new today and starting a GitHub repo, 21 Nov 2026, 14:52.
+
+## notes/ (research notes, 20 to 21 Nov 2026)
+
+- `notes/event-and-background.md`: event overview, judging, Adrian's constraints and shortlist (team background section left out).
+- `notes/ideas.md`: all ideas considered with scores and verdicts, research note.
+- `notes/sponsors.md`: what the sponsors build and what would resonate, research note.
+- `notes/past-events.md`: past events by the organiser and what won, research note.
+- `notes/dialysis-graft.md`: dialysis graft simulation idea with evidence, research note.
+- `notes/2026-11-20-team-call.md`: notes from the team call, 20 Nov.
+- `notes/2026-11-21-opening-talk.md`: notes from the opening talk, 21 Nov.
+- `notes/2026-11-21-discord-digest.md`: digest of the event Discord, 21 Nov, research note.
+- `notes/2026-11-21-idealab-search.md`: search of an idea database for overlap, 21 Nov, research note.
+- `notes/2026-11-21-judges-check.md`: who the judges likely are, 21 Nov, research note.
+- `notes/2026-11-21-medical-chip-evidence.md`: evidence for the medical chip idea, 21 Nov, research note.
+- `notes/2026-11-21-neonatal-ir-clinical.md`: neonatal infrared monitoring, clinical side, 21 Nov, research note.
+- `notes/2026-11-21-neonatal-ir-computation.md`: neonatal infrared monitoring, computation side, 21 Nov, research note.
+- `notes/2026-11-21-neonatal-ir-data.md`: neonatal infrared monitoring, available data, 21 Nov, research note.
+- `notes/data/`: structured JSON outputs behind the notes (idea panels, sponsors, past events, dialysis verification), research note.
