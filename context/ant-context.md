@@ -17,7 +17,7 @@ Contents: 1 Essentials · 2 Main idea · 3 Judges and mentors · 4 Sponsors · 5
 | Demo length | Not announced. About 89 people in 90 minutes: plan a 3-minute pitch that can stretch |
 | Prizes (cash) | 1st £5,000 + demo slot and panel seat at ARIA's AI for Science Summit, Manchester, Thu 26 Nov · 2nd £2,500 · 3rd £1,000 |
 | Compute | Not announced. Five GPU questions unanswered on Discord. Only statement: "Yes bring your own hardware!" |
-| Team size | "We usually recommend teams of up to 4 max" (SoTA, 3 Nov). We are 3 (Adrian, Antonio, Oran) |
+| Team size | "We usually recommend teams of up to 4 max" (SoTA, 3 Nov). We are 3 |
 | Travel refund | Actual receipted public-transport costs, up to £200 per person, paid after the hack; no accommodation |
 | Contacts | contact@ilikethefuture.com · Discord https://discord.gg/jpUtFsVQq · hosts Jamie and Matvey |
 
@@ -33,7 +33,7 @@ Contents: 1 Essentials · 2 Main idea · 3 Judges and mentors · 4 Sponsors · 5
 Informative negative results count: a well-explained failure to achieve a speedup can still win a prize.
 
 ### Rules that exist
-- **Pre-written code is allowed** if you say what was done on the day and what was not: "Judges will be suspicious if you don't" (Matvey, 17 Nov). Keep `BUILT-TODAY.md` honest, show it on a slide, name every library.
+- **Pre-written code is allowed** if you say what was done on the day and what was not: "Judges will be suspicious if you don't" (Matvey, 17 Nov). Keep a built-before / built-here list, show it on a slide, name every library.
 - Own hardware allowed. Some starter data for the three example challenges was promised.
 - Under-18s need written guardian consent and must leave by 22:00 Saturday.
 
@@ -52,70 +52,55 @@ Pick a scientifically relevant computational problem, rethink it for massively p
 ## 2. Main idea: AI-assisted chip design for medical devices
 
 ### Concept (team notes)
-- A medical sensing device has sensors, a housing and a core chip. The chip does one job for one application: runs a small model, plain ML, or only combines sensor inputs, as efficiently as possible.
-- We build the **environment**, not the chips: a user writes a prompt, the system spins up agents, proposes candidate chip designs, simulates and validates them, iterates, outputs the best design. Views: design stage (ideation, testing, reporting), live agent commands, cost tracking, a chip sketch always visible; the user can pause or redirect.
-- Privacy: the model is wired into the chip, so the device works offline and patient data stays on the device. **Do not claim the law forbids cloud processing** (unchecked; GDPR Art 9(2)(h) allows health processing for medical care with safeguards).
-- GPUs both simulate the chip and run the small models.
-- Adrian's AI-scientist environment was built before the event (disclose it).
+- Core idea: build an environment where AI scientists design chips for medical sensing devices. The chip is the "core" of the device: it takes sensor inputs and does one highly specific task (an embedded AI/ML model, or simply combining sensor inputs), optimised for efficiency and the application.
+- Privacy is a key constraint: medical data cannot be sent to external servers (GDPR, hospital policy); hosting the model on the chip keeps data local.
+- Scope: any medical device with sensors (ultrasound, biosensors, diagnostics). We are not a chip supplier: we build the design environment that lets others create chips. Potential market: US healthcare.
+- The environment is an agentic orchestration layer, not a chatbot: the user writes a prompt, the system spins up agents, runs experiments, proposes and tests chip designs. Views: current design stage (ideation, testing, reporting), live agent commands and outputs, cost tracking, a chip sketch always visible; the user can intervene, pause or redirect. Workflow: generate candidates → simulate and validate each → repeat → output the best design.
+- GPUs serve two purposes: simulate the chip, and run the small models that would be embedded on it (sponsors like small models).
+- Similar in spirit to Idea Labs AI, but this environment runs real experiments and produces research-grade output. Pre-written code is allowed (disclose it).
 
-### The demo (repo README)
-Prompt: *"an atrial fibrillation (AF) detector from a single-lead ECG, with as few logic gates as possible, at the clinical accuracy line."*
-1. An AI scientist proposes tiny networks and input choices (sample rate, bits).
-2. Thousands are trained at once on the GPU (the parallelism; baseline: one at a time).
-3. Winners are compiled to a gate circuit with fixed weights.
-4. The circuit is checked bit for bit against the model on unseen patients.
-Result: a curve of accuracy against gate count, with Oran's clinical line and where they cross. Visual: the gate circuit lighting up on a heartbeat.
+The team's concrete demo and its checked evidence are written up separately in this repo (`README.md`, `docs/idea.md`, `docs/evidence.md`, `docs/environment.md`); this file does not repeat them.
 
-Roles: **Adrian** environment and GPU batch · **Antonio** the views (design stages, accuracy curve, circuit lighting up) · **Oran** the clinical accuracy line and which errors matter.
+### How to make it score (our research)
+The judges score correctness, reshaping, speedup and scientific value; an agent dashboard alone scores none of them. So build **one chip end to end with public data and published baselines**, for example an ECG arrhythmia detector on MIT-BIH (PhysioNet, open):
 
-### Mapping to the criteria
-| Criterion | What we show | Make it airtight |
-|---|---|---|
-| Correctness | Circuit = model bit for bit on unseen patients | Show a ✓ badge per test record; state assumptions (sample rate, bits, which leads); patient-level split, no leakage |
-| Reshaping | Thousands of designs trained as one GPU batch; agents propose in parallel | Diagram: one-at-a-time loop vs batched search |
-| Speedup | Designs per hour vs one at a time | Same code, same GPU, batch size 1 vs N; plus CPU baseline; median of repeats; include data-loading time. Circuit vs microcontroller only as a labelled estimate |
-| Scientific value | Accuracy vs gate count with the clinical line | Compare with published AF/ECG hardware (below); say where we lose |
+| Criterion | What to show |
+|---|---|
+| Correctness | The GPU model matches a Verilator simulation of the generated circuit code bit for bit on test inputs; state every assumption (sample rate, bits, data split) |
+| Reshaping | Agents propose candidates (bit widths, layer sizes, parallelism); the GPU evaluates thousands at once (bit-accurate fixed-point simulation over all records plus an energy/area model) instead of one at a time |
+| Speedup | The same candidates simulated one by one in Verilator on all CPU cores, vs the batched GPU search; median of repeats, data loading included |
+| Scientific value | An accuracy-vs-energy curve compared with published ECG chips; say honestly where we lose |
 
-**Headline idea:** time to a clinically acceptable design = designs/hour speedup × how few designs the agent loop needs vs random search at the same budget.
+**Headline:** time to discovery = designs/hour speedup × how few designs the agent loop needs vs random search at the same budget.
 
-### Published comparators (checked unless marked)
-- Wearable AF patch, hardware-aware NAS on FPGA: 95% accuracy at 3.8 mW, 3+ weeks continuous (arXiv 2508.13181).
-- LUT-based 1D-CNN for AF: F1 up to 95%, 2,844 LUTs, no DSP/BRAM, MIT-BIH, Spartan-7 (arXiv 2605.29994).
-- Logic-gate/LUT ECG classifier: 94.41%, 8.25 µJ (arXiv 2609.32854; an earlier version was withdrawn).
-- SparrowSNN ECG ASIC: 98.29% on MIT-BIH, 31.39 nJ per inference, 6.1 µW (arXiv 2406.06543). EKGNet analog: 10.96 µW.
-- Differentiable logic gate networks: 98.47% MNIST at 384k gates; 97.69% at 48k (Petersen 2022).
-- Tiny Classifiers: ≤300 gates on tabular data (arXiv 2303.00031).
-- Prior art to acknowledge: Taalas HC1 (Llama 3.1 8B hard-wired), hls4ml, FINN, LogicNets, PolyLUT, NeuraLUT, AlphaEvolve's Verilog for a TPU. LLM agents for RTL are busy research in 2026: VeriAgent (with a power/performance/area agent), agentic formal verification >95% coverage, HLS-based agent flows 2.6x better than direct RTL (ICCAD '26). **Our claim is the automated parallel design loop plus the accuracy-vs-gates result for a clinical task, not "first to compile a network to gates".**
-
-### Data and tools
-- Open, no login: CinC 2017 (8,528 single-lead recordings, 4 classes, best score 0.83, four teams tied), AFDB (25 × 10 h), PTB-XL (21,799 records).
-- Tools: yowasp-yosys (Yosys via pip, runs anywhere, half native speed), Verilator, difflogic (needs CUDA), FINN and OpenROAD flow (Docker), Tiny Tapeout (~1,000 gates per tile on SkyWater 130 nm; 6-9 months to fab: a nice "you could actually make this" slide).
-- GPU circuit simulation context: NVIDIA RTLflow 40x vs an 80-thread CPU with 65,536 stimuli; NVIDIA GEM 5-40x vs CPU simulators (about 6x vs 8-thread Verilator).
+### Published work we found
+- SparrowSNN ECG ASIC: 98.29% on MIT-BIH, 31.39 nJ per inference, 6.1 µW (arXiv 2406.06543). EKGNet (fully analog): 10.96 µW, 95% balanced accuracy on MIT-BIH. Other MIT-BIH processors report 91.6-93% (accuracy protocols differ between papers, so compare carefully).
+- GPU circuit simulation: NVIDIA RTLflow 40x vs an 80-thread CPU with 65,536 stimuli; NVIDIA GEM 5-40x vs CPU simulators (about 6x vs 8-thread Verilator); batch GPU simulation can run out of memory and be slower than Verilator for single runs (CCSS paper).
+- AI for chip design is busy research in 2026: VeriAgent (code agent + testbench agent + power/performance/area agent); agentic formal verification >95% coverage on five open designs; HLS-based agent flows 2.6x better than direct RTL (ICCAD '26). hls4ml turns quantised networks into FPGA/ASIC firmware; SNAC-Pack automates the architecture search. **Our claim is not "AI designs chips" but medical sensing + on-device privacy + a measured, parallel design search.**
 
 ### Why it fits the room
-- Chip and verification mentors (Fractile's on-site verification engineer, ex-Graphcore architects at Fractile and ARIA).
+- Chip and verification mentors (Fractile's on-site verification engineer; ex-Graphcore architects at Fractile and ARIA).
 - Callosum: work split across hardware; Akarca: "The real end goal of scaling heterogeneous compute is to make new discoveries."
-- Inherent: an AI scientist that proposes, tests, learns, and reports faithfully.
+- Inherent: an AI scientist that proposes, tests, learns and reports faithfully.
 - ARIA Scaling Compute: cheaper inference hardware. Hugging Face: small models.
-- Earlier research: always-on edge sensing is where specialised low-power chips win first (Innatera, BrainChip ship at µW to mW).
+- Our bio-silicon research: always-on edge sensing is where specialised low-power chips win first (Innatera and BrainChip already ship at µW to mW).
 
 ### Risks
-- Not allowed? (own idea / engineering) → fallback: flood uncertainty (section 8).
-- Too generic: always lead with the AF demo and its numbers, never the platform.
-- Chain not proven end to end (feasibility test on Adrian's Mac).
+- Not allowed? Two Discord questions are unanswered: whether own ideas are allowed and whether electrical engineering counts. Fallback: flood uncertainty (section 8).
+- Too generic: lead with one concrete chip and its numbers, never the platform.
 - Compute unknown: size the batch to what we actually have.
-- Overlapping teams on Discord: tobi ("massively parallel scientific falsification, autonomous research swarms").
+- An overlapping angle on Discord: tobi ("massively parallel scientific falsification, autonomous research swarms").
 
-### Views (Antonio)
-Design stages · live agent log · accuracy-vs-gate-count curve with the clinical line · circuit lighting up on a heartbeat · **designs/hour counter vs the one-at-a-time baseline** · **bit-exact ✓ badge** · cost tracker · the built-before / built-here split.
+### Views
+Design stages · live agent log · cost tracker · chip sketch / block diagram of the current best design · accuracy-vs-energy curve · **designs/hour counter vs the one-at-a-time baseline** · **bit-exact ✓ badge** · the built-before / built-here split.
 
 ### Pitch order that fits the judges
-Correctness check → fair baseline → speedup (and memory-vs-compute if measured) → the clinical result and curve → limitations → built-before / built-here. Name a clinician (Oran) for the clinical line.
+Correctness check → fair baseline → speedup (and memory-vs-compute if measured) → the result and its curve → limitations → built-before / built-here. Put a named doctor's name, photo and quote on a slide (it has worked at previous hackathons).
 
 ---
 
 ## 3. Judges and mentors
-**No judges or mentors have been named anywhere** (Luma, Substack, Discord; Discord has no roles). We were told most judges are AI-for-science people, unlikely to have biology or medical expertise (so the clinical part needs one clear slide and Oran's line, not jargon), and that some mentors are chip and evaluation experts. Past SoTA panels: Jamie + someone from the main sponsor or programme + one or two outside experts (from SoTA Letters VIII and a LinkedIn recap; the repo's judges note could not verify this).
+**No judges or mentors have been named anywhere** (Luma, Substack, Discord; Discord has no roles). We were told most judges are AI-for-science people, unlikely to have biology or medical expertise (so the clinical part needs one clear slide and a named clinician, not jargon), and that some mentors are chip and evaluation experts. Past SoTA panels: Jamie + someone from the main sponsor or programme + one or two outside experts (from SoTA Letters VIII and a LinkedIn recap).
 
 ### Most likely in the room
 | Person | Role | Why | What they value |
@@ -237,7 +222,6 @@ Walter Goodwin (Fractile CEO; manifesto: time-to-result is the real limit; memor
 ### Team track record (for credibility, if asked)
 - Antonio and Adrian won the build track at the Oxford and Cambridge AI Race (25 Oct 2026, King's College Cambridge) with The Crophecy: 96 LLM agents betting on EU crop prices, forecasts committed on Solana, leakage-guarded backtest.
 - Antonio: Hack the Future winner (2024, 3D digital twin with Three.js and graph neural networks); Notion London Hackathon People's Choice (Mar 2026, NotionOS); finalist at Iterate London RL (liquid neural networks for drone control, beat an MLP baseline) and the xAI Grokathon (Grok.dad).
-- Oran ran an AF screening programme (sets the clinical line).
 
 ---
 
@@ -254,7 +238,7 @@ Fallback rule if the main idea is not allowed or stalls: own idea allowed + stro
 8. **CiPA virtual population.** FDA heart-cell drug-safety model across thousands of virtual patients. Easy to validate, barely a reshaping, not new.
 9. **Flood uncertainty (fallback if only the three examples count).** One kernel running many scenarios with a [cell][scenario] layout (more work per memory read, shown on a roofline) + GPU multilevel Monte Carlo for flood-probability maps with error bars. Baseline: LISFLOOD-FP on all CPU cores and its GPU solver (only 2.5-4x on >1M cells). Data: Environment Agency 2D benchmarks with reference outputs. Nobody on Discord is doing flood.
 
-Dropped earlier: hyperthermia antenna planning, proton minibeam collimator, pulse oximetry skin-tone simulation, deep brain stimulation programming, radiotherapy planning, embryo selection, colorectal anastomosis, neurochip, low-energy defibrillator, cell colony simulation. Also considered in this repo: infrared newborn brain-oxygen monitoring (possible second device).
+Dropped earlier: hyperthermia antenna planning, proton minibeam collimator, pulse oximetry skin-tone simulation, deep brain stimulation programming, radiotherapy planning, embryo selection, colorectal anastomosis, neurochip, low-energy defibrillator, cell colony simulation.
 
 ### Benchmarking checklist (any idea)
 Optimised multithreaded CPU baseline and the best existing GPU code; same precision; correctness against reference outputs; GPU timers with warm-up excluded but reported; kernel-only and end-to-end times; repeats with median and 95% intervals; problem-size and batch-size sweeps; roofline (Nsight Compute); never a single-thread or plain-NumPy baseline; verify any AI-written kernel (Sakana's 10-100x claims were withdrawn after a skipped check).
@@ -265,5 +249,5 @@ Optimised multithreaded CPU baseline and the best existing GPU code; same precis
 Event: sotaletters.substack.com/p/sota-scientific-parallelism-hackathon · luma.com/scientific-parallelism · sotaletters.substack.com/p/sota-in-manchester-ai-for-science · luma.com/concep-d6wd · ticmanchester.org/events/ai-for-science-summit
 People: find-and-update.company-information.service.gov.uk/company/15818244/officers · x.com/danakarca · fossi-foundation.org/orconf/2026 · fractile.com/manifesto.html · theorg.com/org/fractile · arxiv.org/abs/2608.13331 · aria.org.uk/media/5rfpbiun/annual-report-and-accounts-2025-26.pdf · aria.org.uk/insights/introducing-our-technical-specialists · aria.org.uk/insights/stress-testing-ai-scientists · luma.com/56bp571b
 Past winners: sotaletters.substack.com/p/results-from-sotas-recent-hackathons · sotaletters.substack.com/p/sota-letters-viii · sotaletters.substack.com/p/meet-our-hackathon-prizewinners
-Main idea: arxiv.org/abs/2508.13181 · arxiv.org/abs/2605.29994 · arxiv.org/abs/2609.32854 · arxiv.org/abs/2406.06543 · arxiv.org/abs/2210.08277 · arxiv.org/html/2604.14550v2 · arxiv.org/pdf/2609.21157 · research.nvidia.com (GEM, RTLflow) · physionet.org/content/challenge-2017 · tinytapeout.com/faq
+Main idea: arxiv.org/abs/2406.06543 · arxiv.org/pdf/2607.14747 · arxiv.org/html/2604.14550v2 · arxiv.org/pdf/2609.21157 · research.nvidia.com (GEM, RTLflow) · semiwiki.com GEM review · arxiv.org/pdf/2507.08406 · ar5iv.labs.arxiv.org/html/2103.05579 (hls4ml)
 Other ideas: arxiv.org/abs/2202.04552 · arxiv.org/abs/2212.04405 · arxiv.org/abs/1901.02492 · gmd.copernicus.org/articles/14/3577/2021 · pubmed.ncbi.nlm.nih.gov/31939789 · arxiv.org/pdf/2012.11013 · aria.org.uk/opportunity-spaces/nature-inspired-computation/olfactory-perception · github.com/BioMachineLearning/openpom · spectrum.ieee.org/biological-computer-for-sale
