@@ -163,7 +163,32 @@ body.col #sb .acct button{justify-content:center}
 .nowline svg{width:15px;height:15px;color:var(--ok)}
 .link{font-size:12.5px;color:var(--blue7);font-weight:500;border-radius:4px}
 .link:hover{text-decoration:underline}
-.more-row{margin-top:14px;display:flex;gap:18px;justify-content:center}
+.more-row{margin-top:30px;display:flex;gap:18px;justify-content:center;align-items:center;flex-wrap:wrap}
+.more-row .srcline{margin-top:0}
+/* the chip against the run's own reference model */
+.cmp{display:flex;align-items:center;justify-content:center;gap:14px;margin:14px 0 0;font-size:13.5px;color:var(--i600);flex-wrap:wrap}
+.cmp svg{flex:none;display:block}
+.cmp b{color:var(--i900);font-weight:600}
+/* round-by-round gates in the details drawer */
+.steps{margin:4px 0 6px}
+.steps svg{display:block;width:100%;height:auto}
+.steps p{margin:0 0 6px;font-size:12.5px;color:var(--i700)}
+/* current: moving dashes along wires */
+@keyframes flow{to{stroke-dashoffset:-12}}
+.flow{stroke-dasharray:3 3;animation:flow .8s linear infinite}
+@keyframes glow{0%,100%{opacity:.55}50%{opacity:1}}
+.glow{animation:glow 1.1s ease-in-out infinite}
+/* the small live chip at the top right of Overview and Chat */
+.ctile{position:absolute;top:54px;right:18px;z-index:4;display:flex;align-items:center;gap:10px;padding:7px 12px 7px 8px;border-radius:12px;background:rgb(255 255 255/.92);border:1px solid var(--hair2);box-shadow:0 1px 3px rgb(0 0 0/.05);text-decoration:none;color:var(--i900);transition:border-color .12s,box-shadow .12s}
+.ctile:hover{border-color:rgb(37 99 235/.4);box-shadow:0 0 0 3px rgb(37 99 235/.08)}
+.ctile svg{width:66px;height:40px;flex:none;display:block}
+.ctile b{display:block;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.25}
+.ctile small{display:block;font-size:11px;color:var(--i600);line-height:1.3}
+.ctile[hidden]{display:none}
+.voice{font-size:12.5px;color:var(--i700);padding:8px 0 8px 34px;display:flex;gap:8px;align-items:center}
+.chipvoice{position:absolute;left:16px;top:14px;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--i800);background:rgb(255 255 255/.9);border:1px solid var(--hair2);border-radius:99px;padding:4px 12px 4px 10px;pointer-events:none}
+.chipvoice:empty{display:none}
+@media (max-width:1199px){.ctile{display:none}}
 
 /* chat */
 .chat{flex:1;min-height:0;display:flex;flex-direction:column}
@@ -550,7 +575,7 @@ const UC = {
     yes: 'Seizure', no: 'No seizure',
     gates: [9840, 5212, 3076, 2418], meet: [4, 5, 6, 6], chans: [8, 6, 4, 4], line: 90, metric: 'seizures caught',
     lineText: 'catch at least 90% of seizures for every unseen patient, with at most one false alarm a day',
-    front: 180, battUWh: 120000, batt: '40 mAh coin cell', patch: [40, 25], patchName: 'pod behind the right ear', train: 16,
+    refGates: 410000, front: 180, battUWh: 120000, batt: '40 mAh coin cell', patch: [40, 25], patchName: 'pod behind the right ear', train: 16,
     wearer: 'a mannequin head', devName: 'Seizure alarm headband'
   },
   nirs: {
@@ -560,7 +585,7 @@ const UC = {
     yes: 'Oxygen falling', no: 'Normal',
     gates: [6930, 3904, 2576, 2146], meet: [8, 10, 11, 12], chans: [4, 3, 2, 2], line: 90, metric: 'oxygen drops caught',
     lineText: 'catch at least 90% of brain-oxygen drops below 50% for every unseen newborn, within a minute',
-    front: 1800, battUWh: 660000, batt: '220 mAh cell', patch: [30, 15], patchName: 'module on the forehead patch', train: 48,
+    refGates: 260000, front: 1800, battUWh: 660000, batt: '220 mAh cell', patch: [30, 15], patchName: 'module on the forehead patch', train: 48,
     wearer: 'a newborn-sized mannequin', devName: 'Brain-oxygen forehead patch'
   }
 };
@@ -744,8 +769,8 @@ function script(run) {
     ? `Training a full-size reference model on all channels in 4-second windows, from ${srcName} of ${u.train} training patients. Six patients stay unseen; we only look at them when checking a chip.`
     : `Training a full-size reference model on all 4 light paths in 30-second windows, from ${srcName}: ${u.train} training newborns. Twelve newborns stay unseen; we only look at them when checking a chip.`);
   add(T_SPEC + 4.6, null, null, 'Train the reference model', eeg
-    ? `Data: ${srcName}\nChannels: ${D.mode === 'public' ? 23 : 19}, window: 4 s\nSize: 1.8 million parameters\nSeizures caught on held-out windows: 97%\nAs a circuit: about 410,000 gates, far too big`
-    : `Data: ${srcName}\nLight paths: 4, window: 30 s\nSize: 0.9 million parameters\nDrops caught on held-out windows: 96%\nAs a circuit: about 260,000 gates, far too big`, 9.8);
+    ? `Data: ${srcName}\nChannels: ${D.mode === 'public' ? 23 : 19}, window: 4 s\nSize: 1.8 million parameters\nSeizures caught on held-out windows: 97%\nAs a circuit: about ${fmt(u.refGates)} gates, far too big`
+    : `Data: ${srcName}\nLight paths: 4, window: 30 s\nSize: 0.9 million parameters\nDrops caught on held-out windows: 96%\nAs a circuit: about ${fmt(u.refGates)} gates, far too big`, 9.8);
   R.forEach((rd, i) => {
     const s = roundStart(rd.r), prev = R[i - 1];
     let txt = rd.r === 1
@@ -1031,7 +1056,8 @@ function renderRun() {
       <div class="play"><button class="pp" id="pp" aria-label="Pause"></button><span class="clock" id="clk"></span><div class="track" id="trk"><i></i><b></b></div><span id="livebox"></span></div>
       <div class="tright"><span class="mchip" title="Machine">${ic(MACHINES.find(m => m.name === run.machine).icon)}<span>${run.machine}</span></span>
         <button class="iconbtn" id="runmenu" aria-label="Run menu" title="Run menu">${ic('more')}</button></div>
-    </div><div class="body" id="body"></div>`;
+    </div><div class="body" id="body"></div>
+    <a class="ctile" id="ctile" href="${href(run.id, 'visual', 'chip')}" ${v === 'visual' ? 'hidden' : ''}>${miniChip()}<span><b id="ctg"></b><small>The chip, live</small></span></a>`;
   S.sig = '';
   updateTop();
   updateBody(true);
@@ -1052,6 +1078,35 @@ function updateTop() {
   if (lb.innerHTML !== lw) lb.innerHTML = lw;
   const sw = st === 'done' ? '<span class="state done">Done</span>' : st === 'paused' ? '<span class="state paused">Paused</span>' : '';
   if (sp.innerHTML !== sw) sp.innerHTML = sw;
+  updateCorner(run, t);
+}
+/* A tiny drawing of the chip with current moving from the two sensors, through the die, to the prediction light. */
+function miniChip(cls) {
+  return `<svg viewBox="0 0 66 40" aria-hidden="true"${cls ? ` class="${cls}"` : ''}>
+    <circle cx="5" cy="10" r="3.6" fill="#7c3aed"/><circle cx="5" cy="30" r="3.6" fill="#0891b2"/>
+    <path d="M9 10 H17 L22 15" fill="none" stroke="#ddd6fe" stroke-width="2"/><path d="M9 30 H17 L22 25" fill="none" stroke="#cffafe" stroke-width="2"/>
+    <path class="flow" d="M9 10 H17 L22 15" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round"/>
+    <path class="flow" d="M9 30 H17 L22 25" fill="none" stroke="#0891b2" stroke-width="2" stroke-linecap="round" style="animation-delay:-.4s"/>
+    <path d="M25 6v2M30 6v2M35 6v2M40 6v2M25 32v2M30 32v2M35 32v2M40 32v2" stroke="#9a9aaa" stroke-width="1.4"/>
+    <rect x="22" y="8" width="21" height="24" rx="3" fill="#1f2937"/>
+    <rect class="glow" x="26.5" y="12.5" width="12" height="15" rx="1.5" fill="#3b82f6"/>
+    <path class="flow" d="M28 16 H37 M28 20 H37 M28 24 H37" stroke="#dbeafe" stroke-width="1.2" style="animation-duration:.5s"/>
+    <path d="M43 20 H56" fill="none" stroke="#dcfce7" stroke-width="2"/>
+    <path class="flow mout" d="M43 20 H56" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round"/>
+    <circle class="mled" cx="60" cy="20" r="4" fill="#16a34a"/></svg>`;
+}
+function updateCorner(run, t) {
+  const el = $('#ctile'); if (!el) return;
+  const hide = S.route.view === 'visual';
+  if (el.hidden !== hide) el.hidden = hide;
+  if (hide) return;
+  const best = bestAt(run, t).best, yes = best && predYes();
+  const txt = best ? `${fmt(best.gates)} gates` : 'No chip yet';
+  const g = $('#ctg'); if (g.textContent !== txt) g.textContent = txt;
+  el.setAttribute('aria-label', `Open the chip visual: ${txt}`);
+  const col = !best ? '#c4c4ce' : yes ? '#dc2626' : '#16a34a';
+  const led = $('.mled', el), out = $('.mout', el);
+  if (led.getAttribute('fill') !== col) { led.setAttribute('fill', col); out.setAttribute('stroke', col); }
 }
 function updateBody(force) {
   const run = byId(S.route.id); const v = S.route.view;
@@ -1061,6 +1116,7 @@ function updateBody(force) {
   if (v === 'visual' && ['tradeoff'].includes(S.route.vis) && ph.key === 'finetune') sig += '|' + Math.floor(ph.f * 8);
   if (v === 'overview' && ph.key === 'finetune') sig += '|' + Math.floor(ph.f * 20);
   if (v === 'overview' && ph.key === 'reference') sig += '|' + (ph.f < 0.4);
+  if (v !== 'visual') sig += '|' + voice(run, t, ph);
   if (!force && sig === S.sig) return;
   S.sig = sig;
   if (v !== 'visual') disposeMount();
@@ -1070,27 +1126,31 @@ function updateBody(force) {
 }
 
 /* ---- overview: one number ---- */
+/* What Chipmonk is doing right now, in one present-tense line, as if one person were doing the work. */
+function voice(run, t, ph, pct) {
+  const u = UC[run.uc], D = run.data, me = PRODUCT.short, rd = roundsOf(run)[Math.max(0, ph.round - 1)];
+  if (status(run) === 'paused') return `${me} is paused`;
+  return {
+    spec: ph.f < 0.35 ? `${me} is reading your brief` : `${me} is reading ${PAPERS[run.uc].length} papers and setting the clinical line`,
+    reference: ph.f < 0.4 ? (D.mode === 'public' ? `${me} is loading ${DATASETS.chbmit.name} from PhysioNet` : D.mode === 'own' ? `${me} is loading your recordings` : `${me} is simulating the dataset from your assumptions`)
+      : `${me} is training a full-size reference model`,
+    propose: `${me} is sketching ${fmt(run.cands)} chip designs on ${chanWords(u, rd.chans, run)}`,
+    finetune: `${me} is checking ${fmt(run.cands)} models at once${pct ? `, ${Math.floor(ph.f * 100)}% through` : ''}`,
+    compile: `${me} is wiring the weights into gates`,
+    verify: `${me} is testing the chip on ${u.N} unseen ${u.who}`,
+    report: `${me} is writing the report`,
+    done: `${me} is done: ${ROUNDS} rounds in ${mins(TOTAL)} minutes`
+  }[ph.key];
+}
 function nowLine(run, t, ph, best) {
-  const u = UC[run.uc], R = roundsOf(run), rd = R[Math.max(0, ph.round - 1)];
-  if (status(run) === 'paused') return `<span>${ic('pause')}</span> Paused. Press play in the top bar to carry on.`;
-  const D = run.data;
-  const words = {
-    spec: `Reading your spec, your answers about data and ${PAPERS[run.uc].length} papers, and setting the clinical line.`,
-    reference: D.mode === 'public' ? `Loading ${DATASETS.chbmit.name} from PhysioNet and training a full-size reference model.`
-      : D.mode === 'own' ? 'Loading your recordings and training a full-size reference model.'
-      : 'Simulating the dataset from your assumptions and training a full-size reference model.',
-    propose: `Round ${ph.round}: proposing ${fmt(run.cands)} chip designs on ${chanWords(u, rd.chans, run)}.`,
-    finetune: `Round ${ph.round}: fine-tuning ${fmt(run.cands)} candidate models at once, ${Math.floor(ph.f * 100)}% done.`,
-    compile: `Round ${ph.round}: compiling the strongest models into logic gates.`,
-    verify: `Round ${ph.round}: checking the circuit bit for bit, then testing it on unseen ${u.who}.`,
-    report: 'Writing the report.'
-  };
-  if (ph.key === 'done') return `${ic('ccheck')} Finished after ${mins(TOTAL)} minutes and ${ROUNDS} rounds.`;
+  const R = roundsOf(run), rd = R[Math.max(0, ph.round - 1)];
+  if (status(run) === 'paused') return `<span>${ic('pause')}</span> ${voice(run, t, ph)}. Press play in the top bar to carry on.`;
+  if (ph.key === 'done') return `${ic('ccheck')} ${voice(run, t, ph)}.`;
   const applyRound = x => [1, 2, 3, 4].find(k => roundStart(k) > x.t);
   const pend = run.redirects.filter(x => applyRound(x) && roundStart(applyRound(x)) > t).pop();
   const tail = pend ? ` <span style="color:var(--teal)">Your note applies from round ${applyRound(pend)}.</span>` : '';
   const follow = rd && ph.round && rd.applied.length && !pend ? ' <span style="color:var(--teal)">Following your note.</span>' : '';
-  return `<span class="spin"></span><span>${words[ph.key]}${tail}${follow}</span>`;
+  return `<span class="spin"></span><span>${voice(run, t, ph, true)}.${tail}${follow}</span>`;
 }
 function renderOverview(run, t, ph, best) {
   const u = UC[run.uc], done = ph.key === 'done';
@@ -1115,15 +1175,14 @@ function renderOverview(run, t, ph, best) {
   const loopTxt = done ? `${ROUNDS} rounds` : ph.round ? `Round ${ph.round} of ${ROUNDS}` : `${ROUNDS} rounds ahead`;
   $('#body').innerHTML = `<div class="ov">
     <div class="kick">${nb || kick}</div>
-    ${hero}${verdict}
+    ${hero}${verdict}${best ? compareLine(run, best) : ''}
     <div class="stages" aria-label="Stages">
       <span class="fill" style="width:${fillW}"></span>
       ${STAGES.map((s, i) => `<div class="st ${i < idx ? 'done' : i === idx ? 'now' : ''}"><i></i><span>${s}</span></div>`).join('')}
       <div class="loop"><span>${loopTxt}</span></div>
     </div>
     <div class="nowline">${nowLine(run, t, ph, best)}</div>
-    ${srcLine(run, ph)}
-    <div class="more-row"><button class="link" id="details">Show details</button></div>
+    <div class="more-row">${srcLine(run, ph)}<button class="link" id="details">Show details</button></div>
   </div>`;
   $('#details').onclick = e => { e.stopPropagation(); openDetails(run); };
   $('#srcbtn').onclick = e => { e.stopPropagation(); openSources(run); };
@@ -1131,6 +1190,15 @@ function renderOverview(run, t, ph, best) {
     if (isNew && !matchMedia('(prefers-reduced-motion: reduce)').matches) countDown($('#num'), prevShown.g, best.gates);
     S.lastNum[run.id] = { r: best.r, g: best.gates, id: run.id };
   } else S.lastNum[run.id] = null;
+}
+/* How much smaller the chip is than the full-size reference model trained earlier in the same run. */
+function compareLine(run, best) {
+  const ref = UC[run.uc].refGates, k = ref / best.gates, BW = 150;
+  const cw = Math.max(2.5, BW * best.gates / ref);
+  return `<div class="cmp"><svg width="262" height="34" viewBox="0 0 262 34" role="img" aria-label="Two bars: the reference model at ${fmt(ref)} gates and this chip at ${fmt(best.gates)} gates">
+      <rect x="0" y="3" width="${BW}" height="10" rx="2" fill="#c4c4ce"/><text x="${BW + 7}" y="12" font-size="11" fill="#48485c">Reference model</text>
+      <rect x="0" y="21" width="${cw.toFixed(1)}" height="10" rx="2" fill="#1d4ed8"/><text x="${(cw + 7).toFixed(1)}" y="30" font-size="11" font-weight="600" fill="#1d4ed8">This chip</text></svg>
+    <span><b>${k >= 10 ? fmt(k) : k.toFixed(1)} times smaller</b> than this run's full-size reference model (${fmt(ref)} gates)</span></div>`;
 }
 function srcLine(run, ph) {
   const DS = dataOf(run), n = PAPERS[run.uc].length;
@@ -1159,10 +1227,39 @@ function countDown(el, from, to) {
   const step = () => { const k = Math.min(1, (now() - t0) / D), e = 1 - Math.pow(1 - k, 3); if (!el.isConnected) return; el.textContent = fmt(from + (to - from) * e); if (k < 1) requestAnimationFrame(step); };
   requestAnimationFrame(step);
 }
+/* A step chart of the best chip's gate count after each finished round; the latest one is emphasised. */
+function gateSteps(run, t, R) {
+  const done = R.filter(rd => roundEnd(rd.r) <= t);
+  if (!done.length) return `<div class="steps"><p>The first count arrives at the end of round 1. Each later round should bring it down.</p></div>`;
+  const W = 336, H = 150, base = 112, top = 30, cw = W / ROUNDS, bw = 40, max = R[0].gates;
+  const last = done[done.length - 1];
+  const x = i => cw * i + cw / 2;
+  let g = '';
+  R.forEach((rd, i) => {
+    const cx = x(i), fin = rd === last;
+    g += `<text x="${cx}" y="${base + 18}" text-anchor="middle" font-size="11.5" fill="${fin ? '#1a1a2e' : '#48485c'}"${fin ? ' font-weight="600"' : ''}>Round ${rd.r}</text>`;
+    if (!done.includes(rd)) {
+      g += `<rect x="${cx - bw / 2}" y="${base - 22}" width="${bw}" height="22" rx="3" fill="none" stroke="#b0b0be" stroke-dasharray="3 3"/><text x="${cx}" y="${base - 30}" text-anchor="middle" font-size="11.5" fill="#56566c">to come</text>`;
+      return;
+    }
+    const h = Math.max(4, (base - top) * rd.gates / max);
+    g += `<rect x="${cx - bw / 2}" y="${base - h}" width="${bw}" height="${h}" rx="3" fill="${fin ? '#1d4ed8' : '#b9c5de'}"/>`
+      + `<text x="${cx}" y="${base - h - 7}" text-anchor="middle" font-size="${fin ? 14 : 12}" font-weight="${fin ? 700 : 500}" fill="${fin ? '#1d4ed8' : '#3c3c50'}">${fmt(rd.gates)}</text>`;
+    if (i && done.includes(R[i - 1])) {
+      const drop = Math.round((1 - rd.gates / R[i - 1].gates) * 100), ax = x(i - 1) + bw / 2 + 3, bx = cx - bw / 2 - 5, ay = base - 8;
+      g += `<path d="M${ax} ${ay} H${bx}" stroke="#047857" stroke-width="1.4"/><path d="M${bx - 4} ${ay - 3.5} L${bx + 1} ${ay} L${bx - 4} ${ay + 3.5}" fill="none" stroke="#047857" stroke-width="1.4"/>`
+        + `<text x="${(ax + bx) / 2}" y="${ay - 6}" text-anchor="middle" font-size="11" fill="#047857">${drop >= 0 ? '−' + drop : '+' + -drop}%</text>`;
+    }
+  });
+  const k = R[0].gates / last.gates;
+  const lead = done.length > 1 ? `From ${fmt(R[0].gates)} gates in round 1 to <b>${fmt(last.gates)}</b> in round ${last.r}: ${k.toFixed(1)} times smaller.` : `Round 1's best chip: <b>${fmt(last.gates)}</b> gates. Each later round should bring it down.`;
+  return `<div class="steps"><p>${lead}</p><svg viewBox="0 0 ${W} ${H - 18}" role="img" aria-label="Best chip's gate count after each round">${g}</svg></div>`;
+}
 function openDetails(run) {
   const u = UC[run.uc], t = elapsed(run), { best, R } = bestAt(run, t);
   const rows = R.filter(rd => roundEnd(rd.r) <= t).map(rd => `<div class="rr"><span>Round ${rd.r}</span><span class="g2">${fmt(rd.gates)} gates</span><span style="color:${rd.meet === u.N ? 'var(--ok-t)' : 'var(--amb-t)'}">${rd.meet} of ${u.N} ${u.who}</span></div>`).join('');
   drawer(`<h3>Run details</h3><p class="dsub">${esc(run.title)}</p>
+    <div class="dh" style="margin-top:6px">Gates, round by round</div>${gateSteps(run, t, R)}
     <div class="kv"><span>Device</span><span>${u.name}</span></div><div class="kv"><span>Data</span><span>${esc(dataOf(run).short)}</span></div>
     <div class="kv"><span>Clinical line</span><span>${run.line}% of ${u.metric}, worst ${u.one}</span></div>
     <div class="kv"><span>Run time so far</span><span>${clock(t)}</span></div>
@@ -1196,7 +1293,8 @@ function renderChat(run, t, force) {
       return `<div class="tool${open ? ' open' : ''}${an(e)}"><button data-tool="${e.key}" aria-expanded="${open}"><span class="tg">${pend ? '<span class="spin"></span>' : ic('check')}</span>${esc(e.tool)}${ic('chevr', 'chv')}</button>${open ? `<pre>${esc(e.detail)}</pre>` : ''}</div>`;
     }
     return `<div class="msg${an(e)}"><span class="tile">${ic('sci')}</span><div><div class="who">${e.who}</div><div class="txt">${esc(e.text)}</div></div></div>`;
-  }).join('') + (typing ? `<div class="typing"><i></i><i></i><i></i>Lead scientist is replying</div>` : '');
+  }).join('') + (typing ? `<div class="typing"><i></i><i></i><i></i>Lead scientist is replying</div>`
+    : st === 'running' ? `<div class="voice" aria-live="polite"><span class="spin"></span>${esc(voice(run, t, phase(t)))}</div>` : '');
   let feed = $('#feed');
   if (!feed) {
     const off = st === 'done';
@@ -1737,8 +1835,24 @@ function sceneChip(L, host, run) {
   const path = z => [[-2.55, TOP + 0.14, z * 1.05], [-1.95, TOP + 0.03, z * 1.05], [-1.62, TOP + 0.03, z * 0.455], [-1.2, yE + 0.03, z * 0.455], [-0.62, pkgTop + 0.03, z * 0.33], dpt(215, z < 0 ? 210 : 814, 0.02).toArray(), dpt(610, 632, 0.02).toArray(), dpt(930, 512, 0.02).toArray(), [0.62, pkgTop + 0.03, -0.065], [1.2, yE + 0.03, -0.065], [1.62, TOP + 0.03, -0.065], [2.15, TOP + 0.03, -0.065], [2.45, TOP + 0.24, 0]].map(p => new V3(...p));
   const paths = [path(-1), path(1)].map(pts => { const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + pts[i].distanceTo(pts[i - 1])); return { pts, cum, len: cum[cum.length - 1] }; });
   const at = (P, d, out) => { let i = 1; while (i < P.cum.length - 1 && P.cum[i] < d) i++; const k = (d - P.cum[i - 1]) / Math.max(1e-6, P.cum[i] - P.cum[i - 1]); return out.copy(P.pts[i - 1]).lerp(P.pts[i], clamp01(k)); };
-  const pulses = [];
-  paths.forEach((P, pi) => { for (let k = 0; k < 3; k++) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.045, 16, 12), new THREE.MeshBasicMaterial({ color: pi ? s2c : s1c, toneMapped: false })); G.add(m); pulses.push({ m, P, off: k / 3 + pi * 0.17, pi }); } });
+  // the wires carry current: a glowing line along each path that brightens with the live signal
+  const wire = (pts, c, r) => {
+    const cp = new THREE.CurvePath(); for (let i = 1; i < pts.length; i++) cp.add(new THREE.LineCurve3(pts[i - 1], pts[i]));
+    const m = new THREE.Mesh(new THREE.TubeGeometry(cp, pts.length * 28, r, 8, false), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.4, toneMapped: false, depthWrite: false }));
+    G.add(m); return m;
+  };
+  const inWires = paths.map((P, pi) => wire(P.pts.slice(0, 7), pi ? s2c : s1c, 0.034));
+  const outWire = wire(paths[0].pts.slice(6), new THREE.Color(0x22c55e), 0.036);
+  const pulses = [], pulseG = new THREE.SphereGeometry(0.075, 16, 12), haloG = new THREE.SphereGeometry(0.17, 16, 12);
+  paths.forEach((P, pi) => { for (let k = 0; k < 6; k++) {
+    const m = new THREE.Mesh(pulseG, new THREE.MeshBasicMaterial({ color: pi ? s2c : s1c, toneMapped: false }));
+    const halo = new THREE.Mesh(haloG, new THREE.MeshBasicMaterial({ color: pi ? s2c : s1c, transparent: true, opacity: 0.28, toneMapped: false, depthWrite: false })); m.add(halo);
+    G.add(m); pulses.push({ m, halo, P, off: k / 6 + pi * 0.083, pi });
+  } });
+  // how strongly each sensor is reading right now, from the same live signal the Signal view draws
+  const amp = (i, s) => eeg ? clamp01(Math.abs(eegVal(i * 2, s) + eegVal(i * 2 + 1, s)) / 1.4) : clamp01(0.5 + 0.5 * Math.sin(s * 2.4 + i * 1.3) * Math.sin(s * 0.7 + i));
+  st.hud('<div class="chipvoice" id="chipVoice"></div>');
+  const voiceEl = $('#chipVoice', host);
   // labels and drag
   const W = v => () => G.localToWorld(v.clone());
   st.label(`<i style="background:var(--s1)"></i>Sensor 1: ${u.s1.name.toLowerCase()}`, W(new V3(-2.55, TOP + 0.2, -1.05)));
@@ -1753,18 +1867,26 @@ function sceneChip(L, host, run) {
     const t = elapsed(run), ph = phase(t), best = bestAt(run, t).best, yes = best && predYes();
     const ft = ph.key === 'finetune' && status(run) === 'running';
     const txt = `${best ? fmt(best.gates) : 'No'} gates|${ft}|${ph.round}`;
-    if (txt !== lastTxt) {
-      lastTxt = txt;
+    const vtxt = status(run) === 'done' ? 'The chip is reading both sensors live' : voice(run, t, ph);
+    if (txt + vtxt !== lastTxt) {
+      lastTxt = txt + vtxt;
       lModel.el.firstChild.innerHTML = `<i style="background:#2563eb"></i>AI model: ${best ? fmt(best.gates) + ' logic gates' : 'first chip after round 1'}`;
       lW.el.firstChild.innerHTML = `<i style="background:#d4a94e"></i>${ft ? `Weights being fine-tuned, round ${ph.round}` : 'Fine-tuned weights'}`;
+      const stt = status(run);
+      voiceEl.innerHTML = `${stt === 'running' ? '<span class="spin"></span>' : stt === 'done' ? '<span class="live" style="padding:1px 6px"><i></i>LIVE</span>' : ''}${esc(vtxt)}`;
     }
     G.rotation.y = (reduced() ? 0 : Math.sin(time * 0.22) * 0.38) + userYaw;
-    topM.emissiveIntensity = ft ? 0.12 + 0.1 * Math.sin(time * 5) : 0;
-    [S1, S2].forEach((s, i) => { s.ring.material.emissiveIntensity = 0.4 + 1.8 * Math.exp(-((time * 0.8 + i * 0.4) % 1) * 5); });
+    const a1 = amp(0, time), a2 = amp(1, time), aOut = (a1 + a2) / 2;
+    topM.emissiveIntensity = ft ? 0.12 + 0.1 * Math.sin(time * 5) : 0.05 + 0.16 * aOut;
+    [S1, S2].forEach((s, i) => { s.ring.material.emissiveIntensity = 0.4 + 2.4 * (i ? a2 : a1); });
+    inWires[0].material.opacity = 0.35 + 0.55 * a1; inWires[1].material.opacity = 0.35 + 0.55 * a2;
+    outWire.material.color.set(yes ? 0xef4444 : 0x22c55e); outWire.material.opacity = best ? 0.25 + 0.5 * aOut : 0.08;
     pulses.forEach(p => {
-      const f = (time * 0.16 + p.off) % 1, d = f * p.P.len; at(p.P, d, tmp); p.m.position.copy(tmp);
-      const after = d > p.P.cum[6];
-      p.m.material.color.set(after ? (yes ? 0xef4444 : 0x22c55e) : (p.pi ? 0x0891b2 : 0x7c3aed));
+      const f = (time * 0.14 + p.off) % 1, d = f * p.P.len; at(p.P, d, tmp); p.m.position.copy(tmp);
+      const after = d > p.P.cum[6], a = after ? aOut : p.pi ? a2 : a1;
+      const c = after ? (yes ? 0xef4444 : 0x22c55e) : (p.pi ? 0x0891b2 : 0x7c3aed);
+      p.m.material.color.set(c); p.halo.material.color.set(c);
+      p.m.scale.setScalar(0.7 + 0.6 * a); p.halo.material.opacity = 0.18 + 0.32 * a;
       p.m.visible = !!best || !after;
     });
     ledM.color.set(yes ? 0xff4d4d : 0x22c55e); ledM.emissive.set(yes ? 0xef4444 : 0x16a34a);
@@ -1826,7 +1948,7 @@ function sceneFinetune(L, host, run) {
     <div class="hud"><span class="hint" id="ftLive"></span><span class="hudr"><button class="btn ghost" id="ftReplay" style="height:34px;font-size:13px">${ic('replay')}<span>Replay</span></button></span></div>`);
   const cap = (txt, x, z) => st.label(txt, new V3(x, 0, z), { cls: 'below plain' });
   const capF = cap('', (X0 + X1) / 2, -Z0 + 0.45), capS = cap('Strongest 12, compiled to gates', 1.12, 1.55), capA = st.label(`Check on ${u.N} unseen ${u.who}`, new V3(ARCH, 1.45, -1.95), { cls: 'plain' }), capP = cap('Best chip each round', POD, 2.15);
-  const capRef = st.label('Reference model: about 410,000 gates, far too big', new V3((X0 + X1) / 2, 0.75, 0));
+  const capRef = st.label(`Reference model: about ${fmt(u.refGates)} gates, far too big`,new V3((X0 + X1) / 2, 0.75, 0));
   const wl = R.map((rd, i) => st.label('', () => new V3(POD, 0.12 + size(rd.gates) * 0.36 + 0.2, SLOTZ[i])));
   const bRep = $('#ftReplay', host), big = $('#ftBig', host), sm = $('#ftSm', host), liveEl = $('#ftLive', host);
   bRep.onclick = () => { if (S.replay[run.id]) delete S.replay[run.id]; else S.replay[run.id] = now(); };
@@ -1902,9 +2024,10 @@ function sceneFinetune(L, host, run) {
     const shown = k === 'finetune' ? aliveN : k === 'propose' ? N : 12;
     const live = rp ? 'Replay' : status(run) === 'running' ? 'Live with the run' : status(run) === 'paused' ? 'Paused' : 'Finished run';
     const big0 = k === 'spec' ? 'Getting ready' : k === 'reference' ? 'Reference model' : k === 'report' ? 'Writing the report' : k === 'done' ? `${fmt(R[ROUNDS - 1].gates)} gates` : `Round ${r} of ${ROUNDS}`;
-    const sm0 = { spec: 'Reading the spec and papers', reference: 'Training one full-size model to learn from', propose: `${fmt(run.cands)} candidate models proposed`,
-      finetune: `Fine-tuning all ${fmt(run.cands)} at once: ${fmt(Math.max(12, Math.round(shown * pt)))} still in`, compile: 'Compiling the strongest 12 into logic gates',
-      verify: `Checking each chip on ${u.N} unseen ${u.who}`, report: `Best chip: ${fmt(R[ROUNDS - 1].gates)} gates, down from ${fmt(R[0].gates)}`, done: `The final chip, down from ${fmt(R[0].gates)} gates in round 1` }[k];
+    const me = PRODUCT.short;
+    const sm0 = { spec: `${me} is reading your brief and the papers`, reference: `${me} is training one full-size model to learn from`, propose: `${me} is sketching ${fmt(run.cands)} candidate models`,
+      finetune: `${me} is checking ${fmt(run.cands)} models at once: ${fmt(Math.max(12, Math.round(shown * pt)))} still in`, compile: `${me} is wiring the strongest 12 into gates`,
+      verify: `${me} is testing each chip on ${u.N} unseen ${u.who}`, report: `Best chip: ${fmt(R[ROUNDS - 1].gates)} gates, down from ${fmt(R[0].gates)}`, done: `The final chip, down from ${fmt(R[0].gates)} gates in round 1` }[k];
     const fl = k === 'finetune' ? `${fmt(Math.max(12, Math.round(shown * pt)))} candidate models` : k === 'propose' ? `${fmt(run.cands)} candidate models` : (k === 'spec' || k === 'reference') ? 'Candidate models' : 'Candidates, dropped';
     const hk = [big0, sm0, live, fl, rp].join('|');
     if (hk !== hudKey) { hudKey = hk; big.textContent = big0; sm.textContent = sm0; liveEl.textContent = live; capF.el.firstChild.textContent = fl; bRep.lastChild.textContent = rp ? 'Stop replay' : 'Replay'; }
@@ -1931,7 +2054,9 @@ function figChipFlat(run, t, ph, best) {
     ${box(20, 40, 220, 70, 'Sensor 1', u.s1.name, '#7c3aed')}${box(20, 190, 220, 70, 'Sensor 2', u.s2.name, '#0891b2')}
     <rect x="330" y="30" width="320" height="240" rx="14" fill="#1f2937"/><text x="350" y="62" font-size="13" fill="#e5e7eb">Chip</text>
     <rect x="370" y="90" width="240" height="140" rx="8" fill="#1e3a8a"/><text x="390" y="150" font-size="14" font-weight="600" fill="#fff">AI model</text><text x="390" y="172" font-size="12.5" fill="#dbeafe">${best ? fmt(g) + ' gates' : 'No chip yet'}</text>
-    <path d="M240 75 L330 120 M240 225 L330 180 M650 150 L740 150" stroke="#56566c" stroke-width="1.6"/>
+    <path d="M240 75 L330 120 M240 225 L330 180 M650 150 L740 150" stroke="#d4d4dc" stroke-width="3"/>
+    <path class="flow" d="M240 75 L330 120" stroke="#7c3aed" stroke-width="3" stroke-linecap="round"/><path class="flow" d="M240 225 L330 180" stroke="#0891b2" stroke-width="3" stroke-linecap="round"/>
+    ${best ? '<path class="flow" d="M650 150 L740 150" stroke="#16a34a" stroke-width="3" stroke-linecap="round"/>' : ''}
     ${box(740, 115, 220, 70, 'Prediction', best ? u.no : 'Waiting for a chip', '#16a34a')}</svg></div>`;
 }
 

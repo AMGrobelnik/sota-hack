@@ -200,7 +200,7 @@ body.col #sb .acct button{justify-content:center}
 .sbar .sx.now{background:var(--i900);color:#fff;font-weight:600}
 .sbar .loopb{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--i200);border-radius:99px;padding:2px 4px 2px 4px}
 .sbar .rn{font-size:12px;color:var(--i700);padding:0 8px 0 4px;white-space:nowrap;font-weight:500}
-.fwrap{position:relative;width:100%;max-width:1240px;height:clamp(260px,min(calc(100vh - 330px),28vw),500px);margin:8px 0 6px}
+.fwrap{position:relative;width:100%;max-width:1240px;height:clamp(280px,min(calc(100vh - 300px),31vw),540px);margin:8px 0 6px}
 .fwrap canvas{display:block;width:100%;height:100%}
 .replay{position:absolute;right:0;top:0;height:30px;border-radius:99px;padding:0 12px;font-size:12.5px;font-weight:500;color:var(--i800);background:#fff;border:1px solid var(--hair2);display:inline-flex;align-items:center;gap:6px}
 .replay:hover{background:var(--i100)}
@@ -250,6 +250,26 @@ body.col #sb .acct button{justify-content:center}
 .cbox textarea{flex:1;align-self:center}
 .cbox .send{margin-left:0}
 .cbox.off{opacity:.85}
+.cstat{max-width:720px;margin:0 auto 8px;display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--i600);padding:0 6px;min-height:18px}
+.cstat:empty{display:none}
+/* the small live chip in the corner of Overview and Chat */
+.ctile{position:absolute;right:22px;top:52px;z-index:4;display:flex;align-items:center;gap:8px;height:42px;padding:0 12px 0 6px;border-radius:12px;background:rgb(255 255 255/.94);border:1px solid var(--hair2);box-shadow:0 1px 4px rgb(0 0 0/.05);text-align:left}
+.ctile:hover{border-color:#93c5fd;background:#f8fbff}
+.ctile canvas{width:46px;height:30px;display:block}
+.ctile .ct-t{display:flex;flex-direction:column;line-height:1.15}
+.ctile .ct-t b{font-family:var(--serif);font-size:16px;font-weight:500;color:var(--i900);font-variant-numeric:tabular-nums}
+.ctile .ct-t span{font-size:11px;color:var(--i550);white-space:nowrap}
+/* round-by-round gates in Details */
+.gsteps{display:flex;align-items:flex-start;gap:2px;margin:2px 0 4px}
+.gs{flex:1;min-width:0;display:flex;flex-direction:column}
+.gs .gr{font-size:11.5px;color:var(--i550)}
+.gs b{font-family:var(--serif);font-size:19px;font-weight:500;color:var(--i700);font-variant-numeric:tabular-nums;line-height:1.25}
+.gs .gm{font-size:11.5px}
+.gs.fin b{color:var(--blue8);font-size:23px}
+.gs.fin .gr{color:var(--blue8);font-weight:600}
+.gs.wait b{color:var(--i500);font-size:15px;line-height:1.6}
+.garr{color:var(--i400);margin-top:21px;flex:none;width:14px;height:14px}
+.gnote{font-size:12.5px;color:var(--i700);margin:6px 0 0;line-height:1.5}
 
 /* visual */
 .vis{flex:1;overflow:auto;padding:16px 24px 44px}
@@ -410,6 +430,7 @@ canvas.sig{display:block;width:100%;height:380px}
 
 /* responsive */
 @media (max-width:1279px){.mchip span{display:none}.rtitle{max-width:200px}.play{min-width:190px}}
+@media (max-width:1199px){.ctile .ct-t span{display:none}}
 @media (max-width:1023px){.rtitle{max-width:150px}.facts{grid-template-columns:repeat(2,auto)}}
 @media (max-width:767px){
   #app{flex-direction:column}
@@ -445,6 +466,7 @@ canvas.sig{display:block;width:100%;height:380px}
   .hist{display:none}
   .lab span{font-size:11.5px;padding:4px 8px}
   .feed{padding:16px 14px 8px}
+  .ctile{right:10px;top:48px;padding:0 6px}.ctile .ct-t{display:none}
   .cwrap{padding:6px 12px 22px}
 }
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.001s!important;animation-iteration-count:1!important;transition-duration:.001s!important}}
@@ -594,7 +616,7 @@ const UC = {
     s1: { t: 'Sensor 1', what: 'Left electrodes', where: 'T3 and T5, above and behind the left ear' },
     s2: { t: 'Sensor 2', what: 'Right electrodes', where: 'T4 and T6, above and behind the right ear' },
     yes: 'Seizure', no: 'No seizure', yesLong: 'Seizure flagged: the pod buzzes and alerts a carer',
-    gates: [9840, 5212, 3076, 2418], meet: [4, 5, 6, 6], chans: [8, 6, 4, 4], line: 90, metric: 'seizures caught',
+    refGates: 410000, gates: [9840, 5212, 3076, 2418], meet: [4, 5, 6, 6], chans: [8, 6, 4, 4], line: 90, metric: 'seizures caught',
     lineText: 'catch at least 90% of seizures for every unseen patient, with at most one false alarm a day',
     front: 180, battUWh: 120000, batt: '40 mAh coin cell', size: '40 × 25 mm', sizeWhat: 'behind-the-ear pod',
     proto: 'EEG headband with a behind-the-ear pod',
@@ -605,7 +627,7 @@ const UC = {
     s1: { t: 'Sensor 1', what: 'Near-infrared light sources', where: 'two tiny LEDs on the forehead patch, shining into the head' },
     s2: { t: 'Sensor 2', what: 'Light detectors', where: 'four photodiodes 2 to 3 cm away, catching the light that comes back' },
     yes: 'Oxygen falling', no: 'Normal', yesLong: 'Brain oxygen falling: the patch alerts the incubator monitor',
-    gates: [6930, 3904, 2576, 2146], meet: [8, 10, 11, 12], chans: [4, 3, 2, 2], line: 90, metric: 'oxygen drops caught',
+    refGates: 260000, gates: [6930, 3904, 2576, 2146], meet: [8, 10, 11, 12], chans: [4, 3, 2, 2], line: 90, metric: 'oxygen drops caught',
     lineText: 'catch at least 90% of brain-oxygen drops below 50% for every unseen newborn, within a minute',
     front: 1800, battUWh: 660000, batt: '220 mAh cell', size: '30 × 15 mm', sizeWhat: 'forehead patch',
     proto: 'forehead patch with the chip inside',
@@ -1029,7 +1051,8 @@ function renderRun() {
       <div class="play"><button class="pp" id="pp" aria-label="Pause"></button><span class="clock" id="clk"></span><div class="track" id="trk"><i></i><b></b></div><span id="livebox"></span></div>
       <div class="tright"><span class="mchip" title="Machine">${ic(MACHINES.find(m => m.name === run.machine).icon)}<span>${run.machine}</span></span>
         <button class="iconbtn" id="runmenu" aria-label="Run menu" title="Run menu">${ic('more')}</button></div>
-    </div><div class="body" id="body"></div>`;
+    </div><div class="body" id="body"></div>${v !== 'visual' ? `<button class="ctile" id="ctile" aria-label="Open the chip visual" title="Open the chip visual"><canvas id="ctcv" aria-hidden="true"></canvas><span class="ct-t" id="cttxt"></span></button>` : ''}`;
+  const tile = $('#ctile'); if (tile) tile.onclick = e => { e.stopPropagation(); go(href(run.id, 'visual', 'chip')); };
   S.sig = ''; S.base = '';
   updateTop();
   updateBody(true);
@@ -1050,6 +1073,11 @@ function updateTop() {
   if (lb.innerHTML !== lw) lb.innerHTML = lw;
   const sw = st === 'done' ? '<span class="state done">Done</span>' : st === 'paused' ? '<span class="state paused">Paused</span>' : '';
   if (sp.innerHTML !== sw) sp.innerHTML = sw;
+  const tt = $('#cttxt');
+  if (tt) {
+    const { best } = bestAt(run, t), k = best ? best.r + ':' + best.gates : '-';
+    if (tt.dataset.k !== k) { tt.dataset.k = k; tt.innerHTML = best ? `<b>${fmt(best.gates)}</b><span>gates, round ${best.r} chip</span>` : '<b>No chip yet</b><span>first one after round 1</span>'; }
+  }
 }
 function updateBody(force) {
   const run = byId(S.route.id); const v = S.route.view;
@@ -1061,7 +1089,11 @@ function updateBody(force) {
     else if (v === 'visual') buildVisual(run);
   }
   if (v === 'overview') { const sig = [ph.key, ph.round, best ? best.gates : '-', status(run), ph.key === 'finetune' ? Math.floor(ph.f * 20) : 0, run.redirects.length, !!S.replay].join('|'); if (sig !== S.sig) { S.sig = sig; overviewText(run, t, ph, best); } }
-  else if (v === 'chat') { const sig = run.id + '|' + chatSig(run, t) + '|' + status(run); if (force || sig !== S.sig) { S.sig = sig; renderChat(run, t, force); } }
+  else if (v === 'chat') {
+    const sig = run.id + '|' + chatSig(run, t) + '|' + status(run); if (force || sig !== S.sig) { S.sig = sig; renderChat(run, t, force); }
+    const cs = $('#cstat');
+    if (cs) { const st = status(run), w = st === 'done' ? '' : `${st === 'running' ? '<span class="spin"></span>' : ''}<span>${esc(voice(run, t, ph))}</span>`; if (cs.dataset.w !== w) { cs.dataset.w = w; cs.innerHTML = w; } }
+  }
   else visualTick(run, t, ph, best);
 }
 
@@ -1158,6 +1190,47 @@ function chip2D(c, x, y, s, opt = {}) {
   c.strokeStyle = 'rgba(255,255,255,.22)'; c.lineWidth = 1;
   for (let k = 1; k < 6; k++) { c.beginPath(); c.moveTo(x - d / 2, y - d / 2 + d * k / 6); c.lineTo(x + d / 2, y - d / 2 + d * k / 6); c.stroke(); }
   if (opt.glow) { c.strokeStyle = opt.glow; c.lineWidth = 3; c.beginPath(); c.roundRect(x - s / 2 - 7, y - s / 2 - 7, s + 14, s + 14, s * .12); c.stroke(); }
+  if (opt.live && !RM) chipCurrent(c, x, y, s, d, n, pl, opt.live);
+}
+/* current through a 2D chip: in on the left pins (Sensor 1 top, Sensor 2 bottom), across the die, out on the right */
+function chipCurrent(c, x, y, s, d, n, pl, L) {
+  const t = L.t, a = .55 + .45 * L.act, lw = Math.max(1, s * .012);
+  const s1 = '59,130,246', s2 = '139,92,246', out = L.yes ? '239,68,68' : '16,185,129';
+  // die rows: bright heads running left to right, tinted by the sensor feeding them
+  for (let k = 1; k < 6; k++) {
+    const yy = y - d / 2 + d * k / 6, f = (t * .8 + k * .29) % 1, hx = x - d / 2 + f * d, tail = d * .4;
+    const col = L.yes ? out : k < 3 ? s1 : k > 3 ? s2 : '165,180,252';
+    const g = c.createLinearGradient(hx - tail, 0, hx, 0); g.addColorStop(0, `rgba(${col},0)`); g.addColorStop(1, `rgba(${col},${a})`);
+    c.strokeStyle = g; c.lineWidth = Math.max(1.2, s * .018); c.beginPath(); c.moveTo(Math.max(x - d / 2, hx - tail), yy); c.lineTo(hx, yy); c.stroke();
+  }
+  // soft glow over the die, breathing with the signal
+  c.fillStyle = `rgba(${L.yes ? out : '96,165,250'},${.06 + .14 * L.act})`; c.fillRect(x - d / 2, y - d / 2, d, d);
+  // pulses on the pins
+  const run = s * .16 + pl;
+  for (let i = 0; i < n; i++) {
+    const o = -s / 2 + s * (i + .5) / n * .86 + s * .07, f = (t * 1.1 + i * .37) % 1;
+    const px = x - s / 2 - run + f * run, col = i < n / 2 ? s1 : s2;
+    c.fillStyle = `rgba(${col},${(1 - Math.abs(f - .5) * 1.4) * a})`; c.beginPath(); c.arc(px, y + o, Math.max(1.1, s * .03), 0, Math.PI * 2); c.fill();
+    c.strokeStyle = `rgba(${col},.35)`; c.lineWidth = lw; c.beginPath(); c.moveTo(x - s / 2 - run, y + o); c.lineTo(x - s / 2 - pl, y + o); c.stroke();
+  }
+  for (const i of [Math.floor(n / 2) - 1, Math.floor(n / 2)]) {
+    const o = -s / 2 + s * (i + .5) / n * .86 + s * .07, f = (t * 1.3 + i * .5) % 1, px = x + s / 2 + f * run;
+    c.strokeStyle = `rgba(${out},.4)`; c.lineWidth = lw; c.beginPath(); c.moveTo(x + s / 2 + pl, y + o); c.lineTo(x + s / 2 + run, y + o); c.stroke();
+    c.fillStyle = `rgba(${out},${(1 - f) * .95})`; c.beginPath(); c.arc(px, y + o, Math.max(1.2, s * .034), 0, Math.PI * 2); c.fill();
+  }
+}
+/* how busy the live signal is right now, 0 to 1, and whether the chip is flagging it (in step with the Signal view) */
+function sigAmp(run, ch, s) {
+  if (run.uc === 'eeg') return clamp01(Math.abs(eegVal(ch, s)) / 1.4);
+  return clamp01((nirsVal(s * 60) - 35) / 45);
+}
+const liveAct = run => run.uc === 'eeg' ? clamp01((sigAmp(run, 0, now() / 1000) + sigAmp(run, 2, now() / 1000)) / 1.3) : .35 + .3 * Math.sin(now() / 700);
+function predYes(run, b) {
+  if (!b) return false;
+  const wall = now() / 1000;
+  if (run.uc === 'eeg') { const ph = wall % 24, lat = [2.6, 2.0, 1.5, 1.2][b.r - 1]; return (ph >= 10.3 + lat && ph < 17.4) || (b.r === 1 && ph >= 3 && ph < 3.9); }
+  const ph = (wall * 60) % 2600, lat = [95, 62, 44, 33][b.r - 1];
+  return (ph >= 1640 + lat && ph < 1980) || (b.r === 1 && ph >= 560 && ph < 640);
 }
 function drawFunnel(cv, run) {
   if (!cv || !cv.isConnected) return;
@@ -1168,9 +1241,9 @@ function drawFunnel(cv, run) {
   const st = fstate(run), R = roundsOf(run), u = UC[run.uc];
   const small = W < 640;
   const font = (px, w = 500, fam = 'var(--sans)') => `${w} ${px}px ${fam === 'serif' ? '"Iowan Old Style","Source Serif 4",Palatino,Georgia,serif' : '-apple-system,BlinkMacSystemFont,Inter,"Segoe UI",Helvetica,Arial,sans-serif'}`;
-  const capGap = small ? 30 : 40;
-  const cell = Math.min((W * (small ? 0.48 : 0.47)) / FC, (H - capGap - 40) / FR);
-  const fw = cell * FC, fh = cell * FR, fx0 = 2, fx1 = fx0 + fw, fy0 = (H - capGap - fh) / 2 + 4, cy = fy0 + fh / 2;
+  const capGap = small ? 30 : 40, reserve = small ? 0 : 52;
+  const cell = Math.min((W * (small ? 0.48 : 0.47)) / FC, (H - capGap - 40 - reserve) / FR);
+  const fw = cell * FC, fh = cell * FR, fx0 = 2, fx1 = fx0 + fw, fy0 = (H - capGap - reserve - fh) / 2 + 4, cy = fy0 + fh / 2;
   const capY = fy0 + fh + capGap - 8;
   const rest = W - fx1;
   const xs = fx1 + rest * 0.16, g1 = fx1 + rest * 0.33, g2 = fx1 + rest * 0.5, xa = fx1 + rest * 0.58, xch = fx1 + rest * 0.79;
@@ -1267,13 +1340,29 @@ function drawFunnel(cv, run) {
   const ghosts = R.filter(rd => shown && rd.r < shown.r);
   ghosts.forEach(rd => { const s = chipSize(rd.gates); chip2D(c, xch, cy, s, { ghost: 'rgba(71,85,105,.55)' }); c.fillStyle = '#47475a'; c.font = font(small ? 10.5 : 11.5, 500); c.textAlign = 'left'; c.fillText(`R${rd.r}`, xch + s / 2 - (small ? 16 : 20), cy - s / 2 - 5); });
   const fresh = shown && st.key === 'verify' && st.f >= .9 && st.f < 1 && !st.end;
-  if (shown) chip2D(c, xch, cy, chipSize(shown.gates), { glow: fresh ? 'rgba(37,99,235,.55)' : null });
+  if (shown) chip2D(c, xch, cy, chipSize(shown.gates), { glow: fresh ? 'rgba(37,99,235,.55)' : null, live: { t: now() / 1000, act: liveAct(run), yes: predYes(run, shown) } });
   // hero number under the chip
   c.textAlign = 'center';
   const ny = cy + chipMax * .64 + (small ? 22 : 40);
   if (shown) {
     c.fillStyle = '#16162a'; c.font = font(small ? 26 : 44, 500, 'serif'); c.fillText(fmt(shown.gates), xch, ny);
     c.fillStyle = '#47475a'; c.font = font(small ? 11.5 : 13.5, 500); c.fillText(small ? `gates, round ${shown.r}` : `gates, round ${shown.r} chip`, Math.min(xch, W - (small ? 44 : 70)), ny + (small ? 16 : 22));
+    // how big a difference that is: against this run's own full-size reference model
+    const ref = u.refGates, ratio = Math.round(ref / shown.gates), by = ny + (small ? 36 : 50);
+    if (by < H - 2) {
+      const txt = `${fmt(ratio)} times smaller than the reference model`;
+      c.font = font(small ? 11.5 : 13.5, 600); const tw = c.measureText(txt).width, tx = Math.min(xch, W - 4 - tw / 2);
+      c.fillStyle = '#1e40af'; c.fillText(txt, tx, by);
+      if (!small && by + 46 < H) {
+        const bw = Math.max(200, tw), bx = Math.max(0, Math.min(tx - bw / 2, W - 4 - bw));
+        c.fillStyle = '#475569'; roundRect(c, bx, by + 9, bw, 17, 4);
+        c.textAlign = 'left'; c.font = font(11.5, 600); c.fillStyle = '#fff'; c.fillText(`Reference model: ${fmt(ref)} gates`, bx + 7, by + 21.5);
+        const cw = Math.max(3, bw * shown.gates / ref);
+        c.fillStyle = '#1d4ed8'; roundRect(c, bx, by + 30, cw, 17, 2);
+        c.fillStyle = '#16162a'; c.fillText(`This chip: ${fmt(shown.gates)} gates`, bx + cw + 6, by + 42.5);
+        c.textAlign = 'center';
+      }
+    }
   } else {
     c.fillStyle = '#47475a'; c.font = font(small ? 13 : 17, 500, 'serif'); c.fillText('No chip yet', xch, cy + 6);
   }
@@ -1319,35 +1408,61 @@ function overviewText(run, t, ph, best) {
 }
 function nowLine(run, t, ph) {
   const u = UC[run.uc], R = roundsOf(run), rd = R[Math.max(0, ph.round - 1)];
-  if (S.replay) return `${ic('replay')}<span>Replaying round ${S.replay.round}: every dot is a design; watch the batch fine-tune, the weak fall away, and the smallest that holds up become the chip.</span>`;
-  if (status(run) === 'paused') return `<span>${ic('pause')}</span> Paused. Press play in the top bar to carry on.`;
-  const d = run.data;
-  const words = {
-    spec: d.kind === 'public' ? `Reading your spec and loading ${DATASETS[d.id].name} from ${DATASETS[d.id].from}.` : d.kind === 'sim' ? 'Reading your spec and simulating recordings from your assumptions.' : 'Reading your spec and loading your recordings.',
-    reference: `Reading ${PAPERS[run.uc].length} papers and training a full-size reference model to see what is possible.`,
-    propose: `Round ${ph.round}: proposing ${fmt(run.cands)} chip designs on ${chanWords(u, rd.chans, run)}.`,
-    finetune: `Round ${ph.round}: fine-tuning ${fmt(run.cands)} candidate models at once, ${Math.floor(ph.f * 100)}% done.`,
-    compile: `Round ${ph.round}: compiling the 12 strongest into logic gates.`,
-    verify: `Round ${ph.round}: checking each circuit bit for bit, then on ${u.N} unseen ${u.who}.`,
-    report: 'Writing the report.'
-  };
-  if (ph.key === 'done') return `${ic('ccheck')} Finished after ${mins(TOTAL)} minutes and ${ROUNDS} rounds.`;
+  if (S.replay) return `${ic('replay')}<span>${PRODUCT.short} is replaying round ${S.replay.round}: every dot is a design; watch the batch fine-tune, the weak fall away, and the smallest that holds up become the chip.</span>`;
+  if (status(run) === 'paused') return `<span>${ic('pause')}</span> ${voice(run, t, ph)}`;
+  if (ph.key === 'done') return `${ic('ccheck')} ${voice(run, t, ph)}`;
   const applyRound = x => [1, 2, 3, 4].find(k => roundStart(k) > x.t);
   const pend = run.redirects.filter(x => applyRound(x) && roundStart(applyRound(x)) > t).pop();
   const tail = pend ? ` <span style="color:var(--teal)">Your note applies from round ${applyRound(pend)}.</span>` : '';
-  return `<span class="spin"></span><span>${words[ph.key]}${tail}</span>`;
+  return `<span class="spin"></span><span>${voice(run, t, ph)}${tail}</span>`;
+}
+/* the work, in one voice: what Chipmonk is doing right now, present tense, one line */
+function voice(run, t, ph, short) {
+  const u = UC[run.uc], R = roundsOf(run), rd = R[Math.max(0, ph.round - 1)], d = run.data, me = PRODUCT.short, c = fmt(run.cands);
+  if (status(run) === 'paused') return `${me} is paused. Press play in the top bar to carry on.`;
+  const words = {
+    spec: `${me} is reading your brief and ${d.kind === 'public' ? `loading ${DATASETS[d.id].name}` : d.kind === 'sim' ? 'simulating recordings from your assumptions' : 'loading your recordings'}.`,
+    reference: `${me} is reading ${PAPERS[run.uc].length} papers and training a full-size reference model.`,
+    propose: `${me} is proposing ${c} chip designs on ${chanWords(u, rd.chans, run)}.`,
+    finetune: short ? `${me} is checking ${c} models at once` : `${me} is checking ${c} models at once, fine-tuning them together. ${Math.floor(ph.f * 100)}% done.`,
+    compile: `${me} is wiring the weights of the 12 strongest into gates.`,
+    verify: `${me} is checking each circuit bit for bit, then on ${u.N} unseen ${u.who}.`,
+    report: `${me} is writing your report.`,
+    done: short ? `${me} is done: all ${ROUNDS} rounds` : `${me} is done: ${ROUNDS} rounds in ${mins(TOTAL)} minutes. The final chip is reading the live signal.`
+  };
+  return words[ph.key];
 }
 function openDetails(run) {
   const u = UC[run.uc], t = elapsed(run), { R } = bestAt(run, t);
-  const rows = R.filter(rd => roundEnd(rd.r) <= t).map(rd => `<div class="rr"><span>Round ${rd.r}</span><span class="g2">${fmt(rd.gates)} gates</span><span style="color:${rd.meet === u.N ? 'var(--ok-t)' : 'var(--amb-t)'}">${rd.meet} of ${u.N} ${u.who}</span></div>`).join('');
+  const done = R.filter(rd => roundEnd(rd.r) <= t), fin = done[done.length - 1], over = status(run) === 'done';
+  const arr = `<svg class="garr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>`;
+  const steps = R.map(rd => {
+    if (roundEnd(rd.r) > t) return `<div class="gs wait"><span class="gr">Round ${rd.r}</span><b>to come</b></div>`;
+    const isF = rd === fin;
+    return `<div class="gs${isF ? ' fin' : ''}"><span class="gr">${isF ? (over ? 'Final, round ' : 'Best, round ') : 'Round '}${rd.r}</span><b>${fmt(rd.gates)}</b><span class="gm" style="color:${rd.meet === u.N ? 'var(--ok-t)' : 'var(--amb-t)'}">${rd.meet} of ${u.N} pass</span></div>`;
+  }).join(arr);
+  // the step chart: one bar per round, the latest finished one in blue
+  const W = 392, H = 96, bw = 58, gap = (W - 4 * bw) / 3, mx = R[0].gates;
+  const bars = R.map((rd, i) => {
+    const x = i * (bw + gap);
+    let h = Math.max(3, (rd.gates / mx) * (H - 26)), y = H - 18 - h;
+    if (roundEnd(rd.r) > t) { h = Math.max(3, (fin.gates / mx) * (H - 26)); y = H - 18 - h; } // not known yet: outline at today's best
+    if (roundEnd(rd.r) > t) return `<rect x="${x + .75}" y="${y}" width="${bw - 1.5}" height="${h}" rx="4" fill="none" stroke="#a9a9b8" stroke-dasharray="4 3"/><text x="${x + bw / 2}" y="${H - 3}" text-anchor="middle" font-size="11.5" fill="#4f4f63">R${rd.r}</text>`;
+    return `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="4" fill="${rd === fin ? '#1d4ed8' : '#c7d2fe'}"/><text x="${x + bw / 2}" y="${H - 3}" text-anchor="middle" font-size="11.5" fill="${rd === fin ? '#1e40af' : '#4f4f63'}" font-weight="${rd === fin ? 700 : 400}">R${rd.r}</text>`;
+  }).join('');
+  const steps2 = R.slice(1).map((rd, i) => { const a = R[i], x1 = i * (bw + gap) + bw, x2 = (i + 1) * (bw + gap); const y1 = H - 18 - Math.max(3, a.gates / mx * (H - 26)), y2 = H - 18 - Math.max(3, rd.gates / mx * (H - 26)); return roundEnd(rd.r) <= t ? `<path d="M${x1} ${y1} H${(x1 + x2) / 2} V${y2} H${x2}" fill="none" stroke="#6b7280" stroke-width="1.3"/>` : ''; }).join('');
+  const chart = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Gates of the best chip in each round, falling round by round" style="display:block;margin-top:8px">${bars}${steps2}</svg>`;
+  const note = fin ? (done.length > 1 ? `From ${fmt(R[0].gates)} gates in round 1 to ${fmt(fin.gates)} in round ${fin.r}: ${(R[0].gates / fin.gates).toFixed(1)} times fewer. That is ${Math.round(u.refGates / fin.gates)} times smaller than this run's reference model (${fmt(u.refGates)} gates).` : `Round 1's chip is ${Math.round(u.refGates / fin.gates)} times smaller than this run's reference model (${fmt(u.refGates)} gates). The next rounds shrink it further.`) : '';
+  const rows = fin ? `<div class="gsteps">${steps}</div>${chart}<p class="gnote">${note}</p>` : '';
   drawer(`<h3>Run details</h3><p class="dsub">${esc(run.title)}</p>
+    <div class="dh" style="margin-top:6px">Gates, round by round</div>
+    ${rows || `<p style="color:var(--i600);font-size:12.5px">No round has finished yet. The first chip is checked at the end of round 1.</p>`}
+    <div style="height:10px"></div>
     <div class="kv"><span>Device type</span><span>${u.name}</span></div>
     <div class="kv"><span>Clinical line</span><span>${run.line}% of ${u.metric}, worst ${u.one}</span></div>
     <div class="kv"><span>Preset</span><span>${run.preset}, ${fmt(run.cands)} designs a round</span></div>
     <div class="kv"><span>Run time so far</span><span>${clock(t)}</span></div>
-    <div class="kv"><span>Spend so far</span><span>$${spend(t).toFixed(2)}</span></div>
-    <div class="dh">Best chip each round</div>
-    ${rows || `<p style="color:var(--i600);font-size:12.5px">No round has finished yet.</p>`}`);
+    <div class="kv"><span>Spend so far</span><span>$${spend(t).toFixed(2)}</span></div>`);
 }
 function openSources(run) {
   const u = UC[run.uc], d = run.data;
@@ -1404,7 +1519,7 @@ function renderChat(run, t, force) {
   if (!feed) {
     const off = st === 'done';
     $('#body').innerHTML = `<div class="chat"><div class="feed" id="feed"><div class="feedin" id="feedin"></div></div>
-      <div class="cwrap"><form class="box cbox${off ? ' off' : ''}" id="cform"><textarea id="cta" rows="1" ${off ? 'disabled' : ''} placeholder="${off ? 'This run is finished. Start a new run to try something else.' : 'Message the scientists'}" aria-label="Message the scientists"></textarea>
+      <div class="cwrap"><div class="cstat" id="cstat" aria-live="polite"></div><form class="box cbox${off ? ' off' : ''}" id="cform"><textarea id="cta" rows="1" ${off ? 'disabled' : ''} placeholder="${off ? 'This run is finished. Start a new run to try something else.' : 'Message the scientists'}" aria-label="Message the scientists"></textarea>
       <button type="submit" class="send" id="csend" aria-label="Send" ${off ? 'disabled' : ''}>${ic('up')}</button></form></div></div>`;
     feed = $('#feed');
     const ta = $('#cta');
@@ -1824,7 +1939,6 @@ function placeLabels(c) {
     L.el.style.opacity = vis.toFixed(2);
   }
 }
-const predYes = () => ((now() / 1000) % 12) < 3.4;
 
 /* ---------- materials and parts ---------- */
 function mats(T) {
@@ -2095,7 +2209,7 @@ function buildDevice(M, host, run) {
     const op = ctx.step === 2 ? .14 : 1;
     shellMats.forEach(m => { m.opacity = lerp(m.opacity, op, .08); m.depthWrite = m.opacity > .95; });
     const { best: b } = bestAt(run, elapsed(run));
-    const yes = b && predYes();
+    const yes = predYes(run, b);
     lit.forEach(l => { l.m.emissiveIntensity = l.red ? 1 + .9 * Math.sin(t * 6 + l.ph) : (l.dim ? .35 : 1) * (.6 + .6 * Math.max(0, Math.sin(t * 4 + l.ph))); });
     statusLed.material.color.set(yes ? 0xef4444 : 0x10b981); statusLed.material.emissive.set(yes ? 0xef4444 : 0x10b981);
     statusLed.material.emissiveIntensity = yes ? 1.2 + Math.sin(t * 14) : 1.0;
@@ -2118,8 +2232,11 @@ function buildChip3D(M, host, run) {
   const pkg = makePackage(M, { mats: Mt, size: 2.3, gates: best ? best.gates : 2600, seed: run.seed + (best ? best.r : 0), leadN: 14 });
   pkg.position.x = cx; piv.add(pkg);
   // pads under the feet and traces
-  const tr = [], seg = (a, b, w = .05) => { const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz); const m = new T.Mesh(new T.BoxGeometry(l + w, .012, w), Mt.trace); m.position.set((a[0] + b[0]) / 2, .006, (a[1] + b[1]) / 2); m.rotation.y = -Math.atan2(dz, dx); piv.add(m); };
-  const path = pts => { for (let i = 1; i < pts.length; i++) seg(pts[i - 1], pts[i]); tr.push(pts); };
+  // traces carry current: each sensor's traces glow in its colour, the output in green (red on a flag)
+  const trM = { 1: Mt.trace.clone(), 2: Mt.trace.clone(), out: Mt.trace.clone() };
+  trM[1].emissive = new T.Color(0x2563eb); trM[2].emissive = new T.Color(0x7c3aed); trM.out.emissive = new T.Color(0x10b981);
+  const tr = [], seg = (a, b, mat, w = .05) => { const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz); const m = new T.Mesh(new T.BoxGeometry(l + w, .012, w), mat || Mt.trace); m.position.set((a[0] + b[0]) / 2, .006, (a[1] + b[1]) / 2); m.rotation.y = -Math.atan2(dz, dx); piv.add(m); };
+  const path = (pts, mat) => { for (let i = 1; i < pts.length; i++) seg(pts[i - 1], pts[i], mat); tr.push(pts); };
   const reach = pkg.userData.reach, pitch = 2.3 * .84 / 14;
   const leadZ = i => -2.3 * .42 + pitch * (i + .5);
   for (let i = 0; i < 14; i++) for (const sd of [-1, 1]) { const pad = new T.Mesh(new T.BoxGeometry(.2, .01, pitch * .6), Mt.tin); pad.position.set(cx + sd * (reach - .08), .005, leadZ(i)); piv.add(pad); }
@@ -2130,12 +2247,12 @@ function buildChip3D(M, host, run) {
     for (let k = 0; k < 4; k++) {
       const z = z0 - .3 + k * .2, lz = leadZ(li - 2 + k);
       const pts = [[conX + .3, z], [-1.9, z], [-1.4 + k * .06, lz], [cx - reach + .05, lz]];
-      path(pts); inputs.push({ pts, sn });
+      path(pts, trM[sn]); inputs.push({ pts, sn, k, lz });
     }
     L.add(`<b>${sn === 1 ? u.s1.t : u.s2.t}: ${(sn === 1 ? u.s1 : u.s2).what}</b>${(sn === 1 ? u.s1 : u.s2).where}`, con, [-.3, .25, 0], null, 'l');
   });
   // output trace to the LED
-  const outPts = [[cx + reach - .05, leadZ(7)], [3.1, leadZ(7)], [3.4, 0], [3.7, 0]]; path(outPts);
+  const outPts = [[cx + reach - .05, leadZ(7)], [3.1, leadZ(7)], [3.4, 0], [3.7, 0]]; path(outPts, trM.out);
   const ledM = new T.MeshPhysicalMaterial({ color: 0x10b981, emissive: 0x10b981, emissiveIntensity: 1, roughness: .15, clearcoat: 1 });
   const led = new T.Mesh(new T.SphereGeometry(.2, 32, 20, 0, Math.PI * 2, 0, Math.PI / 2), ledM); led.position.set(3.9, .06, 0); piv.add(led);
   const ledBase = new T.Mesh(new T.BoxGeometry(.5, .08, .5), Mt.white); ledBase.position.set(3.9, .04, 0); piv.add(ledBase);
@@ -2169,11 +2286,38 @@ function buildChip3D(M, host, run) {
   const modelLab = L.add('', pkg, new T.Vector3(mp.x, mp.y, -ds * .46), null, 'r', true);
   const s1Lab = L.add('<b>In from Sensor 1</b>', pkg, pkg.userData.regionPos('s1'), null, 'l');
   s1Lab.el.style.display = 'none';
-  // pulses along the traces
-  const pulseG = new T.SphereGeometry(.05, 12, 10);
-  const pulses = inputs.map((p, i) => { const m = new T.Mesh(pulseG, new T.MeshBasicMaterial({ color: p.sn === 1 ? 0x3b82f6 : 0x7c3aed })); m.userData = { pts: p.pts, off: i * .137 }; piv.add(m); return m; });
-  const outPulse = new T.Mesh(pulseG, new T.MeshBasicMaterial({ color: 0x10b981 })); outPulse.userData = { pts: outPts, off: 0 }; piv.add(outPulse);
-  const along = (pts, k) => { let tot = 0; const ls = []; for (let i = 1; i < pts.length; i++) { const l = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); ls.push(l); tot += l; } let d = k * tot; for (let i = 0; i < ls.length; i++) { if (d <= ls[i]) { const f = d / ls[i]; return [lerp(pts[i][0], pts[i + 1][0], f), lerp(pts[i][1], pts[i + 1][1], f)]; } d -= ls[i]; } return pts[pts.length - 1]; };
+  // live current: pulses run from each sensor, along its cable and traces, up a lead, across the die
+  // into the AI model, then out of the model, down the output lead and along to the prediction LED.
+  // Each pulse is as bright as the signal was when it left the sensor, so it moves in step with the Signal view.
+  const V3 = (x, y, z) => new T.Vector3(x, y, z);
+  const dieTopY = pkg.userData.dieY + .03, bodyY = 2.3 * .17 + .03, half = 1.15, cavE = 2.3 * .32;
+  const onDie = key => { const p = pkg.userData.regionPos(key); return V3(p.x + cx, dieTopY, p.z); };
+  const modelP = onDie('model'), outP = onDie('out');
+  const route = pts => { const ls = [0]; for (let i = 1; i < pts.length; i++) ls.push(ls[i - 1] + pts[i].distanceTo(pts[i - 1])); return { pts, ls, len: ls[ls.length - 1] }; };
+  const at = (r, d, v) => { let i = 1; while (i < r.ls.length - 1 && r.ls[i] < d) i++; const a = r.ls[i - 1], b = r.ls[i]; return v.lerpVectors(r.pts[i - 1], r.pts[i], b > a ? clamp01((d - a) / (b - a)) : 0); };
+  const inRoutes = inputs.map(p => {
+    const cab = new T.CatmullRomCurve3(cables[p.sn - 1]).getPoints(24).reverse().map(q => q.clone().setY(q.y + .07));
+    const reg = onDie(p.sn === 1 ? 's1' : 's2');
+    const pts = [...cab, ...p.pts.map(([x, z]) => V3(x, .05, z)),
+      V3(cx - half - .02, bodyY - .1, p.lz), V3(cx - half + .04, bodyY, p.lz), V3(cx - cavE, bodyY, p.lz * .62),
+      V3(reg.x - .12, dieTopY, reg.z + (p.k - 1.5) * .05), reg, modelP];
+    return { r: route(pts), sn: p.sn, ch: (p.sn - 1) * 2 + (p.k % 2) };
+  });
+  const lz7 = leadZ(7);
+  const outRoute = route([modelP, outP, V3(cx + cavE, bodyY, lz7 * .62), V3(cx + half - .04, bodyY, lz7), V3(cx + half + .02, bodyY - .1, lz7),
+    ...outPts.map(([x, z]) => V3(x, .05, z)), V3(3.9, .2, 0)]);
+  const glowTex = (() => { const cc = document.createElement('canvas'); cc.width = cc.height = 64; const g2 = cc.getContext('2d'); const rg = g2.createRadialGradient(32, 32, 0, 32, 32, 32); rg.addColorStop(0, 'rgba(255,255,255,1)'); rg.addColorStop(.25, 'rgba(255,255,255,.75)'); rg.addColorStop(1, 'rgba(255,255,255,0)'); g2.fillStyle = rg; g2.fillRect(0, 0, 64, 64); const tx = new T.CanvasTexture(cc); tx.colorSpace = T.SRGBColorSpace; return tx; })();
+  const haloM = { 1: new T.SpriteMaterial({ map: glowTex, color: 0x60a5fa, transparent: true, depthWrite: false }), 2: new T.SpriteMaterial({ map: glowTex, color: 0xa78bfa, transparent: true, depthWrite: false }), out: new T.SpriteMaterial({ map: glowTex, color: 0x34d399, transparent: true, depthWrite: false }) };
+  const coreM = { 1: new T.MeshBasicMaterial({ color: 0xdbeafe }), 2: new T.MeshBasicMaterial({ color: 0xede9fe }), out: new T.MeshBasicMaterial({ color: 0xd1fae5 }) };
+  const coreG = new T.SphereGeometry(.045, 12, 10);
+  const mkPulse = (key, r, off, ch) => { const core = new T.Mesh(coreG, coreM[key]), halo = new T.Sprite(haloM[key]); piv.add(core, halo); return { core, halo, r, off, ch }; };
+  const SPD = 2.4, pulses = [];
+  inRoutes.forEach((ir, i) => { for (let j = 0; j < 4; j++) pulses.push(mkPulse(ir.sn, ir.r, j * ir.r.len / 4 + i * .41, ir.ch)); });
+  const outPulses = []; for (let j = 0; j < 6; j++) outPulses.push(mkPulse('out', outRoute, j * outRoute.len / 6, -1));
+  // the AI model block lights up with the current
+  const liveM = new T.MeshBasicMaterial({ color: 0x60a5fa, transparent: true, opacity: 0, depthWrite: false });
+  const live = new T.Mesh(new T.PlaneGeometry(ds * .44, ds * .72), liveM); live.rotation.x = -Math.PI / 2; live.position.copy(mp).add(new T.Vector3(cx, .0025, 0)); piv.add(live);
+  const tmpV = new T.Vector3();
   const orb = makeOrbit(host, { t: new T.Vector3(-.9, -.2, .35), r: 14.6, th: .14, ph: .86, lim: 1.4, plim: [-.5, .35] });
   orb.back = true;
   const ctx = { scene, cam, labels: L.list };
@@ -2203,13 +2347,26 @@ function buildChip3D(M, host, run) {
     scanM.opacity = ftNow ? .8 : 0;
     if (ftNow) scan.position.x = ft.position.x + (((t * .5) % 1) - .5) * ds * .42;
     const { best: b } = bestAt(run, elapsed(run));
-    const yes = b && predYes();
+    const yes = predYes(run, b);
     ledM.color.set(yes ? 0xef4444 : 0x10b981); ledM.emissive.set(yes ? 0xef4444 : 0x10b981); ledM.emissiveIntensity = yes ? 1.3 + .8 * Math.sin(t * 12) : .9;
     predLab.el.classList.toggle('hot', !!yes);
     const pt = `<b>Prediction: ${b ? (yes ? u.yes : u.no) : 'waiting for a chip'}</b>${b ? 'the chip decides on every window' : ''}`;
     if (predLab._t !== pt) { predLab._t = pt; predLab.el.querySelector('span').innerHTML = pt; }
-    pulses.forEach(p => { const k = ((t * .35 + p.userData.off) % 1); const [x, z] = along(p.userData.pts, k); p.position.set(x, .06, z); p.visible = !RM; });
-    const ko = (t * .6) % 1; const [ox, oz] = along(outPts, ko); outPulse.position.set(ox, .06, oz); outPulse.material.color.set(yes ? 0xef4444 : 0x10b981);
+    const wall = now() / 1000;
+    const amp = p => p.ch < 0 ? (yes ? 1 : .55 + .25 * Math.sin(wall * 5)) : sigAmp(run, p.ch, wall - ((wall * SPD + p.off) % p.r.len) / SPD);
+    for (const p of pulses.concat(outPulses)) {
+      p.core.visible = p.halo.visible = !RM;
+      if (RM) continue;
+      at(p.r, (wall * SPD + p.off) % p.r.len, tmpV);
+      const a = amp(p), k = .7 + .9 * a;
+      p.core.position.copy(tmpV); p.core.scale.setScalar(k);
+      p.halo.position.copy(tmpV); p.halo.scale.setScalar(.5 * k); p.halo.material.opacity = .85;
+    }
+    haloM.out.color.set(yes ? 0xf87171 : 0x34d399); coreM.out.color.set(yes ? 0xfee2e2 : 0xd1fae5);
+    const act = liveAct(run);
+    trM[1].emissiveIntensity = .25 + .9 * sigAmp(run, 0, wall); trM[2].emissiveIntensity = .25 + .9 * sigAmp(run, 2, wall);
+    trM.out.emissive.set(yes ? 0xef4444 : 0x10b981); trM.out.emissiveIntensity = yes ? .9 + .5 * Math.sin(t * 12) : .45;
+    liveM.color.set(yes ? 0xef4444 : 0x60a5fa); liveM.opacity = ftNow ? 0 : .12 + .28 * act;
   };
   return ctx;
 }
@@ -2342,7 +2499,8 @@ function buildFunnel3D(M, host, run) {
       $('#hist', host).innerHTML = `<div class="ht"><span>Best chip each round</span><span>${st.round ? `Round ${st.round} of ${ROUNDS}` : ''}</span></div>` + (doneRounds.length ? doneRounds.map(rd => `<div class="hr${sh && rd.r === sh.r ? ' cur' : ''}"><span>Round ${rd.r}</span><i style="width:${(rd.gates / mx * 100).toFixed(0)}%"></i><b>${fmt(rd.gates)}</b></div>`).join('') : '<div class="hr"><span style="grid-column:1/-1">The first chip comes out of round 1</span></div>');
       $('#ftreplay', host).innerHTML = S.replay ? `${ic('play')}Back to live` : `${ic('replay')}Replay ${st.end ? 'the last round' : 'a round'}`;
       $('#ftreplay', host).style.display = sh || S.replay ? '' : 'none';
-      const words = pre ? (st.key === 'reference' ? 'Training the reference model first' : 'Loading the data') : S.replay ? `Replaying round ${st.round}` : st.end ? 'Finished: all four rounds' : `Live: round ${st.round}, ${st.key === 'finetune' ? 'fine-tuning' : st.key === 'propose' ? 'proposing' : st.key === 'compile' ? 'compiling' : 'checking'}`;
+      const tr = elapsed(run), phr = phase(tr);
+      const words = S.replay ? `${PRODUCT.short} is replaying round ${st.round}` : (st.end && phr.key !== 'report' ? voice(run, tr, { key: 'done' }, true) : voice(run, tr, phr, true).replace(/\.$/, '')) + (st.round && !st.end && !S.replay ? `, round ${st.round}` : '');
       $('#ftstate', host).textContent = words;
     }
   };
@@ -2505,7 +2663,30 @@ setInterval(() => {
   if (S.route.page === 'run' && byId(S.route.id)) { updateTop(); updateBody(false); }
   else if (S.route.page === 'run') go('#/');
 }, 250);
+/* the corner chip: Sensor 1 and Sensor 2 feeding it, the prediction going out */
+function drawTile() {
+  const cv = $('#ctcv'); if (!cv) return;
+  const run = byId(S.route.id); if (!run) return;
+  const W = 46, H = 30, dpr = Math.min(2, devicePixelRatio || 1);
+  if (cv.width !== W * dpr) { cv.width = W * dpr; cv.height = H * dpr; }
+  const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);
+  const { best } = bestAt(run, elapsed(run)), x = 24, y = 15, s = 16, t = now() / 1000;
+  if (!best) { chip2D(c, x, y, s, { ghost: 'rgba(71,85,105,.7)' }); return; }
+  const yes = predYes(run, best), out = yes ? '239,68,68' : '16,185,129';
+  [[10.5, '59,130,246', 0], [19.5, '139,92,246', 2]].forEach(([yy, col, ch]) => {
+    c.strokeStyle = `rgba(${col},.45)`; c.lineWidth = 1.4; c.beginPath(); c.moveTo(1, yy); c.lineTo(x - s / 2 - 1, yy); c.stroke();
+    if (!RM) for (let j = 0; j < 2; j++) { const f = (t * .9 + j * .5 + ch * .13) % 1, a = .5 + .5 * sigAmp(run, ch, t - f); c.fillStyle = `rgba(${col},${a})`; c.beginPath(); c.arc(1 + f * (x - s / 2 - 2), yy, 1.9, 0, Math.PI * 2); c.fill(); }
+  });
+  c.strokeStyle = `rgba(${out},.5)`; c.lineWidth = 1.4; c.beginPath(); c.moveTo(x + s / 2 + 1, y); c.lineTo(W - 1, y); c.stroke();
+  if (!RM) { const f = (t * 1.2) % 1; c.fillStyle = `rgba(${out},${1 - f * .6})`; c.beginPath(); c.arc(x + s / 2 + 2 + f * (W - x - s / 2 - 3), y, 2, 0, Math.PI * 2); c.fill(); }
+  chip2D(c, x, y, s, {});
+  // die lit by the current
+  const d = s * .5, a = .35 + .5 * liveAct(run);
+  c.fillStyle = `rgba(${yes ? out : '147,197,253'},${a})`; c.fillRect(x - d / 2, y - d / 2, d, d);
+  if (!RM) { const f = (t * .9) % 1; c.fillStyle = 'rgba(255,255,255,.85)'; c.fillRect(x - d / 2 + f * (d - 1.5), y - d / 2, 1.5, d); }
+}
 (function loop() {
+  if (S.route.page === 'run' && S.route.view !== 'visual') drawTile();
   if (S.route.page === 'run') {
     if (S.route.view === 'overview') drawFunnel($('#fun'), byId(S.route.id));
     else if (S.route.view === 'visual') { if (S.route.vis === 'signal') drawSignal(); frame3D(); }
