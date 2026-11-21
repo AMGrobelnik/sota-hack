@@ -1,17 +1,30 @@
 # Demo use cases (locked, Sat 21 Nov 2026)
 
 Theme: **NICU on a chip.** The design environment designs the core chip for neonatal
-monitoring devices. Three cases, in pitch order:
+monitoring devices. Two case studies:
 
-1. **AF from single-lead ECG**: proof that the pipeline works (already built: batched
-   search, gate compile, bit-exact check). Not the clinical headline: AF screening is
-   largely served by existing devices (KardiaMobile single-lead and 6L; NICE MTG64 reports
-   per-recording sensitivity 92 to 99% and specificity 92 to 98%, with 10 to 28% of traces
-   unclassified).
-2. **Incubator Watch**: contactless apnoea, bradycardia and desaturation detection, with
-   thermal early-warning as the next sensor. Real neonatal physiology, simulated sensors.
-3. **Neonatal seizure detection from EEG**: real open expert-labelled data, a richer chip
+1. **Incubator Watch** (radar plus thermal infrared): contactless detection of apnoea and
+   bradycardia (radar) and temperature warning signs of cold stress and early sepsis
+   (thermal). Real neonatal physiology, simulated sensors.
+2. **Neonatal seizure detection from EEG**: real open expert-labelled data, a richer chip
    design problem.
+
+AF from ECG is dropped completely (decision, 21 Nov). AF screening is already served by
+existing devices, so it is not a case study.
+
+## What each sensor is for
+
+- **Radar**: mounted on the incubator, it senses the tiny chest movements of breathing and
+  the heartbeat without touching the baby. The chip turns that into breathing and heart
+  rate and flags apnoea and bradycardia. It replaces wired chest leads, which irritate
+  fragile skin and fall off.
+- **Thermal infrared camera**: measures the temperature of the core against the hands and
+  feet. A widening gap (warm core, cold periphery) is the warning pattern for cold stress
+  and early sepsis (Oran's NeoTherm work). The chip turns the image into that gap and
+  flags it.
+- **Not doing**: two-wavelength near-infrared for oxygen. Contactless camera oxygen in
+  neonates is not reliable enough, and there is no open neonatal ground truth;
+  desaturation stays with the existing pulse oximeter.
 
 ## Shared clinical framing
 
@@ -23,7 +36,7 @@ monitoring devices. Three cases, in pitch order:
 - Clinical metric for every case: events detected (sensitivity per event) against false
   alarms per hour, compared with the baseline above. Report per baby, not pooled accuracy.
 
-## Case 2: Incubator Watch
+## Case 1: Incubator Watch
 
 **Event definitions** (UK: NHS Greater Glasgow and Clyde neonatal guideline, apnoea of
 prematurity; BAPM wording not yet found):
@@ -40,7 +53,6 @@ prematurity; BAPM wording not yet found):
 |---|---|---|---|
 | Radar on the incubator | Chest movement: breathing and heartbeat | Real neonatal physiology from PhysioNet PICS; radar signal simulated from it; front end checked against open radar data | Build first |
 | Thermal camera | Core versus peripheral temperature (cold stress, early sepsis pattern) | Simulated: body heat of thousands of babies and incubator settings on the GPU | Next sensor |
-| Two-wavelength near-infrared | Oxygen saturation | Simulated (no open neonatal ground truth) | Later |
 
 **Data sources**
 
@@ -59,7 +71,7 @@ prematurity; BAPM wording not yet found):
 
 **On the slide:** "real neonatal physiology, simulated radar and thermal".
 
-## Case 3: Neonatal seizure detection
+## Case 2: Neonatal seizure detection
 
 - Data: Helsinki neonatal EEG dataset, Stevenson et al., Scientific Data 2019
   (doi:10.1038/sdata.2019.39), CC BY 4.0, Zenodo 10.5281/zenodo.4940267 (several versions;
@@ -87,6 +99,5 @@ prematurity; BAPM wording not yet found):
   https://www.clinicalguidelines.scot.nhs.uk/nhsggc-guidelines/nhsggc-guidelines/neonatology/apnoea-of-prematurity/
 - Alarm fatigue: https://www.childrenshospitals.org/news/childrens-hospitals-today/2019/04/patient-safety-project-aims-to-reduce-alarm-fatigue-in-the-nicu ;
   https://pmc.ncbi.nlm.nih.gov/articles/PMC11353546/ ; https://onlinelibrary.wiley.com/doi/10.1111/nicc.70322
-- KardiaMobile accuracy: https://www.nice.org.uk/guidance/MTG64/chapter/3-evidence
 - Helsinki EEG: https://pmc.ncbi.nlm.nih.gov/articles/PMC6400100/ ; https://zenodo.org/records/4940267
 - Neonatal radar simulator: https://doaj.org/article/6d2b87fb398d490d9916b5649b3aa08c
