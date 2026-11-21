@@ -8,11 +8,11 @@ from pathlib import Path
 import httpx
 import pytest
 from aiohttp.test_utils import TestServer
-from script_backend import use_script_backend
 
 from chipmonk_backend.agents.types import AgentSpec
 from chipmonk_backend.compute.runpod.worker import WorkerClient, WorkerUnreachableError, create_app
 from chipmonk_backend.config import BackendConfig
+from script_backend import use_script_backend
 
 TOKEN = "per-pod-test-token"
 LOGS_AND_WRITES = """

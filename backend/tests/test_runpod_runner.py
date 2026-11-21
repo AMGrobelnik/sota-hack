@@ -16,7 +16,6 @@ from typing import Any
 
 import pytest
 from aiohttp.test_utils import TestServer
-from script_backend import use_script_backend
 
 from chipmonk_backend.agents.types import AgentSpec
 from chipmonk_backend.compute.factory import runner_for
@@ -36,6 +35,7 @@ from chipmonk_backend.compute.runpod.worker import WORKER_TOKEN_ENV, create_app
 from chipmonk_backend.config import BACKEND_ROOT, BackendConfig, load_config
 from chipmonk_backend.orchestrate import run_agent
 from chipmonk_backend.runs import RunDir, RunRecord
+from script_backend import use_script_backend
 
 TRAINS = """
 import pathlib
