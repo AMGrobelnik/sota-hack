@@ -92,7 +92,7 @@ class TranscribeConfig(BaseModel):
 
     enabled: bool = True
     model: str = "openai/gpt-transcribe"
-    fallback_model: str | None = "openai/gpt-4o-transcribe"
+    fallback_model: str | None = "elevenlabs/scribe-v2"
     language: str = "en"
     max_bytes: int = Field(default=2 * 1024 * 1024, gt=0)
     max_audio_s: float = Field(default=30.0, gt=0)

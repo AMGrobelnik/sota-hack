@@ -132,8 +132,8 @@ async def test_fallback_model_when_the_first_fails(config: BackendConfig, key: N
     async with await _client(config, provider) as c:
         resp = await _post(c, _wav())
         assert resp.status == 200
-        assert (await resp.json())["model"] == "openai/gpt-4o-transcribe"
-    assert [r.model for r in provider.calls] == ["openai/gpt-transcribe", "openai/gpt-4o-transcribe"]
+        assert (await resp.json())["model"] == "elevenlabs/scribe-v2"
+    assert [r.model for r in provider.calls] == ["openai/gpt-transcribe", "elevenlabs/scribe-v2"]
 
 
 # ---- silence and noise ----
@@ -294,7 +294,7 @@ def test_audio_budget_is_a_rolling_window() -> None:
 
 
 async def test_provider_failure_is_502_without_its_text(config: BackendConfig, key: None) -> None:
-    provider = FakeProvider(failing=frozenset({"openai/gpt-transcribe", "openai/gpt-4o-transcribe"}))
+    provider = FakeProvider(failing=frozenset({"openai/gpt-transcribe", "elevenlabs/scribe-v2"}))
     async with await _client(config, provider) as c:
         resp = await _post(c, _wav())
         assert resp.status == 502
