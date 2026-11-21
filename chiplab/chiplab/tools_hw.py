@@ -163,6 +163,8 @@ def estimate_cost(design_id: str) -> dict:
     rd = lambda f: json.loads((d / f).read_text()) if (d / f).exists() else {}
     syn, sky, ice = rd("synth.json"), rd("pdk_sky130.json"), rd("luts_ice40.json")
     tt = rd("tt.json").get("tiles_used") if (d / "tt.json").exists() else None
+    if isinstance(tt, str) and "x" in tt:  # tile shape "AxB" -> number of tiles
+        a, b = tt.lower().split("x"); tt = int(a) * int(b)
     r = estimate(syn.get("gates"), sky.get("area_um2"), tt, ice.get("luts"))
     (d / "cost.json").write_text(json.dumps(r))
     return {"design_id": design_id, **r}
