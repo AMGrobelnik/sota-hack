@@ -195,11 +195,6 @@ select.sel{height:30px;border:1px solid var(--i150);border-radius:7px;background
 .details div:nth-last-child(-n+2){border-bottom:0}
 .details dt{color:var(--i550)}
 .details dd{margin:0;font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
-.next{margin-top:40px;display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:12px;background:#fff;border:1px solid var(--hair);box-shadow:var(--sh-hair);width:100%;text-align:left;transition:box-shadow .12s,border-color .12s}
-.next:hover{border-color:rgb(59 130 246 / .35);box-shadow:0 2px 10px rgb(59 130 246 / .12)}
-.next .nk{font-size:11.5px;color:var(--i550)}
-.next .nl{font-size:14px;font-weight:600;color:var(--i900);margin-top:1px}
-.next .na{margin-left:auto;width:30px;height:30px;border-radius:50%;background:rgb(37 99 235 / .08);color:var(--blue6);display:grid;place-items:center;flex:none}
 
 /* Chat */
 .chat{flex:1;min-height:0;display:flex;flex-direction:column}
@@ -439,7 +434,7 @@ function replyFor(r, mode, from) {
   const U = UC[r.uc], rn = from + 1;
   if (mode === "smaller") return `Understood. From round ${rn} we rank candidates by size first and accept ${U.events} caught down to the clinical line of 90%. Expect a chip about a third smaller, likely on two sensors, with every ${U.person} checked the same way.`;
   if (mode === "accuracy") return `Understood. From round ${rn} we favour catching more ${U.events}, even if the chip grows by about a third. We'll look hardest at the weakest ${U.person}.`;
-  return `Noted. We'll keep that in mind from round ${rn}; nothing about the target changes yet. Tell us if you want us to trade size for ${U.events} caught or the other way round.`;
+  return `Noted. We'll keep that in mind from round ${rn}; nothing about the target changes yet.`;
 }
 function parseMode(text) {
   const s = text.toLowerCase();
@@ -760,39 +755,27 @@ function nowSentence(r, t) {
   const pre = r.paused ? "Paused. " : "";
   switch (g.k) {
     case "spec": return [pre + "The scientists are reading your description and turning it into a clear goal for the chip.", `A good chip has to catch at least 9 in 10 ${U.events} for every ${U.person}.`];
-    case "ref": return [pre + `They are studying ${U.data} that doctors have already marked.`, `This is how they learn what ${r.uc === "eeg" ? "a seizure" : "a dangerous oxygen drop"} looks like.`];
+    case "ref": return [pre + `The scientists are studying ${U.data} that doctors have already marked.`, `This is how they learn what ${r.uc === "eeg" ? "a seizure" : "a dangerous oxygen drop"} looks like.`];
     case "propose": return [pre + `The scientists are sketching new chip designs, each a different guess at how small the chip can be and still catch ${U.events}.`, red.trim()];
     case "tune": return [pre + `The scientists are training ${nf(N)} small candidate models at once and keeping the ones that are both accurate and small.`, `${nf(Math.round(N * g.f))} of ${nf(N)} are trained.${red}`];
-    case "compile": return [pre + "They are turning the best candidates into real chip wiring, with what each model learned built straight into the circuit.", red.trim()];
-    case "verify": return [pre + `They are checking that each chip gives exactly the same answers as its model, then testing it on ${U.people} it has never seen.`, red.trim()];
+    case "compile": return [pre + "The scientists are turning the best candidates into real chip wiring, with what each model learned built straight into the circuit.", red.trim()];
+    case "verify": return [pre + `The scientists are checking that each chip gives exactly the same answers as its model, then testing it on ${U.people} it has never seen.`, red.trim()];
     case "report": return [pre + `The scientists are writing up the result: the chip, the sensors it needs, and how it did for every ${U.person}.`, ""];
   }
   return ["", ""];
-}
-function nextAction(r, t) {
-  const g = stageAt(r, t), b = bestAt(r, t), U = UC[r.uc], vis = k => () => go(`#/run/${r.id}/visual/${k}`);
-  if (r.paused && !isDone(r)) return { k: "The run is waiting for you", l: "Resume the run", f: () => togglePause(r) };
-  if (g.k === "done") return { k: "Suggested next", l: "See what the chip means for the device", f: vis("device") };
-  if (g.k === "spec" || g.k === "ref") return { k: "Suggested next", l: "Read what the scientists are planning", f: () => go(`#/run/${r.id}/chat`) };
-  if (r.redirect && r.redirect.mode === "smaller" && g.r >= r.redirect.from && t > r.redirect.at) return { k: "Suggested next", l: "Watch the smaller chips appear", f: vis("tradeoff") };
-  if (!b) return { k: "Suggested next", l: "Watch the first chip take shape", f: vis("chip") };
-  if (b.k === 0) return { k: "Suggested next", l: `See the chip on a real ${r.uc === "eeg" ? "brainwave recording" : "oxygen recording"}`, f: vis("signal") };
-  return { k: "Suggested next", l: `Check every ${U.person}; the worst one counts`, f: vis("patients") };
 }
 function updOverview(force) {
   const r = curRun, el = $("#ov"); if (!el) return;
   const t = elapsed(r), U = UC[r.uc], g = stageAt(r, t), b = bestAt(r, t), done = g.k === "done";
   const [s1, s2] = nowSentence(r, t);
   const f = t / total(r);
-  const na = nextAction(r, t);
   const line = b ? `${done ? "The final chip" : "The best chip so far"} meets the clinical line on <b>${b.pass} of 12</b> unseen ${U.people}.` : `No chip yet. The first one is ready when round 1 has been checked.`;
   const dotc = !b ? "var(--i300)" : b.pass >= 11 ? "var(--ok)" : "#f59e0b";
   if (force || !el.firstChild) {
     el.innerHTML = `<p class="now" id="now" aria-live="polite"></p>
       <div class="prog"><div class="prog-top"><span id="pl"></span><span id="pr"></span></div><div class="bar" id="bar"><i></i></div><div class="steps" id="steps"></div></div>
       <div class="best"><span class="dot" id="bdot"></span><span class="txt" id="btxt"></span><button class="det" id="dtg" aria-expanded="false">Details</button></div>
-      <div id="dpanel"></div>
-      <button class="next" id="next"><span><div class="nk"></div><div class="nl"></div></span><span class="na">${ic("right")}</span></button>`;
+      <div id="dpanel"></div>`;
     $("#dtg").onclick = () => { ovDetails = !ovDetails; updOverview(); };
   }
   const key = s1 + "|" + s2.replace(/\d[\d,]* of/, "#");
@@ -825,7 +808,6 @@ function updOverview(force) {
     const h = `<dl class="details">${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>`;
     if (dp.innerHTML !== h) dp.innerHTML = h;
   } else dp.innerHTML = "";
-  const nx = $("#next"); nx.querySelector(".nk").textContent = na.k; nx.querySelector(".nl").textContent = na.l; nx.onclick = na.f;
 }
 
 /* ---------- Chat ---------- */
@@ -867,11 +849,12 @@ function updChat(force) {
 }
 function redirect(r, text) {
   const t = elapsed(r), g = stageAt(r, t), mode = parseMode(text);
-  r.extra.push({ t, who: "you", text });
+  const tNow = Math.max(t, ...events(r).filter(e => e.t <= t + 1e-6).map(e => e.t)) + 1e-3; // never sorts above a line already shown
+  r.extra.push({ t: tNow, who: "you", text });
   let from = g.r == null ? (g.k === "report" ? r.rounds : 0) : (g.k === "propose" || g.k === "tune") ? g.r : g.r + 1;
   if (mode !== "note") { if (from >= r.rounds) r.rounds = from + 1; r.redirect = { at: t, mode, from }; }
   r.typing = true; updChat(true);
-  setTimeout(() => { r.typing = false; r.extra.push({ t: elapsed(r), who: "lead", text: replyFor(r, mode, from) }); if (curRun === r && route.view === "chat") updChat(true); }, 1700);
+  setTimeout(() => { r.typing = false; r.extra.push({ t: Math.max(elapsed(r), tNow + 1e-3), who: "lead", text: replyFor(r, mode, from) }); if (curRun === r && route.view === "chat") updChat(true); }, 1700);
 }
 
 /* ---------- Visual ---------- */
@@ -915,25 +898,26 @@ const VISUALS = {
     const cells = b ? Math.max(8, Math.round(gates / 20)) : 0;
     let grid = "";
     if (b) { // one square per 20 gates, centred in the model block, so the chip visibly shrinks between rounds
-      const sz = 10, cols = Math.min(22, cells), rws = Math.ceil(cells / cols), gx = 510 - cols * sz / 2, gy = 268 - rws * sz / 2; const R = rng(hashStr(r.id + b.k + b.q));
+      const sz = 10, cols = Math.min(22, Math.ceil(Math.sqrt(cells * 2.2))), rws = Math.ceil(cells / cols), gx = 510 - cols * sz / 2, gy = 280 - rws * sz / 2; const R = rng(hashStr(r.id + b.k + b.q));
       for (let i = 0; i < cells; i++) { const x = gx + (i % cols) * sz, y = gy + Math.floor(i / cols) * sz; grid += `<rect x="${x + 1}" y="${y + 1}" width="${sz - 2}" height="${sz - 2}" rx="1.5" fill="${R() < .5 ? "#bfdbfe" : "#93c5fd"}"/>`; } }
+    let ghost = ""; if (!b) { const gsz = 14, gc = 14, gr = 6, gx0 = 510 - gc * gsz / 2, gy0 = 215; for (let i = 0; i < gc * gr; i++) ghost += `<rect x="${gx0 + (i % gc) * gsz + 1.5}" y="${gy0 + Math.floor(i / gc) * gsz + 1.5}" width="${gsz - 3}" height="${gsz - 3}" rx="2" fill="#f4f4f7" stroke="#d4d4dc" stroke-width="1"/>`; }
     const sensors = U.sensors.map((s, i) => { const y = 150 + i * 160; return `<g><rect x="40" y="${y}" width="210" height="76" rx="12" fill="#fff" stroke="#d4d4dc"/><path d="M60 ${y + 38}h8l5-12 7 24 5-12h8" fill="none" stroke="${r.uc === "eeg" ? "#3b82f6" : "#8b5cf6"}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><text x="108" y="${y + 33}" font-size="15" font-weight="600" fill="#1a1a2e">${s[0]}</text><text x="108" y="${y + 53}" font-size="12" fill="#666676">${s[1]}</text><path d="M252 ${y + 38}L${352} ${y + 38 < 260 ? 230 : 300}" stroke="#8a8a99" stroke-width="1.6" fill="none" marker-end="url(#ah)"/></g>`; }).join("");
     const extra = b && b.used > 2 ? `<text x="145" y="420" text-anchor="middle" font-size="12" fill="#666676">and ${b.used - 2} more sensor${b.used - 2 > 1 ? "s" : ""} in this chip</text>` : "";
     const chipStroke = b ? "#1a1a2e" : "#b0b0be";
     let pins = ""; for (let i = 0; i < 9; i++) { const x = 380 + i * 30; pins += `<rect x="${x}" y="98" width="10" height="12" rx="2" fill="#b0b0be"/><rect x="${x}" y="410" width="10" height="12" rx="2" fill="#b0b0be"/>`; }
     for (let i = 0; i < 8; i++) { const y = 135 + i * 34; pins += `<rect x="348" y="${y}" width="12" height="10" rx="2" fill="#b0b0be"/><rect x="660" y="${y}" width="12" height="10" rx="2" fill="#b0b0be"/>`; }
     const html = `<div>${svgOpen(1000, 470, `aria-label="Chip diagram"`)}${ARROW_DEF}
-      <g transform="translate(430 18)"><rect x="0" y="0" width="160" height="40" rx="20" fill="${tuning ? "#eff6ff" : "#fff"}" stroke="${tuning ? "#60a5fa" : "#d4d4dc"}"/><text x="80" y="25" text-anchor="middle" font-size="13.5" font-weight="600" fill="${tuning ? "#1d4ed8" : "#4a4a5a"}">Fine-tune</text></g>
-      <path d="M510 60V200" stroke="${tuning ? "#3b82f6" : "#b0b0be"}" stroke-width="2" fill="none" ${tuning ? 'class="flow"' : 'stroke-dasharray="5 5"'} marker-end="url(#ah)"/>
-      ${tuning ? `<text x="600" y="44" font-size="12" fill="#2563eb">training ${nf(Math.round(N * g.f))} of ${nf(N)} candidates</text>` : ""}
+      <g transform="translate(430 26)"><rect x="0" y="0" width="160" height="40" rx="20" fill="${tuning ? "#eff6ff" : "#fff"}" stroke="${tuning ? "#60a5fa" : "#d4d4dc"}"/><text x="80" y="25" text-anchor="middle" font-size="13.5" font-weight="600" fill="${tuning ? "#1d4ed8" : "#4a4a5a"}">Fine-tune</text></g>
+      <path d="M510 66V199" stroke="${tuning ? "#3b82f6" : "#6b6b7b"}" stroke-width="2.6" fill="none" ${tuning ? 'class="flow"' : ""} marker-end="url(#ah)"/>
+      ${tuning ? `<text x="602" y="52" font-size="12" fill="#2563eb">training ${nf(Math.round(N * g.f))} of ${nf(N)} candidates</text>` : ""}
       ${pins}
       <rect x="360" y="110" width="300" height="300" rx="18" fill="${b ? "#fafaf9" : "#fff"}" stroke="${chipStroke}" stroke-width="2" ${b ? "" : 'stroke-dasharray="7 6"'}/>
       <text x="380" y="140" font-size="13" font-weight="700" fill="#1a1a2e" letter-spacing=".02em">Chip</text>
       <text x="640" y="140" text-anchor="end" font-size="13" font-weight="600" fill="${b ? "#2563eb" : "#8a8a99"}">${b ? nf(gates) + " logic gates" : "not built yet"}</text>
       <rect x="390" y="200" width="240" height="160" rx="12" fill="#fff" stroke="${b ? "#93c5fd" : "#d4d4dc"}" stroke-width="1.5"/>
-      ${grid}
-      <text x="510" y="${b ? 382 : 275}" text-anchor="middle" font-size="14" font-weight="600" fill="#1a1a2e">AI model</text>
-      ${b ? `<text x="510" y="398" text-anchor="middle" font-size="11" fill="#666676">what it learned is wired into the gates</text>` : `<text x="510" y="296" text-anchor="middle" font-size="12" fill="#8a8a99">The first chip is built after round 1.</text>`}
+      ${grid}${ghost}
+      <text x="510" y="${b ? 382 : 318}" text-anchor="middle" font-size="14" font-weight="600" fill="#1a1a2e">AI model</text>
+      ${b ? `<text x="510" y="398" text-anchor="middle" font-size="11" fill="#666676">what it learned is wired into the gates</text>` : `<text x="510" y="338" text-anchor="middle" font-size="12" fill="#8a8a99">The first chip is built after round 1.</text>`}
       ${sensors}${extra}
       <path d="M674 260H770" stroke="#8a8a99" stroke-width="1.6" fill="none" marker-end="url(#ah)"/>
       <rect x="780" y="215" width="190" height="90" rx="14" fill="${b ? (b.pass >= 11 ? "#ecfdf5" : "#fffbeb") : "#fff"}" stroke="${b ? (b.pass >= 11 ? "#a7f3d0" : "#fde68a") : "#d4d4dc"}"/>
@@ -967,7 +951,7 @@ const VISUALS = {
     const x0 = 110, x1 = 980, sx = m => x0 + (m / 60) * (x1 - x0), y = v => 300 - (v - 40) * 6.5;
     const R = rng(7); let d = "";
     for (let i = 0; i <= 360; i++) { const m = i / 6; let v = 68 + Math.sin(m / 9) * 3 + (R() - .5) * 1.6; const dip = (c, w, depth) => depth * Math.exp(-Math.pow((m - c) / w, 2)); v -= dip(16.5, 2.2, 19) + dip(39.5, 1.4, 15); d += (i ? "L" : "M") + sx(m).toFixed(1) + " " + y(v).toFixed(1); }
-    const traces = `<text x="${x0 - 14}" y="${y(68)}" text-anchor="end" font-size="12" font-weight="600" fill="#1a1a2e">Brain oxygen</text>
+    const traces = `<text transform="translate(26 ${y(55)}) rotate(-90)" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1a2e">Brain oxygen</text>
       ${[50, 60, 70].map(v => `<text x="${x0 - 14}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="#8a8a99">${v}%</text><path d="M${x0} ${y(v)}H${x1}" stroke="#f3f3f6"/>`).join("")}
       <path d="M${x0} ${y(55)}H${x1}" stroke="#ef4444" stroke-dasharray="6 5" stroke-width="1.4"/><text x="${x1}" y="${y(55) - 7}" text-anchor="end" font-size="11.5" fill="#b91c1c">Alarm line, 55%</text>
       <path d="${d}" fill="none" stroke="#8b5cf6" stroke-width="1.8"/>`;

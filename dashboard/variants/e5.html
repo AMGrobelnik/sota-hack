@@ -152,10 +152,17 @@ a{color:inherit}
 .dock .dsv{margin:6px -4px 4px}
 .dock .dg{font-size:18px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
 .dock .ds{font-size:11px;color:var(--ink55);margin-top:1px}
+.dock.mini{width:96px;padding:6px 8px 6px;text-align:center}
+.dock.mini .dsv{margin:0 -2px 2px}
+.dock.mini .dg{font-size:13px}
+.dock.mini .dg span{font-size:10px;font-weight:500;color:var(--ink55)}
+.dock .dopen{margin-top:8px;font-size:11.5px;font-weight:600;color:var(--blue)}
+.dock .dopen span{cursor:pointer}
 .flash{animation:flash 1.6s ease-out}
 @keyframes flash{0%{box-shadow:0 0 0 0 rgb(59 130 246/.55)}100%{box-shadow:0 0 0 16px rgb(59 130 246/0)}}
 @media (min-width:1280px){
   .rb.dock-on .view{padding-right:272px}
+  .rb.dock-on.dock-min .view{padding-right:136px}
   .rb.dock-on .dock{display:block}
 }
 @media (max-width:1279px){
@@ -190,12 +197,10 @@ a{color:inherit}
 .ring svg{display:block}
 .ring span{position:absolute;inset:0;display:grid;place-items:center;font-size:10px;font-weight:600;color:var(--ink8)}
 .ring .arc{transform-origin:22px 22px;animation:rot 4s cubic-bezier(.5,.1,.5,.9) infinite}
-.spark{display:block;width:100%;height:24px;margin-top:10px}
 .bar{height:4px;background:var(--ink1);border-radius:2px;margin-top:8px;overflow:hidden}
 .bar i{display:block;height:100%;border-radius:2px}
 .cm{display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink55);margin-top:6px}
 .cm b{color:var(--ink8);font-weight:600}
-.tree{margin:8px 0 0 17px;border-left:1px solid var(--ink15);padding:2px 0 2px 10px}
 .tr{display:flex;gap:7px;align-items:center;height:24px;font-size:12px;color:var(--ink55);white-space:nowrap;overflow:hidden}
 .tr.sub{padding-left:16px}
 .tr.on{color:var(--ink9);font-weight:500}
@@ -416,7 +421,7 @@ const EEG = { Fp1: [-.3, -.9], Fp2: [.3, -.9], F7: [-.73, -.53], F3: [-.38, -.45
 const UC = {
   brain: {
     key: 'brain', name: 'Brainwave sensing', icon: 'wave', hint: 'An EEG device that spots seizures.',
-    s1: 'EEG electrodes', s2: 'Motion sensor', out: 'Seizure alarm', outWhen: 'every 2 s window',
+    s1: 'EEG electrodes A', s2: 'EEG electrodes B', out: 'Seizure alarm', outWhen: 'every 2 s window',
     pat: 'patient', pats: 'patients', Pat: 'Patient', worstIdx: 6, line: .90, chan: 'channel', chans: 'channels', all: 19,
     event: 'seizure', refGates: 46200, refScore: .95, pool: ['T5', 'C3', 'F8', 'T6', 'T4', 'F7', 'T3'],
     lineText: L => `catch at least ${pct(L)} of seizures in every unseen patient, with at most 1 false alarm an hour`,
@@ -451,7 +456,7 @@ const UC = {
   },
   baby: {
     key: 'baby', name: 'Newborn sensing', icon: 'drop', hint: 'A near-infrared brain-oxygen patch for newborns.',
-    s1: 'Light detectors', s2: 'Heart rate', out: 'Low-oxygen alarm', outWhen: 'every 10 s window',
+    s1: 'Near detectors', s2: 'Far detectors', out: 'Low-oxygen alarm', outWhen: 'every 10 s window',
     pat: 'newborn', pats: 'newborns', Pat: 'Newborn', worstIdx: 8, line: .90, chan: 'detector', chans: 'detectors', all: 4,
     event: 'low-oxygen episode', refGates: 21800, refScore: .95, pool: ['D1', 'D3'],
     lineText: L => `flag at least ${pct(L)} of low-oxygen episodes within 30 seconds in every unseen newborn`,
@@ -806,7 +811,9 @@ const VIS = [
 ];
 let lastBestG = {};   // run id -> gates last drawn, to flash on improvement
 let viewSig = '';
-function dockOn() { return !(R.view === 'visual' && R.vis === 'chip'); }
+let dockOpen = false;
+function dockOn() { return R.view !== 'visual'; }
+function dockMini() { return R.view === 'chat' && !dockOpen; }
 
 function renderRun() {
   const r = curRun(); if (!r) return go('#/');
@@ -831,12 +838,18 @@ function renderRun() {
     </div>
     <div class="rb" id="rb">
       <div class="view" id="view"></div>
-      <button class="dock" id="dock" aria-label="Open the chip view"></button>
+      <div class="dock" id="dock" role="button" tabindex="0" aria-label="Best chip"></div>
     </div>`;
   $('#pp').onclick = () => { if (isDone(r)) { R.rep = { id: r.id, t: 0 }; } else { r.paused = !r.paused; } update(true); };
   $('#track').onclick = e => { const b = e.currentTarget.getBoundingClientRect(); const f = clamp((e.clientX - b.left) / b.width, 0, 1); const t = f * plan(r).total; if (t >= r.t - .5) R.rep = null; else R.rep = { id: r.id, t }; update(true); };
   $('#live').onclick = () => { R.rep = null; update(true); };
-  $('#dock').onclick = () => go(runHash(r.id, 'visual', 'chip'));
+  const dk = $('#dock');
+  const dockAct = e => {
+    if (e.target.closest('[data-open]') || R.view !== 'chat') return go(runHash(r.id, 'visual', 'chip'));
+    dockOpen = !dockOpen; update(true);
+  };
+  dk.onclick = dockAct;
+  dk.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dockAct(e); } };
   $('#dockbtn').onclick = e => {
     const b = best(r, viewT(r));
     openPop(e.currentTarget, `<div style="width:248px;padding:6px 6px 2px"><div class="dsv">${chipSVG(r, b && b.rd, { mini: true })}</div>
@@ -909,16 +922,18 @@ function update(force) {
   lv.title = rep ? 'Back to live' : '';
   // dock
   const b = best(r, t), rb = $('#rb'), tb = $('#tb');
-  rb.classList.toggle('dock-on', dockOn()); tb.classList.toggle('dock-on', dockOn());
+  rb.classList.toggle('dock-on', dockOn()); rb.classList.toggle('dock-min', dockOn() && dockMini()); $('#dock').setAttribute('aria-expanded', R.view === 'chat' ? String(dockOpen) : 'false'); tb.classList.toggle('dock-on', dockOn());
   rb.classList.toggle('is-live', running);
-  const gk = b ? b.rd.g + ':' + b.rd.ch.length + ':' + b.met : 'none';
+  const gk = (b ? b.rd.g + ':' + b.rd.ch.length + ':' + b.met : 'none') + (R.view === 'chat' ? (dockOpen ? ':o' : ':m') : '');
   const dock = $('#dock');
   if (force || dock.dataset.k !== gk) {
     const improved = dock.dataset.k && dock.dataset.k !== gk && b;
     dock.dataset.k = gk;
-    dock.innerHTML = `<div class="dh"><span>Best chip</span><span>${b ? 'Round ' + (b.rd.k + 1) : 'Not yet'}</span></div>
+    dock.classList.toggle('mini', dockMini());
+    if (dockMini()) dock.innerHTML = `<div class="dsv ${improved ? 'redraw' : ''}">${chipSVG(r, b && b.rd, { mini: true })}</div><div class="dg">${b ? fmtN(b.rd.g) + '<span> gates</span>' : '<span>No chip yet</span>'}</div>`;
+    else dock.innerHTML = `<div class="dh"><span>Best chip</span><span>${b ? 'Round ' + (b.rd.k + 1) : 'Not yet'}</span></div>
       <div class="dsv ${improved ? 'redraw' : ''}">${chipSVG(r, b && b.rd, { mini: true })}</div>
-      <div class="dg">${b ? fmtN(b.rd.g) + ' gates' : 'No chip yet'}</div><div class="ds">${dockSub(r, b)}</div>`;
+      <div class="dg">${b ? fmtN(b.rd.g) + ' gates' : 'No chip yet'}</div><div class="ds">${dockSub(r, b)}</div>${R.view === 'chat' ? `<div class="dopen"><span data-open>Open the chip view</span></div>` : ''}`;
     $('#dockbtn').innerHTML = `<span style="color:var(--ink55)">${ic('cpu', 14)}</span>${b ? fmtN(b.rd.g) + ' gates' : 'No chip yet'}`;
     if (improved) { dock.classList.remove('flash'); void dock.offsetWidth; dock.classList.add('flash'); }
   }
@@ -957,16 +972,6 @@ function cardRange(r, i) { const P = plan(r); return [[0, TR], [TR, P.rs], [P.rs
 function cardProg(r, t, i) { const [a, b] = cardRange(r, i); return clamp((t - a) / (b - a), 0, 1); }
 function cardTime(r, t, i) { const [a, b] = cardRange(r, i); const s = clamp(t, a, b) - a; const m = Math.round(s * SIM / 60); return t < a ? '0m' : m + 'm'; }
 function cardCost(r, t, i) { const [a, b] = cardRange(r, i); const s = clamp(t, a, b) - a; return s * [.028, .011, .019][i] * COMPUTE[r.compute].cost; }
-function spark(r, i, p, hue) {
-  const R2 = rng(hash(r.id) + i * 7), n = 28, pts = [];
-  for (let j = 0; j < n; j++) pts.push(.35 + .45 * Math.abs(Math.sin(j * .55 + i)) + R2() * .2);
-  const w = 240, h = 24;
-  if (p <= 0) return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><path d="M0 ${h - 1}H${w}" stroke="#e8e8ec" stroke-dasharray="3 4" vector-effect="non-scaling-stroke"/></svg>`;
-  const m = Math.max(2, Math.round(p * (n - 1)) + 1);
-  const xy = pts.slice(0, m).map((v, j) => [j / (n - 1) * w, h - v * (h - 3)]);
-  const d = xy.map((q, j) => (j ? 'L' : 'M') + q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('');
-  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><path d="${d}L${xy[xy.length - 1][0].toFixed(1)} ${h}L0 ${h}Z" fill="${hue}" opacity=".12"/><path d="${d}" fill="none" stroke="${hue}" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`;
-}
 function drawOverview(r, t, ph, b, ev) {
   const u = UC[r.uc], P = plan(r), done = ph.ph === 'done';
   const act = ph.ph === 'spec' || ph.ph === 'ref' ? 0 : ph.ph === 'round' ? 1 : ph.ph === 'report' ? 2 : -1;
@@ -982,30 +987,10 @@ function drawOverview(r, t, ph, b, ev) {
         <div class="ring"><svg width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="18" fill="none" stroke="#f3f3f6" stroke-width="3.5"/>
           <circle class="rv" cx="22" cy="22" r="18" fill="none" stroke="${c.hue}" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="${(p * 113).toFixed(1)} 113" transform="rotate(-90 22 22)"/>
           ${isAct && running ? `<circle class="arc" cx="22" cy="22" r="18" fill="none" stroke="${c.hue}" stroke-opacity=".35" stroke-width="3.5" stroke-dasharray="10 103"/>` : ''}</svg>${ring}</div></div>
-      ${spark(r, i, p, c.hue)}
       <div class="bar"><i style="width:${p * 100}%;background:linear-gradient(90deg,${c.hue}99,${c.hue})"></i></div>
       <div class="cm"><span class="ctm">${cardTime(r, t, i)}</span><b class="cco">$${cardCost(r, t, i).toFixed(2)}</b></div></div>`;
   };
-  const row = (on, txt, okd, cls = '') => `<div class="tr ${cls} ${on ? 'on' : ''}">${okd ? `<span class="ok">${ic('check', 12, 2.4)}</span>` : on ? (running ? spin(11) : '<span class="dot"></span>') : '<span class="dot"></span>'}<span>${txt}</span></div>`;
-  let tree = '';
-  if (act === 0) tree = row(ph.ph === 'spec', 'Read the brief', ph.ph === 'ref') + row(ph.ph === 'ref', 'Train a reference model', false);
-  if (act === 1 || done) {
-    const subs = ['Propose designs', 'Fine-tune candidates', 'Compile to gates', 'Check bit for bit'];
-    const nextRed = !done && P.rounds[ph.k + 1] && r.redirects.some(x => x.k === ph.k + 1 && x.mod && x.tr <= t);
-    const shown = done ? P.rounds.slice(-3) : P.rounds.slice(Math.max(0, ph.k - 1), ph.k + (nextRed ? 2 : 1));
-    const restN = done ? P.n - 3 : P.n - ph.k - (nextRed ? 2 : 1);
-    if (done && restN > 0) tree += `<div class="more" style="padding:4px 0 2px">${restN} earlier ${restN === 1 ? 'round' : 'rounds'}</div>`;
-    tree += shown.map(rr => {
-      const isA = !done && rr.k === ph.k, red = r.redirects.some(x => x.k === rr.k && x.mod && x.tr <= t);
-      const lbl = `Round ${rr.k + 1}${red ? ' <span class="tag">your note</span>' : ''}`;
-      let h = row(isA, lbl, rr.end <= t);
-      if (isA) h += subs.map((s, j) => row(j === ph.sub, s, j < ph.sub, 'sub')).join('');
-      return h;
-    }).join('');
-    if (!done && restN > 0) tree += `<div class="more">${restN} more ${restN === 1 ? 'round' : 'rounds'} to go</div>`;
-  }
-  if (act === 2) tree = row(t < P.rs + 7, 'Final check', t >= P.rs + 7) + row(t >= P.rs + 7, 'Write the report', false);
-  const col = i => `<div class="col">${card(i)}${(i === act || (done && i === 1)) && tree ? `<div class="tree">${tree}</div>` : ''}</div>`;
+  const col = i => `<div class="col">${card(i)}</div>`;
   // verdict
   let vtxt, vcol;
   const n = b ? b.rd.ch.length : 0;
@@ -1020,7 +1005,7 @@ function drawOverview(r, t, ph, b, ev) {
     report: 'Running a final check and writing the report',
     done: b && b.pass ? 'Finished. The report is written and the best chip is ready.' : 'Finished. The report is written; no chip met the line for every ' + u.pat + '.',
   }[ph.ph] || [`Round ${ph.k + 1}: proposing new designs`, `Round ${ph.k + 1}: fine-tuning candidate models, <span id="lv-ft">${fmtN(N * clamp(ph.f, 0, 1))}</span> of ${fmtN(N)} done`, `Round ${ph.k + 1}: compiling the best 16 into logic gates`, `Round ${ph.k + 1}: checking circuits bit for bit against their models`][ph.sub];
-  const recent = ev.filter(e => e.who !== 'div').slice(-4).reverse();
+  const recent = ev.filter(e => e.who !== 'div').slice(-3).reverse();
   const rowsH = recent.map(e => {
     const w = WHO[e.who], isT = e.who === 'tool', isU = e.who === 'user', pending = e.tEnd && e.tEnd > t;
     const g = isU ? `<span class="wd" style="background:#0d9488;color:#fff">${ic('chevr', 10, 2.4)}</span>` : isT ? `<span class="wd" style="background:var(--ink1);color:var(--ink55)">${pending ? spin(10) : ic('tool', 10)}</span>` : `<span class="wd" style="background:${w.bg};color:${w.fg}">${ic(w.icon, 10, 2)}</span>`;
