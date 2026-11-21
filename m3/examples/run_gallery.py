@@ -6,14 +6,15 @@ CLI printed.
     chiplab/.venv/bin/python m3/examples/run_gallery.py [name ...]
 
 Every stage goes through the lab's batch tools, all examples at once, never one design at a time:
-  1. submit-batch ingest-model for every example and every fusion head (a failed xgboost_json ingest is retried as
-     format chipir from chipir.json, the lab's own TreeLUT conversion, and both answers are kept);
+  1. ingest-model for every example and every fusion head, all at once in parallel CLI processes (not the job
+     worker: see parallel() below; a failed xgboost_json ingest is retried as format chipir from chipir.json, the
+     lab's own TreeLUT conversion, and both answers are kept);
   2. submit-batch compose-chip for the fusion examples (heads -> one chip with and / or / k-of-n logic);
   3. synthesize-batch for every chip;
   4. one wave of submit-batch jobs: count-luts (xc7, ice40), map-to-process (sky130), simulate on the example's
      vectors with its expected first output (level 1), simulate on 100,000 random vectors, prove-equivalence
      (level 2), rtl-simulate of the Tiny Tapeout streaming wrapper on the vectors with every expected output
-     (level 3; also the generic FPGA wrapper where chip.json asks), tt-package without harden (Tiny Tapeout tiles);
+     and of the generic FPGA wrapper, which shows every output bit (level 3), tt-package without harden (Tiny Tapeout tiles);
   5. verification-level for every chip.
 Each answer goes to <name>/cli/<step>.json with the home path replaced by ~; the summary goes to <name>/result.json
 and RESULTS.md is written from all of them by make_results.py.
@@ -110,6 +111,17 @@ def batch(tool: str, items: list[tuple[str, str, dict]], *, timeout: int = 3600)
     return out
 
 
+def parallel(tool: str, items: list[tuple[str, str, dict]]) -> dict:
+    """All items at once, each in its own `chiplab <tool>` process. Used for ingest-model: in the shared job worker
+    an xgboost_json ingest next to a torchlogix ingest crashed the CPU lane (two libomp runtimes in one process,
+    SIGSEGV in libomp; see RESULTS.md and proposed/ingest-in-subprocess.patch)."""
+    t0 = time.time()
+    res = list(POOL.map(lambda it: (it, cli(tool, it[2], f"{it[0]}__{it[1]}")), items))
+    print(f"[{time.strftime('%H:%M:%S')}] {tool}: {len(items)} parallel CLI calls in {time.time() - t0:.1f} s wall",
+          flush=True)
+    return {(n, s): {**r, "via": "parallel CLI processes"} for (n, s, _), r in res}
+
+
 def ok(r: dict) -> bool:
     return r.get("exit_code") == 0
 
@@ -155,9 +167,9 @@ def main(names: list[str]) -> None:
                 if "fallback" in spec:
                     f = spec["fallback"]
                     fb[(n, f"ingest_{h}")] = ingest_args(e["d"], f["format"], f.get("model"), f["args"], f.get("file"))
-    res = batch("ingest_model", items)
+    res = parallel("ingest-model", items)
     retry = [(n, s + "_chipir", fb[(n, s)]) for (n, s), r in res.items() if not ok(r) and (n, s) in fb]
-    res.update(batch("ingest_model", retry))
+    res.update(parallel("ingest-model", retry))
     for (n, s), r in res.items():
         E[n]["steps"][s] = save(n, s, r)
 
@@ -218,9 +230,9 @@ def main(names: list[str]) -> None:
         wave.setdefault("prove_equivalence", []).append((n, "prove", {"design_id": did, "timeout": 600}))
         wave.setdefault("rtl_simulate", []).append((n, "rtlsim_tt", {"design_id": did, "vectors": e["ins"],
                                                                      "expected": exp_all, "tt": True}))
-        if e["chip"].get("stream_generic_too"):
-            wave["rtl_simulate"].append((n, "rtlsim_generic", {"design_id": did, "vectors": e["ins"],
-                                                               "expected": exp_all, "tt": False}))
+        # the generic (FPGA) wrapper exposes every output bit; the TT one only the low 7 (see `truncated`)
+        wave["rtl_simulate"].append((n, "rtlsim_generic", {"design_id": did, "vectors": e["ins"],
+                                                           "expected": exp_all, "tt": False}))
         wave.setdefault("tt_package", []).append((n, "tt_package", {"design_id": did, "harden": False}))
     for fut in [POOL.submit(batch, tool, items) for tool, items in wave.items()]:
         for (n, s), r in fut.result().items():
@@ -246,22 +258,23 @@ def finish(name: str, e: dict) -> None:
     S = {
         "design_id": e.get("design_id"), "failure": e["failure"], "chip_outputs": e.get("chip_outputs"),
         "ingested_via": ing if ing != "compose" else "compose-chip",
-        "gates": g("synthesize", "gates"), "depth": g("synthesize", "depth"),
+        "gates": g("synthesize", "metrics", "gates"), "depth": g("synthesize", "metrics", "depth"),
         "ge_sky130": g("map_sky130", "metrics", "gate_equivalents"), "area_um2_sky130": g("map_sky130", "metrics", "area_um2"),
         "tt_tiles_est_sky130": g("map_sky130", "metrics", "tt_tiles_est"),
-        "luts_xc7": g("luts_xc7", "luts"), "luts_ice40": g("luts_ice40", "luts"),
+        "luts_xc7": g("luts_xc7", "metrics", "luts"), "luts_ice40": g("luts_ice40", "metrics", "luts"),
         "sim_vectors_bit_exact": g("simulate_vectors", "bit_exact"), "sim_vectors_n": g("simulate_vectors", "n"),
-        "sim_vectors_expected_match": g("simulate_vectors", "expected_match"),
+        "sim_vectors_pairs": g("simulate_vectors", "pairs"),
         "sim_device": g("simulate_vectors", "device"),
         "sim_random_bit_exact": g("simulate_random", "bit_exact"), "sim_random_n": g("simulate_random", "n"),
         "prove": {k: g("prove", k) for k in ("proved", "against", "method", "verification_level", "seconds")},
         "rtlsim_tt": {k: g("rtlsim_tt", k) for k in ("passed", "vectors", "mismatches", "transfers_per_frame",
                                                      "visible_output_bits", "truncated", "verification_level")},
-        "rtlsim_generic": ({k: g("rtlsim_generic", k) for k in ("passed", "vectors", "mismatches", "transfers_per_frame")}
+        "rtlsim_generic": ({k: g("rtlsim_generic", k) for k in ("passed", "vectors", "mismatches", "transfers_per_frame", "truncated")}
                            if "rtlsim_generic" in st else None),
         "tt_package_tiles": g("tt_package", "tiles"), "tt_user_config_ok": g("tt_package", "user_config_ok"),
         "tt_rtl_test_passed": g("tt_package", "rtl_test_passed"),
-        "level": g("level", "level"),
+        "level": g("level", "verification_level"), "level_meaning": g("level", "meaning"),
+        "tt_package_error": (g("tt_package", "error") or "").strip()[:160] or None,
         "errors": {s: err(r) for s, r in st.items() if not ok(r)},
     }
     (OUT / name / "result.json").write_text(json.dumps(S, indent=1, default=str) + "\n")
@@ -276,5 +289,19 @@ def _dig(d, ks):
     return d
 
 
+def summarize_saved() -> None:
+    """Rebuild every result.json from the saved <name>/cli/*.json answers, without calling the lab again."""
+    for d in sorted(p for p in OUT.iterdir() if (p / "cli").is_dir()):
+        st = {f.stem: json.loads(f.read_text()) for f in (d / "cli").glob("*.json")}
+        r = st.get("compose") or (st.get("ingest_chipir") if not ok(st.get("ingest", {})) else st.get("ingest")) or {}
+        ports = r.get("ports", {})
+        outs = [o["name"] for o in ports.get("outputs", [])] if isinstance(ports, dict) else []
+        failure = None if ok(r) else f"ingest/compose failed: {err(r)}"
+        finish(d.name, {"steps": st, "design_id": r.get("design_id"), "chip_outputs": outs, "failure": failure})
+
+
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    if sys.argv[1:] == ["--summarize"]:
+        summarize_saved()
+    else:
+        main(sys.argv[1:])

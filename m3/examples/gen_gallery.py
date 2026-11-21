@@ -1,4 +1,4 @@
-"""Build the chip lab's example model gallery from seeded synthetic data.
+"""Build the chip lab's example gallery: medical-sensing detectors trained on seeded SYNTHETIC sensor windows.
 
 Run with the lab's venv python (it has torch, torchlogix, xgboost):
     chiplab/.venv/bin/python m3/examples/gen_gallery.py
@@ -9,10 +9,14 @@ Every example lands in m3/examples/<name>/ as
     model.pt     torchlogix only: the saved module (a pickle made here; ingest it only from this machine)
     chip.json    how run_gallery.py brings it in through the CLI
     vectors.npz  in_<port> inputs and out_<output> expected outputs, computed by the model's own framework
-                 or by a plain numpy reading of its integer semantics, never by the lab
-    README.md    one line on the generic sensor task, plus training details
+                 or by a plain numpy reading of its integer semantics, never by the lab; label_<name> the
+                 generator's ground truth for the same windows (ignored by the runner)
+    meta.json    task, how the signal and the event are simulated, model kind and size, and the detection
+                 figures of the model on the synthetic test windows
+    README.md    the same in prose
 
-All data is synthetic and seeded: no recordings, no downloads, no patient data.
+All data is synthetic and seeded: simulated sensor windows, no recordings, no downloads, NOT patient data.
+The examples show that a small detector of each kind goes to a chip bit-exactly; they make no clinical claim.
 """
 from __future__ import annotations
 
@@ -24,12 +28,40 @@ import numpy as np
 # torch is imported inside the functions that train with it, so the spawned XGBoost process never loads it
 
 OUT = Path(__file__).resolve().parent
+N_TRAIN = 3000
 N_VEC = 256
+DISCLAIMER = ("Synthetic data from a seeded generator, not patient data; the detection figures are on synthetic "
+              "test windows and make no clinical claim.")
 
 
 # ------------------------------------------------------------------------------------------------ helpers
 
-def write_example(name: str, *, desc: str, model: dict, chip: dict, vectors: dict, notes: list[str],
+def detection(pred, y, classes: list[str]) -> dict:
+    """Detection figures of a decision against the generator's ground truth, on the synthetic test windows."""
+    pred, y = np.asarray(pred).reshape(-1), np.asarray(y).reshape(-1)
+    d = {"windows": int(len(y)), "accuracy": round(float((pred == y).mean()), 3)}
+    if len(classes) == 2:
+        tp, fn = int(((pred == 1) & (y == 1)).sum()), int(((pred == 0) & (y == 1)).sum())
+        tn, fp = int(((pred == 0) & (y == 0)).sum()), int(((pred == 1) & (y == 0)).sum())
+        d.update(events=tp + fn, sensitivity=round(tp / max(tp + fn, 1), 3),
+                 specificity=round(tn / max(tn + fp, 1), 3), false_alarms=fp, missed=fn)
+    else:
+        d["recall"] = {c: round(float((pred[y == k] == k).mean()), 3) if (y == k).any() else None
+                       for k, c in enumerate(classes)}
+        d["windows_per_class"] = {c: int((y == k).sum()) for k, c in enumerate(classes)}
+    return d
+
+
+def fmt_det(d: dict) -> str:
+    if "sensitivity" in d:
+        return (f"sensitivity {d['sensitivity']:.3f} ({d['events']} events), specificity {d['specificity']:.3f}, "
+                f"accuracy {d['accuracy']:.3f} on {d['windows']} synthetic test windows")
+    rec = ", ".join(f"{c} {r:.3f}" for c, r in d["recall"].items())
+    return f"accuracy {d['accuracy']:.3f}, recall per class: {rec}, on {d['windows']} synthetic test windows"
+
+
+def write_example(name: str, *, title: str, task: str, signal: str, model_kind: str, model_size: str,
+                  model: dict, chip: dict, vectors: dict, labels: dict, det: dict, notes: list[str],
                   extra: dict | None = None) -> None:
     d = OUT / name
     d.mkdir(parents=True, exist_ok=True)
@@ -37,18 +69,32 @@ def write_example(name: str, *, desc: str, model: dict, chip: dict, vectors: dic
     for fn, doc in (extra or {}).items():
         (d / fn).write_text(json.dumps(doc) + "\n")
     (d / "chip.json").write_text(json.dumps(chip, indent=1) + "\n")
-    np.savez_compressed(d / "vectors.npz", **{k: np.asarray(v, dtype=np.int64) for k, v in vectors.items()})
+    np.savez_compressed(d / "vectors.npz", **{k: np.asarray(v, dtype=np.int64) for k, v in vectors.items()},
+                        **{f"label_{k}": np.asarray(v, dtype=np.int64).reshape(-1) for k, v in labels.items()})
+    meta = {"title": title, "task": task, "signal": signal, "model_kind": model_kind, "model_size": model_size,
+            "detection": det, "data": DISCLAIMER}
+    (d / "meta.json").write_text(json.dumps(meta, indent=1) + "\n")
     ins = [k[3:] for k in vectors if k.startswith("in_")]
     outs = [k[4:] for k in vectors if k.startswith("out_")]
-    lines = [f"# {name}", "", desc, "", f"- Chip flow: `{chip['kind']}` (see `chip.json`).",
-             f"- Vectors: {len(next(iter(vectors.values())))} in `vectors.npz`; inputs {ins}, expected outputs {outs}.",
+    lines = [f"# {name}: {title}", "", task, "",
+             f"- Simulated signal and event: {signal}",
+             f"- Model: {model_kind}, {model_size}.",
+             f"- Chip flow: `{chip['kind']}` (see `chip.json`).",
+             f"- Vectors: {N_VEC} test windows in `vectors.npz`; inputs {ins}, expected outputs {outs}, ground "
+             f"truth {['label_' + k for k in labels]}.",
+             *[f"- Detection ({k}, model on the synthetic test windows): {fmt_det(v)}." for k, v in det.items()],
              *[f"- {n}" for n in notes], "",
-             "Synthetic data, seeded; rebuilt by `m3/examples/gen_gallery.py`. Chip numbers: `../RESULTS.md`.", ""]
+             f"{DISCLAIMER} Rebuilt by `m3/examples/gen_gallery.py`; chip numbers in `../RESULTS.md`.", ""]
     (d / "README.md").write_text("\n".join(lines))
 
 
-def split(X, y, n_test=N_VEC):
-    return X[:-n_test], y[:-n_test], X[-n_test:], y[-n_test:]
+def split(X, n_test=N_VEC):
+    return X[:-n_test], X[-n_test:]
+
+
+def qclip(X, bits, signed):
+    lo, hi = (-(1 << (bits - 1)), (1 << (bits - 1)) - 1) if signed else (0, (1 << bits) - 1)
+    return np.clip(np.round(X), lo, hi).astype(np.int64)
 
 
 # ------------------------------------------------------------------------------------------------ intnn
@@ -117,11 +163,17 @@ def train_intnn(X, y, *, hidden: list[int], wtype: str, n_cls: int, seed: int, a
     return best
 
 
-def intnn_example(name, desc, X, y, *, bits, signed, hidden, wtype, n_cls, seed, spike_form=False):
-    Xtr, ytr, Xte, yte = split(X, y)
-    p, acc_tr = train_intnn(Xtr, ytr, hidden=hidden, wtype=wtype, n_cls=n_cls, seed=seed)
+def intnn_size(p: dict, lanes: int, wtype: str) -> str:
+    dims = [lanes, *[len(L["W"]) for L in p["layers"]], len(p["Wo"])]
+    n_w = sum(len(L["W"]) * len(L["W"][0]) for L in p["layers"]) + len(p["Wo"]) * len(p["Wo"][0])
+    return f"layers {dims}, {n_w} weights ({wtype} hidden, 5-bit output layer)"
+
+
+def intnn_example(name, *, title, task, signal, X, y, classes, bits, signed, hidden, wtype, seed,
+                  spike_form=False):
+    (Xtr, Xte), (ytr, yte) = split(X), split(y)
+    p, acc_tr = train_intnn(Xtr, ytr, hidden=hidden, wtype=wtype, n_cls=len(classes), seed=seed)
     dec, _ = intnn_forward(p, Xte)
-    acc_te = float((dec[:, 0] == yte).mean())
     spec = {"lanes": X.shape[1], "bits": bits, "signed": signed}
     if spike_form:      # the feasibility-spike single-hidden-layer form (cfg/W1/b1/shift/W2/b2/amax)
         L = p["layers"][0]
@@ -129,99 +181,154 @@ def intnn_example(name, desc, X, y, *, bits, signed, hidden, wtype, n_cls, seed,
                  "W1": L["W"], "b1": L["b"], "shift": L["shift"], "W2": p["Wo"][0], "b2": p["bo"][0], "amax": L["amax"]}
     else:
         model = {**p, "in_spec": spec, "wtype": wtype}
-    write_example(name, desc=desc, model=model,
-                  chip={"kind": "ingest", "format": "intnn", "args": {"name": name}},
-                  vectors={"in_x": Xte, "out_y": dec},
-                  notes=[f"intnn, {wtype} hidden weights, layers {[X.shape[1], *hidden, len(p['Wo'])]}, input "
-                         f"{X.shape[1]} lanes x {bits}-bit {'signed' if signed else 'unsigned'}"
-                         + (", spike single-layer form" if spike_form else ", multi-layer form") + ".",
-                         f"Accuracy of the integer model on synthetic data (numpy, this Mac): train {acc_tr:.3f}, "
-                         f"held-out vectors {acc_te:.3f}.",
+    write_example(name, title=title, task=task, signal=signal,
+                  model_kind=f"intnn {wtype}" + (" (spike single-layer form)" if spike_form else ""),
+                  model_size=intnn_size(p, X.shape[1], wtype) + f"; input {X.shape[1]} lanes x {bits}-bit "
+                  f"{'signed' if signed else 'unsigned'}",
+                  model=model, chip={"kind": "ingest", "format": "intnn", "args": {"name": name}},
+                  vectors={"in_x": Xte, "out_y": dec}, labels={"y": yte},
+                  det={"y": detection(dec, yte, classes)},
+                  notes=[f"Integer model accuracy on the synthetic training windows: {acc_tr:.3f}.",
                          "Expected outputs: plain numpy of the intnn integer semantics (h = clip((W h + b) >> shift, "
                          "0, amax); score > 0 or argmax)."])
-    return p, Xte, dec
+    return p, Xte, dec, yte
 
 
-# ------------------------------------------------------------------------------------------------ synthetic tasks
+# ------------------------------------------------------------------------------------------------ synthetic signals
+# Every generator returns integer sensor windows as the chip sees them plus the ground truth it simulated.
 
-def task_vibration(rng, n, lanes=8, bits=4):
-    """Band energies of a machine vibration spectrum (deviation from baseline); fault = energy in bands 5-7."""
-    lim = (1 << (bits - 1)) - 1
+def hr_windows(rng, n):
+    """8 heart-rate samples, one per 2 s, 4-bit signed, 1 unit = 8 bpm from the wearer's resting rate.
+    Event 1 = tachycardia-like rise, 2 = bradycardia-like fall; normal windows carry drift, noise and, in 15 %,
+    a one-sample motion spike."""
+    ev = rng.choice(3, n, p=[0.5, 0.3, 0.2])
+    t = np.arange(8)
+    bpm = rng.normal(0, 5, (n, 1)) + rng.normal(0, 4, (n, 8))
+    onset = rng.integers(0, 5, n)
+    frac = np.clip((t[None, :] - onset[:, None] + 1) / 3, 0, 1)
+    mag = np.where(ev == 1, rng.uniform(25, 55, n), np.where(ev == 2, -rng.uniform(22, 40, n), 0.0))
+    bpm += mag[:, None] * frac
+    spike = (ev == 0) & (rng.random(n) < 0.15)
+    bpm[spike, rng.integers(0, 8, spike.sum())] += rng.uniform(20, 32, spike.sum())
+    return qclip(bpm / 8, 4, True), ev
+
+
+HR_SIGNAL = ("8 heart-rate samples (one per 2 s, 4-bit signed, 8 bpm per unit from resting); the event is a "
+             "sustained rise of 25-55 bpm or fall of 22-40 bpm ramping in from a random onset, against drift, "
+             "noise and one-sample motion spikes.")
+
+
+def spo2_windows(rng, n, lanes=6):
+    """SpO2 readings, one per 5 s, 4-bit unsigned as 100 - SpO2 % (0 = 100 %, 15 = 85 % or lower).
+    Event: a desaturation dip of 4-10 points with partial recovery; 20 % of normal windows have a one-sample
+    motion artefact drop."""
     y = rng.integers(0, 2, n)
-    X = rng.normal(0, 1.6, (n, lanes))
-    X[:, 5:8] += np.where(y[:, None] == 1, 2.5, -0.5)
-    return np.clip(np.round(X), -lim - 1, lim).astype(np.int64), y
-
-
-def task_fall(rng, n, lanes=6, bits=5):
-    """Accelerometer window features (peak, jerk, tilt change, ...); fall = high peak + tilt change + stillness."""
-    lim = (1 << (bits - 1)) - 1
-    y = rng.integers(0, 2, n)
-    X = rng.normal(0, 3, (n, lanes))
-    X[:, 0] += np.where(y == 1, 7, 0); X[:, 2] += np.where(y == 1, 6, -1); X[:, 4] -= np.where(y == 1, 5, 0)
-    return np.clip(np.round(X), -lim - 1, lim).astype(np.int64), y
-
-
-def task_hvac(rng, n):
-    """Room temperature, setpoint gap, humidity, CO2, occupancy, outside temp (4-bit); idle / heat / cool."""
-    y = rng.integers(0, 3, n)
-    X = rng.normal(8, 2.2, (n, 6))
-    X[:, 1] += np.select([y == 1, y == 2], [4.0, -4.0], 0.0)
-    X[:, 0] += np.select([y == 1, y == 2], [-2.0, 2.0], 0.0)
-    return np.clip(np.round(X), 0, 15).astype(np.int64), y
-
-
-def task_gesture(rng, n):
-    """16 capacitive touch pads (1 bit each, thresholded off-chip); swipe-left / swipe-right / tap."""
-    y = rng.integers(0, 3, n)
-    p = np.full((n, 16), 0.1)
-    p[y == 0, :8] = 0.75; p[y == 1, 8:] = 0.75; p[y == 2, 5:11] = 0.85
-    return (rng.random((n, 16)) < p).astype(np.int64), y
-
-
-def task_leak(rng, n):
-    """Water pipe: pressure drop, flow, night flow, acoustic level, temperature, valve state (4-bit); leak or not."""
-    y = rng.integers(0, 2, n)
-    X = rng.normal(6, 2.5, (n, 6))
-    X[:, 0] += np.where(y == 1, 3.5, 0); X[:, 2] += np.where(y == 1, 3.0, 0); X[:, 3] += np.where(y == 1, 2.0, 0)
-    return np.clip(np.round(X), 0, 15).astype(np.int64), y
-
-
-def task_air(rng, n):
-    """Air sensor: PM2.5, VOC, CO2, humidity, temperature (4-bit); good / moderate / poor."""
-    y = rng.integers(0, 3, n)
-    X = rng.normal(4, 2.0, (n, 5))
-    X[:, 0] += 3.5 * y; X[:, 1] += 2.5 * y; X[:, 2] += 1.5 * y
-    return np.clip(np.round(X), 0, 15).astype(np.int64), y
-
-
-def task_temp(rng, n):
-    """Bearing temperature trend: 4 samples (6-bit unsigned, 1 unit = 1 degree above ambient); overheating or not."""
-    y = rng.integers(0, 2, n)
-    base = rng.normal(20, 6, n) + np.where(y == 1, 18, 0)
-    X = base[:, None] + rng.normal(0, 3, (n, 4)) + np.arange(4) * np.where(y == 1, 2, 0)[:, None]
-    return np.clip(np.round(X), 0, 63).astype(np.int64), y
-
-
-def task_gas(rng, n, lanes=4, bits=5, shift=0.0):
-    """One gas sensor's features (baseline drift, rise rate, peak, recovery); gas present or not."""
-    y = rng.integers(0, 2, n)
-    X = rng.normal(shift, 3, (n, lanes))
-    X[:, 1] += np.where(y == 1, 6, 0); X[:, 2] += np.where(y == 1, 5, 0)
-    lim = (1 << (bits - 1)) - 1
-    return np.clip(np.round(X), -lim - 1, lim).astype(np.int64), y
-
-
-def task_strain(rng, n, lanes=24, bits=6):
-    """24 consecutive strain-gauge samples (6-bit signed); impact event = a sharp spike then ringing."""
-    y = rng.integers(0, 2, n)
-    X = rng.normal(0, 4, (n, lanes))
     t = np.arange(lanes)
-    pos = rng.integers(4, 12, n)
-    ring = 20 * np.exp(-0.35 * np.clip(t[None, :] - pos[:, None], 0, None)) * np.cos(1.6 * (t[None, :] - pos[:, None]))
-    X += np.where((y[:, None] == 1) & (t[None, :] >= pos[:, None]), ring, 0)
-    lim = (1 << (bits - 1)) - 1
-    return np.clip(np.round(X), -lim - 1, lim).astype(np.int64), y
+    x = rng.uniform(1, 4, (n, 1)) + rng.normal(0, 0.7, (n, lanes))
+    onset = rng.integers(0, lanes - 2, n)
+    shape = np.clip((t[None, :] - onset[:, None] + 1) / 2, 0, 1) * (
+        1 - 0.5 * np.clip((t[None, :] - onset[:, None] - 3) / 2, 0, 1))
+    x += np.where(y[:, None] == 1, rng.uniform(4, 10, (n, 1)) * shape, 0)
+    art = (y == 0) & (rng.random(n) < 0.2)
+    x[art, rng.integers(0, lanes, art.sum())] += rng.uniform(5, 9, art.sum())
+    return qclip(x, 4, False), y
+
+
+SPO2_SIGNAL = ("6 SpO2 readings (one per 5 s, 4-bit as 100 minus SpO2 %); the event is a dip of 4-10 points with "
+               "partial recovery from a random onset; 20 % of normal windows carry a one-sample motion-artefact "
+               "drop.")
+
+
+def fall_windows(rng, n):
+    """6 wrist-accelerometer window features, 5-bit signed: peak magnitude, jerk, tilt change, pre-impact
+    free-fall, post-impact stillness, step regularity. 25 % of non-falls are hard sit-downs (high peak only)."""
+    y = rng.integers(0, 2, n)
+    X = rng.normal(0, 3, (n, 6))
+    X += np.where(y[:, None] == 1, np.array([7, 4, 6, 4, -5, -3]), 0)
+    sit = (y == 0) & (rng.random(n) < 0.25)
+    X[sit, 0] += 7; X[sit, 1] += 3
+    return qclip(X, 5, True), y
+
+
+def breath_windows(rng, n):
+    """Chest-band breath amplitude in 6 sub-windows of 5 s, 4-bit unsigned. 0 normal, 1 shallow (2-4 consecutive
+    sub-windows at 35-60 % amplitude), 2 pause (2-3 consecutive sub-windows near zero)."""
+    y = rng.integers(0, 3, n)
+    amp = rng.normal(10, 1.5, (n, 1)) + rng.normal(0, 1.2, (n, 6))
+    for i in np.flatnonzero(y == 1):
+        L = rng.integers(2, 5); s = rng.integers(0, 7 - L)
+        amp[i, s:s + L] *= rng.uniform(0.35, 0.6)
+    for i in np.flatnonzero(y == 2):
+        L = rng.integers(2, 4); s = rng.integers(0, 7 - L)
+        amp[i, s:s + L] = rng.normal(1, 0.8, L)
+    return qclip(amp, 4, False), y
+
+
+def rr_flags(rng, n):
+    """16 beat-to-beat flags from 17 simulated RR intervals: flag = |RR_i - RR_(i-1)| > 12 % of the mean RR.
+    0 regular (3 % jitter plus 4 % respiratory swing), 1 isolated premature beat (one or two short-long pairs),
+    2 irregular rhythm (20 % random RR variation)."""
+    y = rng.integers(0, 3, n)
+    k = np.arange(17)
+    rr = 0.8 * (1 + 0.04 * np.sin(2 * np.pi * k[None, :] / rng.uniform(4, 6, (n, 1))) + 0.03 * rng.normal(size=(n, 17)))
+    for i in np.flatnonzero(y == 1):
+        for p in rng.choice(np.arange(1, 15), rng.integers(1, 3), replace=False):
+            rr[i, p] *= 0.65; rr[i, p + 1] *= 1.3
+    irr = y == 2
+    rr[irr] = rng.uniform(0.55, 0.95, (irr.sum(), 1)) * (1 + 0.2 * rng.normal(size=(irr.sum(), 17)))
+    return (np.abs(np.diff(rr, axis=1)) > 0.12 * rr.mean(1, keepdims=True)).astype(np.int64), y
+
+
+def fever_windows(rng, n):
+    """6 skin-temperature samples, one per 30 min, 4-bit unsigned, 1 unit = 0.25 C above 36.0 C.
+    0 normal (36.4-37.2 C, flat), 1 rising (from 36.5-37.0 C at 0.24-0.44 C per hour), 2 fever (38.0-39.5 C)."""
+    y = rng.integers(0, 3, n)
+    t = np.arange(6)
+    start = np.select([y == 0, y == 1], [rng.uniform(36.4, 37.2, n), rng.uniform(36.5, 37.0, n)],
+                      rng.uniform(38.0, 39.5, n))
+    slope = np.where(y == 1, rng.uniform(0.12, 0.22, n), rng.normal(0, 0.04, n))
+    temp = start[:, None] + slope[:, None] * t[None, :] + rng.normal(0, 0.12, (n, 6))
+    return qclip((temp - 36.0) / 0.25, 4, False), y
+
+
+def eeg_windows(rng, n):
+    """24 samples of one band-passed EEG channel at 16 Hz (1.5 s), 6-bit signed, about 5 uV per unit.
+    Background: AR(1) noise; 30 % of normal windows carry a slow blink-like bump; the event is a rhythmic
+    spike-and-wave burst (period 5 samples, about 3 Hz) of 12-22 units from a random onset."""
+    y = rng.integers(0, 2, n)
+    x = np.zeros((n, 24)); e = rng.normal(0, 3, (n, 24))
+    for t in range(24):
+        x[:, t] = (0.7 * x[:, t - 1] if t else 0) + e[:, t]
+    t = np.arange(24)
+    blink = (y == 0) & (rng.random(n) < 0.3)
+    c = rng.uniform(3, 21, n)
+    x += np.where(blink[:, None], rng.uniform(12, 20, (n, 1)) * np.exp(-0.5 * ((t[None, :] - c[:, None]) / 2.5) ** 2), 0)
+    pattern = np.array([1.0, -0.3, -0.5, -0.4, -0.2])
+    onset = rng.integers(0, 12, n)
+    burst = rng.uniform(12, 22, (n, 1)) * pattern[(t[None, :] - onset[:, None]) % 5]
+    x += np.where((y[:, None] == 1) & (t[None, :] >= onset[:, None]), burst, 0)
+    return qclip(x, 6, True), y
+
+
+def deterioration_windows(seed: int, n: int = N_TRAIN) -> dict:
+    """Multi-sensor fusion data. A hidden deterioration state (50 %) shows in each sensor with probability 0.85;
+    each sensor also shows a spurious abnormality in 8 % of stable windows. Sensors, 4 samples each:
+    heart rate (5-bit signed, 4 bpm per unit from resting; abnormal = +20-40 bpm), respiration rate (5-bit signed,
+    1 breath/min per unit from 14/min; abnormal = +6-12), SpO2 (4-bit, 100 - SpO2 %; abnormal = 4-8 points down)."""
+    rng = np.random.default_rng(seed)
+    y = rng.integers(0, 2, n)
+    shows = {s: np.where(y == 1, rng.random(n) < 0.85, rng.random(n) < 0.08).astype(np.int64)
+             for s in ("hr", "resp", "spo2")}
+    hr = rng.normal(0, 6, (n, 1)) + rng.normal(0, 4, (n, 4)) + shows["hr"][:, None] * rng.uniform(20, 40, (n, 1))
+    rr = rng.normal(0, 1.5, (n, 1)) + rng.normal(0, 1.2, (n, 4)) + shows["resp"][:, None] * rng.uniform(6, 12, (n, 1))
+    sp = rng.uniform(1, 4, (n, 1)) + rng.normal(0, 0.7, (n, 4)) + shows["spo2"][:, None] * rng.uniform(4, 8, (n, 1))
+    return {"y": y, "shows": shows, "hr": qclip(hr / 4, 5, True), "resp": qclip(rr, 5, True),
+            "spo2": qclip(sp, 4, False)}
+
+
+DET_SIGNAL = ("a hidden deterioration state (half the windows) shows in each of heart rate (+20-40 bpm), "
+              "respiration rate (+6-12 /min) and SpO2 (4-8 points down) with probability 0.85; each sensor also "
+              "shows a spurious abnormality in 8 % of stable windows; 4 samples per sensor.")
 
 
 # ------------------------------------------------------------------------------------------------ trees
@@ -271,26 +378,29 @@ def treelut_scores(tl, X):
     return dec, s
 
 
-def tree_example(name, desc, X, y, *, n_cls, seed, n_estimators, max_depth, w_feature=4, w_tree=3):
-    Xtr, ytr, Xte, yte = split(X, y)
+def tree_example(name, *, title, task, signal, X, y, classes, seed, n_estimators, max_depth, bits,
+                 w_feature=4, w_tree=3):
+    (Xtr, Xte), (ytr, yte) = split(X), split(y)
+    n_cls = len(classes)
     mj, tl = train_xgb(Xtr, ytr, n_cls, seed, n_estimators, max_depth, w_feature, w_tree)
     dec, s = treelut_scores(tl, Xte)
     acc_tr = float((np.asarray(tl.predict(Xtr)).astype(int).reshape(-1) == ytr).mean())
-    acc_te = float((dec[:, 0] == yte).mean())
-    write_example(name, desc=desc, model=mj,
-                  chip={"kind": "ingest", "format": "xgboost_json", "args": {"w_feature": w_feature, "w_tree": w_tree,
-                                                                              "name": name},
-                        "fallback": {"format": "chipir", "file": "chipir.json", "args": {"name": name}}},
+    n_trees = n_estimators * (1 if n_cls == 2 else n_cls)
+    write_example(name, title=title, task=task, signal=signal, model_kind="XGBoost via TreeLUT",
+                  model_size=f"{n_estimators} rounds x depth {max_depth} ({n_trees} trees), "
+                  f"{'binary' if n_cls == 2 else f'{n_cls} classes'}, TreeLUT w_feature={w_feature}, "
+                  f"w_tree={w_tree}; input {X.shape[1]} x {bits}-bit",
+                  model=mj, chip={"kind": "ingest", "format": "xgboost_json",
+                                  "args": {"w_feature": w_feature, "w_tree": w_tree, "name": name},
+                                  "fallback": {"format": "chipir", "file": "chipir.json", "args": {"name": name}}},
                   extra={"chipir.json": treelut_chipir(tl, name)},
-                  vectors={"in_x": Xte, "out_y": dec, "out_scores": s},
-                  notes=[f"XGBoost {xgboost_version()}, {n_estimators} rounds x depth {max_depth}, "
-                         f"{'binary' if n_cls == 2 else f'{n_cls} classes'}; TreeLUT w_feature={w_feature}, w_tree={w_tree}.",
-                         f"Accuracy of TreeLUT's quantised model on synthetic data (this Mac): train {acc_tr:.3f}, "
-                         f"held-out vectors {acc_te:.3f}.",
+                  vectors={"in_x": Xte, "out_y": dec, "out_scores": s}, labels={"y": yte},
+                  det={"y": detection(dec, yte, classes)},
+                  notes=[f"XGBoost {xgboost_version()}; TreeLUT quantised model accuracy on the synthetic training "
+                         f"windows: {acc_tr:.3f}.",
                          "Expected outputs: TreeLUT's own predict (vendored copy) and its per-class integer sums.",
                          "`chipir.json`: the same model after the lab's TreeLUT converter, ingested as format chipir "
                          "when the CLI's xgboost_json path fails (see ../RESULTS.md)."])
-    return mj, tl, Xte, dec, s
 
 
 def xgboost_version():
@@ -300,13 +410,12 @@ def xgboost_version():
 
 # ------------------------------------------------------------------------------------------------ torchlogix
 
-def gesture_logic(seed=5):
+def irregular_beat_logic(seed=5):
     import torch
     from torchlogix.layers import GroupSum, LogicDense
     from torchlogix.utils import set_export_mode
-    rng = np.random.default_rng(seed)
-    X, y = task_gesture(rng, 3000)
-    Xtr, ytr, Xte, yte = split(X, y)
+    X, y = rr_flags(np.random.default_rng(seed), N_TRAIN)
+    (Xtr, Xte), (ytr, yte) = split(X), split(y)
     torch.manual_seed(seed)
     m = torch.nn.Sequential(LogicDense(16, 48), LogicDense(48, 48), GroupSum(k=3, tau=4.0))
     opt = torch.optim.Adam(m.parameters(), 0.05)
@@ -332,7 +441,7 @@ def gesture_logic(seed=5):
     assert np.allclose(ev * 4.0, s), "torchlogix eval forward disagrees with export mode"
     dec = np.argmax(s, axis=1)[:, None]
     acc_tr = float((np.argmax(discrete(Xtr), 1) == ytr).mean())
-    name = "gesture_logic_3class"
+    name = "irregular_beat_logic_3class"
     d = OUT / name; d.mkdir(parents=True, exist_ok=True)
     torch.save(m, d / "model.pt")
     layers = []
@@ -346,23 +455,33 @@ def gesture_logic(seed=5):
                            "gate_ids": ids.long().tolist(), "a": idx[0].long().tolist(), "b": idx[1].long().tolist()})
         elif isinstance(mod, GroupSum):
             layers.append({"type": "GroupSum", "k": mod.k, "tau": float(mod.tau)})
-    write_example(name, desc="Gesture pad: 16 thresholded capacitive touch pads -> swipe-left / swipe-right / tap.",
+    classes = ["regular", "premature beat", "irregular rhythm"]
+    write_example(name, title="irregular beat",
+                  task="Beat-to-beat flags from a heart-rate sensor -> regular / isolated premature beat / "
+                       "irregular rhythm.",
+                  signal="17 simulated RR intervals give 16 flags (beat-to-beat change above 12 % of the mean RR); "
+                         "regular rhythm has 3 % jitter and a 4 % respiratory swing, a premature beat is one or two "
+                         "short-long pairs, an irregular rhythm has 20 % random RR variation.",
+                  model_kind="torchlogix logic network",
+                  model_size="LogicDense(16,48) -> LogicDense(48,48) -> GroupSum(3, tau=4): 96 two-input logic "
+                             "gates; input 16 x 1-bit",
                   model={"format": "torchlogix", "file": "model.pt", "layers": layers,
                          "note": "readable copy of the discrete network; the lab ingests model.pt"},
                   chip={"kind": "ingest", "format": "torchlogix", "args": {"path": "model.pt", "trusted": True,
                                                                             "name": name}},
-                  vectors={"in_x": Xte, "out_y": dec, "out_scores": s},
-                  notes=["torchlogix LogicDense(16,48) -> LogicDense(48,48) -> GroupSum(3, tau=4), 150 Adam steps; "
+                  vectors={"in_x": Xte, "out_y": dec, "out_scores": s}, labels={"y": yte},
+                  det={"y": detection(dec, yte, classes)},
+                  notes=[f"150 Adam steps; discrete network accuracy on the synthetic training windows: {acc_tr:.3f}. "
                          "model.pt is the saved module (pickle written on this machine).",
-                         f"Accuracy of the discrete network on synthetic data (this Mac): train {acc_tr:.3f}, held-out "
-                         f"vectors {float((dec[:, 0] == yte).mean()):.3f}.",
                          "Expected outputs: torchlogix's own export-mode forward (also checked against eval mode x tau)."])
 
 
 # ------------------------------------------------------------------------------------------------ fusion
 
-def fusion_example(name, desc, heads: dict, fusion: list, shared: bool, note: str):
-    """heads: name -> (model, chip-ingest dict, X_test, {output: expected})."""
+def fusion_example(name, *, title, task, signal, heads: dict, fusion: list, shared: bool, model_size: str,
+                   labels: dict, classes2: list[str], note: str):
+    """heads: name -> (model, chip-ingest dict, X_test, {output: expected}). labels: output name -> ground truth
+    (fusion outputs and, where they have one, head outputs)."""
     model = {"heads": {h: {"format": c["format"], "args": c.get("args", {}), "model": m,
                            **({"fallback": c["fallback"]} if "fallback" in c else {})}
                        for h, (m, c, _, _) in heads.items()},
@@ -377,109 +496,153 @@ def fusion_example(name, desc, heads: dict, fusion: list, shared: bool, note: st
         k = {"and": bits.shape[1], "or": 1}.get(f["op"], f.get("k"))
         outs[f["name"]] = (bits.sum(1, keepdims=True) >= k).astype(np.int64)
     vec.update({f"out_{k}": v for k, v in outs.items()})
-    write_example(name, desc=desc, model=model, chip={"kind": "compose", "shared_inputs": shared, "fusion": fusion},
-                  vectors=vec, notes=[note, "Expected fusion outputs: numpy over the heads' expected decisions "
-                                            "(and = all, or = any, kofn = at least k)."])
+    det = {k: detection(outs[k], v, classes2) for k, v in labels.items()}
+    write_example(name, title=title, task=task, signal=signal, model_kind="multi-head fusion (compose-chip, "
+                  + " / ".join(sorted({f["op"] for f in fusion})) + ")", model_size=model_size, model=model,
+                  chip={"kind": "compose", "shared_inputs": shared, "fusion": fusion}, vectors=vec, labels=labels,
+                  det=det, notes=[note, "Expected fusion outputs: numpy over the heads' expected decisions "
+                                        "(and = all, or = any, kofn = at least k)."])
 
 
 # ------------------------------------------------------------------------------------------------ gallery
 
 def trees_phase():
     """All XGBoost training, in its own process: on macOS XGBoost's and torch's OpenMP runtimes crash or deadlock
-    when both train in one process. Returns the gas_c head of the k-of-n example as plain lists."""
-    X, y = task_leak(np.random.default_rng(6), 3000)
-    tree_example("leak_treelut_binary", "Water pipe: 6 pressure/flow/acoustic features (4-bit) -> leak yes/no.",
-                 X, y, n_cls=2, seed=6, n_estimators=8, max_depth=3)
-    X, y = task_air(np.random.default_rng(7), 3000)
-    tree_example("air_treelut_3class", "Indoor air: PM2.5, VOC, CO2, humidity, temperature (4-bit) -> good / "
-                 "moderate / poor.", X, y, n_cls=3, seed=7, n_estimators=6, max_depth=3)
-    # gas_c head of the k-of-n example: an XGBoost model on 4 features
-    Xc, yc = task_leak(np.random.default_rng(13), 3000)
-    Xc = Xc[:, :4]
-    Xtr, ytr, Xte_c, _ = split(Xc, yc)
-    mj_c, tl_c = train_xgb(Xtr, ytr, 2, 13, 6, 3, 4, 3)
-    dec_c, s_c = treelut_scores(tl_c, Xte_c)
-    return mj_c, treelut_chipir(tl_c, "gas_c"), Xte_c, dec_c, s_c
+    when both train in one process. Returns the SpO2 head of the k-of-n example as plain values."""
+    X, y = spo2_windows(np.random.default_rng(6), N_TRAIN)
+    tree_example("spo2_drop_treelut_binary", title="SpO2 drop",
+                 task="Pulse oximeter: 6 SpO2 readings over 30 s -> desaturation yes/no.", signal=SPO2_SIGNAL,
+                 X=X, y=y, classes=["normal", "desaturation"], seed=6, n_estimators=8, max_depth=3, bits=4)
+    X, y = fever_windows(np.random.default_rng(7), N_TRAIN)
+    tree_example("fever_trend_treelut_3class", title="fever trend",
+                 task="Skin-temperature patch: 6 readings over 3 h -> normal / rising trend / fever.",
+                 signal="6 samples one per 30 min (4-bit, 0.25 C per unit above 36.0 C); normal is flat at "
+                        "36.4-37.2 C, a rising trend climbs 0.24-0.44 C per hour from 36.5-37.0 C, fever sits at "
+                        "38.0-39.5 C; 0.12 C noise.",
+                 X=X, y=y, classes=["normal", "rising", "fever"], seed=7, n_estimators=6, max_depth=3, bits=4)
+    D = deterioration_windows(21)
+    (Xtr, Xte), (ytr, _) = split(D["spo2"]), split(D["shows"]["spo2"])
+    mj, tl = train_xgb(Xtr, ytr, 2, 23, 6, 3, 4, 3)
+    dec, s = treelut_scores(tl, Xte)
+    return mj, treelut_chipir(tl, "spo2"), dec, s
 
 
 def main():
     import multiprocessing as mp
     from concurrent.futures import ProcessPoolExecutor
     with ProcessPoolExecutor(1, mp_context=mp.get_context("spawn")) as ex:
-        mj_c, ir_c, Xte_c, dec_c, s_c = ex.submit(trees_phase).result()
-    rng = np.random.default_rng(1)
-    X, y = task_vibration(rng, 3000)
-    vib = intnn_example("vibration_intnn_binary", "Machine vibration: 8 band-energy deviations (4-bit signed) -> "
-                        "bearing fault yes/no.", X, y, bits=4, signed=True, hidden=[8], wtype="binary", n_cls=2,
-                        seed=1, spike_form=True)
-    X, y = task_fall(np.random.default_rng(2), 3000)
-    intnn_example("fall_intnn_ternary", "Wearable accelerometer: 6 window features (5-bit signed) -> fall yes/no.",
-                  X, y, bits=5, signed=True, hidden=[12], wtype="ternary", n_cls=2, seed=2)
-    X, y = task_hvac(np.random.default_rng(3), 3000)
-    intnn_example("hvac_intnn_4bit_3class", "Room climate: 6 sensor readings (4-bit) -> idle / heat / cool.",
-                  X, y, bits=4, signed=False, hidden=[10, 8], wtype="4bit", n_cls=3, seed=3)
-    gesture_logic()
+        mj_s, ir_s, dec_s, s_s = ex.submit(trees_phase).result()
+    bin2 = ["normal", "event"]
 
-    # fusion AND: vibration head (own port) + temperature head (own port) -> fault alarm only when both agree
-    rt = np.random.default_rng(8)
-    Xt, yt = task_temp(rt, 3000)
-    Xtr, ytr, Xte_t, _ = split(Xt, yt)
-    pt, _ = train_intnn(Xtr, ytr, hidden=[6], wtype="ternary", n_cls=2, seed=8)
-    temp_head = ({**pt, "in_spec": {"lanes": 4, "bits": 6, "signed": False}}, {"format": "intnn", "args": {"name": "temp"}},
-                 Xte_t, {"y": intnn_forward(pt, Xte_t)[0]})
-    vib_p, vib_X, vib_dec = vib
-    vib_head = ({**vib_p, "in_spec": {"lanes": 8, "bits": 4, "signed": True}}, {"format": "intnn", "args": {"name": "vib"}},
-                vib_X, {"y": vib_dec})
-    fusion_example("machine_fault_fusion_and", "Motor monitor, two sensors on two ports: vibration head AND bearing-"
-                   "temperature head -> confirmed fault alarm.", {"vib": vib_head, "temp": temp_head},
-                   [{"name": "fault", "op": "and", "inputs": ["vib_y", "temp_y"]}], False,
-                   "Heads: vibration (intnn binary, same parameters as vibration_intnn_binary) and temperature "
-                   "(intnn ternary 4 -> 6 -> 1), each on its own input port.")
+    # 1. heart-rate alarm: binary-weight intnn in the spike single-layer form
+    X, ev = hr_windows(np.random.default_rng(1), N_TRAIN)
+    hr = intnn_example("hr_alarm_intnn_binary", title="heart-rate alarm",
+                       task="Wearable heart-rate sensor: 8 readings over 16 s -> abnormal rate alarm yes/no.",
+                       signal=HR_SIGNAL, X=X, y=(ev > 0).astype(np.int64), classes=["normal", "abnormal rate"],
+                       bits=4, signed=True, hidden=[8], wtype="binary", seed=1, spike_form=True)
+    ev_te = split(ev)[1]
 
-    # fusion OR: two heads on one shared port (same vibration features) -> any alarm
-    rv = np.random.default_rng(9)
-    Xv, yv = task_vibration(rv, 3000)
-    y_imb = (Xv[:, 0] + Xv[:, 1] > 3).astype(np.int64)      # second fault type: imbalance shows in bands 0-1
-    Xtr, ytr, Xte_v, _ = split(Xv, yv)
-    _, ytr2, _, _ = split(Xv, y_imb)
-    pa, _ = train_intnn(Xtr, ytr, hidden=[8], wtype="ternary", n_cls=2, seed=9)
-    pb, _ = train_intnn(Xtr, ytr2, hidden=[6], wtype="ternary", n_cls=2, seed=10)
-    spec = {"lanes": 8, "bits": 4, "signed": True}
-    fusion_example("vibration_any_alarm_fusion_or", "One vibration sensor, two fault heads on the shared port "
-                   "(bearing wear, imbalance) -> OR: any-fault alarm.",
-                   {"bearing": ({**pa, "in_spec": spec}, {"format": "intnn", "args": {"name": "bearing"}}, Xte_v,
-                                {"y": intnn_forward(pa, Xte_v)[0]}),
-                    "imbalance": ({**pb, "in_spec": spec}, {"format": "intnn", "args": {"name": "imbalance"}}, Xte_v,
-                                  {"y": intnn_forward(pb, Xte_v)[0]})},
-                   [{"name": "any_fault", "op": "or", "inputs": ["bearing_y", "imbalance_y"]}], True,
-                   "Heads: two intnn ternary nets reading the same 8 x 4-bit signed input port (shared_inputs=true).")
+    # 2. fall detection: ternary intnn
+    X, y = fall_windows(np.random.default_rng(2), N_TRAIN)
+    intnn_example("fall_intnn_ternary", title="fall detection",
+                  task="Wrist accelerometer: 6 features of a 4 s window -> fall yes/no.",
+                  signal="6 accelerometer window features (5-bit signed: peak, jerk, tilt change, free-fall, "
+                         "stillness, step regularity); a fall shifts all six together, 25 % of non-falls are hard "
+                         "sit-downs with a high peak and jerk only; unit-variance noise x 3.",
+                  X=X, y=y, classes=["no fall", "fall"], bits=5, signed=True, hidden=[12], wtype="ternary", seed=2)
 
-    # fusion k-of-n: three redundant gas sensors, two intnn heads and one TreeLUT head -> 2-of-3 vote
-    heads = {}
-    for i, (h, sh) in enumerate((("gas_a", 0.0), ("gas_b", 1.0))):
-        Xg, yg = task_gas(np.random.default_rng(11 + i), 3000, shift=sh)
-        Xtr, ytr, Xte_g, _ = split(Xg, yg)
-        pg, _ = train_intnn(Xtr, ytr, hidden=[6], wtype="ternary", n_cls=2, seed=11 + i)
-        heads[h] = ({**pg, "in_spec": {"lanes": 4, "bits": 5, "signed": True}}, {"format": "intnn", "args": {"name": h}},
-                    Xte_g, {"y": intnn_forward(pg, Xte_g)[0]})
-    heads["gas_c"] = (mj_c, {"format": "xgboost_json", "args": {"w_feature": 4, "w_tree": 3, "name": "gas_c"},
-                             "fallback": {"format": "chipir", "model": ir_c,
-                                          "args": {"name": "gas_c"}}}, Xte_c,
-                      {"y": dec_c, "scores": s_c})
-    fusion_example("gas_vote_fusion_kofn", "Three redundant gas sensors on three ports, mixed model formats -> "
-                   "2-of-3 vote alarm.", heads, [{"name": "gas_alarm", "op": "kofn", "k": 2,
-                                                  "inputs": ["gas_a_y", "gas_b_y", "gas_c_y"]}], False,
-                   "Heads: gas_a, gas_b (intnn ternary 4 -> 6 -> 1, 5-bit signed) and gas_c (XGBoost 6 x depth 3 "
-                   "via TreeLUT, 4 x 4-bit), each on its own port.")
+    # 3. breathing pause: 4-bit intnn, 3 classes
+    X, y = breath_windows(np.random.default_rng(3), N_TRAIN)
+    intnn_example("breathing_pause_intnn_4bit_3class", title="breathing pause",
+                  task="Chest respiration band: breath amplitude over 30 s -> normal / shallow / pause.",
+                  signal="6 breath-amplitude sub-windows of 5 s (4-bit); shallow breathing scales 2-4 consecutive "
+                         "sub-windows to 35-60 %, a pause holds 2-3 consecutive sub-windows near zero (10-15 s); "
+                         "per-window and per-sample noise.",
+                  X=X, y=y, classes=["normal", "shallow", "pause"], bits=4, signed=False, hidden=[10, 8],
+                  wtype="4bit", seed=3)
 
-    # streaming: a wide frame (24 x 6-bit = 144 bits = 10 words of 15 bits) streamed in one word per strobe
-    X, y = task_strain(np.random.default_rng(14), 3000)
-    intnn_example("impact_stream_intnn_wide", "Structural monitor: 24 consecutive strain-gauge samples (6-bit signed) "
-                  "streamed in one 15-bit word per strobe -> impact yes/no.", X, y, bits=6, signed=True, hidden=[8],
-                  wtype="ternary", n_cls=2, seed=14)
-    stream = json.loads((OUT / "impact_stream_intnn_wide" / "chip.json").read_text())
+    # 4. irregular beat: torchlogix
+    irregular_beat_logic()
+
+    # 5. seizure-like EEG burst: wide input streamed into the chip (24 x 6-bit = 144 bits)
+    X, y = eeg_windows(np.random.default_rng(14), N_TRAIN)
+    intnn_example("eeg_burst_stream_intnn_wide", title="seizure-like EEG burst",
+                  task="One EEG channel: 24 raw samples (1.5 s) streamed in one 15-bit word per strobe -> "
+                       "seizure-like burst yes/no.",
+                  signal="24 samples at 16 Hz (6-bit signed, about 5 uV per unit) of AR(1) background noise; the "
+                         "event is a 3 Hz spike-and-wave burst of 12-22 units from a random onset; 30 % of normal "
+                         "windows carry a slow blink-like bump.",
+                  X=X, y=y, classes=["background", "burst"], bits=6, signed=True, hidden=[8], wtype="ternary",
+                  seed=14)
+    stream = json.loads((OUT / "eeg_burst_stream_intnn_wide" / "chip.json").read_text())
     stream["stream_generic_too"] = True
-    (OUT / "impact_stream_intnn_wide" / "chip.json").write_text(json.dumps(stream, indent=1) + "\n")
+    (OUT / "eeg_burst_stream_intnn_wide" / "chip.json").write_text(json.dumps(stream, indent=1) + "\n")
+
+    # 6. fusion AND: heart-rate head (same parameters as example 1) AND an SpO2 head, each on its own port
+    hr_p, hr_X, hr_dec, hr_y = hr
+    Xs, ys = spo2_windows(np.random.default_rng(8), N_TRAIN)
+    (Xs_tr, Xs_te), (ys_tr, ys_te) = split(Xs), split(ys)
+    ps, _ = train_intnn(Xs_tr, ys_tr, hidden=[8], wtype="4bit", n_cls=2, seed=8)
+    fusion_example("hr_spo2_fusion_and", title="heart rate AND SpO2 alarm",
+                   task="Two sensors on two ports: abnormal heart rate AND desaturation -> confirmed alarm, which "
+                        "suppresses single-sensor false alarms.",
+                   signal="windows from the heart-rate and SpO2 generators above, paired by index; the ground truth "
+                          "is both events present (independent draws, so about a quarter of the windows).",
+                   heads={"hr": ({**hr_p, "in_spec": {"lanes": 8, "bits": 4, "signed": True}},
+                                 {"format": "intnn", "args": {"name": "hr"}}, hr_X, {"y": hr_dec}),
+                          "spo2": ({**ps, "in_spec": {"lanes": 6, "bits": 4, "signed": False}},
+                                   {"format": "intnn", "args": {"name": "spo2"}}, Xs_te,
+                                   {"y": intnn_forward(ps, Xs_te)[0]})},
+                   fusion=[{"name": "alarm", "op": "and", "inputs": ["hr_y", "spo2_y"]}], shared=False,
+                   model_size="heads: intnn binary 8 -> 8 -> 1 (heart rate) and intnn 4-bit 6 -> 8 -> 1 (SpO2)",
+                   labels={"alarm": hr_y & ys_te, "hr_y": hr_y, "spo2_y": ys_te}, classes2=bin2,
+                   note="Heads: heart rate (same parameters as hr_alarm_intnn_binary) and SpO2 (intnn 4-bit weights "
+                        "6 -> 8 -> 1, 4-bit input), each on its own input port.")
+
+    # 7. fusion OR: two heads on one shared heart-rate port -> any rate alarm
+    Xh, evh = hr_windows(np.random.default_rng(9), N_TRAIN)
+    (Xh_tr, Xh_te), (ev_tr, ev_te2) = split(Xh), split(evh)
+    pa, _ = train_intnn(Xh_tr, (ev_tr == 1).astype(np.int64), hidden=[8], wtype="ternary", n_cls=2, seed=9)
+    pb, _ = train_intnn(Xh_tr, (ev_tr == 2).astype(np.int64), hidden=[6], wtype="ternary", n_cls=2, seed=10)
+    spec = {"lanes": 8, "bits": 4, "signed": True}
+    fusion_example("hr_tachy_brady_fusion_or", title="fast OR slow heart rate",
+                   task="One heart-rate sensor, two heads on the shared port (too fast, too slow) -> OR: any "
+                        "rate alarm.",
+                   signal=HR_SIGNAL,
+                   heads={"tachy": ({**pa, "in_spec": spec}, {"format": "intnn", "args": {"name": "tachy"}}, Xh_te,
+                                    {"y": intnn_forward(pa, Xh_te)[0]}),
+                          "brady": ({**pb, "in_spec": spec}, {"format": "intnn", "args": {"name": "brady"}}, Xh_te,
+                                    {"y": intnn_forward(pb, Xh_te)[0]})},
+                   fusion=[{"name": "any_alarm", "op": "or", "inputs": ["tachy_y", "brady_y"]}], shared=True,
+                   model_size="heads: intnn ternary 8 -> 8 -> 1 (fast) and 8 -> 6 -> 1 (slow) on one port",
+                   labels={"any_alarm": (ev_te2 > 0).astype(np.int64), "tachy_y": (ev_te2 == 1).astype(np.int64),
+                           "brady_y": (ev_te2 == 2).astype(np.int64)}, classes2=bin2,
+                   note="Heads: two intnn ternary nets reading the same 8 x 4-bit signed port (shared_inputs=true).")
+
+    # 8. multi-sensor fusion alarm: 2-of-3 vote over heart rate, respiration (intnn) and SpO2 (TreeLUT)
+    D = deterioration_windows(21)
+    heads = {}
+    for h, seed in (("hr", 21), ("resp", 22)):
+        (X_tr, X_te), (y_tr, _) = split(D[h]), split(D["shows"][h])
+        p, _ = train_intnn(X_tr, y_tr, hidden=[6], wtype="ternary", n_cls=2, seed=seed)
+        heads[h] = ({**p, "in_spec": {"lanes": 4, "bits": 5, "signed": True}}, {"format": "intnn", "args": {"name": h}},
+                    X_te, {"y": intnn_forward(p, X_te)[0]})
+    heads["spo2"] = (mj_s, {"format": "xgboost_json", "args": {"w_feature": 4, "w_tree": 3, "name": "spo2"},
+                            "fallback": {"format": "chipir", "model": ir_s, "args": {"name": "spo2"}}},
+                     split(D["spo2"])[1], {"y": dec_s, "scores": s_s})
+    y_te = split(D["y"])[1]
+    fusion_example("multi_sensor_fusion_kofn", title="multi-sensor fusion alarm",
+                   task="Three vital-sign sensors on three ports, mixed model formats -> 2-of-3 vote "
+                        "deterioration alarm.",
+                   signal=DET_SIGNAL, heads=heads,
+                   fusion=[{"name": "alarm", "op": "kofn", "k": 2, "inputs": ["hr_y", "resp_y", "spo2_y"]}],
+                   shared=False,
+                   model_size="heads: intnn ternary 4 -> 6 -> 1 (heart rate, respiration; 5-bit) and XGBoost "
+                              "6 x depth 3 via TreeLUT (SpO2, 4-bit)",
+                   labels={"alarm": y_te, "hr_y": y_te, "resp_y": y_te, "spo2_y": y_te}, classes2=bin2,
+                   note="Heads: heart rate and respiration rate (intnn ternary 4 -> 6 -> 1, 5-bit signed) and SpO2 "
+                        "(XGBoost 6 x depth 3 via TreeLUT, 4 x 4-bit), each on its own port; every head and the "
+                        "vote are scored against the hidden deterioration state.")
 
 
 if __name__ == "__main__":
