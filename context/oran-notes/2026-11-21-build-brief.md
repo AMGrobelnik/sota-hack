@@ -69,45 +69,81 @@ infection (local hot spots, exploratory).
 
 ---
 
-## Case 2: Epilepsy wearable (adults at home)
+## Case 2: Neonatal EEG brain monitor
 
 ### What and why
 
-People with epilepsy undercount their own seizures, so treatment rests on unreliable
-seizure diaries. A behind-the-ear wearable with two to four electrodes is discreet enough
-to wear every day, but it needs a tiny, low-power chip that detects seizures on the
-device. The question a wearable maker needs answered before building: **with only these
-electrodes, how small can the chip be, and what does it cost in missed seizures?**
+Babies in neonatal intensive care, especially those with brain injury from lack of oxygen
+around birth (hypoxic-ischaemic encephalopathy, HIE), need their brain activity watched
+continuously. Full EEG needs an expert to read it, and experts are not there around the
+clock. Units fall back on aEEG, a simplified one- or two-channel bedside trend that misses
+many seizures (Cochrane: sensitivity for individual seizures 0 to 86% across 13 studies,
+low certainty). Many neonatal seizures have no visible signs and are only seen on EEG.
 
-We design the chip; we do not build the wearable.
+The chip reads the EEG continuously at the cot side, from as few electrodes and gates as
+possible, and gives expert-level outputs without an expert in the room.
 
 ### Chip outputs
 
-| Output | From |
-|---|---|
-| Seizure alarm | EEG from the wearable's channels |
-| Signal quality (electrode off, movement) | Same channels |
+| Output | Meaning | Labels from |
+|---|---|---|
+| Seizure alarm | A seizure is happening now | Helsinki dataset, three experts |
+| Brain-injury severity grade | Normal or mild, moderate, severe, inactive background | Cork dataset, two experts with consensus |
+| Signal quality | Electrode off, movement | Derived from the signal |
 
 ### How it works end to end
 
-1. **Data.** Siena Scalp EEG (PhysioNet, CC BY 4.0, 14 adults, expert seizure
-   annotations).
-2. **Wearable channels.** Keep only the electrodes a behind-the-ear device would
-   approximate (temporal channels nearest the ear; exact choice to agree with Oran, and
-   ideally with the wearable company's real electrode layout).
-3. **Channel budget sweep.** Run the search at 1, 2, 4 channels and the full cap, so the
-   result shows what the wearable gives up.
-4. **Batched design search, compile, bit-exact check**, as in Case 1.
-5. **Results.** Split by patient (14 patients, so leave-one-patient-out). Seizures caught
-   per event and false alarms per day, against chip size, one curve per channel budget.
+1. **Data** (both open, CC BY 4.0):
+   - Helsinki neonatal EEG: 79 term babies from a neonatal unit, seizures annotated
+     independently by three experts (Zenodo 10.5281/zenodo.4940267; take the latest
+     version).
+   - Cork neonatal EEG: 53 babies with HIE, 169 hours, each hour graded for background
+     severity by two experts (Zenodo 7477575, about 4.4 GB, EDF or CSV).
+2. **Channel budget.** Run the search at 1, 2 and 4 channels and the full montage. The
+   bedside two-channel layout (Oran to confirm the standard positions) is the key point:
+   can two electrodes plus a tiny chip match the expert reading the full EEG?
+3. **Batched design search.** Thousands of candidate chips trained at once across
+   channels, window length, bits and size; seizure and grade outputs share one front end.
+4. **Compile and verify.** Best designs to gates; bit-exact check on unseen babies.
+5. **Results.** Split by baby. Seizures caught (per event, against expert consensus) and
+   false alarms per hour; grade agreement with the experts; all against chip size, one
+   curve per channel budget.
 
 ### On the slide
 
-"With two behind-the-ear electrodes, the smallest chip that works is N gates and catches
-X% of seizures, against Y% with the full cap." Caveat: hospital electrodes near the ear
-approximate, but are not identical to, a wearable's electrodes.
+"With two electrodes and N gates, the chip catches X% of the seizures three experts
+marked, at Y false alarms per hour, and agrees with expert brain-injury grading Z% of the
+time."
 
 ---
+
+## Benchmark: our environment against a general AI model
+
+Real data is what makes this comparison fair, which is why both demo cases use it.
+
+- **Task:** the same design brief (data, constraints, clinical line) given to (a) our
+  environment and (b) a general frontier model (Claude or ChatGPT) asked to design the
+  chip, with the same time budget.
+- **Measure on the same held-out real patients:** events caught, false alarms per hour,
+  chip size in gates, and whether the design passes the bit-exact check.
+- **Other baselines:** random search at the same budget; one design at a time instead of
+  batched (the speedup); full-precision models (the accuracy ceiling).
+- **Fairness:** same data access, same compute time, same verification; report the
+  setup on the slide.
+
+---
+
+## Other use cases (roadmap slide)
+
+"We demoed these two today because open data exists to show you exactly how it works.
+The same environment covers:"
+
+- Adult behind-the-ear epilepsy wearable: seizures and sleep from two to four
+  electrodes (Siena Scalp EEG, Sleep-EDF); seizure-risk forecasting from sleep is a
+  research direction.
+- Necrotising enterocolitis and skin infection from the incubator thermal camera.
+- Camera vital signs where raw video never leaves the chip.
+- Breath and olfaction sensor arrays.
 
 ## What the dashboard should show (Oran)
 
