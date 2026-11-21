@@ -28,6 +28,18 @@ EXAMPLES = {
     "estimate_batch": {"designs": ["<design_id>", "<design_id>"], "keep": 5},
     "chip_report": {"design_id": "cdaea5efb328"},
     "estimate_cost": {"design_id": "cdaea5efb328"},
+    "layout": {"design_id": "cdaea5efb328", "pdk": "sky130", "clock_period_ns": 20},
+    "timing_power": {"design_id": "cdaea5efb328", "pdk": "sky130"},
+    "bitstream": {"design_id": "cdaea5efb328"},
+    "tt_package": {"design_id": "cdaea5efb328", "harden": False},
+    "prove_sequential": {"design_id": "cdaea5efb328", "timeout": 300},
+    "verification_level": {"design_id": "cdaea5efb328"},
+    "gate_activity": {"design_id": "cdaea5efb328", "n": 2000, "vcd": True},
+    "compare_hw_baseline": {"design_id": "cdaea5efb328", "task": "af_vs_normal", "dataset": "AFDB", "protocol": "record-level, per paper"},
+    "submit_verilog": {"verilog": "module m(input [3:0] x, output [4:0] y); assign y = x + x; endmodule", "top": "m",
+                       "port_spec": {"inputs": [{"name": "x", "lanes": 1, "bits": 4, "signed": False}],
+                                     "outputs": [{"name": "y", "lanes": 1, "bits": 5, "signed": False}]},
+                       "reference_ir": "<chipir/1 doc computing x + x>"},
 }
 
 

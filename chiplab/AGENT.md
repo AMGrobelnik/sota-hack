@@ -259,10 +259,11 @@ chiplab simulate --json '{"design_id": "cdaea5efb328", "inputs": "random", "n": 
 
 Verification level 2: prove the gate netlist equals the model for every possible input (ABC equivalence check against an independent golden model of the IR; falls back to proving synthesis if inconclusive).
 
-- Python: `lab.prove_equivalence(design_id: str, timeout: int = 600) -> dict`
-- Lane: cpu; cached: False
+- Python: `lab.prove_equivalence(design_id: str, timeout: int = 600, golden: bool = False) -> dict`
+- Lane: cpu; cached: True
   - `design_id`: str
   - `timeout`: int seconds per proof attempt (600)
+  - `golden`: bool — also try the proof against the independent golden model (small chips; slow on large ones)
 
 <details><summary>JSON schema</summary>
 
@@ -276,6 +277,10 @@ Verification level 2: prove the gate netlist equals the model for every possible
   "timeout": {
    "type": "integer",
    "default": 600
+  },
+  "golden": {
+   "type": "boolean",
+   "default": false
   },
   "run_id": {
    "type": "string"
@@ -308,7 +313,7 @@ chiplab prove-equivalence --json '{"design_id": "cdaea5efb328"}'
 Map a design onto a real process's standard cells: area in µm², gate-equivalents (area / NAND2), cell counts and an estimate of Tiny Tapeout tiles.
 
 - Python: `lab.map_to_process(design_id: str, pdk: str = sky130) -> dict`
-- Lane: cpu; cached: False
+- Lane: cpu; cached: True
   - `design_id`: str
   - `pdk`: str — sky130|gf180|ihp
 
@@ -699,6 +704,11 @@ Compare a design with published hardware from the lab's registry. Only entries w
 ```
 </details>
 
+Example:
+```bash
+chiplab compare-hw-baseline --json '{"design_id": "cdaea5efb328", "task": "af_vs_normal", "dataset": "AFDB", "protocol": "record-level, per paper"}'
+```
+
 ### `gate-activity`
 
 Gate activity as raw numbers: run the scientist's input sequence (or random vectors) through the gate netlist and return, per net, how often it switches (toggle rate) and how often it is 1. Optionally writes a VCD of the ports. Data for power estimates and for whoever draws the 'chip lighting up' view.
@@ -760,6 +770,11 @@ Gate activity as raw numbers: run the scientist's input sequence (or random vect
 }
 ```
 </details>
+
+Example:
+```bash
+chiplab gate-activity --json '{"design_id": "cdaea5efb328", "n": 2000, "vcd": true}'
+```
 
 ### `chip-report`
 
@@ -876,6 +891,354 @@ Submit hand- or agent-written Verilog safely. It is screened (no system tasks or
 }
 ```
 </details>
+
+Example:
+```bash
+chiplab submit-verilog --json '{"verilog": "module m(input [3:0] x, output [4:0] y); assign y = x + x; endmodule", "top": "m", "port_spec": {"inputs": [{"name": "x", "lanes": 1, "bits": 4, "signed": false}], "outputs": [{"name": "y", "lanes": 1, "bits": 5, "signed": false}]}, "reference_ir": "<chipir/1 doc computing x + x>"}'
+```
+
+### `layout`
+
+Place and route the chip with LibreLane (Docker): real cell area, die area, timing slack against a clock, power (vectorless, or from an activity VCD), GDS and the KLayout image. Validated on sky130; gf180 and ihp use the same flow (validated up to configuration).
+
+- Python: `lab.layout(design_id: str, pdk: str = sky130, clock_period_ns: float = 20.0, core_util: int = 40, activity_vcd: str | None = None, timeout: int = 3600) -> dict`
+- Lane: docker; cached: True
+  - `design_id`: str
+  - `pdk`: str — sky130|gf180|ihp (sky130)
+  - `clock_period_ns`: float — decision clock for timing (20)
+  - `core_util`: int — target utilisation % (40)
+  - `activity_vcd`: str — VCD of real activity for power (optional)
+  - `timeout`: int seconds (3600)
+
+<details><summary>JSON schema</summary>
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "design_id": {
+   "type": "string"
+  },
+  "pdk": {
+   "type": "string",
+   "default": "sky130"
+  },
+  "clock_period_ns": {
+   "type": "number",
+   "default": 20.0
+  },
+  "core_util": {
+   "type": "integer",
+   "default": 40
+  },
+  "activity_vcd": {
+   "type": "string",
+   "default": null
+  },
+  "timeout": {
+   "type": "integer",
+   "default": 3600
+  },
+  "run_id": {
+   "type": "string"
+  },
+  "session_id": {
+   "type": "string"
+  },
+  "round": {
+   "type": "integer"
+  },
+  "force": {
+   "type": "boolean",
+   "default": false
+  }
+ },
+ "required": [
+  "design_id"
+ ]
+}
+```
+</details>
+
+Example:
+```bash
+chiplab layout --json '{"design_id": "cdaea5efb328", "pdk": "sky130", "clock_period_ns": 20}'
+```
+
+### `timing-power`
+
+Timing and power of the laid-out chip (same LibreLane run as layout; cached, so calling both costs one run).
+
+- Python: `lab.timing_power(design_id: str, pdk: str = sky130, clock_period_ns: float = 20.0, activity_vcd: str | None = None) -> dict`
+- Lane: docker; cached: True
+  - `design_id`: str
+  - `pdk`: str — sky130|gf180|ihp (sky130)
+  - `clock_period_ns`: float (20)
+  - `activity_vcd`: str — optional VCD for activity-based power
+
+<details><summary>JSON schema</summary>
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "design_id": {
+   "type": "string"
+  },
+  "pdk": {
+   "type": "string",
+   "default": "sky130"
+  },
+  "clock_period_ns": {
+   "type": "number",
+   "default": 20.0
+  },
+  "activity_vcd": {
+   "type": "string",
+   "default": null
+  },
+  "run_id": {
+   "type": "string"
+  },
+  "session_id": {
+   "type": "string"
+  },
+  "round": {
+   "type": "integer"
+  },
+  "force": {
+   "type": "boolean",
+   "default": false
+  }
+ },
+ "required": [
+  "design_id"
+ ]
+}
+```
+</details>
+
+Example:
+```bash
+chiplab timing-power --json '{"design_id": "cdaea5efb328", "pdk": "sky130"}'
+```
+
+### `bitstream`
+
+iCE40UP5K bitstream (UPduino class board): the streaming wrapper plus a board top (clk, rst_n, ui_in, uo_out on pins), synthesised, placed and routed; LUTs, pins, maximum clock. Pass a .pcf for a specific board's pins.
+
+- Python: `lab.bitstream(design_id: str, pcf: str | None = None, freq_mhz: float = 12.0) -> dict`
+- Lane: cpu; cached: True
+  - `design_id`: str
+  - `pcf`: str — pin constraints file (optional; unconstrained otherwise)
+  - `freq_mhz`: float (12)
+
+<details><summary>JSON schema</summary>
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "design_id": {
+   "type": "string"
+  },
+  "pcf": {
+   "type": "string",
+   "default": null
+  },
+  "freq_mhz": {
+   "type": "number",
+   "default": 12.0
+  },
+  "run_id": {
+   "type": "string"
+  },
+  "session_id": {
+   "type": "string"
+  },
+  "round": {
+   "type": "integer"
+  },
+  "force": {
+   "type": "boolean",
+   "default": false
+  }
+ },
+ "required": [
+  "design_id"
+ ]
+}
+```
+</details>
+
+Example:
+```bash
+chiplab bitstream --json '{"design_id": "cdaea5efb328"}'
+```
+
+### `tt-package`
+
+Tiny Tapeout project for the chip: streaming top tt_um_chipin_<id>, info.yaml, docs, a cocotb test with vectors from the integer model, Tiny Tapeout user config. harden=true also builds the GDS locally (Docker) and runs the gate-level test (verification level 4); otherwise commit the folder and run the tt-gds workflow.
+
+- Python: `lab.tt_package(design_id: str, harden: bool = False, tiles: str = auto, pdk: str = sky130A, vectors: int = 64, clock_hz: int = 25000000, title: str | None = None) -> dict`
+- Lane: docker; cached: True
+  - `design_id`: str
+  - `harden`: bool (false)
+  - `tiles`: str — auto|1x1|1x2|2x2|... (auto)
+  - `pdk`: str — sky130A|gf180mcuD|ihp-sg13g2
+  - `vectors`: int — test vectors from the integer model (64)
+  - `clock_hz`: int (25000000)
+  - `title`: str (optional)
+
+<details><summary>JSON schema</summary>
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "design_id": {
+   "type": "string"
+  },
+  "harden": {
+   "type": "boolean",
+   "default": false
+  },
+  "tiles": {
+   "type": "string",
+   "default": "auto"
+  },
+  "pdk": {
+   "type": "string",
+   "default": "sky130A"
+  },
+  "vectors": {
+   "type": "integer",
+   "default": 64
+  },
+  "clock_hz": {
+   "type": "integer",
+   "default": 25000000
+  },
+  "title": {
+   "type": "string",
+   "default": null
+  },
+  "run_id": {
+   "type": "string"
+  },
+  "session_id": {
+   "type": "string"
+  },
+  "round": {
+   "type": "integer"
+  },
+  "force": {
+   "type": "boolean",
+   "default": false
+  }
+ },
+ "required": [
+  "design_id"
+ ]
+}
+```
+</details>
+
+Example:
+```bash
+chiplab tt-package --json '{"design_id": "cdaea5efb328", "harden": false}'
+```
+
+### `prove-sequential`
+
+Sequential equivalence (eqy) of the streaming wrapper against its synthesised netlist: verification level 2 for clocked designs. Works on small chips; may time out on large ones (reported honestly).
+
+- Python: `lab.prove_sequential(design_id: str, timeout: int = 600) -> dict`
+- Lane: cpu; cached: True
+  - `design_id`: str
+  - `timeout`: int seconds (600)
+
+<details><summary>JSON schema</summary>
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "design_id": {
+   "type": "string"
+  },
+  "timeout": {
+   "type": "integer",
+   "default": 600
+  },
+  "run_id": {
+   "type": "string"
+  },
+  "session_id": {
+   "type": "string"
+  },
+  "round": {
+   "type": "integer"
+  },
+  "force": {
+   "type": "boolean",
+   "default": false
+  }
+ },
+ "required": [
+  "design_id"
+ ]
+}
+```
+</details>
+
+Example:
+```bash
+chiplab prove-sequential --json '{"design_id": "cdaea5efb328", "timeout": 300}'
+```
+
+### `verification-level`
+
+The chip's verification level (1 bit-exact, 2 formal, 3 streaming RTL sim + lint, 4 TT gate-level test, 5 hardware) with the evidence behind it and what to run next.
+
+- Python: `lab.verification_level(design_id: str) -> dict`
+- Lane: inline; cached: False
+  - `design_id`: str
+
+<details><summary>JSON schema</summary>
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "design_id": {
+   "type": "string"
+  },
+  "run_id": {
+   "type": "string"
+  },
+  "session_id": {
+   "type": "string"
+  },
+  "round": {
+   "type": "integer"
+  },
+  "force": {
+   "type": "boolean",
+   "default": false
+  }
+ },
+ "required": [
+  "design_id"
+ ]
+}
+```
+</details>
+
+Example:
+```bash
+chiplab verification-level --json '{"design_id": "cdaea5efb328"}'
+```
 
 ### `submit-job`
 
