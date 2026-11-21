@@ -221,6 +221,68 @@ Against the first pass (24 examples on 021f68d, 23 passed):
   is not addressed in the README (not re-tested here).
 - Worse: nothing observed.
 
+## End-to-end prep
+
+Definition used: none of the task list, the new AGENT.md or the lab's docs on b77cc76/f0c296c defines
+"end-to-end prep", "backend stub run" or "default-path install". The readings below come from the brief this
+package was given, and f0c296c's own integration points (the ChipIn `./progress` bridge,
+`chiplab doctor --agent-env`) were used where they apply. Raw outputs are in `e2e/`.
+
+Default-path install, proven under a throwaway home (not the real one: the Mac owner's rule forbids new
+folders in the real home directory; installing there awaits the Mac owner's yes):
+
+- Command: `scripts/install.sh` with no flags, from this worktree's `chiplab/`, under `env -i` with exactly
+  `HOME=~/projects/sota-hack/.worktrees/_m3/fakehome`, `PATH` (the session's PATH, unchanged),
+  `DOCKER_HOST` (colima's socket) and `UV_CACHE_DIR` (the real uv cache, install step only). No `CHIPLAB_*`
+  and no `PDK_ROOT`. Through `memgate run --need-gb 16` and a 3600 s limit.
+- Result: exit 0, ends with `READY`, 129.9 s wall clock (one run, line stamps in
+  `e2e/defaultpath-install-steps.txt`): uv 2.9 s, Python env 1.4 s (cached), OSS CAD Suite 28.0 s (520 MB
+  download; the pinned sha256 matched, as no checksum note or mismatch was printed), PDKs 79.3 s (three kits
+  downloaded fresh), Docker image 0.6 s (already in colima, which had just been resized to 8 CPUs and
+  16 GiB), Tiny Tapeout tools 1.8 s, doctor 15.7 s.
+- It wrote `<home>/.chiplab/`, `<home>/.config/chiplab/config.json` (absolute paths, `docker_host`) and the
+  launcher `<home>/.local/bin/chiplab`, and printed "add ~/.local/bin to PATH". macOS also created
+  `<home>/Library/Caches` and `Library/Logs`.
+- `env -i HOME=<fakehome> PATH=$PATH chiplab doctor` as written: exit 127, `chiplab` not found, because the
+  launcher folder is not on the session's PATH. With `PATH=<fakehome>/.local/bin:$PATH` (what the install's
+  note asks for) and nothing else, not even `DOCKER_HOST`: exit 0, ok true, missing required none, missing
+  optional `python:mcp` only; Docker found through the config file; all three kits and the TT tools present
+  (`e2e/p1-doctor-fakehome.json`). `chiplab doctor --agent-env` under the same: exit 0, ok true, launcher found
+  (`e2e/p1-doctor-fakehome-agentenv.json`).
+
+The owner's literal command against the real home, read-only:
+
+- `env -i HOME=~ PATH=$PATH chiplab doctor`: exit 127, `chiplab` not found (nothing is installed in the real
+  home, so there is no launcher). Reading the code first showed doctor creates only a `.doctor` folder in the
+  run folder (inside the checkout) and removes it, so it was safe to run.
+- Same with the worktree's `.venv/bin/chiplab` called by path: exit 1, ok false; missing required yosys,
+  yosys-abc, iverilog, vvp, verilator, pdk:sky130; it points at `~/.chiplab/pdk` and `~/.chiplab/tt`
+  (`e2e/p1-doctor-realhome-venv.json`). Note: the JSON says `status: ok` with `ok: false` (exit 1).
+- Afterwards `ls -d ~/.chiplab ~/.config/chiplab ~/.local/bin/chiplab`: none exists. Nothing was created.
+
+Backend stub run and the lab from its environment:
+
+- Backend: `~/projects/sota-hack/.worktrees/backend-providers/backend`, used read-only (its git status was
+  clean before and after). The command is `--backend stub`, not `--agent stub` (`--agent` belongs to
+  `serve`). Run: `chipin-backend run --config <e2e.yaml> --backend stub --mode local --no-summary`, with an
+  overlay config that only moves `runs_dir` and `log_dir` to `_m3/e2e/`. Result: run
+  20261121-214514-97385c succeeded, the stub's reply, cost $0, 0 model calls (`e2e/stub-run.json`).
+- Lab from that run: in the run's `workspace/`, with the environment built by the backend's own
+  `build_agent_env` (it kept only HOME, PATH, LANG and its two forced names; the CHIPLAB_* and DOCKER_HOST
+  values passed in were stripped), HOME the throwaway home and its `.local/bin` on PATH. The ChipIn
+  `./progress` helper was written into the workspace with the backend's `write_helper`, as its API server
+  does. Then the quick start on the lab's only fixture: `ingest-model` (spike_best.json), `synthesize`,
+  `simulate` (100000 random vectors). All three rc 0, status ok, bit_exact true; 0.5 s, 0.6 s, 1.4 s
+  (`e2e/p1-e2e-lab.json`).
+- The bridge worked: the lab found the helper and wrote 13 lines into the run's `progress.jsonl` (status
+  lines, metrics gates 2285, depth 51, transistors 17380, vectors_checked 100000, mismatches 0, and four
+  artifacts copied into `workspace/chips/765fa47586bd/`).
+- What is NOT connected: the stub agent did not call the lab; the lab was called by this package's script
+  inside the finished run's workspace. The backend's `run` command does not install the helper or read
+  `progress.jsonl`, so these lines did not reach the run's `events.jsonl`; only the API server (`serve`)
+  tails that file, and `serve` was not started here. So: both pieces work on this Mac and the lab reports
+  through the backend's helper format; an agent-driven run that calls the lab has not been run.
+
 ## Files
 
 - `doctor.json`, `doctor_full.json`, `doctor_with_docker.json`, `ingest.json`, `synth.json`: raw command output.
