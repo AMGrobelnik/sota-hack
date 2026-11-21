@@ -46,8 +46,9 @@ with the clinical line marked.
 
 ## Status
 
-Nothing is built yet. A feasibility test of the whole chain is running
-on Adrian's Mac. The checked evidence will be in `docs/evidence.md`.
+Feasibility test done on Adrian's Mac (Sat 21 Nov): the whole chain runs. 256 tiny candidates train in one batch at about 1,600 per minute, about 59 times the one-at-a-time rate on the same GPU and about 29 times the one-at-a-time rate on the CPU. One small model was compiled to 2,330 gates and gives the same answer as the model on all 3,880 test windows. Its accuracy is still poor (F1 0.68 against 0.88 for the full-precision reference), and the best larger model did not finish synthesis in 11 minutes. Details and rerun commands: `spike/README.md`.
+
+The checked evidence will be in `docs/evidence.md`.
 
 ## Layout
 
