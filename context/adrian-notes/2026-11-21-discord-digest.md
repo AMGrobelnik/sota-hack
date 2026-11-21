@@ -140,5 +140,9 @@ From introductions and general, newest first:
   messages on the server, pins are unlikely but unverified.
 - The server's Events tab (scheduled events): not opened, same reason.
 - Images and attachments were not opened (one coffee photo in general, Sat 09:48).
+
+## Questions in the channel, not yet answered
+
 - Sat 17:10, general channel: a participant wrote that an organiser had mentioned a submission process for projects, and asked where and how to submit (repo link, zip or slides) and what the deadline is. No organiser answer yet at 17:13.
 - Sat 17:12, general channel: a participant asked how to get Anthropic credits. No answer yet at 17:13.
+- Sat 18:52, general channel: a participant wrote that the organisers are waiting on Hugging Face for the GPU credits and asked when they might come through. No organiser answer yet at 19:20.
