@@ -14,9 +14,12 @@ from chipmonk_backend.api.server import HOST, create_app, new_token, serve
 from chipmonk_backend.config import BackendConfig
 
 
-def add_serve_parser(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
-    """Register ``serve`` on the main command's subparsers."""
-    serve_p = sub.add_parser("serve", help="serve the local API for the ChipIn dashboards")
+def add_serve_parser(
+    sub: argparse._SubParsersAction,  # type: ignore[type-arg]
+    common: argparse.ArgumentParser,
+) -> None:
+    """Register ``serve``; ``common`` adds ``--config`` and ``--env-file``."""
+    serve_p = sub.add_parser("serve", parents=[common], help="serve the local API for the ChipIn dashboards")
     serve_p.add_argument("--port", type=int, default=None, help="default: api.yaml port (8797)")
     serve_p.add_argument("--frontend", type=Path, default=None, help="static folder to serve at /")
     serve_p.add_argument(

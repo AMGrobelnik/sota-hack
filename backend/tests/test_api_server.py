@@ -22,7 +22,7 @@ from chipmonk_backend.api.server import TOKEN_HEADER, create_app, serve
 from chipmonk_backend.api.translate import Translator, tool_summary
 from chipmonk_backend.cli import _parser
 from chipmonk_backend.config import BackendConfig
-from chipmonk_backend.runs import JsonlEventSink
+from chipmonk_backend.runs import JsonlEventSink, RunDir, RunRecord
 
 TOKEN = "test-session-token"
 AUTH = {TOKEN_HEADER: TOKEN}
@@ -185,6 +185,7 @@ def test_serve_command_defaults() -> None:
         None,
     )
     assert load_api_config().port == 8797
+    assert _parser().parse_args(["serve", "--config", "x.yaml"]).config == Path("x.yaml")
 
 
 # ---- run lifecycle ----
@@ -223,7 +224,9 @@ async def test_run_lifecycle_with_the_stub(client: TestClient, config: BackendCo
     assert (run_dir / artifacts[0]["path"]).is_file()
     on_disk = [json.loads(line) for line in (run_dir / "events.jsonl").read_text().splitlines()]
     assert on_disk == events
-    assert json.loads((run_dir / "run.json").read_text())["run_mode"] == "flex"
+    run_record = json.loads((run_dir / "run.json").read_text())
+    assert (run_record["run_mode"], run_record["status"]) == ("flex", "succeeded")
+    assert run_record["config"] and run_record["duration_s"] is not None and run_record["result"]
     assert "seizures" in (run_dir / "workspace" / "brief.md").read_text()
 
     detail = await (await client.get(f"/api/runs/{run_id}", headers=AUTH)).json()
@@ -290,7 +293,7 @@ async def test_files_and_answers_reach_the_brief(client: TestClient, config: Bac
 # ---- stop and messages ----
 
 
-async def test_stop_a_running_run(slow_client: TestClient) -> None:
+async def test_stop_a_running_run(slow_client: TestClient, config: BackendConfig) -> None:
     run_id = await _start(slow_client)
     resp = await slow_client.get(f"/api/runs/{run_id}/events", params={"token": TOKEN})
     await _read_stream(resp, until="stage")
@@ -300,6 +303,7 @@ async def test_stop_a_running_run(slow_client: TestClient) -> None:
     assert rest[-1]["type"] == "run.finished" and rest[-1]["status"] == "stopped"
     detail = await (await slow_client.get(f"/api/runs/{run_id}", headers=AUTH)).json()
     assert detail["status"] == "stopped"
+    assert json.loads((config.resolved_runs_dir() / run_id / "run.json").read_text())["status"] == "stopped"
     again = await slow_client.post(f"/api/runs/{run_id}/stop", headers=AUTH)
     assert again.status == 202
 
@@ -455,6 +459,7 @@ async def test_a_run_left_running_is_closed_on_load(config: BackendConfig) -> No
         "started_at": "2026-01-01T00:00:00+00:00",
     }
     (folder / API_RECORD_FILE).write_text(json.dumps(record))
+    RunDir(folder).write_record(RunRecord(run_id=folder.name, run_mode="flex", agent={}, status="running"))
     (folder / "events.jsonl").write_text(
         json.dumps({"seq": 1, "type": "run.started", "run_id": folder.name}) + "\n"
     )
@@ -464,3 +469,4 @@ async def test_a_run_left_running_is_closed_on_load(config: BackendConfig) -> No
     assert item.record["status"] == "failed"
     assert [e["type"] for e in item.log.since(1)] == ["run.started", "error", "run.finished"]
     assert item.log.since(3)[0]["seq"] == 3
+    assert RunDir(folder).read_record().status == "failed"

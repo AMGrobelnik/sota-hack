@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
@@ -36,14 +35,13 @@ from chipmonk_backend.api.scripted import NAME as SCRIPTED
 from chipmonk_backend.api.scripted import STEP_ENV, register
 from chipmonk_backend.api.translate import Translator, clip
 from chipmonk_backend.compute.base import Runner
-from chipmonk_backend.compute.factory import runner_for
 from chipmonk_backend.config import BackendConfig, RunMode
-from chipmonk_backend.runs import JsonlEventSink, RunDir, RunRecord, new_run_id
+from chipmonk_backend.orchestrate import run_agent
+from chipmonk_backend.runs import JsonlEventSink, RunDir, is_safe_run_id, new_run_id
 
 API_RECORD_FILE = "api.json"
 RAW_EVENTS_FILE = "agent_events.jsonl"
 INSTRUCTIONS_PATH = Path(__file__).with_name("instructions.md")
-RUN_ID_RE = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{6}$")
 
 ApiAgent = Literal["claude", "stub"]
 ApiRunner = Literal["local"]
@@ -167,12 +165,13 @@ class RunManager:
                 item.log.append("run.finished", status="failed", summary=message)
                 record.update(status="failed", finished_at=utc_now(), summary=message)
                 item.save()
+                _close_record(item.run, message)
             self.runs[item.id] = item
         logger.info("indexed {} earlier runs in {}", len(self.runs), self.runs_dir)
 
     def get(self, run_id: str) -> ApiRun:
         """The run ``run_id``; ``RequestError(404)`` if unknown."""
-        item = self.runs.get(run_id) if RUN_ID_RE.match(run_id) else None
+        item = self.runs.get(run_id) if is_safe_run_id(run_id) else None
         if item is None:
             raise RequestError(f"no run {run_id!r}", status=404)
         return item
@@ -228,21 +227,29 @@ class RunManager:
         return item
 
     async def _drive(self, item: ApiRun, spec: AgentSpec, translator: Translator) -> None:
-        """Run the agent; always ends the event log with ``run.finished``."""
-        mode = RUNNER_MODES[self.runner]
-        record = RunRecord(run_id=item.id, run_mode=mode, agent=spec.to_dict(), status="running")
-        item.run.write_record(record)
+        """Run the agent through :func:`run_agent`; always ends the event log with ``run.finished``.
+
+        ``run_agent`` owns ``run.json`` (status, timings, costs, ``stopped`` on
+        cancellation) and closes the runner; this adds the dashboard's view.
+        """
         tailer = ProgressTailer(item.run.path / PROGRESS_FILE, item.log, item.run.path, item.run.workspace)
         follow = asyncio.create_task(tailer.follow(self.api.progress_poll_s))
         status: ApiStatus = "failed"
         summary: str | None = None
         result: AgentResult | None = None
+
+        def keep_runner(runner: Runner) -> None:
+            item.runner = runner
+
         try:
-            item.runner = runner_for(self.config, mode)
             if item.stopping:
                 raise asyncio.CancelledError
-            item.inner = asyncio.create_task(item.runner.run(spec, item.run))
-            result = await item.inner
+            item.inner = asyncio.create_task(
+                run_agent(
+                    spec, self.config, run_mode=RUNNER_MODES[self.runner], run=item.run, on_runner=keep_runner
+                )
+            )
+            _, result = await item.inner
             status = "failed" if result.failed else "succeeded"
             # The agent's last message, not final_text: claude_cli joins every turn's text there.
             summary = clip(result.error or translator.last_text or result.final_text, 600) or None
@@ -259,8 +266,7 @@ class RunManager:
         finally:
             follow.cancel()
             tailer.drain()
-            if item.runner is not None:
-                await item.runner.close()
+            item.runner = None
             for rel in result.files if result else []:
                 if rel.lower() in {"report.md", "report.html"}:
                     self._artifact(tailer, rel, "report")
@@ -268,10 +274,6 @@ class RunManager:
             item.log.append("run.finished", status=status, summary=summary)
             item.record.update(status=status, finished_at=utc_now(), summary=summary, cost=cost)
             item.save()
-            record.status = "succeeded" if status == "succeeded" else "failed"
-            record.result = result.to_dict() if result else None
-            record.error = None if status == "succeeded" else summary
-            item.run.write_record(record)
             logger.info("run {} {}", item.id, status)
 
     @staticmethod
@@ -320,6 +322,15 @@ class RunManager:
             await asyncio.gather(*(i.task for i in live if i.task), return_exceptions=True)
         for item in self.runs.values():
             item.log.wake()
+
+
+def _close_record(run: RunDir, message: str) -> None:
+    """Mark a ``run.json`` left ``running`` by a dead server as failed."""
+    try:
+        if run.record_path.is_file() and run.read_record().status == "running":
+            run.update_record(status="failed", error=message, finished_at=utc_now())
+    except (OSError, ValueError, TypeError) as exc:
+        logger.warning("run {}: could not close {}: {}", run.run_id, run.record_path.name, exc)
 
 
 def _validate(

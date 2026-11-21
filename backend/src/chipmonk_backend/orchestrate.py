@@ -12,12 +12,14 @@ import shlex
 import sys
 import time
 import weakref
+from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
 
 from loguru import logger
 
 from chipmonk_backend.agents.types import AgentResult, AgentSpec, utc_now
+from chipmonk_backend.compute.base import Runner
 from chipmonk_backend.compute.factory import runner_for
 from chipmonk_backend.config import BackendConfig, ComputeTier, RunMode
 from chipmonk_backend.runs import RunDir, RunRecord
@@ -53,8 +55,15 @@ async def run_agent(
     run_mode: RunMode | None = None,
     tier: ComputeTier | None = None,
     run_id: str | None = None,
+    run: RunDir | None = None,
+    on_runner: Callable[[Runner], None] | None = None,
 ) -> tuple[RunDir, AgentResult]:
     """Run ``spec`` once and return its run folder and result.
+
+    ``run`` is a run folder the caller already made (the API server writes its
+    own files there first); otherwise one is created as ``run_id``.
+    ``on_runner`` is handed the runner before the agent starts, for callers
+    that pass messages to it.
 
     ``run.json`` moves ``running`` -> ``succeeded`` | ``failed`` | ``stopped``
     and ends with the resolved config, timings, the costs known and the
@@ -70,14 +79,21 @@ async def run_agent(
     mode = run_mode or config.compute.run_mode
     chosen_tier = tier or config.compute.tier
     async with _agent_slots(config.compute.max_concurrent_agents):
-        return await _run_agent(spec, config, mode=mode, tier=chosen_tier, run_id=run_id)
+        if run is None:
+            run = RunDir.create(config.resolved_runs_dir(), run_id)
+        return await _run_agent(spec, config, run, mode=mode, tier=chosen_tier, on_runner=on_runner)
 
 
 async def _run_agent(
-    spec: AgentSpec, config: BackendConfig, *, mode: RunMode, tier: ComputeTier, run_id: str | None
+    spec: AgentSpec,
+    config: BackendConfig,
+    run: RunDir,
+    *,
+    mode: RunMode,
+    tier: ComputeTier,
+    on_runner: Callable[[Runner], None] | None,
 ) -> tuple[RunDir, AgentResult]:
     """:func:`run_agent` once a slot is held."""
-    run = RunDir.create(config.resolved_runs_dir(), run_id)
     if config.agents.openrouter_tool:
         if mode == "on_demand":
             logger.warning("openrouter_tool is for local and flex runs; not offered on a pod")
@@ -95,7 +111,13 @@ async def _run_agent(
     )
     logger.info("run {} started: agent={} mode={} tier={}", run.run_id, spec.name, mode, tier)
     started = time.monotonic()
-    runner = runner_for(config, mode)
+    try:
+        runner = runner_for(config, mode)
+    except Exception as exc:
+        _finish(run, started, status="failed", error=f"{type(exc).__name__}: {exc}")
+        raise
+    if on_runner is not None:
+        on_runner(runner)
     try:
         try:
             result = await runner.run(spec, run, tier=tier)

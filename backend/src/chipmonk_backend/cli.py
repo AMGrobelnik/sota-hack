@@ -77,7 +77,7 @@ def _parser() -> argparse.ArgumentParser:
     ask.add_argument("question")
     ask.add_argument("--model", default=None, help="preset name or OpenRouter model id")
     ask.add_argument("--max-tokens", type=int, default=4096)
-    add_serve_parser(sub)
+    add_serve_parser(sub, common)
     return parser
 
 
