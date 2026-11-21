@@ -40,10 +40,18 @@ def _docker_ok() -> bool:
     return r.returncode == 0
 
 
-def run_isolated(workdir: Path, cmd: list[str], timeout: int = 300) -> tuple[int, str, str]:
-    """Run cmd with workdir mounted (sources read-only under /src, outputs to /out)."""
+class SandboxUnavailable(RuntimeError):
+    pass
+
+
+def run_isolated(workdir: Path, cmd: list[str], timeout: int = 300, allow_host: bool = False) -> tuple[int, str, str]:
+    """Run cmd with workdir mounted (sources read-only under /src, outputs to /out). Without the container this
+    refuses, unless allow_host=True (the caller accepts running unvetted RTL tools on the host)."""
     workdir = workdir.resolve()
     (workdir / "out").mkdir(exist_ok=True)
+    if not _docker_ok() and not allow_host:
+        raise SandboxUnavailable(f"the sandbox container ({config.LIBRELANE_IMAGE}) is not available: start Docker and "
+                                 f"pull the image, or pass allow_host=true to run the checks on this machine without isolation")
     if _docker_ok():
         full = ["docker", "run", "--rm", "--network", "none", "--memory", "2g", "--cpus", "2", "--pids-limit", "256",
                 "--read-only", "--tmpfs", "/tmp:rw,size=256m", "-u", "1000:1000",
@@ -61,21 +69,28 @@ def run_isolated(workdir: Path, cmd: list[str], timeout: int = 300) -> tuple[int
         return 124, f"timed out after {timeout}s", mode
 
 
-def check_verilog(text: str, top: str, workdir: Path, timeout: int = 300) -> dict:
+def check_verilog(text: str, top: str, workdir: Path, timeout: int = 300, allow_host: bool = False) -> dict:
     problems = screen(text)
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", top or ""):
+        problems.append("top must be a plain Verilog identifier")
     if problems:
         return {"accepted": False, "problems": problems}
+    if not text.endswith("\n"):
+        text += "\n"
     (workdir / "src").mkdir(parents=True, exist_ok=True)
     (workdir / "src" / "design.v").write_text(text)
-    rc, lint_out, mode = run_isolated(workdir, ["verilator", "--lint-only", "-Wall", "-Wno-DECLFILENAME", "-Wno-UNUSEDSIGNAL",
-                                                "--top-module", top, "/src/design.v"], timeout)
+    try:
+        rc, lint_out, mode = run_isolated(workdir, ["verilator", "--lint-only", "-Wall", "-Wno-DECLFILENAME", "-Wno-UNUSEDSIGNAL",
+                                                    "-Wno-EOFNEWLINE", "--top-module", top, "/src/design.v"], timeout, allow_host)
+    except SandboxUnavailable as e:
+        return {"accepted": False, "problems": [str(e)], "sandbox": "unavailable"}
     lint = {"ok": rc == 0, "messages": [l for l in lint_out.splitlines() if l.startswith("%")][:20]}
     if rc != 0 and not any("%Warning" in m for m in lint["messages"]):
         return {"accepted": False, "problems": ["verilator lint failed"], "lint": lint, "sandbox": mode}
     ys = (f"read_verilog /src/design.v; hierarchy -check -top {top}; synth -top {top} -flatten -noabc; "
           f"abc -g AND,NAND,OR,NOR,XOR,XNOR,ANDNOT,ORNOT,MUX -script \"+strash;dc2;map\"; opt_clean -purge; "
           f"write_json /out/net.json; write_verilog -noattr /out/gates.v; tee -q -o /out/stat.json stat -json")
-    rc, syn_out, mode = run_isolated(workdir, ["yosys", "-q", "-p", ys], timeout)
+    rc, syn_out, mode = run_isolated(workdir, ["yosys", "-q", "-p", ys], timeout, allow_host)
     if rc != 0 or not (workdir / "out" / "net.json").exists():
         return {"accepted": False, "problems": ["synthesis failed"], "detail": syn_out[-800:], "lint": lint, "sandbox": mode}
     stat = json.loads((workdir / "out" / "stat.json").read_text())

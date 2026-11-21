@@ -3,6 +3,7 @@ to fix it. Output is one JSON object; `ok` is true when everything the core flow
 from __future__ import annotations
 
 import importlib
+import os
 import platform
 import shutil
 import subprocess
@@ -64,7 +65,9 @@ def run() -> dict:
     if dk:
         info = subprocess.run(["docker", "info", "--format", "{{.ServerVersion}}"], capture_output=True, text=True, timeout=30)
         up = info.returncode == 0
-        add("docker", up, info.stdout.strip() or info.stderr.strip()[:160], "start Docker Desktop / the docker daemon", required=False)
+        add("docker", up, {"server": info.stdout.strip() or info.stderr.strip()[:160], "DOCKER_HOST": os.environ.get("DOCKER_HOST")},
+            "start Docker (Docker Desktop, colima start, or OrbStack); with colima/OrbStack you can also set DOCKER_HOST=unix://<socket>",
+            required=False)
         if up:
             img = subprocess.run(["docker", "image", "inspect", config.LIBRELANE_IMAGE, "--format", "{{.Architecture}}"],
                                  capture_output=True, text=True, timeout=30)
@@ -78,6 +81,10 @@ def run() -> dict:
             add(f"pdk:{pdk}", True, str(liberty(pdk)), required=(pdk == "sky130"))
         except Exception as e:
             add(f"pdk:{pdk}", False, str(e)[:160], f"{INSTALL} (fetches PDKs with ciel into PDK_ROOT)", required=(pdk == "sky130"))
+    if platform.system() == "Darwin":
+        libs = [Path(d) / "libcairo.2.dylib" for d in ("/opt/homebrew/lib", "/usr/local/lib")]
+        found = next((str(l) for l in libs if l.exists()), None)
+        add("macos:cairo", bool(found), found or "libcairo not found", "brew install cairo   (Tiny Tapeout PNG export)", required=False)
     tt = Path(config.TT_TOOLS) / "tt_tool.py"
     add("tinytapeout:tools", tt.exists(), str(tt), f"{INSTALL} (clones tt-support-tools)", required=False)
     try:

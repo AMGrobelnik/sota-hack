@@ -34,7 +34,7 @@ def job_status(job_id: str) -> dict:
 def job_result(job_id: str) -> dict:
     from chiplab.jobs import queue
     s = queue.status(job_id, with_result=True)
-    if s["state"] not in ("done", "failed"):
+    if s["state"] not in ("done", "failed", "timeout"):
         return {"job_id": job_id, "state": s["state"], "ready": False}
     return {"job_id": job_id, "state": s["state"], "ready": True, "result": s.get("result")}
 

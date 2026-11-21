@@ -80,7 +80,8 @@ def main(argv=None) -> int:
         args = json.loads(data) if data else {}
     res = T[cmd]["fn"](**args)
     print(json.dumps(res, indent=1, default=str))
-    return 0 if res.get("status") == "ok" else 1
+    from chiplab.tools import STATUS_RC
+    return STATUS_RC.get(res.get("status"), 1)  # 0 ok, 1 error, 2 a check failed, 3 timeout
 
 
 if __name__ == "__main__":

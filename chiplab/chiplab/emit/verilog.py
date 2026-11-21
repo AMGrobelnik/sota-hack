@@ -50,8 +50,12 @@ def _sw(lo: int, hi: int) -> int:
     return w if s else w + 1
 
 
-def emit(ir: dict, top: str | None = None) -> tuple[str, dict]:
-    """Return (verilog text, port info). Port info lists inputs/outputs with lanes, bits, signed."""
+def emit(ir: dict, top: str | None = None, node_impl=None) -> tuple[str, dict]:
+    """Return (verilog text, port info). Port info lists inputs/outputs with lanes, bits, signed.
+
+    node_impl (optional, default None = the standard emitter, output unchanged): a callable
+    node_impl(node, lanes, widths, ranges) returning None (use the standard code for this node) or
+    (lines, [(ref, width, signed) per lane]) to implement the node another way (see emit/optimized.py)."""
     R = ir_ranges(ir)
     top = top or top_name(ir)
     for p in list(ir["inputs"]) + list(ir["outputs"]):
@@ -84,6 +88,13 @@ def emit(ir: dict, top: str | None = None) -> tuple[str, dict]:
     for nd in ir.get("nodes", []):
         i, op = nd["id"], nd["op"]
         ws = node_lanes(i)
+        if node_impl is not None:
+            got = node_impl(nd, L, ws, R)
+            if got is not None:
+                lines, lanes = got
+                body.extend(lines)
+                L[i] = [_Lane(r, w, sg) for r, w, sg in lanes]
+                continue
         out: list[_Lane] = []
         for j, (w, s) in enumerate(ws):
             ref = f"n_{i}_{j}"
