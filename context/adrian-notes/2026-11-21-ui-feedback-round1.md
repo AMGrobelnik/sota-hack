@@ -41,3 +41,12 @@ Paraphrased from a teammate's spoken walk-through of the round-2 dashboards.
 - Start page: keep the Lite, Pro, Max, Ultra choice and the GPU choice; the use-case choice was not understood.
 - After the prompt the product should ask questions: own dataset, yes or no; if no, look for a public dataset and use it; if none, ask permission to simulate one, state the assumptions and why, and let the clinician confirm or correct them.
 - Asked for: five more dashboard variants using this.
+
+## Waitlist, next iteration (Sat 21 Nov, about 19:10)
+
+From Adrian; to be done together with the next round of landing page variants, not before (more feedback is coming first).
+
+- The site now runs on the domain chipin.space; the waitlist landing page is at /waitlist.
+- Show "N people on the waitlist" on the page, with a made-up number for now.
+- Add a world map of the countries people signed up from, with mock countries for now.
+- Open point: swap the made-up number and countries for the real ones from the store before the page is sent out.
