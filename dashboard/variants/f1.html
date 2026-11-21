@@ -1329,7 +1329,7 @@ function visSentence(run, key) {
   return {
     device: eeg ? 'A prototype of the seizure alarm on a mannequin head: electrodes in a headband, the chip in a pod behind the right ear. Drag to turn it, then step in to the chip.'
       : 'A prototype of the brain-oxygen patch on a newborn-sized mannequin: lights and detectors in the patch, the chip in the small module. Drag to turn it, then step in to the chip.',
-    chip: 'The chip being built. Sensor 1 and Sensor 2 feed it, the fine-tuned AI model decides, and it outputs a prediction.',
+    chip: `${status(run) === 'done' ? 'The final chip' : 'The chip being built'}. Sensor 1 and Sensor 2 feed it, the fine-tuned AI model decides, and it outputs a prediction.`,
     finetune: `Each tile is ${pt === 1 ? 'one candidate model' : `${pt} candidate models`}. A batch is fine-tuned at once, most drop out, and the strongest become ever smaller chips.`,
     signal: eeg ? "The EEG as a neurologist reads it, scrolling as the headband reads it, with the clinician's seizure marks and the chip's flags underneath." : "Brain oxygen as a neonatal nurse reads it, scrolling as the patch reads it, with the alarm line, the clinician's marks and the chip's flags underneath.",
     sensors: eeg ? 'Where the electrodes sit on the head. The ones this chip reads light up.' : "The light sources and detectors on the newborn's forehead patch. The ones this chip reads light up.",
@@ -1357,6 +1357,7 @@ function renderVisual(run, t, ph, best) {
     if (is3) mount3D(key, run, shellKey);
   }
   if (!is3) $('#fig').innerHTML = FIG[key](run, t, ph, best);
+  const vs = $('.vs'), sen = visSentence(run, key); if (vs && vs.textContent !== sen) vs.textContent = sen;
   const sd = $('#side');
   if (sd) { sd.innerHTML = (key === 'chip' ? sideChip : sideDevice)(run, t, ph, best); const fb = $('#ftmine'); if (fb) fb.onclick = e => { e.stopPropagation(); fineTuneDialog(run); }; }
   $('#vfoot').innerHTML = (FOOT[key] || (() => ''))(run, t, ph, best);
@@ -2145,10 +2146,13 @@ function drawSignal() {
     c.strokeStyle = GRID; c.fillStyle = AX; c.lineWidth = 1;
     [40, 60, 80].forEach(v => { c.beginPath(); c.moveTo(L, Y(v)); c.lineTo(W - Rr, Y(v)); c.stroke(); c.fillText(v + '%', 18, Y(v) + 4); });
     c.setLineDash([5, 4]); c.strokeStyle = '#dc2626'; c.beginPath(); c.moveTo(L, Y(50)); c.lineTo(W - Rr, Y(50)); c.stroke(); c.setLineDash([]);
-    c.fillStyle = '#b91c1c'; c.fillText('Alarm line 50%', W - Rr - 100, Y(50) - 6);
     c.strokeStyle = INK; c.lineWidth = 1.7; c.beginPath();
     for (let x = L; x <= W - Rr; x += 1) { const s = s0 + (x - L) / (W - L - Rr) * span; const y = Y(nirsVal(s)); x === L ? c.moveTo(x, y) : c.lineTo(x, y); }
     c.stroke();
+    // alarm label: rightmost spot where the trace stays well above the line, so it never sits on the trace
+    const clear = x => { for (let xx = x - 6; xx <= x + 106; xx += 3) if (nirsVal(s0 + (xx - L) / (W - L - Rr) * span) < 60) return false; return true; };
+    let lx = W - Rr - 100; while (lx > L + 10 && !clear(lx)) lx -= 120;
+    c.fillStyle = '#b91c1c'; c.fillText('Alarm line 50%', lx, Y(50) - 6);
     c.fillStyle = LAB; c.save(); c.translate(10, (top + plotB) / 2 + 40); c.rotate(-Math.PI / 2); c.fillText('Brain oxygen', 0, 0); c.restore();
     c.fillText('Chip', 12, plotB + 21);
     if (!best) { c.fillStyle = AX; c.fillText('No chip yet: flags appear after round 1', L + 4, plotB + 21); }
