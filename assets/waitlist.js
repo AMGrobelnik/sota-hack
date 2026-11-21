@@ -21,8 +21,13 @@
     if (!validCount(n)) return;
     var els = document.querySelectorAll("[data-waitlist-count]");
     for (var i = 0; i < els.length; i++) {
-      els[i].textContent = wording(n);
       var wrap = els[i].closest("[data-waitlist-wrap]");
+      // Nobody yet: keep the count hidden until the first real sign-up.
+      if (n === 0) {
+        if (wrap) wrap.hidden = true;
+        continue;
+      }
+      els[i].textContent = wording(n);
       if (wrap) wrap.hidden = false;
     }
   }
