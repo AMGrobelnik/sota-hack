@@ -1,0 +1,13 @@
+--- a/chiplab/chiplab/tools_hw.py
++++ b/chiplab/chiplab/tools_hw.py
+@@ -93,7 +93,9 @@
+         with tempfile.NamedTemporaryFile(suffix=".json") as f:
+             f.write(raw); f.flush()
+             booster = xgb.XGBClassifier(); booster.load_model(f.name)
+-        ir = from_xgboost(booster, w_feature, w_tree)
++        if booster.n_estimators is None:   # load_model does not restore it; TreeLUT needs the trees per class
++            booster.set_params(n_estimators=booster.get_booster().num_boosted_rounds())
++        ir = from_xgboost(booster, w_feature, w_tree, name=name)
+     elif fmt == "torchlogix":
+         if not (path and trusted):
+             raise ValueError("torchlogix models are pickles: pass a local path and trusted=true")
