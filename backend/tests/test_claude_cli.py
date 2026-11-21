@@ -10,21 +10,21 @@ from typing import Any
 
 import pytest
 
-from chipmonk_backend.agents import AgentEvent, AgentSpec, backend_for
-from chipmonk_backend.agents._claude.background import BackgroundWork
-from chipmonk_backend.agents._claude.config_dir import pretrust, project_slug, revoke_trust
-from chipmonk_backend.agents._claude.cost import TranscriptUsage, cost_from_state, parse_cost_output
-from chipmonk_backend.agents._claude.delivery import (
+from chipin_backend.agents import AgentEvent, AgentSpec, backend_for
+from chipin_backend.agents._claude.background import BackgroundWork
+from chipin_backend.agents._claude.config_dir import pretrust, project_slug, revoke_trust
+from chipin_backend.agents._claude.cost import TranscriptUsage, cost_from_state, parse_cost_output
+from chipin_backend.agents._claude.delivery import (
     PromptNotDeliveredError,
     bracketed_paste,
     check_delivery,
     typeable,
 )
-from chipmonk_backend.agents._claude.screen import DOWN, ENTER, ESCAPE, DialogPilot, submit_held
-from chipmonk_backend.agents.claude_cli import build_argv, transcript_path, translate_record
-from chipmonk_backend.agents.mailbox import InjectMailbox
-from chipmonk_backend.agents.output import STRUCT_OUT_FILENAME, review_output
-from chipmonk_backend.config import BackendConfig, ClaudeCliConfig
+from chipin_backend.agents._claude.screen import DOWN, ENTER, ESCAPE, DialogPilot, submit_held
+from chipin_backend.agents.claude_cli import build_argv, transcript_path, translate_record
+from chipin_backend.agents.mailbox import InjectMailbox
+from chipin_backend.agents.output import STRUCT_OUT_FILENAME, review_output
+from chipin_backend.config import BackendConfig, ClaudeCliConfig
 
 FAKE_CLI = Path(__file__).with_name("fake_claude_cli.py")
 
@@ -239,7 +239,7 @@ def test_pretrust_marks_the_folder_trusted_then_revokes(tmp_path: Path) -> None:
     assert data["projects"][str(tmp_path.resolve())]["hasTrustDialogAccepted"] is True
     # Replaced by rename, never rewritten in place; mode kept; no temp file left.
     assert path.stat().st_ino != inode and path.stat().st_mode & 0o777 == 0o640
-    assert sorted(p.name for p in config_dir.iterdir()) == [".claude.json", ".claude.json.chipmonk.lock"]
+    assert sorted(p.name for p in config_dir.iterdir()) == [".claude.json", ".claude.json.chipin.lock"]
     revoke_trust(grant)
     data = json.loads(path.read_text())
     assert data["projects"] == {"/other": {"hasTrustDialogAccepted": True}} and data["keep"] == 1
@@ -367,7 +367,7 @@ async def test_live_claude_cli_run(config: BackendConfig, tmp_path: Path) -> Non
         pytest.skip("the claude CLI is not installed")
     spec = AgentSpec(
         name="live",
-        prompts=["Create hello.txt containing exactly the line: hello chipmonk. Then say done."],
+        prompts=["Create hello.txt containing exactly the line: hello chipin. Then say done."],
         model="sonnet",
         effort="low",
         output_schema={"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"]},
@@ -378,6 +378,6 @@ async def test_live_claude_cli_run(config: BackendConfig, tmp_path: Path) -> Non
     sink = ListSink()
     result = await backend_for("claude_cli", config.agents).run(spec, sink)
     assert not result.failed, result.error
-    assert (tmp_path / "work" / "hello.txt").read_text().strip() == "hello chipmonk"
+    assert (tmp_path / "work" / "hello.txt").read_text().strip() == "hello chipin"
     assert "tool_call" in sink.kinds()
     assert result.cost_usd > 0

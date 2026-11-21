@@ -13,9 +13,9 @@ from typing import Any
 
 import pytest
 
-from chipmonk_backend.agents import AgentSpec, backend_for
-from chipmonk_backend.agents.openrouter_agent import mcp_servers_for, normalize_model, translate_event
-from chipmonk_backend.config import BackendConfig
+from chipin_backend.agents import AgentSpec, backend_for
+from chipin_backend.agents.openrouter_agent import mcp_servers_for, normalize_model, translate_event
+from chipin_backend.config import BackendConfig
 
 
 @dataclass
@@ -119,7 +119,7 @@ def test_translate_event_kinds() -> None:
 
 async def test_run_without_a_key_is_a_setup_error(config: BackendConfig, tmp_path: Path) -> None:
     pytest.importorskip("openhands.sdk")
-    from chipmonk_backend.llm.keys import MissingKeyError
+    from chipin_backend.llm.keys import MissingKeyError
 
     spec = AgentSpec(name="a", prompts=["hi"], workdir=tmp_path)
     with pytest.raises(MissingKeyError, match="OPENROUTER_API_KEY"):
@@ -145,7 +145,7 @@ async def test_faked_run_never_writes_the_key(
     from openhands.sdk.testing import TestLLM
     from pydantic import SecretStr
 
-    from chipmonk_backend.agents.openrouter_agent import OpenRouterAgentBackend
+    from chipin_backend.agents.openrouter_agent import OpenRouterAgentBackend
 
     def scripted_llm(self: Any, model: str, key: str, *, usage_id: str, fallback: Any = None) -> Any:
         finish = MessageToolCall(
@@ -164,20 +164,20 @@ async def test_faked_run_never_writes_the_key(
     assert result.final_text == "all done"
     leaked = [p for p in workdir.rglob("*") if p.is_file() and FAKE_KEY.encode() in p.read_bytes()]
     assert leaked == []
-    assert not (workdir / ".chipmonk" / "openhands").exists()
+    assert not (workdir / ".chipin" / "openhands").exists()
 
 
 @pytest.mark.live
 async def test_live_openrouter_agent_run(config: BackendConfig, tmp_path: Path) -> None:
     """A real OpenHands run on the configured cheap model (needs the extra and the key)."""
     pytest.importorskip("openhands.sdk")
-    from chipmonk_backend.llm.keys import has_openrouter_key
+    from chipin_backend.llm.keys import has_openrouter_key
 
     if not has_openrouter_key():
         pytest.skip("OPENROUTER_API_KEY is not set")
     spec = AgentSpec(
         name="live",
-        prompts=["Create hello.txt containing exactly the line: hello chipmonk. Then finish."],
+        prompts=["Create hello.txt containing exactly the line: hello chipin. Then finish."],
         output_schema={"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"]},
         expected_files=["hello.txt"],
         workdir=tmp_path / "work",
@@ -185,5 +185,5 @@ async def test_live_openrouter_agent_run(config: BackendConfig, tmp_path: Path) 
     )
     result = await backend_for("openrouter", config.agents).run(spec, _NullSink())
     assert not result.failed, result.error
-    assert (tmp_path / "work" / "hello.txt").read_text().strip() == "hello chipmonk"
+    assert (tmp_path / "work" / "hello.txt").read_text().strip() == "hello chipin"
     assert result.cost_usd > 0

@@ -8,7 +8,7 @@ from collections.abc import Callable
 import httpx
 import pytest
 
-from chipmonk_backend.compute.runpod.api import (
+from chipin_backend.compute.runpod.api import (
     PodSpec,
     RunPodAPI,
     RunPodError,
@@ -21,7 +21,7 @@ Handler = Callable[[httpx.Request], httpx.Response]
 
 RUNNING_POD = {
     "id": "p1",
-    "name": "chipmonk_worker_r1_a_a1",
+    "name": "chipin_worker_r1_a_a1",
     "status": "RUNNING",
     "cost": 0.25,
     "gpu": {"id": "NVIDIA RTX A4000", "count": 1},

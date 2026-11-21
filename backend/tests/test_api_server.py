@@ -15,17 +15,17 @@ import pytest
 from aiohttp import ClientResponse
 from aiohttp.test_utils import TestClient, TestServer
 
-from chipmonk_backend.agents.types import AgentEvent
-from chipmonk_backend.api.config import ApiConfig, load_api_config
-from chipmonk_backend.api.events import STAGES, EventLog
-from chipmonk_backend.api.manager import API_RECORD_FILE, RunManager
-from chipmonk_backend.api.progress import ProgressTailer, write_helper
-from chipmonk_backend.api.server import TOKEN_HEADER, create_app, serve
-from chipmonk_backend.api.translate import Translator, tool_summary
-from chipmonk_backend.cli import _parser
-from chipmonk_backend.config import BackendConfig
-from chipmonk_backend.llm import summarise as summarise_mod
-from chipmonk_backend.runs import JsonlEventSink, RunDir, RunRecord
+from chipin_backend.agents.types import AgentEvent
+from chipin_backend.api.config import ApiConfig, load_api_config
+from chipin_backend.api.events import STAGES, EventLog
+from chipin_backend.api.manager import API_RECORD_FILE, RunManager
+from chipin_backend.api.progress import ProgressTailer, write_helper
+from chipin_backend.api.server import TOKEN_HEADER, create_app, serve
+from chipin_backend.api.translate import Translator, tool_summary
+from chipin_backend.cli import _parser
+from chipin_backend.config import BackendConfig
+from chipin_backend.llm import summarise as summarise_mod
+from chipin_backend.runs import JsonlEventSink, RunDir, RunRecord
 
 TOKEN = "test-session-token"
 AUTH = {TOKEN_HEADER: TOKEN}

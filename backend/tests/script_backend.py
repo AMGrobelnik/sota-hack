@@ -14,8 +14,8 @@ from typing import ClassVar
 
 import pytest
 
-from chipmonk_backend.agents.base import BACKENDS, AgentBackend
-from chipmonk_backend.agents.types import AgentEvent, AgentResult, AgentSpec, EventSink
+from chipin_backend.agents.base import BACKENDS, AgentBackend
+from chipin_backend.agents.types import AgentEvent, AgentResult, AgentSpec, EventSink
 
 
 class ScriptBackend(AgentBackend):

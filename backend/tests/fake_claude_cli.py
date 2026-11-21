@@ -92,9 +92,9 @@ def run_turn(prompt: str, turn: int, journal: Callable[[dict], None]) -> None:
             },
         }
     )
-    Path("hello.txt").write_text("hello chipmonk\n")
-    if ".chipmonk_struct_out.json" in prompt:
-        Path(".chipmonk_struct_out.json").write_text(json.dumps({"file": "hello.txt", "ok": True}))
+    Path("hello.txt").write_text("hello chipin\n")
+    if ".chipin_struct_out.json" in prompt:
+        Path(".chipin_struct_out.json").write_text(json.dumps({"file": "hello.txt", "ok": True}))
     journal(
         {
             "type": "user",

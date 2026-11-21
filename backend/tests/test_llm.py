@@ -9,12 +9,12 @@ from typing import Any
 import httpx
 import pytest
 
-from chipmonk_backend.config import LlmConfig
-from chipmonk_backend.llm import client as client_mod
-from chipmonk_backend.llm import retry as retry_mod
-from chipmonk_backend.llm.client import OpenRouterClient, OpenRouterError
-from chipmonk_backend.llm.keys import is_key_exhausted
-from chipmonk_backend.llm.retry import is_retryable, retry_paid_call
+from chipin_backend.config import LlmConfig
+from chipin_backend.llm import client as client_mod
+from chipin_backend.llm import retry as retry_mod
+from chipin_backend.llm.client import OpenRouterClient, OpenRouterError
+from chipin_backend.llm.keys import is_key_exhausted
+from chipin_backend.llm.retry import is_retryable, retry_paid_call
 
 CHAT_OK = {
     "id": "gen-1",
@@ -222,7 +222,7 @@ async def test_list_models_and_key_info(monkeypatch: pytest.MonkeyPatch) -> None
 @pytest.mark.live
 async def test_live_openrouter_chat(config: Any) -> None:
     """One real call to the cheap preset (needs ``OPENROUTER_API_KEY``)."""
-    from chipmonk_backend.llm.keys import has_openrouter_key
+    from chipin_backend.llm.keys import has_openrouter_key
 
     if not has_openrouter_key():
         pytest.skip("OPENROUTER_API_KEY is not set")

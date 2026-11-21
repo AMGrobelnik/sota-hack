@@ -9,10 +9,10 @@ from typing import Any
 import pytest
 import yaml
 
-from chipmonk_backend import cli
-from chipmonk_backend.llm.client import ChatResult
-from chipmonk_backend.orchestrate import LLM_CALLS_ENV
-from chipmonk_backend.runs import RunDir
+from chipin_backend import cli
+from chipin_backend.llm.client import ChatResult
+from chipin_backend.orchestrate import LLM_CALLS_ENV
+from chipin_backend.runs import RunDir
 
 
 @pytest.fixture
@@ -39,7 +39,7 @@ def test_run_writes_a_full_record(
     record = json.loads((run_dir / "run.json").read_text())
     assert record["status"] == "succeeded"
     assert record["agent"]["prompts"] == ["Propose three seizure detectors."]
-    assert "chipmonk_backend ask" in record["agent"]["system_prompt"]
+    assert "chipin_backend ask" in record["agent"]["system_prompt"]
     assert record["agent"]["env"][LLM_CALLS_ENV] == str(run_dir / "llm_calls.jsonl")
     assert record["config"]["agents"]["openrouter_tool"] is True
     assert record["finished_at"] and record["duration_s"] >= 0

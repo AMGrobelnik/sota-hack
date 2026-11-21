@@ -1,12 +1,12 @@
-# Chipmonk backend
+# ChipIn backend
 
-Runs Chipmonk's AI-scientist agents and records every run as a folder on disk.
+Runs ChipIn's AI-scientist agents and records every run as a folder on disk.
 The interface lives on its own branch, `amg/frontend`; this branch holds the
 backend only.
 
 The code is adapted from AI Inventor, an earlier product by one of the team
 (Apache-2.0, see `LICENSE` and `NOTICE`). Only its agent-running layer was
-taken. The Chipmonk tools come later: proposing designs, fine-tuning many
+taken. The ChipIn tools come later: proposing designs, fine-tuning many
 small models at once on a GPU, compiling to logic gates and checking the chip.
 
 ## Status
@@ -43,7 +43,7 @@ Built and tested, dry run only:
 - The pod's timer ends the worker process, not the pod: the agent stops but
   the pod, and its bill, keep running until something terminates it.
 - The launcher terminates its pod when the run ends, on every path. The
-  safety net is `python -m chipmonk_backend.compute.runpod reap --delete`;
+  safety net is `python -m chipin_backend.compute.runpod reap --delete`;
   by default it ends only pods older than the longest a live pod can run,
   so it never ends a pod that a run still uses. Without `--delete` it only
   reports.
@@ -59,8 +59,8 @@ From `backend/`:
 uv sync --extra dev                 # add --extra openhands for the OpenRouter agent
 source .venv/bin/activate
 cp .env.example .env                # then fill in the values you need
-python -m chipmonk_backend run --backend stub --prompt "hello"     # no model
-python -m chipmonk_backend run --config config/example.yaml \
+python -m chipin_backend run --backend stub --prompt "hello"     # no model
+python -m chipin_backend run --config config/example.yaml \
     --prompt-file examples/seizure_eeg_prompt.md                   # real agent
 pytest && ruff check . && ruff format --check .
 ```
@@ -82,7 +82,7 @@ What one `run` does:
 3. Each event goes to the console, `logs/backend.log` and
    `runs/<run_id>/events.jsonl` as it happens.
 4. With `openrouter_tool` on, the agent may run
-   `python -m chipmonk_backend ask --model cheap "<question>"`; each call is
+   `python -m chipin_backend ask --model cheap "<question>"`; each call is
    logged to `runs/<run_id>/llm_calls.jsonl` with its cost.
 5. `runs/<run_id>/run.json` ends up holding the prompt, the resolved config,
    the result, the timings, the costs and the summary. The command prints
@@ -91,11 +91,11 @@ What one `run` does:
 Other commands:
 
 ```bash
-python -m chipmonk_backend ask --model cheap "One EEG feature for seizures?"
-python -m chipmonk_backend run --no-summary --backend stub --prompt "hi"
-python -m chipmonk_backend run --mode on_demand --tier gpu_basic --prompt "hi"
-python -m chipmonk_backend config                    # the resolved config
-python -m chipmonk_backend.compute.runpod check      # pods and prices, read-only
+python -m chipin_backend ask --model cheap "One EEG feature for seizures?"
+python -m chipin_backend run --no-summary --backend stub --prompt "hi"
+python -m chipin_backend run --mode on_demand --tier gpu_basic --prompt "hi"
+python -m chipin_backend config                    # the resolved config
+python -m chipin_backend.compute.runpod check      # pods and prices, read-only
 ```
 
 `ask` exits 1 when the model returned no text because it hit `--max-tokens`.
@@ -105,7 +105,7 @@ python -m chipmonk_backend.compute.runpod check      # pods and prices, read-onl
 Every summary uses one OpenRouter model,
 `openai/gpt-oss-120b`, walked provider by provider: each tier pins one
 provider, the next tier is the fallback, and the whole walk has one time
-budget. The settings are in `src/chipmonk_backend/llm/summaries.yaml`.
+budget. The settings are in `src/chipin_backend/llm/summaries.yaml`.
 
 - `result.summary.run`: three bullets on what the run did, built from a
   digest of its events, with the run's end pinned first.
@@ -123,12 +123,12 @@ skips it too.
 agent run on this Mac and follow it live.
 
 ```bash
-python -m chipmonk_backend serve --agent stub --frontend <site folder>
-python -m chipmonk_backend serve           # the Claude agent, port 8797
+python -m chipin_backend serve --agent stub --frontend <site folder>
+python -m chipin_backend serve           # the Claude agent, port 8797
 ```
 
 - It binds 127.0.0.1 only, on port 8797 (`--port` or
-  `src/chipmonk_backend/api/api.yaml` change it).
+  `src/chipin_backend/api/api.yaml` change it).
 - It prints one link, `http://127.0.0.1:8797/#token=<token>`. The token is
   new at every start and is never written to disk. A page sends it in the
   `X-ChipIn-Token` header; the event stream may pass it as `?token=`.
@@ -182,12 +182,12 @@ backend/
   config/backend.yaml        commented defaults; backend.local.yaml overlays it
   config/example.yaml        a cheap end-to-end run (see "Run it")
   examples/                  example prompts
-  src/chipmonk_backend/
+  src/chipin_backend/
     config.py                schema and loader (YAML, local overlay, .env)
     log.py                   loguru: stderr plus logs/backend.log
     runs.py                  run folders: run.json, events.jsonl, workspace/
     orchestrate.py           run_agent(spec, config): one run end to end
-    cli.py                   chipmonk-backend run / ask / serve / config
+    cli.py                   chipin-backend run / ask / serve / config
     api/                     the local API server for the dashboards
     llm/                     OpenRouter client, key, retry, presets, summaries
     agents/                  AgentBackend interface and the backends
@@ -245,22 +245,22 @@ Names only; values go in the gitignored `backend/.env`.
 | `OPENROUTER_API_KEY` | `ask`, summaries, `openrouter`      |
 | `RUNPOD_API_KEY`     | `on_demand` mode and RunPod checks  |
 | `CLAUDE_CONFIG_DIR`  | optional: another CLI login folder  |
-| `CHIPMONK_CONFIG`    | optional: another config file       |
+| `CHIPIN_CONFIG`    | optional: another config file       |
 | `HF_TOKEN`           | optional: passed to agents          |
 
-The backend sets two more itself: `CHIPMONK_LLM_CALLS` (where `ask` logs a
-call) and `CHIPMONK_WORKER_TOKEN` (a pod's worker token).
+The backend sets two more itself: `CHIPIN_LLM_CALLS` (where `ask` logs a
+call) and `CHIPIN_WORKER_TOKEN` (a pod's worker token).
 
 ## What was left out and why
 
 - AI Inventor's research pipeline and its workflow engine and database: a
-  Chipmonk run is one agent and a folder, so `orchestrate.run_agent` does it.
+  ChipIn run is one agent and a folder, so `orchestrate.run_agent` does it.
 - The product web server, accounts and credential handling: the interface
   lives on its own branch; it reaches this backend only through the local
   API server above.
 - Spend metering and budgets: each call's cost comes from the response and
   goes into the run record.
-- Free-model routing: Chipmonk uses paid OpenRouter models only.
+- Free-model routing: ChipIn uses paid OpenRouter models only.
 - The macOS virtual-machine isolation of Flex: it needs a server and Apple
   VMs; here Flex runs on the Mac itself.
 - Email, analytics, deployment tooling and the gallery: not needed to run

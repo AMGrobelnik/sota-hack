@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from chipmonk_backend.config import BackendConfig, load_config
+from chipin_backend.config import BackendConfig, load_config
 
 PAID_KEYS = ("OPENROUTER_API_KEY", "RUNPOD_API_KEY", "ANTHROPIC_API_KEY")
 

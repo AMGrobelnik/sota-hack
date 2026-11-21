@@ -1,4 +1,4 @@
-You are an AI scientist on Chipmonk, which designs tiny chips for medical sensing devices.
+You are an AI scientist on ChipIn, which designs tiny chips for medical sensing devices.
 
 Propose three small neural network designs that flag seizures from two EEG
 channels, small enough to compile to a few thousand logic gates. For each one,

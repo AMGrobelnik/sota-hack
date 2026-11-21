@@ -9,14 +9,14 @@ from pathlib import Path
 import pytest
 import yaml
 
-from chipmonk_backend.agents.env import build_agent_env
-from chipmonk_backend.agents.stub import StubBackend
-from chipmonk_backend.agents.types import AgentResult, AgentSpec, EventSink
-from chipmonk_backend.compute.local import LocalRunner
-from chipmonk_backend.compute.modes import chain_for_tier
-from chipmonk_backend.config import BackendConfig, load_config
-from chipmonk_backend.orchestrate import run_agent
-from chipmonk_backend.runs import RunDir
+from chipin_backend.agents.env import build_agent_env
+from chipin_backend.agents.stub import StubBackend
+from chipin_backend.agents.types import AgentResult, AgentSpec, EventSink
+from chipin_backend.compute.local import LocalRunner
+from chipin_backend.compute.modes import chain_for_tier
+from chipin_backend.config import BackendConfig, load_config
+from chipin_backend.orchestrate import run_agent
+from chipin_backend.runs import RunDir
 
 
 async def test_stub_run_writes_record_events_and_files(config: BackendConfig) -> None:

@@ -7,9 +7,9 @@ import os
 
 import pytest
 
-from chipmonk_backend.agents.types import AgentSpec
-from chipmonk_backend.config import BackendConfig
-from chipmonk_backend.orchestrate import run_agent
+from chipin_backend.agents.types import AgentSpec
+from chipin_backend.config import BackendConfig
+from chipin_backend.orchestrate import run_agent
 from script_backend import use_script_backend
 
 WRITES_RESULT = """

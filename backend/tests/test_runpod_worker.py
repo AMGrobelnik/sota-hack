@@ -9,9 +9,9 @@ import httpx
 import pytest
 from aiohttp.test_utils import TestServer
 
-from chipmonk_backend.agents.types import AgentSpec
-from chipmonk_backend.compute.runpod.worker import WorkerClient, WorkerUnreachableError, create_app
-from chipmonk_backend.config import BackendConfig
+from chipin_backend.agents.types import AgentSpec
+from chipin_backend.compute.runpod.worker import WorkerClient, WorkerUnreachableError, create_app
+from chipin_backend.config import BackendConfig
 from script_backend import use_script_backend
 
 TOKEN = "per-pod-test-token"

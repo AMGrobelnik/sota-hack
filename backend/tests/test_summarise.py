@@ -12,11 +12,11 @@ import httpx
 import pytest
 import yaml
 
-from chipmonk_backend import cli
-from chipmonk_backend.agents.types import AgentEvent, AgentResult
-from chipmonk_backend.llm import summarise as summarise_mod
-from chipmonk_backend.llm.client import ChatResult
-from chipmonk_backend.llm.summarise import (
+from chipin_backend import cli
+from chipin_backend.agents.types import AgentEvent, AgentResult
+from chipin_backend.llm import summarise as summarise_mod
+from chipin_backend.llm.client import ChatResult
+from chipin_backend.llm.summarise import (
     build_run_digest,
     label_output,
     load_summary_settings,
@@ -206,7 +206,7 @@ def test_ask_fails_on_an_empty_answer_cut_at_the_limit(
 @pytest.mark.live
 async def test_live_run_summary() -> None:
     """One real, cheap summary call (needs ``OPENROUTER_API_KEY``)."""
-    from chipmonk_backend.llm.keys import has_openrouter_key
+    from chipin_backend.llm.keys import has_openrouter_key
 
     if not has_openrouter_key():
         pytest.skip("OPENROUTER_API_KEY is not set")

@@ -17,10 +17,10 @@ from typing import Any
 import pytest
 from aiohttp.test_utils import TestServer
 
-from chipmonk_backend.agents.types import AgentSpec
-from chipmonk_backend.compute.factory import runner_for
-from chipmonk_backend.compute.runpod import __main__ as runpod_cli
-from chipmonk_backend.compute.runpod.api import (
+from chipin_backend.agents.types import AgentSpec
+from chipin_backend.compute.factory import runner_for
+from chipin_backend.compute.runpod import __main__ as runpod_cli
+from chipin_backend.compute.runpod.api import (
     Offer,
     PodInfo,
     PodNotFoundError,
@@ -29,12 +29,12 @@ from chipmonk_backend.compute.runpod.api import (
     RunPodError,
     RunPodTransientError,
 )
-from chipmonk_backend.compute.runpod.reaper import reap_orphans
-from chipmonk_backend.compute.runpod.runner import RunPodRunner, max_pod_lifetime_s
-from chipmonk_backend.compute.runpod.worker import WORKER_TOKEN_ENV, create_app
-from chipmonk_backend.config import BACKEND_ROOT, BackendConfig, load_config
-from chipmonk_backend.orchestrate import run_agent
-from chipmonk_backend.runs import RunDir, RunRecord
+from chipin_backend.compute.runpod.reaper import reap_orphans
+from chipin_backend.compute.runpod.runner import RunPodRunner, max_pod_lifetime_s
+from chipin_backend.compute.runpod.worker import WORKER_TOKEN_ENV, create_app
+from chipin_backend.config import BACKEND_ROOT, BackendConfig, load_config
+from chipin_backend.orchestrate import run_agent
+from chipin_backend.runs import RunDir, RunRecord
 from script_backend import use_script_backend
 
 TRAINS = """
@@ -132,7 +132,7 @@ def _with_runpod(config: BackendConfig, **runpod: Any) -> BackendConfig:
     settings = {
         "dry_run": False,
         "allow_paid_pods": True,
-        "image": "registry.example/chipmonk-worker:test",
+        "image": "registry.example/chipin-worker:test",
         "healthcheck_timeout_s": 1,
         "tier_chains": {
             "cpu_basic": ["cpu3g-2-8", "cpu5g-2-8"],
@@ -173,7 +173,7 @@ async def test_pod_lifecycle_streams_fetches_outputs_and_terminates(
     assert texts == ["fine-tuning 1000 candidates", "best: 12 gates"]
     assert fake.terminated == ["pod1"]
     created = fake.created[0]
-    assert created.machine == "cpu3g-2-8" and created.name == "chipmonk_worker_r1_designer_a1"
+    assert created.machine == "cpu3g-2-8" and created.name == "chipin_worker_r1_designer_a1"
     assert set(created.env) == {WORKER_TOKEN_ENV}  # the only secret a pod gets
     assert "--ttl-s" in created.command and str(7200 + 300) in created.command
 
@@ -260,16 +260,16 @@ async def test_dry_run_writes_the_request_and_creates_nothing(config: BackendCon
 
 async def test_reaper_matches_prefix_and_age_and_only_acts_when_asked(fake: FakeRunPod) -> None:
     fake.pods = {
-        "a": PodInfo("a", "chipmonk_worker_r1_x_a1", "RUNNING", "cpu3g", created_at="2026-11-21T10:00:00Z"),
+        "a": PodInfo("a", "chipin_worker_r1_x_a1", "RUNNING", "cpu3g", created_at="2026-11-21T10:00:00Z"),
         "b": PodInfo("b", "someone_elses_pod", "RUNNING", "cpu3g", created_at="2026-11-21T10:00:00Z"),
-        "c": PodInfo("c", "chipmonk_worker_r2_x_a1", "TERMINATED", "cpu3g"),
-        "d": PodInfo("d", "chipmonk_worker_r3_x_a1", "RUNNING", "cpu3g"),  # age unknown
+        "c": PodInfo("c", "chipin_worker_r2_x_a1", "TERMINATED", "cpu3g"),
+        "d": PodInfo("d", "chipin_worker_r3_x_a1", "RUNNING", "cpu3g"),  # age unknown
     }
     with pytest.raises(ValueError):
         await reap_orphans(fake, prefix="")
-    found = await reap_orphans(fake, prefix="chipmonk_worker_")
+    found = await reap_orphans(fake, prefix="chipin_worker_")
     assert [p.id for p in found] == ["a", "d"] and fake.terminated == []
-    old = await reap_orphans(fake, prefix="chipmonk_worker_", older_than_s=60, dry_run=False)
+    old = await reap_orphans(fake, prefix="chipin_worker_", older_than_s=60, dry_run=False)
     assert [p.id for p in old] == ["a"] and fake.terminated == ["a"]
 
 
@@ -309,7 +309,7 @@ async def test_ambiguous_create_with_listing_down_is_recorded_then_closed(
         await runner.run(AgentSpec(name="a", prompts=["hi"], backend="stub"), run)
 
     leaks = run.read_record().compute["possible_leaks"]
-    assert leaks == ["chipmonk_worker_r7_a_a1", "chipmonk_worker_r7_a_a2"]
+    assert leaks == ["chipin_worker_r7_a_a1", "chipin_worker_r7_a_a2"]
     assert fake.terminated == []
     await runner.close()  # the listing works again: both ghosts are found and ended
     assert sorted(fake.terminated) == ["pod1", "pod2"] and not runner._doubtful
@@ -347,10 +347,10 @@ async def test_default_config_refuses_a_paid_pod(config: BackendConfig, fake: Fa
 
 async def test_reaper_refuses_to_delete_without_a_minimum_age(fake: FakeRunPod) -> None:
     fake.pods = {
-        "a": PodInfo("a", "chipmonk_worker_r1_x_a1", "RUNNING", "cpu3g", created_at="2020-01-01T00:00:00Z")
+        "a": PodInfo("a", "chipin_worker_r1_x_a1", "RUNNING", "cpu3g", created_at="2020-01-01T00:00:00Z")
     }
     with pytest.raises(ValueError, match="minimum age"):
-        await reap_orphans(fake, prefix="chipmonk_worker_", dry_run=False)
+        await reap_orphans(fake, prefix="chipin_worker_", dry_run=False)
     assert fake.terminated == []
 
 
