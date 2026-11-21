@@ -8,6 +8,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
+from chipin_backend.api.transcribe import TranscribeConfig
 from chipin_backend.config import Effort
 
 API_CONFIG_PATH = Path(__file__).with_name("api.yaml")
@@ -28,6 +29,7 @@ class ApiConfig(BaseModel):
     presets: dict[Preset, Effort] = Field(
         default_factory=lambda: {"lite": "low", "pro": "high", "max": "xhigh", "ultra": "max"}
     )
+    transcribe: TranscribeConfig = Field(default_factory=TranscribeConfig)
 
 
 def load_api_config(path: Path = API_CONFIG_PATH) -> ApiConfig:

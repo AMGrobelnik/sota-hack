@@ -98,7 +98,12 @@ async def _events(client: TestClient, run_id: str, **params: str) -> list[dict[s
 async def test_health_needs_no_token(client: TestClient) -> None:
     resp = await client.get("/api/health")
     assert resp.status == 200
-    assert await resp.json() == {"ok": True, "version": 1, "defaults": {"agent": "stub", "runner": "local"}}
+    assert await resp.json() == {
+        "ok": True,
+        "version": 1,
+        "defaults": {"agent": "stub", "runner": "local"},
+        "transcribe": False,
+    }
 
 
 async def test_default_agent_is_claude_on_this_mac(config: BackendConfig) -> None:

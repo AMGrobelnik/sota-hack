@@ -15,6 +15,7 @@ Routes::
     GET  /api/runs/{id}/events?token=...&from=<seq>   (text/event-stream)
     POST /api/runs/{id}/messages     -> 202
     POST /api/runs/{id}/stop         -> 202
+    POST /api/transcribe?lang=en     -> {"text", "model", "audio_seconds", "latency_ms"}
 """
 
 from __future__ import annotations
@@ -32,13 +33,14 @@ from loguru import logger
 
 from chipin_backend.api.config import ApiConfig
 from chipin_backend.api.manager import ApiAgent, ApiRunner, RequestError, RunManager
+from chipin_backend.api.transcribe import CONTEXT_HEADER, add_transcribe_route, transcribe_ready
 from chipin_backend.config import BackendConfig
 
 API_VERSION = 1
 HOST = "127.0.0.1"
 TOKEN_HEADER = "X-ChipIn-Token"
 ALLOWED_ORIGIN_RE = re.compile(r"^(https://chipin\.space|http://(127\.0\.0\.1|localhost)(:\d{1,5})?)$")
-ALLOW_HEADERS = f"Content-Type, {TOKEN_HEADER}"
+ALLOW_HEADERS = f"Content-Type, {TOKEN_HEADER}, {CONTEXT_HEADER}"
 ALLOW_METHODS = "GET, POST, OPTIONS"
 
 MANAGER = web.AppKey("manager", RunManager)
@@ -102,7 +104,12 @@ async def health(request: web.Request) -> web.Response:
     """``{"ok": true, "version": 1, "defaults": {...}}``."""
     manager = request.app[MANAGER]
     return _json(
-        {"ok": True, "version": API_VERSION, "defaults": {"agent": manager.agent, "runner": manager.runner}}
+        {
+            "ok": True,
+            "version": API_VERSION,
+            "defaults": {"agent": manager.agent, "runner": manager.runner},
+            "transcribe": transcribe_ready(request.app),
+        }
     )
 
 
@@ -219,6 +226,7 @@ def create_app(
     app.router.add_get("/api/runs/{run_id}/events", stream_events)
     app.router.add_post("/api/runs/{run_id}/messages", post_message)
     app.router.add_post("/api/runs/{run_id}/stop", stop_run)
+    add_transcribe_route(app, api.transcribe)
     if frontend is not None:
         app[FRONTEND] = frontend.resolve()
         app.router.add_get("/", index)
