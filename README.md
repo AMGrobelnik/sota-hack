@@ -56,3 +56,4 @@ on Adrian's Mac. The checked evidence will be in `docs/evidence.md`.
 - `docs/event.md`: dates, venue, rules, judging, prizes.
 - `docs/idea.md`: the idea in full, with cautions and open questions.
 - `docs/evidence.md`: checked evidence on prior work, data and tools.
+- `context/`: raw context: transcripts, Granola notes, the judging slide, research notes.
