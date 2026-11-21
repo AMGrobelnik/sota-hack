@@ -51,8 +51,9 @@ def main(argv=None) -> int:
             print(json.dumps({"written": docs.write()})); return 0
         print(docs.agent_md()); return 0
     if cmd == "doctor":
-        from chiplab.doctor import run
-        r = run(); print(json.dumps(r, indent=1, default=str)); return 0 if r["ok"] else 1
+        from chiplab.doctor import run, run_agent_env
+        r = run_agent_env() if "--agent-env" in argv else run()
+        print(json.dumps(r, indent=1, default=str)); return 0 if r["ok"] else 1
     if cmd == "mcp":
         from chiplab.mcp_server import stdio
         stdio(); return 0
