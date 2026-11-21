@@ -781,12 +781,13 @@ chiplab gate-activity --json '{"design_id": "765fa47586bd", "n": 2000, "vcd": tr
 
 ### `chip-report`
 
-One-page chip report (markdown text): ports, hardware numbers with their basis, verification level and evidence, manufacturing routes and cost, published hardware for context, artefact paths.
+One-page chip report (markdown text): ports, hardware numbers with their basis, verification level and evidence, manufacturing routes and cost, published hardware for context, artefact paths. With decision_rate_hz (or a rate given to layout earlier) it shows power at that decision rate.
 
-- Python: `lab.chip_report(design_id: str, name: str | None = None) -> dict`
+- Python: `lab.chip_report(design_id: str, name: str | None = None, decision_rate_hz: float | None = None) -> dict`
 - Lane: inline; cached: False
   - `design_id`: str
   - `name`: str — a readable name (optional)
+  - `decision_rate_hz`: float — decisions per second the device needs (optional)
 
 <details><summary>JSON schema</summary>
 
@@ -799,6 +800,10 @@ One-page chip report (markdown text): ports, hardware numbers with their basis, 
   },
   "name": {
    "type": "string",
+   "default": null
+  },
+  "decision_rate_hz": {
+   "type": "number",
    "default": null
   },
   "run_id": {
@@ -907,9 +912,9 @@ chiplab submit-verilog --json '{"verilog": "module xx(input [3:0] x, output [4:0
 
 ### `layout`
 
-Place and route the chip with LibreLane (Docker): real cell area, die area, timing slack against a clock, power (vectorless, or from an activity VCD), GDS and the KLayout image. Validated on sky130; gf180 and ihp use the same flow (validated up to configuration).
+Place and route the chip with LibreLane (Docker): real cell area, die area, timing slack against a clock, power (vectorless, or from an activity VCD), GDS and the KLayout image. Power is given at the clock (power_uw_at_clock) and, with decision_rate_hz, at the rate the sensor actually needs decisions (power_uw_at_rate = energy per decision x rate + leakage). Changing the rate never re-runs LibreLane.
 
-- Python: `lab.layout(design_id: str, pdk: str = sky130, clock_period_ns: float | None = None, core_util: int = 40, activity_vcd: str | None = None, timeout: int = 3600) -> dict`
+- Python: `lab.layout(design_id: str, pdk: str = sky130, clock_period_ns: float | None = None, core_util: int = 40, activity_vcd: str | None = None, timeout: int = 3600, decision_rate_hz: float | None = None) -> dict`
 - Lane: docker; cached: True
   - `design_id`: str
   - `pdk`: str — sky130|gf180|ihp (sky130)
@@ -917,6 +922,7 @@ Place and route the chip with LibreLane (Docker): real cell area, die area, timi
   - `core_util`: int — target utilisation % (40)
   - `activity_vcd`: str — VCD of real activity for power (optional)
   - `timeout`: int seconds (3600)
+  - `decision_rate_hz`: float — decisions per second the device needs (optional)
 
 <details><summary>JSON schema</summary>
 
@@ -947,6 +953,10 @@ Place and route the chip with LibreLane (Docker): real cell area, die area, timi
    "type": "integer",
    "default": 3600
   },
+  "decision_rate_hz": {
+   "type": "number",
+   "default": null
+  },
   "run_id": {
    "type": "string"
   },
@@ -975,14 +985,15 @@ chiplab layout --json '{"design_id": "ed8e52cb7a11", "pdk": "sky130", "clock_per
 
 ### `timing-power`
 
-Timing and power of the laid-out chip (same LibreLane run as layout; cached, so calling both costs one run).
+Timing and power of the laid-out chip (same LibreLane run as layout; cached, so calling both costs one run). With decision_rate_hz it adds power_uw_at_rate: energy per decision x decisions per second + leakage.
 
-- Python: `lab.timing_power(design_id: str, pdk: str = sky130, clock_period_ns: float | None = None, activity_vcd: str | None = None) -> dict`
+- Python: `lab.timing_power(design_id: str, pdk: str = sky130, clock_period_ns: float | None = None, activity_vcd: str | None = None, decision_rate_hz: float | None = None) -> dict`
 - Lane: docker; cached: True
   - `design_id`: str
   - `pdk`: str — sky130|gf180|ihp (sky130)
   - `clock_period_ns`: float (default 20 ns; 40 ns on gf180)
   - `activity_vcd`: str — optional VCD for activity-based power
+  - `decision_rate_hz`: float — decisions per second the device needs (optional)
 
 <details><summary>JSON schema</summary>
 
@@ -1003,6 +1014,10 @@ Timing and power of the laid-out chip (same LibreLane run as layout; cached, so 
   },
   "activity_vcd": {
    "type": "string",
+   "default": null
+  },
+  "decision_rate_hz": {
+   "type": "number",
    "default": null
   },
   "run_id": {
@@ -1744,6 +1759,56 @@ Synthesize many designs at once (fans out over the CPU lane). Returns job ids.
  },
  "required": [
   "design_ids"
+ ]
+}
+```
+</details>
+
+### `ingest-batch`
+
+Ingest many models at once: each item is an ingest_model argument dict ({format, model|path|b64, name, ...}). They run in parallel on the CPU lane (start workers with `chiplab workers`). Returns job ids; with wait=true it waits and returns the design ids in the same order (null where an ingest failed).
+
+- Python: `lab.ingest_batch(models: list, wait: bool = False, wait_timeout: int = 900, session_id: str | None = None, run_id: str | None = None) -> dict`
+- Lane: inline; cached: False
+  - `models`: list[dict] — ingest_model arguments, one per model
+  - `wait`: bool — wait for all and return design ids (false)
+  - `wait_timeout`: int seconds to wait (900)
+
+<details><summary>JSON schema</summary>
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "models": {
+   "type": "array"
+  },
+  "wait": {
+   "type": "boolean",
+   "default": false
+  },
+  "wait_timeout": {
+   "type": "integer",
+   "default": 900
+  },
+  "session_id": {
+   "type": "string",
+   "default": null
+  },
+  "run_id": {
+   "type": "string",
+   "default": null
+  },
+  "round": {
+   "type": "integer"
+  },
+  "force": {
+   "type": "boolean",
+   "default": false
+  }
+ },
+ "required": [
+  "models"
  ]
 }
 ```

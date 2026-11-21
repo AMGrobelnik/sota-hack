@@ -241,9 +241,11 @@ def gate_activity(design_id: str, vectors: dict | None = None, n: int = 2000, vc
 
 
 @tool("One-page chip report (markdown text): ports, hardware numbers with their basis, verification level and "
-      "evidence, manufacturing routes and cost, published hardware for context, artefact paths.",
-      {"design_id": "str", "name": "str — a readable name (optional)"}, lane="inline")
-def chip_report(design_id: str, name: str | None = None) -> dict:
+      "evidence, manufacturing routes and cost, published hardware for context, artefact paths. With "
+      "decision_rate_hz (or a rate given to layout earlier) it shows power at that decision rate.",
+      {"design_id": "str", "name": "str — a readable name (optional)",
+       "decision_rate_hz": "float — decisions per second the device needs (optional)"}, lane="inline")
+def chip_report(design_id: str, name: str | None = None, decision_rate_hz: float | None = None) -> dict:
     import hashlib
     import time
     import jinja2
@@ -261,21 +263,30 @@ def chip_report(design_id: str, name: str | None = None) -> dict:
     cost = rd("cost.json") or estimate_cost.__wrapped__(design_id=design_id)
     base = compare_hw_baseline.__wrapped__(design_id=design_id)["baselines"]
     pdks = {p: rd(f"pdk_{p}.json") for p in ("sky130", "gf180", "ihp") if rd(f"pdk_{p}.json")}
-    layouts = {}
+    layouts, rate_rows = {}, []
     for p in ("sky130A", "gf180mcuD", "ihp-sg13g2"):
         m = rd(f"layout_{p}.json")
         if m:
             layouts[p] = {"summary": ", ".join(f"{k}={m[k]}" for k in ("area_um2", "die_mm2", "timing_ws_ns", "power_uw") if m.get(k) is not None),
                           "basis": m.get("basis", "")}
+            rate = decision_rate_hz if decision_rate_hz is not None else m.get("decision_rate_hz")
+            pwr = rate_power(m.get("energy_per_decision_pj"), m.get("leakage_uw"), rate)
+            if pwr is not None:
+                rate_rows.append({"pdk": p, "rate_hz": float(rate), "power_uw": pwr, "energy_pj": m.get("energy_per_decision_pj"),
+                                  "leakage_uw": m.get("leakage_uw"), "clock_ns": m.get("clock_period_ns"),
+                                  "power_basis": m.get("power_basis") or "vectorless"})
     luts = {f: rd(f"luts_{f}.json") for f in ("xc7", "ice40") if rd(f"luts_{f}.json")}
     arte = {f.name: str(f) for f in sorted(d.glob("*")) if f.suffix in (".v", ".json", ".gds", ".png", ".bin", ".vcd")}
     tpl = jinja2.Template((PKG_DIR / "report_template.md.j2").read_text(), trim_blocks=False)
     md = tpl.render(name=name or meta.get("name") or ir.get("name"), design_id=design_id, when=time.strftime("%Y-%m-%d %H:%M"),
                     ladder=lad, ports=rd("port.json"), source=meta.get("ingested_from") or ("training batch " + str(meta.get("batch_id")) if meta.get("batch_id") else "chipir"),
                     ops=sorted({n["op"] for n in ir["nodes"]}), synth=rd("synth.json"), luts=luts, pdks=pdks, layouts=layouts,
-                    fpga=rd("bitstream.json"), cost=cost, baselines=base, artefacts=arte)
+                    fpga=rd("bitstream.json"), cost=cost, baselines=base, artefacts=arte, rate_rows=rate_rows)
     (d / "report.md").write_text(md)
-    return {"design_id": design_id, "report_md": md, "digest": hashlib.sha256(md.encode()).hexdigest()[:12],
+    out = {"design_id": design_id, "report_md": md, "digest": hashlib.sha256(md.encode()).hexdigest()[:12]}
+    if rate_rows:
+        out["power_at_rate"] = rate_rows
+    return {**out,
             "files": [str(d / "report.md")], "verilog_url": f"/files/{design_id}/design.v",
             "netlist_json_url": f"/files/{design_id}/synth/net.json",
             "layout_png_url": next((f"/files/{design_id}/{p.relative_to(d)}" for p in d.rglob("*.png")), None)}
@@ -339,50 +350,98 @@ _PDK_ALIAS = {"sky130": "sky130A", "sky130A": "sky130A", "gf180": "gf180mcuD", "
               "ihp": "ihp-sg13g2", "ihp-sg13g2": "ihp-sg13g2"}
 
 
-def _layout(design_id: str, pdk: str, clock_period_ns: float | None, core_util: int, activity_vcd: str | None, timeout: int) -> dict:
+def _librelane_run(design_id: str, p: str, clock_period_ns: float, core_util: int, activity_vcd: str | None,
+                   timeout: int) -> dict:
+    """The expensive part of layout/timing_power: one LibreLane run, cached on its own key (design, PDK, clock,
+    utilisation, activity), so derived numbers such as power at a decision rate never trigger a new run."""
     from pathlib import Path
+    from chiplab import cache
     from chiplab.hw.librelane import timing_power_layout
+    key = {"design_id": design_id, "pdk": p, "clock_period_ns": float(clock_period_ns), "core_util": int(core_util),
+           "activity_vcd": activity_vcd}
+    hit = cache.get("_librelane_run", key)
+    if hit is not None:
+        return {k: v for k, v in hit.items() if k != "status"}
     d = _design_dir(design_id)
     info = json.loads((d / "port.json").read_text())
-    p = _PDK_ALIAS[pdk]
-    clock_period_ns = clock_period_ns or DEFAULT_CLOCK_NS.get(p, 20.0)
     r = timing_power_layout([d / "design.v"], info["top"], d / f"layout_{p}", pdk=p, clock_period_ns=clock_period_ns,
                             activity_vcd=Path(activity_vcd) if activity_vcd else None, core_util=core_util, timeout=timeout)
+    if r.get("area_um2") is not None and not r.get("error"):
+        cache.put("_librelane_run", key, {**r, "status": "ok"})
+    return r
+
+
+def rate_power(energy_per_decision_pj: float | None, leakage_uw: float | None, decision_rate_hz: float | None) -> float | None:
+    """Average power at a decision rate, µW: dynamic energy per decision (pJ) x decisions/s x 1e-6, plus leakage."""
+    if decision_rate_hz is None or energy_per_decision_pj is None:
+        return None
+    return round(energy_per_decision_pj * float(decision_rate_hz) * 1e-6 + (leakage_uw or 0.0), 6)
+
+
+def _layout(design_id: str, pdk: str, clock_period_ns: float | None, core_util: int, activity_vcd: str | None, timeout: int,
+            decision_rate_hz: float | None = None) -> dict:
+    from pathlib import Path
+    d = _design_dir(design_id)
+    p = _PDK_ALIAS[pdk]
+    clock_period_ns = clock_period_ns or DEFAULT_CLOCK_NS.get(p, 20.0)
+    r = _librelane_run(design_id, p, clock_period_ns, core_util, activity_vcd, timeout)
     pw = r.get("power_w")
+    leak = round(r["leakage_w"] * 1e6, 6) if r.get("leakage_w") is not None else None
+    energy = r.get("energy_per_decision_pj_vectorless")
     out = {"design_id": design_id, "pdk": p, "area_um2": r.get("area_um2"), "die_area_um2": r.get("die_area_um2"),
            "core_mm2": round(r["area_um2"] / 1e6, 6) if r.get("area_um2") else None,
            "die_mm2": round(r["die_area_um2"] / 1e6, 6) if r.get("die_area_um2") else None,
            "timing_ws_ns": r.get("timing_ws_ns"), "critical_path_ns": r.get("critical_path_ns"),
            "power_uw": round(pw * 1e6, 3) if pw is not None else None,
-           "leakage_uw": round(r["leakage_w"] * 1e6, 6) if r.get("leakage_w") is not None else None,
-           "energy_per_decision_pj": r.get("energy_per_decision_pj_vectorless"), "power_basis": r.get("power_basis"),
+           "power_uw_at_clock": round(pw * 1e6, 3) if pw is not None else None,
+           "power_at_clock_basis": (f"LibreLane {r.get('power_basis') or 'vectorless'} power with the logic evaluated every "
+                                    f"{clock_period_ns} ns clock cycle (a worst case for a slow sensor)"),
+           "leakage_uw": leak,
+           "energy_per_decision_pj": energy,
+           "energy_basis": (f"dynamic (internal + switching) {r.get('power_basis') or 'vectorless'} power at the "
+                            f"{clock_period_ns} ns clock x one clock period = energy of one decision"),
+           "power_basis": r.get("power_basis"),
            "gate_equivalents_layout": r.get("gate_equivalents_layout"), "gds": r.get("gds"), "png": r.get("png"),
            "gds_url": f"/files/{design_id}/{Path(r['gds']).relative_to(d)}" if r.get("gds") else None,
            "png_url": f"/files/{design_id}/{Path(r['png']).relative_to(d)}" if r.get("png") else None,
            "basis": r.get("basis", "librelane-layout"), "hw_kind": "layout", "metrics": r.get("metrics"),
            "clock_period_ns": clock_period_ns, "seconds": r.get("seconds"),
            "files": [f for f in (r.get("gds"), r.get("png"), r.get("netlist")) if f]}
+    if r.get("error"):
+        out["error"] = r["error"]
+    if decision_rate_hz is not None:
+        out["decision_rate_hz"] = float(decision_rate_hz)
+        out["power_uw_at_rate"] = rate_power(energy, leak, decision_rate_hz)
+        out["power_at_rate_basis"] = (f"dynamic energy per decision from LibreLane {r.get('power_basis') or 'vectorless'} "
+                                      f"power at the {clock_period_ns} ns clock ({energy} pJ), times {float(decision_rate_hz)} "
+                                      f"decisions per second, plus leakage ({leak} µW)")
     (d / f"layout_{p}.json").write_text(json.dumps(out, default=str))
     return out
 
 
 @tool("Place and route the chip with LibreLane (Docker): real cell area, die area, timing slack against a clock, "
-      "power (vectorless, or from an activity VCD), GDS and the KLayout image. Validated on sky130; gf180 and ihp use "
-      "the same flow (validated up to configuration).",
+      "power (vectorless, or from an activity VCD), GDS and the KLayout image. Power is given at the clock "
+      "(power_uw_at_clock) and, with decision_rate_hz, at the rate the sensor actually needs decisions "
+      "(power_uw_at_rate = energy per decision x rate + leakage). Changing the rate never re-runs LibreLane.",
       {"design_id": "str", "pdk": "str — sky130|gf180|ihp (sky130)", "clock_period_ns": "float — clock for timing (default 20 ns; 40 ns on gf180)",
        "core_util": "int — target utilisation % (40)", "activity_vcd": "str — VCD of real activity for power (optional)",
-       "timeout": "int seconds (3600)"}, lane="docker", cacheable=True)
+       "timeout": "int seconds (3600)", "decision_rate_hz": "float — decisions per second the device needs (optional)"},
+      lane="docker", cacheable=True)
 def layout(design_id: str, pdk: str = "sky130", clock_period_ns: float | None = None, core_util: int = 40,
-           activity_vcd: str | None = None, timeout: int = 3600) -> dict:
-    return _layout(design_id, pdk, clock_period_ns, core_util, activity_vcd, timeout)
+           activity_vcd: str | None = None, timeout: int = 3600, decision_rate_hz: float | None = None) -> dict:
+    return _layout(design_id, pdk, clock_period_ns, core_util, activity_vcd, timeout, decision_rate_hz)
 
 
-@tool("Timing and power of the laid-out chip (same LibreLane run as layout; cached, so calling both costs one run).",
+@tool("Timing and power of the laid-out chip (same LibreLane run as layout; cached, so calling both costs one run). "
+      "With decision_rate_hz it adds power_uw_at_rate: energy per decision x decisions per second + leakage.",
       {"design_id": "str", "pdk": "str — sky130|gf180|ihp (sky130)", "clock_period_ns": "float (default 20 ns; 40 ns on gf180)",
-       "activity_vcd": "str — optional VCD for activity-based power"}, lane="docker", cacheable=True)
-def timing_power(design_id: str, pdk: str = "sky130", clock_period_ns: float | None = None, activity_vcd: str | None = None) -> dict:
+       "activity_vcd": "str — optional VCD for activity-based power",
+       "decision_rate_hz": "float — decisions per second the device needs (optional)"}, lane="docker", cacheable=True)
+def timing_power(design_id: str, pdk: str = "sky130", clock_period_ns: float | None = None, activity_vcd: str | None = None,
+                 decision_rate_hz: float | None = None) -> dict:
     from chiplab.tools import TOOLS
-    r = TOOLS["layout"]["fn"](design_id=design_id, pdk=pdk, clock_period_ns=clock_period_ns, activity_vcd=activity_vcd)
+    r = TOOLS["layout"]["fn"](design_id=design_id, pdk=pdk, clock_period_ns=clock_period_ns, activity_vcd=activity_vcd,
+                              decision_rate_hz=decision_rate_hz)
     if r.get("status") != "ok":
         return r
     return {k: v for k, v in r.items() if k not in ("cost", "status")}
