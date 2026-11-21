@@ -1,0 +1,1345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI scientist</title>
+<style>
+:root{
+  --wash:#fafaf9;--card:#fff;--glass:rgb(255 253 250/.72);--glass-strong:rgb(255 253 250/.96);
+  --i900:#1a1a2e;--i800:#3a3a4a;--i700:#4a4a5a;--i600:#5a5a6a;--i550:#666676;--i500:#6c6c85;--i400:#8a8a99;--i300:#b0b0be;--i200:#d4d4dc;--i150:#e8e8ec;--i100:#f3f3f6;
+  --blue:#3b82f6;--blue6:#2563eb;--blue7:#1d4ed8;--violet:#7c3aed;--teal:#0d9488;
+  --ok:#10b981;--ok-t:#047857;--ok-bg:#ecfdf5;--bad:#ef4444;--bad-t:#b91c1c;--bad-bg:#fef2f2;--amb-t:#92400e;--amb-bg:#fffbeb;
+  --hair:rgb(0 0 0/.06);--hair2:rgb(0 0 0/.08);
+  --sans:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Helvetica,Arial,sans-serif;
+  --serif:"Iowan Old Style","Source Serif 4","Palatino Linotype",Palatino,Georgia,serif;
+  --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,monospace;
+  --ease:cubic-bezier(.4,0,.2,1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--wash);color:var(--i900);font:13px/1.45 var(--sans);-webkit-font-smoothing:antialiased;overflow:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0;padding:0}
+button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+a{color:inherit}
+svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.spin{width:12px;height:12px;border-radius:50%;border:1.6px solid rgb(59 130 246/.22);border-top-color:var(--blue);animation:rot .9s linear infinite;flex:none;display:inline-block}
+@keyframes rot{to{transform:rotate(360deg)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+@keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
+@keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+#app{display:flex;height:100vh;height:100dvh}
+/* ---------- sidebar ---------- */
+#sb{width:252px;flex:none;display:flex;flex-direction:column;background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-right:1px solid rgb(0 0 0/.05);transition:width .15s var(--ease);z-index:20;overflow:hidden}
+.sb-head{height:52px;flex:none;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid rgb(0 0 0/.04)}
+.logo{width:28px;height:28px;border-radius:7px;flex:none;display:grid;place-items:center;background:linear-gradient(140deg,#60a5fa,#6366f1 60%,#8b5cf6);box-shadow:inset 0 0 0 1px rgb(255 255 255/.25)}
+.logo svg{width:16px;height:16px;stroke:#fff;fill:none;stroke-width:1.8}
+.word{font-weight:800;font-size:14px;letter-spacing:-.02em;white-space:nowrap}
+.iconbtn{width:28px;height:28px;border-radius:6px;display:grid;place-items:center;color:var(--i550);flex:none;transition:background .1s}
+.iconbtn:hover{background:rgb(0 0 0/.05)}
+.sb-head .iconbtn{margin-left:auto}
+.nav{padding:8px;display:flex;flex-direction:column;gap:2px;flex:none}
+.nav a{height:36px;border-radius:7px;display:flex;align-items:center;gap:10px;padding:0 10px;color:var(--i500);font-size:12.5px;font-weight:500;text-decoration:none;white-space:nowrap;transition:background .1s}
+.nav a svg{width:18px;height:18px}
+.nav a:hover{background:rgb(0 0 0/.03)}
+.nav a.on{background:rgb(37 99 235/.06);color:var(--i900)}
+.cnt{margin-left:auto;font-size:10px;font-weight:600;color:var(--blue6);background:rgb(37 99 235/.07);border-radius:99px;padding:1px 7px}
+.sb-div{height:1px;background:rgb(0 0 0/.05);margin:0 12px;flex:none}
+.runs{flex:1;overflow:auto;padding:10px 8px}
+.cap{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--i550);padding:4px 10px 6px;display:flex;align-items:center;white-space:nowrap}
+.row{position:relative;height:28px;border-radius:6px;display:flex;align-items:center;gap:6px;padding:0 10px;font-size:12.5px;font-weight:500;color:var(--i700);text-decoration:none;white-space:nowrap;transition:background .1s}
+.row:hover{background:rgb(0 0 0/.025)}
+.row.on{background:rgb(37 99 235/.06);color:var(--i900)}
+.row .t{overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.row .g{width:12px;height:12px;flex:none;display:grid;place-items:center}
+.row .g svg{width:12px;height:12px}
+.row .more{position:absolute;right:4px;top:4px;width:20px;height:20px;border-radius:5px;display:none;place-items:center;color:var(--i550);background:var(--glass-strong)}
+.row:hover .more,.row .more[aria-expanded=true]{display:grid}
+.row .more:hover{background:var(--i100)}
+.tbar{height:9px;border-radius:4px;background:var(--i150);flex:1;animation:pulse 1.2s infinite}
+.row input{flex:1;min-width:0;border:0;border-radius:4px;padding:2px 4px;box-shadow:0 0 0 2px rgb(59 130 246/.5);font-size:12.5px;background:#fff}
+.acct{flex:none;border-top:1px solid rgb(0 0 0/.05);padding:8px}
+.acct button{width:100%;display:flex;align-items:center;gap:10px;padding:6px;border-radius:8px;text-align:left}
+.acct button:hover{background:rgb(0 0 0/.03)}
+.av{width:28px;height:28px;border-radius:50%;flex:none;display:grid;place-items:center;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff}
+.av svg{width:15px;height:15px}
+.acct .nm{font-size:12.5px;font-weight:500;color:var(--i800);line-height:1.2;white-space:nowrap}
+.acct .em{font-size:10px;color:var(--i550);white-space:nowrap}
+body.col #sb{width:52px}
+body.col #sb .word,body.col #sb .nav a span,body.col #sb .cnt,body.col #sb .runs,body.col #sb .acct .who,body.col #sb .sb-div{display:none}
+body.col #sb .sb-head{padding:0 12px;justify-content:center}
+body.col #sb .sb-head .logo{display:none}
+body.col #sb .sb-head .iconbtn{margin:0}
+body.col #sb .nav a{justify-content:center;padding:0}
+body.col #sb .acct{margin-top:auto}
+body.col #sb .acct button{justify-content:center}
+#mhead{display:none}
+#scrim{display:none}
+
+/* ---------- main ---------- */
+#main{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;position:relative}
+.demo{position:fixed;right:14px;bottom:10px;font-size:10.5px;color:var(--i400);pointer-events:none;z-index:5}
+
+/* start page */
+.start{flex:1;overflow:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px 64px}
+.start-col{width:100%;max-width:672px}
+.greet{font-family:var(--serif);font-size:38px;line-height:1.1;font-weight:500;text-align:center;margin:0;letter-spacing:-.01em}
+.sub{text-align:center;color:var(--i550);font-size:16px;margin:12px 0 32px}
+.box{background:var(--glass-strong);border:1px solid var(--hair);border-radius:24px;box-shadow:0 1px 3px rgb(0 0 0/.04);padding:20px 20px 12px;transition:box-shadow .12s}
+.box:focus-within{box-shadow:0 2px 14px rgb(0 0 0/.07)}
+.box textarea{display:block;width:100%;border:0;outline:none;resize:none;background:transparent;font-size:14px;line-height:1.5;min-height:24px;max-height:280px;padding:0}
+.box textarea::placeholder{color:var(--i500)}
+.box textarea:focus-visible{outline:none}
+.ctl{display:flex;align-items:center;gap:6px;margin-top:12px;min-height:36px;flex-wrap:wrap}
+.pill{height:24px;border-radius:99px;border:1px solid var(--hair2);background:#fff;display:inline-flex;align-items:center;gap:5px;padding:0 9px;font-size:11.5px;font-weight:500;color:var(--i800);white-space:nowrap;transition:background .1s}
+.pill:hover{background:var(--i100)}
+.pill svg{width:13px;height:13px}
+.pill .chev{width:12px;height:12px;opacity:.5}
+.pill.ic{width:24px;padding:0;justify-content:center}
+.send{margin-left:auto;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--i150);color:var(--i300);transition:all .12s;flex:none}
+.send.ready{background:#fff;color:var(--i900);box-shadow:0 1px 6px rgb(0 0 0/.14)}
+.send.ready:hover{box-shadow:0 2px 10px rgb(0 0 0/.18)}
+.send svg{width:17px;height:17px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:16px}
+.chip{height:36px;border-radius:99px;border:1px solid var(--hair2);background:#fff;padding:0 14px;display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--i800);transition:background .1s}
+.chip:hover{background:var(--i100)}
+.chip svg{width:14px;height:14px;color:var(--i550)}
+
+/* topbar */
+.top{height:40px;flex:none;display:flex;align-items:center;gap:14px;padding:0 12px 0 16px;border-bottom:1px solid var(--hair);background:rgb(255 255 255/.7)}
+.tabs{display:flex;gap:16px;height:100%;flex:none}
+.tabs a{height:100%;display:flex;align-items:center;font-size:11.5px;font-weight:500;color:var(--i550);text-decoration:none;border-bottom:2px solid transparent;padding-top:2px}
+.tabs a:hover{color:var(--i900)}
+.tabs a.on{color:var(--blue6);font-weight:600;border-bottom-color:var(--blue6)}
+.state{height:20px;border-radius:99px;padding:0 9px;font-size:11.5px;font-weight:500;display:inline-flex;align-items:center;flex:none}
+.state.done{background:var(--ok-bg);color:var(--ok-t);box-shadow:inset 0 0 0 1px #a7f3d0}
+.state.paused{background:var(--i100);color:var(--i600);box-shadow:inset 0 0 0 1px var(--i150)}
+.rtitle{font-size:11.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:60px;max-width:300px;flex:0 1 auto}
+.play{flex:1;max-width:520px;display:flex;align-items:center;gap:8px;min-width:0}
+.pp{width:24px;height:24px;border-radius:6px;display:grid;place-items:center;color:var(--i700);flex:none}
+.pp:hover{background:rgb(0 0 0/.05)}
+.pp svg{width:13px;height:13px;fill:currentColor;stroke:none}
+.clock{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:5px;background:var(--i100);color:var(--i700);flex:none}
+.clock.live{background:rgb(239 68 68/.08);color:var(--bad-t)}
+.track{flex:1;height:4px;border-radius:2px;background:var(--i150);position:relative;min-width:40px}
+.track i{position:absolute;left:0;top:0;bottom:0;border-radius:2px;background:linear-gradient(90deg,#fca5a5,#ef4444)}
+.track b{position:absolute;top:50%;width:10px;height:10px;border-radius:50%;background:#ef4444;transform:translate(-50%,-50%);box-shadow:0 0 0 2px #fff}
+.track.rest i{background:linear-gradient(90deg,#a5b4fc,#7c6cf0)}
+.track.rest b{background:#7c6cf0}
+.live{display:inline-flex;align-items:center;gap:5px;font-size:9px;font-weight:800;letter-spacing:.08em;color:var(--bad-t);background:rgb(239 68 68/.1);border-radius:99px;padding:2px 7px;flex:none}
+.live i{width:5px;height:5px;border-radius:50%;background:var(--bad);animation:blink 1.3s infinite}
+.tright{margin-left:auto;display:flex;align-items:center;gap:6px;flex:none}
+.mchip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--i600);height:24px;padding:0 8px;border-radius:6px}
+.mchip:hover{background:rgb(0 0 0/.04)}
+.mchip svg{width:14px;height:14px}
+
+.body{flex:1;min-height:0;position:relative;display:flex;flex-direction:column}
+
+/* overview: one number */
+.ov{flex:1;overflow:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px 72px;text-align:center}
+.kick{font-size:13px;color:var(--i550);height:20px;display:flex;align-items:center;gap:8px}
+.newbest{color:var(--ok-t);font-weight:500;animation:fadein .4s}
+.hero{display:flex;align-items:baseline;justify-content:center;gap:14px;margin:6px 0 4px}
+.num{font-family:var(--serif);font-size:clamp(76px,11vw,152px);line-height:1;font-weight:500;letter-spacing:-.035em;font-variant-numeric:lining-nums tabular-nums;color:var(--i900)}
+.num.none{font-size:clamp(44px,6vw,72px);color:var(--i400);letter-spacing:-.02em}
+.unit{font-family:var(--serif);font-size:22px;color:var(--i550)}
+.verdict{font-size:17px;line-height:1.45;color:var(--i800);max-width:560px;margin:10px 0 0}
+.verdict .mk{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px;vertical-align:1px}
+.mk.ok{background:var(--ok)}.mk.no{background:#f59e0b}
+.stages{position:relative;display:grid;grid-template-columns:repeat(7,1fr);width:min(620px,100%);margin:52px 0 0;row-gap:6px}
+.stages:before{content:"";position:absolute;left:calc(100%/14);right:calc(100%/14);top:5px;height:1px;background:var(--i200)}
+.stages .fill{position:absolute;left:calc(100%/14);top:5px;height:1px;background:var(--blue);transition:width .6s var(--ease)}
+.st{display:flex;flex-direction:column;align-items:center;gap:8px;position:relative;font-size:11px;color:var(--i400)}
+.st i{width:11px;height:11px;border-radius:50%;background:var(--wash);border:1.5px solid var(--i200);position:relative;z-index:1}
+.st.done i{background:var(--blue);border-color:var(--blue)}
+.st.done{color:var(--i600)}
+.st.now{color:var(--i900);font-weight:600}
+.st.now i{border-color:var(--blue);background:#fff;box-shadow:0 0 0 4px rgb(59 130 246/.15)}
+.st.now i:after{content:"";position:absolute;inset:2px;border-radius:50%;background:var(--blue);animation:blink 1.3s infinite}
+.loop{grid-column:3/7;grid-row:2;border:1px solid var(--i200);border-top:0;height:9px;border-radius:0 0 6px 6px;margin:0 12%;position:relative}
+.loop span{position:absolute;left:50%;top:4px;transform:translateX(-50%);background:var(--wash);padding:0 8px;font-size:11px;color:var(--i550);white-space:nowrap}
+.nowline{margin-top:44px;display:flex;align-items:center;justify-content:center;gap:9px;font-size:13.5px;color:var(--i700);max-width:780px;text-align:left}
+.nowline .spin{width:13px;height:13px}
+.nowline svg{width:15px;height:15px;color:var(--ok)}
+.link{font-size:12.5px;color:var(--blue6);font-weight:500;border-radius:4px}
+.link:hover{text-decoration:underline}
+.more-row{margin-top:14px;display:flex;gap:18px;justify-content:center}
+
+/* chat */
+.chat{flex:1;min-height:0;display:flex;flex-direction:column}
+.feed{flex:1;overflow:auto;padding:24px 20px 8px}
+.feedin{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:4px}
+.msg{display:flex;gap:10px;padding:8px 0}
+.anim{animation:fadein .35s}
+.msg .tile{width:24px;height:24px;border-radius:50%;flex:none;display:grid;place-items:center;background:#f5f3ff;color:var(--violet);margin-top:1px}
+.msg .tile svg{width:13px;height:13px}
+.msg .who{font-size:11px;font-weight:600;color:var(--violet);margin-bottom:2px}
+.msg .txt{font-size:13.5px;line-height:1.55;color:var(--i800);max-width:640px}
+.tool{margin-left:34px;border-radius:8px}
+.tool>button{width:100%;display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:8px;font-size:12.5px;color:var(--i600);text-align:left}
+.tool>button:hover{background:rgb(0 0 0/.03)}
+.tool .tg{width:14px;height:14px;display:grid;place-items:center;flex:none}
+.tool .tg svg{width:13px;height:13px;color:var(--i400)}
+.tool .chv{margin-left:auto;width:13px;height:13px;color:var(--i400);transition:transform .12s}
+.tool.open .chv{transform:rotate(90deg)}
+.tool pre{margin:2px 8px 8px 30px;padding:10px 12px;background:#fff;border:1px solid var(--hair);border-radius:8px;font:11.5px/1.6 var(--mono);color:var(--i700);white-space:pre-wrap}
+.me{align-self:flex-end;max-width:520px;background:rgb(13 148 136/.08);color:#0f4f4a;border:1px solid rgb(13 148 136/.18);border-radius:14px 14px 4px 14px;padding:8px 12px;font-size:13.5px;margin:8px 0}
+.typing{font-size:12px;color:var(--i500);padding:6px 0 6px 34px;display:flex;gap:6px;align-items:center}
+.typing i{width:4px;height:4px;border-radius:50%;background:var(--i400);animation:blink 1s infinite}
+.typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
+.cwrap{flex:none;padding:8px 20px 28px}
+.cbox{max-width:720px;margin:0 auto;display:flex;align-items:flex-end;gap:10px;padding:12px 12px 12px 20px}
+.cbox textarea{flex:1;align-self:center}
+.cbox .send{margin-left:0}
+.cbox.off{opacity:.7}
+
+/* visual */
+.vis{flex:1;overflow:auto;padding:18px 24px 48px}
+.visin{max-width:1040px;margin:0 auto}
+.picker{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:22px}
+.picker button{height:28px;border-radius:99px;padding:0 12px;font-size:12.5px;color:var(--i600);display:inline-flex;align-items:center;gap:4px}
+.picker button:hover{background:rgb(0 0 0/.04)}
+.picker button.on{background:var(--i900);color:#fff}
+.picker button svg{width:12px;height:12px}
+.vh{font-family:var(--serif);font-size:26px;font-weight:500;margin:0;letter-spacing:-.01em}
+.vs{color:var(--i550);font-size:14px;margin:4px 0 16px;max-width:680px}
+.panel{background:#fff;border:1px solid var(--hair);border-radius:12px;box-shadow:0 1px 3px rgb(0 0 0/.04);padding:18px;position:relative}
+.panel svg.fig{display:block;width:100%;height:auto}
+.foot{font-size:12.5px;color:var(--i600);margin-top:12px;display:flex;gap:18px;flex-wrap:wrap;align-items:center}
+.lg{display:inline-flex;align-items:center;gap:6px}
+.lg i{width:14px;height:8px;border-radius:2px;display:inline-block}
+canvas.sig{display:block;width:100%;height:360px}
+.ptiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.pt{border:1px solid var(--hair);border-radius:10px;padding:12px 14px;background:#fff}
+.pt.worst{box-shadow:0 0 0 2px #fca5a5;border-color:transparent}
+.pt.worst.okw{box-shadow:0 0 0 2px #fcd34d}
+.pt .pn{font-size:11.5px;color:var(--i550);display:flex;justify-content:space-between}
+.pt .pv{font-family:var(--serif);font-size:30px;line-height:1.15;margin:4px 0 6px;font-variant-numeric:tabular-nums}
+.pt .bar{height:4px;border-radius:2px;background:var(--i100);position:relative}
+.pt .bar i{position:absolute;left:0;top:0;bottom:0;border-radius:2px}
+.pt .bar b{position:absolute;top:-3px;width:1.5px;height:10px;background:var(--i900)}
+.pt .ps{font-size:11.5px;margin-top:7px}
+.ps.ok{color:var(--ok-t)}.ps.no{color:var(--bad-t)}
+.stats{display:flex;flex-direction:column;gap:22px}
+.stat .l{font-size:12.5px;color:var(--i550)}
+.stat .v{font-family:var(--serif);font-size:30px;line-height:1.2}
+.stat .e{font-size:11.5px;color:var(--i400)}
+.dev{display:grid;grid-template-columns:1fr 220px;gap:28px;align-items:center}
+.empty{padding:48px 20px;text-align:center;color:var(--i550);font-size:14px}
+
+/* configure */
+.cfg{flex:1;overflow:auto;padding:40px 24px}
+.cfgin{max-width:820px;margin:0 auto;display:grid;grid-template-columns:180px 1fr;gap:32px;align-items:start}
+.cfg h1{font-family:var(--serif);font-weight:500;font-size:32px;margin:0 0 24px;grid-column:1/-1}
+.subrail{display:flex;flex-direction:column;gap:2px}
+.subrail .cap{padding-left:10px}
+.subrail button{height:32px;border-radius:7px;text-align:left;padding:0 10px;font-size:12.5px;color:var(--i600)}
+.subrail button:hover{background:rgb(0 0 0/.03)}
+.subrail button.on{background:rgb(37 99 235/.06);color:var(--i900);font-weight:500}
+.seg{display:inline-flex;background:var(--i100);border-radius:8px;padding:2px;gap:2px}
+.seg button{height:26px;padding:0 12px;border-radius:6px;font-size:12px;color:var(--i600)}
+.seg button.on{background:var(--blue6);color:#fff}
+.field{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:14px 0;border-bottom:1px solid var(--hair)}
+.field:last-child{border-bottom:0}
+.field .fl{font-size:13px;font-weight:500}
+.field .fh{font-size:12px;color:var(--i550);margin-top:2px}
+.field select,.field input{height:30px;border:1px solid var(--i150);border-radius:7px;background:#fff;padding:0 8px;font-size:12.5px;min-width:150px}
+.sw{width:34px;height:20px;border-radius:99px;background:var(--blue6);position:relative;flex:none}
+.sw:after{content:"";position:absolute;right:2px;top:2px;width:16px;height:16px;border-radius:50%;background:#fff}
+.sw.offsw{background:var(--i200)}
+.sw.offsw:after{right:auto;left:2px}
+
+/* popovers, menus, drawers */
+#layer{position:fixed;inset:0;pointer-events:none;z-index:50}
+#layer>*{pointer-events:auto}
+.pop{position:fixed;background:#fff;border:1px solid var(--hair2);border-radius:12px;box-shadow:0 4px 20px rgb(0 0 0/.1);padding:6px;min-width:176px;animation:fadein .12s}
+.pop .cap{padding:6px 8px 4px}
+.opt{width:100%;display:flex;align-items:flex-start;gap:9px;padding:7px 8px;border-radius:7px;text-align:left;font-size:12.5px;color:var(--i800)}
+.opt:hover{background:var(--i100)}
+.opt.on{background:rgb(37 99 235/.1)}
+.opt svg{width:15px;height:15px;margin-top:1px;color:var(--i550)}
+.opt .oh{display:block;font-size:11px;color:var(--i550);margin-top:1px}
+.opt .ck{margin-left:auto;color:var(--blue6)}
+.opt.dis{opacity:.45;cursor:not-allowed}
+.sep{height:1px;background:var(--hair);margin:4px 6px}
+.adv{width:300px;padding:14px}
+.adv h4{margin:0 0 4px;font-size:13px}
+.adv .field{padding:10px 0}
+.adv .field select,.adv .field input{min-width:112px;height:28px}
+.scrim{position:fixed;inset:0;background:rgb(26 26 46/.18);animation:fadein .15s}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(380px,92vw);background:#fff;border-left:1px solid var(--hair);box-shadow:-8px 0 30px rgb(0 0 0/.08);padding:20px 22px;overflow:auto;animation:slide .18s var(--ease)}
+@keyframes slide{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}
+.drawer h3{font-family:var(--serif);font-weight:500;font-size:22px;margin:0 0 4px}
+.drawer .dsub{color:var(--i550);font-size:12.5px;margin:0 0 16px}
+.drawer .x{position:absolute;right:14px;top:14px}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kv span:first-child{color:var(--i550)}
+.kv span:last-child{text-align:right;font-weight:500}
+.dh{font-size:13px;font-weight:600;margin:22px 0 6px}
+.rr{display:grid;grid-template-columns:70px 1fr auto;gap:8px;padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rr .g2{font-variant-numeric:tabular-nums;font-weight:500}
+.modal{position:fixed;left:50%;top:14vh;transform:translateX(-50%);width:min(520px,92vw);background:#fff;border-radius:14px;box-shadow:0 12px 48px rgb(0 0 0/.18);overflow:hidden;animation:fadein .15s}
+.modal input{width:100%;border:0;border-bottom:1px solid var(--hair);padding:16px 18px;font-size:15px;outline:none}
+.modal .list{max-height:320px;overflow:auto;padding:6px}
+.modal .pad{padding:20px 22px}
+.modal h3{margin:0 0 10px;font-family:var(--serif);font-weight:500;font-size:22px}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--i900);color:#fff;font-size:12.5px;padding:8px 14px;border-radius:99px;animation:fadein .15s}
+
+/* responsive */
+@media (max-width:1279px){.mchip span{display:none}.rtitle{max-width:200px}.play{min-width:190px}}
+@media (max-width:1023px){.rtitle{max-width:160px}}
+@media (max-width:767px){
+  #app{flex-direction:column}
+  #sb{position:fixed;left:0;top:0;bottom:0;width:252px!important;transform:translateX(-102%);transition:transform .18s var(--ease);background:var(--glass-strong)}
+  body.drawer-open #sb{transform:none;box-shadow:4px 0 30px rgb(0 0 0/.12)}
+  body.col #sb .word,body.col #sb .nav a span,body.col #sb .cnt,body.col #sb .runs,body.col #sb .acct .who,body.col #sb .sb-div,body.col #sb .sb-head .logo{display:revert}
+  body.col #sb .runs{display:block}
+  body.col #sb .nav a{justify-content:flex-start;padding:0 10px}
+  body.col #sb .sb-head{justify-content:flex-start}
+  body.col #sb .sb-head .iconbtn{margin-left:auto}
+  body.drawer-open #scrim{display:block;position:fixed;inset:0;z-index:15;background:rgb(26 26 46/.2)}
+  #mhead{display:flex;height:48px;flex:none;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid var(--hair);background:var(--glass-strong)}
+  .top{gap:10px;padding:0 10px}
+  .rtitle,.track,.tright .mchip{display:none}
+  .play{flex:1;justify-content:flex-end;min-width:0}
+  .greet{font-size:32px}
+  .ov{padding:28px 18px 60px;justify-content:flex-start}
+  .stages{margin-top:36px}
+  .st span{font-size:9.5px}
+  .loop{margin:0 4%}
+  .dev{grid-template-columns:1fr}
+  .cfgin{grid-template-columns:1fr}
+  .demo{bottom:6px;right:10px}
+  .vis{padding:14px 14px 40px}
+  .feed{padding:16px 14px 8px}
+  .cwrap{padding:6px 12px 22px}
+}
+@media (prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.001s!important;animation-iteration-count:1!important;transition-duration:.001s!important}}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="sb" aria-label="Sidebar"></aside>
+  <div id="scrim"></div>
+  <header id="mhead"></header>
+  <main id="main"></main>
+</div>
+<div class="demo">Simulated run, demo data</div>
+<div id="layer"></div>
+<script>
+(() => {
+'use strict';
+/* The product name lives here and only here. */
+const PRODUCT = { short: 'Chipmonk', full: 'Chipmonk AI Scientist' };
+document.title = PRODUCT.full;
+
+/* ---------------- icons ---------------- */
+const P = {
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  sliders:'<path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/>',
+  search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  panel:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  ccheck:'<circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+  more:'<circle cx="5" cy="12" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><circle cx="19" cy="12" r="1.2" fill="currentColor"/>',
+  pause:'<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>',
+  play:'<path d="M7 4.5v15l12.5-7.5z"/>',
+  chev:'<path d="m6 9 6 6 6-6"/>',
+  chevr:'<path d="m9 6 6 6-6 6"/>',
+  up:'<path d="M12 19V5M5 12l7-7 7 7"/>',
+  cpu:'<rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/>',
+  gpu:'<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="9" cy="12" r="3"/><path d="M15 10h4M15 14h4"/>',
+  wave:'<path d="M2 12h3.5l2.5-6 4 12 3-9 2 3h5"/>',
+  drop:'<path d="M12 3c3 4 6 7.5 6 11a6 6 0 0 1-12 0c0-3.5 3-7 6-11z"/>',
+  x:'<path d="M6 6l12 12M18 6 6 18"/>',
+  restart:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
+  link:'<path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>',
+  star:'<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/>',
+  pencil:'<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+  trash:'<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',
+  user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  layers:'<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
+  tool:'<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/>',
+  sci:'<path d="M9 3h6M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2h12.4a1.5 1.5 0 0 0 1.3-2L14 9V3"/><path d="M7 15h10"/>',
+  settings:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  help:'<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4.9.8c0 1.7-2.4 2.2-2.4 3.7M12 17h.01"/>',
+  chart:'<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-6"/>',
+  chipglyph:'<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>'
+};
+const ic = (n, cls) => `<svg class="i${cls ? ' ' + cls : ''}" viewBox="0 0 24 24" aria-hidden="true">${P[n]}</svg>`;
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = n => Math.round(n).toLocaleString('en-GB');
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const now = () => performance.now();
+const hash = (a, b) => { let x = Math.imul(a ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x632be5ab, 0xc2b2ae35); x ^= x >>> 15; x = Math.imul(x, 0x2c1b3c6d); x ^= x >>> 12; return x >>> 0; };
+const rng = seed => { let s = seed >>> 0; return () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+
+/* ---------------- the run model ---------------- */
+const SPEED = 20; // simulated seconds per real second: a 3 minute demo is about an hour of run time
+const STAGES = ['Spec', 'Reference', 'Propose', 'Fine-tune', 'Compile', 'Verify', 'Report'];
+const ROUNDS = 4, T_SPEC = 10, T_REF = 15, SUB = [8, 16, 6, 7], RLEN = 37, T_REPORT = 12;
+const R0 = T_SPEC + T_REF;
+const TOTAL = R0 + ROUNDS * RLEN + T_REPORT;
+const SUBKEYS = ['propose', 'finetune', 'compile', 'verify'];
+const roundStart = r => R0 + (r - 1) * RLEN;
+const roundEnd = r => R0 + r * RLEN;
+function phase(t) {
+  if (t >= TOTAL) return { key: 'done', idx: 7, round: ROUNDS, f: 1 };
+  if (t < T_SPEC) return { key: 'spec', idx: 0, round: 0, f: t / T_SPEC };
+  if (t < R0) return { key: 'reference', idx: 1, round: 0, f: (t - T_SPEC) / T_REF };
+  if (t < roundEnd(ROUNDS)) {
+    const r = Math.floor((t - R0) / RLEN); let u = t - roundStart(r + 1);
+    for (let i = 0; i < 4; i++) { if (u < SUB[i]) return { key: SUBKEYS[i], idx: 2 + i, round: r + 1, f: u / SUB[i] }; u -= SUB[i]; }
+  }
+  return { key: 'report', idx: 6, round: ROUNDS, f: (t - roundEnd(ROUNDS)) / T_REPORT };
+}
+
+const UC = {
+  eeg: {
+    name: 'Brainwave sensing', icon: 'wave', device: 'EEG headband', who: 'patients', one: 'patient', One: 'Patient', N: 6,
+    s1: ['Sensor 1', 'EEG, left side'], s2: ['Sensor 2', 'EEG, right side'], yes: 'Seizure', no: 'No seizure',
+    gates: [9840, 5212, 3076, 2418], meet: [4, 5, 6, 6], chans: [8, 6, 4, 4], line: 90, metric: 'seizures caught',
+    lineText: 'catch at least 90% of seizures for every unseen patient, with at most one false alarm a day',
+    front: 180, battUWh: 120000, batt: '40 mAh coin cell', patch: [40, 25], patchName: 'behind-the-ear pod', train: 31,
+    placeholder: 'Describe the device and its job, e.g. an EEG headband that flags a seizure as it starts',
+    example: 'A 4-channel EEG headband that flags a seizure within a few seconds of onset and runs a week on one charge.'
+  },
+  nirs: {
+    name: 'Newborn sensing', icon: 'drop', device: 'forehead NIRS patch', who: 'newborns', one: 'newborn', One: 'Newborn', N: 12,
+    s1: ['Sensor 1', 'Near-infrared light'], s2: ['Sensor 2', 'Light detector'], yes: 'Oxygen falling', no: 'Normal',
+    gates: [6930, 3904, 2576, 2146], meet: [8, 10, 11, 12], chans: [4, 3, 2, 2], line: 90, metric: 'oxygen drops caught',
+    lineText: 'catch at least 90% of brain-oxygen drops below 50% for every unseen newborn, within a minute',
+    front: 1800, battUWh: 660000, batt: '220 mAh cell', patch: [30, 15], patchName: 'forehead patch', train: 58,
+    placeholder: "Describe the device and its job, e.g. a forehead patch that warns when a newborn's brain oxygen drops",
+    example: "A forehead patch for incubators that warns when a newborn's brain oxygen stays below 50% for a minute."
+  }
+};
+const PRESETS = [
+  { name: 'Lite', icon: 'zap', hint: '2,048 candidates a round', cands: 2048 },
+  { name: 'Pro', icon: 'layers', hint: '8,192 candidates a round', cands: 8192 },
+  { name: 'Max', icon: 'sci', hint: '32,768 candidates a round', cands: 32768 }
+];
+P.zap = '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>';
+const MACHINES = [
+  { name: 'CPU Basic', icon: 'cpu', hint: 'The small machine. Fine-tunes slowly.' },
+  { name: 'CPU Plus', icon: 'cpu', hint: 'A bigger machine.' },
+  { name: 'GPU Basic', icon: 'gpu', hint: 'Adds a GPU. Good for a Lite run.' },
+  { name: 'GPU Plus', icon: 'gpu', hint: 'A much bigger GPU, for Pro and Max.' }
+];
+
+let nextId = 1;
+const runs = [];
+function makeRun(o) {
+  const r = Object.assign({ id: 'r' + nextId++, uc: 'eeg', factor: 1, base: 0, anchor: now(), paused: false, redirects: [], starred: false,
+    preset: 'Lite', cands: 2048, machine: 'GPU Basic', line: 90, budget: 20000, scientists: 'Claude Agent', titleAt: 0, created: Date.now(), seed: nextId * 7919 }, o);
+  return r;
+}
+runs.push(makeRun({ title: 'Seizure alarm chip for a 4-channel EEG headband', uc: 'eeg', base: 62, factor: 1 }));
+runs.push(makeRun({ title: 'Brain-oxygen alarm for an incubator forehead patch', uc: 'nirs', base: TOTAL, factor: 1 }));
+runs.push(makeRun({ title: 'Low-power seizure chip for a behind-the-ear pod', uc: 'eeg', base: TOTAL, factor: 0.93 }));
+runs.push(makeRun({ title: 'Early warning of oxygen drops in preterm newborns', uc: 'nirs', base: TOTAL, factor: 1.08 }));
+runs.push(makeRun({ title: 'Absence-seizure counter for a 2-channel EEG patch', uc: 'eeg', base: TOTAL, factor: 0.81 }));
+const byId = id => runs.find(r => r.id === id);
+const elapsed = r => Math.min(TOTAL, r.paused || r.base >= TOTAL ? r.base : r.base + (now() - r.anchor) / 1000);
+const status = r => elapsed(r) >= TOTAL ? 'done' : r.paused ? 'paused' : 'running';
+
+function classify(text) {
+  const s = text.toLowerCase();
+  if (/channel|electrode|optode|detector|sensor/.test(s)) return 'channels';
+  if (/fewer gate|smaller|less area|tiny|lower power|cheaper|size|gates|power|battery/.test(s)) return 'smaller';
+  if (/sensitiv|accura|miss|safer|careful|false alarm|worst|reliab/.test(s)) return 'accurate';
+  return 'note';
+}
+function roundsOf(run) {
+  const u = UC[run.uc]; const out = []; let f = run.factor, line = run.line, chD = 0, meetAdj = 0;
+  for (let r = 1; r <= ROUNDS; r++) {
+    const lo = r === 1 ? -1 : roundStart(r - 1), hi = roundStart(r);
+    const applied = run.redirects.filter(x => x.t >= lo && x.t < hi);
+    for (const x of applied) {
+      if (x.kind === 'smaller') { f *= 0.68; line = Math.min(line, 88); }
+      else if (x.kind === 'channels') { chD -= 1; f *= 0.88; }
+      else if (x.kind === 'accurate') { f *= 1.3; meetAdj += 1; }
+    }
+    const gates = Math.round(u.gates[r - 1] * f * (1 + (hash(run.seed, r) % 40) / 1000));
+    const meet = Math.max(0, Math.min(u.N, u.meet[r - 1] + meetAdj));
+    const chans = Math.max(2, u.chans[r - 1] + chD);
+    const rd = { r, gates, meet, line, chans, applied };
+    rd.vals = patientVals(run, rd);
+    rd.worst = Math.min(...rd.vals);
+    rd.worstIdx = rd.vals.indexOf(rd.worst);
+    out.push(rd);
+  }
+  return out;
+}
+function patientVals(run, rd) {
+  const N = UC[run.uc].N, miss = N - rd.meet, seed = run.seed;
+  const order = [...Array(N).keys()].sort((a, b) => hash(seed, a) - hash(seed, b));
+  const vals = new Array(N);
+  order.forEach((p, rank) => {
+    const h = hash(p * 13 + rd.r, seed + 7);
+    vals[p] = rank < miss ? rd.line - 1 - (h % 5) - (miss - rank > 1 ? 2 : 0) : Math.min(99, rd.line + 1 + (rank - miss) % 3 + (h % 7) + (rd.r > 2 ? 1 : 0));
+  });
+  return vals;
+}
+function bestAt(run, t) {
+  const R = roundsOf(run); let b = null;
+  for (const rd of R) if (roundEnd(rd.r) <= t) b = rd;
+  return { best: b, R };
+}
+const chipPower = g => 3 + g * 0.0045;
+const battDays = (u, g) => u.battUWh / (u.front + chipPower(g)) / 24;
+const coreMM2 = g => g * 6e-6;
+function clock(t) {
+  const s = Math.round(t * SPEED), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), ss = s % 60;
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}` : `${m}:${String(ss).padStart(2, '0')}`;
+}
+const mins = t => Math.max(1, Math.round(t * SPEED / 60));
+const spend = t => (t / TOTAL) * 6.8;
+
+/* ---------------- scientists' feed ---------------- */
+const EEG_SETS = { 8: ['F7', 'F8', 'T3', 'T4', 'T5', 'T6', 'C3', 'C4'], 7: ['F7', 'F8', 'T3', 'T4', 'T5', 'T6', 'C3'], 6: ['F7', 'F8', 'T3', 'T4', 'T5', 'T6'], 5: ['F7', 'T3', 'T4', 'T5', 'T6'], 4: ['T3', 'T4', 'T5', 'T6'], 3: ['T3', 'T4', 'T5'], 2: ['T3', 'T4'] };
+const NIRS_PAIRS = [['S1', 'D1'], ['S1', 'D2'], ['S2', 'D3'], ['S2', 'D4']];
+function chanWords(u, k, run) {
+  if (run.uc === 'eeg') return `${k} channel${k > 1 ? 's' : ''} (${EEG_SETS[k].join(', ')})`;
+  return `${k} light path${k > 1 ? 's' : ''}`;
+}
+function noteWords(x) {
+  return { smaller: 'aiming for chips about a third smaller and accepting 88% instead of 90%',
+    channels: 'dropping one more channel', accurate: 'favouring the worst patient over size',
+    note: `taking your note into account ("${x.text.length > 60 ? x.text.slice(0, 57) + '...' : x.text}")` }[x.kind];
+}
+function script(run) {
+  const u = UC[run.uc], R = roundsOf(run), ev = [], c = fmt(run.cands);
+  const add = (t, who, text, tool, detail, dur) => ev.push({ t, who, text, tool, detail, dur: dur || 0, key: run.id + ':' + t });
+  const eeg = run.uc === 'eeg';
+  add(0.3, 'Lead scientist', `I've read your spec: ${eeg ? 'an EEG headband that flags a seizure as it starts' : "a forehead patch that warns when a newborn's brain oxygen drops"}. Every chip will be held to one clinical line: ${run.line === 90 ? u.lineText : u.lineText.replace('90%', run.line + '%')}.`);
+  add(1, null, null, 'Read the spec and set the clinical line', eeg
+    ? `Device: EEG headband, up to 8 channels\nJob: flag seizure onset\nLine: ${run.line}% of seizures caught per patient,\n      at most 1 false alarm a day\nGate budget: ${fmt(run.budget)}`
+    : `Device: forehead NIRS patch, 2 sources, 4 detectors\nJob: flag brain oxygen below 50% for 60 s\nLine: ${run.line}% of drops caught per newborn, within 60 s\nGate budget: ${fmt(run.budget)}`, 7);
+  add(T_SPEC + 0.4, 'Trainer', eeg
+    ? `Training a full-size reference model on all 19 channels in 4-second windows from ${u.train} training patients. Six patients stay unseen; we only look at them when checking a chip.`
+    : `Training a full-size reference model on all 4 light paths in 30-second windows from ${u.train} training newborns. Twelve newborns stay unseen; we only look at them when checking a chip.`);
+  add(T_SPEC + 1, null, null, 'Train the reference model', eeg
+    ? 'Channels: 19, window: 4 s\nSize: 1.8 million parameters\nSeizures caught on held-out windows: 97%\nAs a circuit: about 410,000 gates, far too big'
+    : 'Light paths: 4, window: 30 s\nSize: 0.9 million parameters\nDrops caught on held-out windows: 96%\nAs a circuit: about 260,000 gates, far too big', 13);
+  R.forEach((rd, i) => {
+    const s = roundStart(rd.r), prev = R[i - 1];
+    let txt = rd.r === 1
+      ? `Round 1: proposing ${c} small designs that should fit on a chip. Most listen to ${chanWords(u, rd.chans, run)}${eeg ? ' in 2-second windows' : ''}.`
+      : `Round ${rd.r}: the last chip held up on ${prev.chans} ${eeg ? 'channels' : 'light paths'}, so this batch of ${c} leans on ${chanWords(u, rd.chans, run)}.`;
+    if (rd.applied.length) txt += ` Following your note, ${rd.applied.map(noteWords).join('; ')}.`;
+    add(s + 0.4, 'Designer', txt);
+    add(s + 1, null, null, `Propose ${c} chip designs`, `${eeg ? 'Channels' : 'Light paths'}: ${rd.chans}\nWindow: ${eeg ? '2 s' : '30 s'}\nSizes: ${fmt(rd.gates * 0.3)} to ${fmt(rd.gates * 8)} gates\nClinical line: ${rd.line}%`, 6.5);
+    add(s + 8.3, 'Trainer', `Fine-tuning all ${c} at once from the reference model, on the same ${u.train} training ${u.who}.`);
+    add(s + 9, null, null, `Fine-tune ${c} models in one batch`, `Machine: ${run.machine}, one batch\nBest validation score: ${Math.min(99, rd.line + 5)}%\nKept for compiling: top 12`, 14.5);
+    add(s + 24.4, 'Designer', `Compiled the 12 strongest into logic gates, with their weights wired in. The smallest one that still holds up is ${fmt(rd.gates)} gates.`);
+    add(s + 25, null, null, 'Compile the top 12 into logic gates', `Smallest: ${fmt(rd.gates)} gates\nNext: ${fmt(rd.gates * 1.21)} gates\nLargest: ${fmt(rd.gates * 3.4)} gates`, 4.5);
+    add(s + 30.4, null, null, 'Check the circuit against its model, bit for bit', `${eeg ? '1.2 million' : '410,000'} windows compared\nMismatches: 0`, 5.5);
+    const miss = rd.meet < u.N;
+    add(s + 36.2, 'Verifier', `The ${fmt(rd.gates)}-gate circuit matches its model bit for bit. On the ${u.N} unseen ${u.who} it meets the clinical line for ${rd.meet} of ${u.N}` +
+      (miss ? `; ${u.one} ${rd.worstIdx + 1} is at ${rd.worst}%, under the ${rd.line}% line.` : `; the worst is ${u.one} ${rd.worstIdx + 1} at ${rd.worst}%.`) +
+      (i ? ` That's the new best, down from ${fmt(prev.gates)}.` : ''));
+  });
+  const fin = R[ROUNDS - 1];
+  add(roundEnd(ROUNDS) + 0.5, null, null, 'Write the report', 'Sections: the chip, how it was found,\nper-patient results, power estimate', 10);
+  add(TOTAL - 0.2, 'Lead scientist', `Done. The final chip is ${fmt(fin.gates)} gates on ${chanWords(u, fin.chans, run)}. It meets the clinical line on ${fin.meet} of ${u.N} unseen ${u.who}; the worst is ${fin.worst}%. The report and the gate-level design are ready.`);
+  for (const x of run.redirects) {
+    ev.push({ t: x.t, me: true, text: x.text, key: 'me' + x.at });
+    ev.push({ t: x.t + 0.001, who: 'Lead scientist', text: x.reply, reply: x, key: 'rp' + x.at });
+  }
+  return ev.sort((a, b) => a.t - b.t);
+}
+function replyFor(run, kind, t) {
+  const r = [1, 2, 3, 4].find(k => roundStart(k) > t);
+  const u = UC[run.uc];
+  if (!r) return { text: "The last round is already past proposing, so this run's chip won't change now. I'll put your note in the report as the first thing to try in a new run.", r: 0 };
+  const when = `From round ${r}`;
+  const m = {
+    smaller: `Understood. ${when} we'll aim for chips about a third smaller and accept 88% of ${u.metric} instead of 90%. The clinical line moves with it, so you'll see it drawn lower in Trade-off.`,
+    channels: `Understood. ${when} the designs drop one more ${run.uc === 'eeg' ? 'channel' : 'light path'}. Fewer ${run.uc === 'eeg' ? 'electrodes' : 'optodes'} also saves power on the device.`,
+    accurate: `Understood. ${when} we'll favour the worst ${u.one} over size, so expect a bigger chip that meets the line for more ${u.who}.`,
+    note: `Noted. I'll hand that to the designer before round ${r} starts proposing.`
+  };
+  return { text: m[kind], r };
+}
+
+/* ---------------- app state and routing ---------------- */
+const S = {
+  route: { page: 'start' }, uc: 'eeg', preset: 'Lite', machine: 'GPU Basic',
+  adv: { line: 90, budget: 20000, scientists: 'Claude Agent', model: 'Claude Opus' },
+  cfgTab: 'line', open: new Set(), seen: {}, renaming: null, sig: '', sbSig: '', lastNum: {}, drawer: null
+};
+const VIS = [
+  { key: 'chip', name: 'Chip' }, { key: 'signal', name: 'Signal' }, { key: 'sensors', name: 'Sensors' },
+  { key: 'tradeoff', name: 'Trade-off' }, { key: 'patients', name: 'Patients' }, { key: 'device', name: 'On the device', more: true }
+];
+function parse() {
+  const p = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+  if (p[0] === 'run' && byId(p[1])) {
+    return { page: 'run', id: p[1], view: ['overview', 'chat', 'visual'].includes(p[2]) ? p[2] : 'overview', vis: VIS.some(v => v.key === p[3]) ? p[3] : 'chip' };
+  }
+  if (p[0] === 'configure') return { page: 'configure' };
+  return { page: 'start' };
+}
+const href = (id, view, vis) => `#/run/${id}/${view || 'overview'}${view === 'visual' && vis ? '/' + vis : ''}`;
+function go(h) { if (location.hash !== h) location.hash = h; else { S.route = parse(); render(); } }
+window.addEventListener('hashchange', () => { S.route = parse(); closeLayer(); document.body.classList.remove('drawer-open'); render(); });
+
+/* ---------------- sidebar ---------------- */
+function glyph(r) {
+  if (r.titleAt > now() && status(r) === 'running') return '<span class="g"><span class="spin"></span></span>';
+  const st = status(r);
+  if (st === 'running') return '<span class="g"><span class="spin"></span></span>';
+  if (st === 'done') return `<span class="g" style="color:var(--ok)">${ic('ccheck')}</span>`;
+  return '';
+}
+function runRow(r) {
+  const on = S.route.page === 'run' && S.route.id === r.id;
+  const title = r.titleAt > now() ? '<span class="tbar"></span>' : S.renaming === r.id
+    ? `<input value="${esc(r.title)}" aria-label="Run title" data-rename="${r.id}">` : `<span class="t">${esc(r.title)}</span>`;
+  return `<a class="row${on ? ' on' : ''}" href="${href(r.id, on ? S.route.view : 'overview', S.route.vis)}" title="${esc(r.title)}">${glyph(r)}${title}
+    <button class="more" data-rowmenu="${r.id}" aria-label="More for this run" aria-expanded="false">${ic('more')}</button></a>`;
+}
+function renderSidebar() {
+  const pg = S.route.page;
+  const starred = runs.filter(r => r.starred), rest = runs.filter(r => !r.starred);
+  $('#sb').innerHTML = `
+    <div class="sb-head"><span class="logo">${ic('chipglyph')}</span><span class="word">${PRODUCT.short}</span>
+      <button class="iconbtn" id="tgl" aria-label="Collapse sidebar" title="Collapse sidebar">${ic('panel')}</button></div>
+    <nav class="nav">
+      <a href="#/" class="${pg === 'start' ? 'on' : ''}" title="New run">${ic('plus')}<span>New run</span></a>
+      <a href="#/configure" class="${pg === 'configure' ? 'on' : ''}" title="Configure">${ic('settings')}<span>Configure</span></a>
+      <a href="#" id="srch" title="Search runs">${ic('search')}<span>Search</span><b class="cnt">${runs.length}</b></a>
+    </nav>
+    <div class="sb-div"></div>
+    <div class="runs">
+      ${starred.length ? `<div class="cap">Starred</div>${starred.map(runRow).join('')}<div style="height:10px"></div>` : ''}
+      <div class="cap">Recents</div>
+      ${rest.map(runRow).join('') || '<div style="padding:4px 10px;color:var(--i550);font-size:12px">No runs yet. Describe a device to start one.</div>'}
+    </div>
+    <div class="acct"><button id="acct" aria-label="Account menu"><span class="av">${ic('user')}</span>
+      <span class="who"><div class="nm">Your workspace</div><div class="em">Demo plan</div></span></button></div>`;
+  $('#mhead').innerHTML = `<button class="iconbtn" id="ham" aria-label="Open menu">${ic('menu')}</button><span class="logo">${ic('chipglyph')}</span><span class="word">${PRODUCT.short}</span>`;
+  const inp = $('[data-rename]');
+  if (inp) {
+    inp.focus(); inp.select();
+    const done = save => { const r = byId(inp.dataset.rename); if (save && inp.value.trim()) r.title = inp.value.trim(); S.renaming = null; S.sbSig = ''; render(); };
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); done(true); } if (e.key === 'Escape') done(false); });
+    inp.addEventListener('blur', () => done(true));
+    inp.addEventListener('click', e => e.preventDefault());
+  }
+}
+function sbSig() { return runs.map(r => r.id + status(r) + r.starred + r.title + (r.titleAt > now())).join('|') + S.route.page + (S.route.id || '') + (S.route.view || '') + (S.route.vis || '') + S.renaming; }
+
+/* ---------------- start page ---------------- */
+function greeting() { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; }
+function renderStart() {
+  const u = UC[S.uc], pr = PRESETS.find(p => p.name === S.preset), m = MACHINES.find(x => x.name === S.machine);
+  $('#main').innerHTML = `<div class="start"><div class="start-col">
+    <h1 class="greet">${greeting()}</h1>
+    <p class="sub">Describe a medical device. The AI scientists design the chip inside it.</p>
+    <form class="box" id="startform">
+      <textarea id="prompt" rows="1" placeholder="${esc(u.placeholder)}" aria-label="Describe the device"></textarea>
+      <div class="ctl">
+        <button type="button" class="pill" data-pop="uc">${ic(u.icon)}${u.name}${ic('chev', 'chev')}</button>
+        <button type="button" class="pill" data-pop="preset">${ic(pr.icon)}${pr.name}${ic('chev', 'chev')}</button>
+        <button type="button" class="pill" data-pop="machine">${ic(m.icon)}${m.name}${ic('chev', 'chev')}</button>
+        <button type="button" class="pill ic" data-pop="adv" aria-label="Advanced options" title="Advanced options">${ic('sliders')}</button>
+        <button type="submit" class="send" id="go" aria-label="Start run" title="Start run">${ic('up')}</button>
+      </div>
+    </form>
+    <div class="chips">
+      <button class="chip" data-ex="eeg">${ic('wave')}Brainwave sensing</button>
+      <button class="chip" data-ex="nirs">${ic('drop')}Newborn sensing</button>
+    </div>
+  </div></div>`;
+  const ta = $('#prompt');
+  const sync = () => { ta.style.height = 'auto'; ta.style.height = Math.min(280, ta.scrollHeight) + 'px'; $('#go').classList.toggle('ready', !!ta.value.trim()); };
+  ta.addEventListener('input', sync);
+  ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#startform').requestSubmit(); } });
+  $('#startform').addEventListener('submit', e => { e.preventDefault(); startRun(ta.value.trim()); });
+  $$('[data-ex]').forEach(b => b.addEventListener('click', () => {
+    S.uc = b.dataset.ex; const v = UC[S.uc].example; renderStart(); const t = $('#prompt'); t.value = v; t.dispatchEvent(new Event('input')); t.focus();
+  }));
+  if (S._draft) { ta.value = S._draft; S._draft = ''; sync(); }
+}
+function startRun(text) {
+  if (!text) { const t = $('#prompt'); t.focus(); t.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-4px)' }, { transform: 'translateX(4px)' }, { transform: 'none' }], 220); return; }
+  const lower = text.toLowerCase();
+  let uc = S.uc;
+  if (/newborn|neonat|infant|oxygen|nirs|incubator|preterm/.test(lower)) uc = 'nirs';
+  else if (/eeg|seizure|brainwave|epilep/.test(lower)) uc = 'eeg';
+  let title = text.replace(/\s+/g, ' ').replace(/^(a|an|the)\s+/i, '').split(/[.!?]/)[0];
+  if (title.length > 58) title = title.slice(0, 56).replace(/\s+\S*$/, '') + '...';
+  title = title.charAt(0).toUpperCase() + title.slice(1);
+  const pr = PRESETS.find(p => p.name === S.preset);
+  const r = makeRun({ title, uc, base: 0, anchor: now(), factor: 0.95 + Math.random() * 0.1, preset: pr.name, cands: pr.cands, machine: S.machine,
+    line: S.adv.line, budget: S.adv.budget, scientists: S.adv.scientists, titleAt: now() + 1600, prompt: text });
+  runs.unshift(r);
+  go(href(r.id, 'overview'));
+}
+
+/* ---------------- configure page ---------------- */
+function renderConfigure() {
+  const tabs = [['line', 'Clinical line'], ['limits', 'Chip limits'], ['scientists', 'Scientists'], ['machine', 'Machine']];
+  const A = S.adv;
+  const panels = {
+    line: `<div class="field"><div><div class="fl">Use case</div><div class="fh">Sets the device, the signal and who the patients are.</div></div>
+        <select data-k="uc">${Object.entries(UC).map(([k, v]) => `<option value="${k}"${S.uc === k ? ' selected' : ''}>${v.name}</option>`).join('')}</select></div>
+      <div class="field"><div><div class="fl">Clinical line</div><div class="fh">Share of events the chip must catch for each unseen patient.</div></div>
+        <select data-k="line">${[85, 88, 90, 95].map(v => `<option value="${v}"${A.line === v ? ' selected' : ''}>${v}% caught</option>`).join('')}</select></div>
+      <div class="field"><div><div class="fl">What counts</div><div class="fh">A chip passes only if the worst patient meets the line.</div></div><span class="seg"><button class="on">Worst patient</button><button>Average</button></span></div>`,
+    limits: `<div class="field"><div><div class="fl">Gate budget</div><div class="fh">The scientists never propose a chip bigger than this.</div></div><input data-k="budget" type="number" step="1000" value="${A.budget}"></div>
+      <div class="field"><div><div class="fl">Rounds</div><div class="fh">Propose, fine-tune, compile and verify, repeated.</div></div><select disabled><option>4</option></select></div>
+      <div class="field"><div><div class="fl">Bit-for-bit check</div><div class="fh">Every circuit is compared with its model before it counts.</div></div><span class="sw" title="Always on"></span></div>`,
+    scientists: `<div class="field"><div><div class="fl">Agent</div><div class="fh">Who runs the scientists.</div></div><span class="seg">${['Claude Agent', 'OpenHands'].map(a => `<button data-agent="${a}" class="${A.scientists === a ? 'on' : ''}">${a}</button>`).join('')}</span></div>
+      <div class="field"><div><div class="fl">Lead scientist model</div><div class="fh">Plans the run and talks to you.</div></div><select><option>Claude Opus</option><option>Claude Sonnet</option></select></div>
+      <div class="field"><div><div class="fl">Designer and trainer model</div><div class="fh">Proposes designs and runs fine-tuning.</div></div><select><option>Claude Sonnet</option><option>Claude Haiku</option></select></div>`,
+    machine: MACHINES.map(m => `<div class="field"><div><div class="fl">${m.name}</div><div class="fh">${m.hint}</div></div>${S.machine === m.name ? `<span class="state done">Default</span>` : `<button class="link" data-mach="${m.name}">Make default</button>`}</div>`).join('')
+  };
+  $('#main').innerHTML = `<div class="cfg"><div class="cfgin"><h1>Configure</h1>
+    <div class="subrail"><div class="cap">Preset</div>${PRESETS.map(p => `<button data-preset="${p.name}" class="${S.preset === p.name ? 'on' : ''}">${p.name}</button>`).join('')}
+      <div style="height:14px"></div><div class="cap">Settings</div>${tabs.map(([k, n]) => `<button data-tab="${k}" class="${S.cfgTab === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+    <div class="panel">${panels[S.cfgTab]}</div></div></div>`;
+  $$('[data-tab]').forEach(b => b.onclick = () => { S.cfgTab = b.dataset.tab; renderConfigure(); });
+  $$('[data-preset]').forEach(b => b.onclick = () => { S.preset = b.dataset.preset; renderConfigure(); toast(`New runs use ${S.preset}`); });
+  $$('[data-agent]').forEach(b => b.onclick = () => { A.scientists = b.dataset.agent; renderConfigure(); });
+  $$('[data-mach]').forEach(b => b.onclick = () => { S.machine = b.dataset.mach; renderConfigure(); });
+  $$('[data-k]').forEach(el => el.onchange = () => { const k = el.dataset.k; if (k === 'uc') S.uc = el.value; else A[k] = +el.value; });
+}
+
+/* ---------------- run page ---------------- */
+function renderRun() {
+  const run = byId(S.route.id), v = S.route.view;
+  $('#main').innerHTML = `<div class="top">
+      <nav class="tabs">${[['overview', 'Overview'], ['chat', 'Chat'], ['visual', 'Visual']].map(([k, n]) => `<a href="${href(run.id, k, S.route.vis)}" class="${v === k ? 'on' : ''}">${n}</a>`).join('')}</nav>
+      <span id="stpill"></span>
+      <span class="rtitle" title="${esc(run.title)}">${esc(run.title)}</span>
+      <div class="play"><button class="pp" id="pp" aria-label="Pause"></button><span class="clock" id="clk"></span><div class="track" id="trk"><i></i><b></b></div><span id="livebox"></span></div>
+      <div class="tright"><span class="mchip" title="Machine">${ic(MACHINES.find(m => m.name === run.machine).icon)}<span>${run.machine}</span></span>
+        <button class="iconbtn" id="runmenu" aria-label="Run menu" title="Run menu">${ic('more')}</button></div>
+    </div><div class="body" id="body"></div>`;
+  S.sig = '';
+  updateTop();
+  updateBody(true);
+}
+function updateTop() {
+  const run = byId(S.route.id); if (!run) return;
+  const t = elapsed(run), st = status(run);
+  $('#clk').textContent = clock(t);
+  $('#clk').className = 'clock' + (st === 'running' ? ' live' : '');
+  const p = (t / TOTAL * 100).toFixed(2) + '%';
+  const trk = $('#trk'); trk.className = 'track' + (st === 'running' ? '' : ' rest');
+  trk.firstElementChild.style.width = p; trk.lastElementChild.style.left = p;
+  const pp = $('#pp');
+  const want = st === 'running' ? 'pause' : 'play';
+  if (pp.dataset.i !== want + st) { pp.dataset.i = want + st; pp.innerHTML = `<svg viewBox="0 0 24 24">${P[want]}</svg>`; pp.setAttribute('aria-label', st === 'done' ? 'Run finished' : want === 'pause' ? 'Pause run' : 'Resume run'); pp.disabled = st === 'done'; pp.style.opacity = st === 'done' ? .4 : 1; }
+  const lb = $('#livebox'), sp = $('#stpill');
+  const lw = st === 'running' ? '<span class="live"><i></i>LIVE</span>' : '';
+  if (lb.innerHTML !== lw) lb.innerHTML = lw;
+  const sw = st === 'done' ? '<span class="state done">Done</span>' : st === 'paused' ? '<span class="state paused">Paused</span>' : '';
+  if (sp.innerHTML !== sw) sp.innerHTML = sw;
+}
+function updateBody(force) {
+  const run = byId(S.route.id); const v = S.route.view;
+  const t = elapsed(run), ph = phase(t), { best } = bestAt(run, t);
+  let sig = [run.id, v, S.route.vis, ph.key, ph.round, best ? best.r + ':' + best.gates : '-', status(run), run.redirects.length].join('|');
+  if (v === 'chat') sig += '|' + chatSig(run, t);
+  if (v === 'visual' && ['tradeoff'].includes(S.route.vis) && ph.key === 'finetune') sig += '|' + Math.floor(ph.f * 8);
+  if (v === 'overview' && ph.key === 'finetune') sig += '|' + Math.floor(ph.f * 20);
+  if (!force && sig === S.sig) return;
+  S.sig = sig;
+  if (v === 'overview') renderOverview(run, t, ph, best);
+  else if (v === 'chat') renderChat(run, t, force);
+  else renderVisual(run, t, ph, best);
+}
+
+/* ---- overview: one number ---- */
+function nowLine(run, t, ph, best) {
+  const u = UC[run.uc], R = roundsOf(run), rd = R[Math.max(0, ph.round - 1)];
+  if (status(run) === 'paused') return `<span>${ic('pause')}</span> Paused. Press play in the top bar to carry on.`;
+  const words = {
+    spec: 'Reading your spec and setting the clinical line.',
+    reference: 'Training a full-size reference model to see what is possible.',
+    propose: `Round ${ph.round}: proposing ${fmt(run.cands)} chip designs on ${chanWords(u, rd.chans, run)}.`,
+    finetune: `Round ${ph.round}: fine-tuning ${fmt(run.cands)} candidate models at once, ${Math.floor(ph.f * 100)}% done.`,
+    compile: `Round ${ph.round}: compiling the strongest models into logic gates.`,
+    verify: `Round ${ph.round}: checking the circuit bit for bit, then testing it on unseen ${u.who}.`,
+    report: 'Writing the report.'
+  };
+  if (ph.key === 'done') return `${ic('ccheck')} Finished after ${mins(TOTAL)} minutes and ${ROUNDS} rounds.`;
+  const applyRound = x => [1, 2, 3, 4].find(k => roundStart(k) > x.t);
+  const pend = run.redirects.filter(x => applyRound(x) && roundStart(applyRound(x)) > t).pop();
+  const tail = pend ? ` <span style="color:var(--teal)">Your note applies from round ${applyRound(pend)}.</span>` : '';
+  const follow = rd && ph.round && rd.applied.length && !pend ? ' <span style="color:var(--teal)">Following your note.</span>' : '';
+  return `<span class="spin"></span><span>${words[ph.key]}${tail}${follow}</span>`;
+}
+function renderOverview(run, t, ph, best) {
+  const u = UC[run.uc], done = ph.key === 'done';
+  const prevShown = S.lastNum[run.id];
+  let hero, verdict, kick;
+  if (!best) {
+    hero = `<div class="hero"><span class="num none">No chip yet</span></div>`;
+    const wait = roundEnd(1) - t;
+    verdict = `<p class="verdict">The first chip is checked at the end of round 1, in about ${mins(wait)} minutes.</p>`;
+    kick = 'Best chip so far';
+  } else {
+    const ok = best.meet === u.N;
+    hero = `<div class="hero"><span class="num" id="num">${fmt(best.gates)}</span><span class="unit">gates</span></div>`;
+    verdict = `<p class="verdict"><span class="mk ${ok ? 'ok' : 'no'}"></span>${ok ? `Meets the clinical line on all ${u.N} unseen ${u.who}.` : `Not there yet: meets the clinical line on ${best.meet} of ${u.N} unseen ${u.who}.`}</p>`;
+    kick = done ? 'Final chip' : 'Best chip so far';
+  }
+  const isNew = best && prevShown && prevShown.r !== best.r && prevShown.id === run.id && best.gates < prevShown.g;
+  if (isNew) S.newBest = { id: run.id, until: now() + 9000, from: prevShown.g };
+  const nb = S.newBest && S.newBest.id === run.id && S.newBest.until > now() && !done ? `<span class="newbest">New best, down from ${fmt(S.newBest.from)}.</span>` : '';
+  const idx = done ? 7 : ph.idx;
+  const fillW = done ? 'calc(100% - 100%/7)' : `calc((100% - 100%/7) * ${Math.min(6, idx) / 6})`;
+  const loopTxt = done ? `${ROUNDS} rounds` : ph.round ? `Round ${ph.round} of ${ROUNDS}` : `${ROUNDS} rounds ahead`;
+  $('#body').innerHTML = `<div class="ov">
+    <div class="kick">${nb || kick}</div>
+    ${hero}${verdict}
+    <div class="stages" aria-label="Stages">
+      <span class="fill" style="width:${fillW}"></span>
+      ${STAGES.map((s, i) => `<div class="st ${i < idx ? 'done' : i === idx ? 'now' : ''}"><i></i><span>${s}</span></div>`).join('')}
+      <div class="loop"><span>${loopTxt}</span></div>
+    </div>
+    <div class="nowline">${nowLine(run, t, ph, best)}</div>
+    <div class="more-row"><button class="link" id="details">Show details</button></div>
+  </div>`;
+  $('#details').onclick = e => { e.stopPropagation(); openDetails(run); };
+  if (best) {
+    if (isNew && !matchMedia('(prefers-reduced-motion: reduce)').matches) countDown($('#num'), prevShown.g, best.gates);
+    S.lastNum[run.id] = { r: best.r, g: best.gates, id: run.id };
+  } else S.lastNum[run.id] = null;
+}
+function countDown(el, from, to) {
+  const t0 = now(), D = 1400;
+  const step = () => { const k = Math.min(1, (now() - t0) / D), e = 1 - Math.pow(1 - k, 3); if (!el.isConnected) return; el.textContent = fmt(from + (to - from) * e); if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+function openDetails(run) {
+  const u = UC[run.uc], t = elapsed(run), { best, R } = bestAt(run, t);
+  const rows = R.filter(rd => roundEnd(rd.r) <= t).map(rd => `<div class="rr"><span>Round ${rd.r}</span><span class="g2">${fmt(rd.gates)} gates</span><span style="color:${rd.meet === u.N ? 'var(--ok-t)' : 'var(--amb-t)'}">${rd.meet} of ${u.N} ${u.who}</span></div>`).join('');
+  drawer(`<h3>Run details</h3><p class="dsub">${esc(run.title)}</p>
+    <div class="kv"><span>Use case</span><span>${u.name}</span></div>
+    <div class="kv"><span>Clinical line</span><span>${run.line}% of ${u.metric}, worst ${u.one}</span></div>
+    <div class="kv"><span>Run time so far</span><span>${clock(t)}</span></div>
+    <div class="kv"><span>Spend so far</span><span>$${spend(t).toFixed(2)}</span></div>
+    ${best ? `<div class="kv"><span>Best chip uses</span><span>${chanWords(u, best.chans, run)}</span></div>` : ''}
+    <div class="dh">Best chip each round</div>
+    ${rows || `<p style="color:var(--i550);font-size:12.5px">No round has finished yet.</p>`}`);
+}
+
+/* ---- chat ---- */
+function visibleEvents(run, t) {
+  return script(run).filter(e => e.reply ? now() >= e.reply.at + 1600 : e.t <= t);
+}
+function chatSig(run, t) {
+  const ev = visibleEvents(run, t);
+  const pending = ev.filter(e => e.tool && t < e.t + e.dur).length;
+  const typing = run.redirects.some(x => now() < x.at + 1600);
+  return ev.length + ':' + pending + ':' + typing;
+}
+function renderChat(run, t, force) {
+  const st = status(run), ev = visibleEvents(run, t);
+  const typing = run.redirects.some(x => now() < x.at + 1600);
+  const first = !$('#feed');
+  const seen = S.seen[run.id] || (S.seen[run.id] = new Set());
+  const an = e => { const k = e.key; const isNew = !seen.has(k); seen.add(k); return isNew && !first ? ' anim' : ''; };
+  const rows = ev.map(e => {
+    if (e.me) return `<div class="me${an(e)}">${esc(e.text)}</div>`;
+    if (e.tool) {
+      const pend = t < e.t + e.dur && st !== 'done';
+      const open = S.open.has(e.key);
+      return `<div class="tool${open ? ' open' : ''}${an(e)}"><button data-tool="${e.key}" aria-expanded="${open}"><span class="tg">${pend ? '<span class="spin"></span>' : ic('check')}</span>${esc(e.tool)}${ic('chevr', 'chv')}</button>${open ? `<pre>${esc(e.detail)}</pre>` : ''}</div>`;
+    }
+    return `<div class="msg${an(e)}"><span class="tile">${ic('sci')}</span><div><div class="who">${e.who}</div><div class="txt">${esc(e.text)}</div></div></div>`;
+  }).join('') + (typing ? `<div class="typing"><i></i><i></i><i></i>Lead scientist is replying</div>` : '');
+  let feed = $('#feed');
+  if (!feed) {
+    const off = st === 'done';
+    $('#body').innerHTML = `<div class="chat"><div class="feed" id="feed"><div class="feedin" id="feedin"></div></div>
+      <div class="cwrap"><form class="box cbox${off ? ' off' : ''}" id="cform"><textarea id="cta" rows="1" ${off ? 'disabled' : ''} placeholder="${off ? 'This run is finished. Start a new run to try something else.' : 'Message the scientists'}" aria-label="Message the scientists"></textarea>
+      <button type="submit" class="send" id="csend" aria-label="Send" ${off ? 'disabled' : ''}>${ic('up')}</button></form></div></div>`;
+    feed = $('#feed');
+    const ta = $('#cta');
+    ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(200, ta.scrollHeight) + 'px'; $('#csend').classList.toggle('ready', !!ta.value.trim()); });
+    ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#cform').requestSubmit(); } });
+    $('#cform').addEventListener('submit', e => { e.preventDefault(); const v = ta.value.trim(); if (!v || status(run) === 'done') return; sendRedirect(run, v); ta.value = ''; ta.dispatchEvent(new Event('input')); });
+    $('#feedin').addEventListener('click', e => { const b = e.target.closest('[data-tool]'); if (!b) return; const k = b.dataset.tool; S.open.has(k) ? S.open.delete(k) : S.open.add(k); renderChat(run, elapsed(run), false); });
+    force = true;
+  }
+  const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
+  $('#feedin').innerHTML = rows;
+  if (force || atBottom) feed.scrollTop = feed.scrollHeight;
+}
+function sendRedirect(run, text) {
+  const t = elapsed(run), kind = classify(text), rp = replyFor(run, kind, t);
+  run.redirects.push({ t, text, kind: rp.r ? kind : 'late', reply: rp.text, at: now() });
+  S.sig = ''; updateBody(true);
+  const feed = $('#feed'); if (feed) feed.scrollTop = feed.scrollHeight;
+}
+
+/* ---- visual ---- */
+function renderVisual(run, t, ph, best) {
+  const u = UC[run.uc], key = S.route.vis, vis = VIS.find(v => v.key === key);
+  const main = VIS.filter(v => !v.more), moreOn = vis.more;
+  const eeg = run.uc === 'eeg';
+  const sent = {
+    chip: 'What the scientists built: the two sensors feed the chip, the AI model on it makes the call, and fine-tuning is how it was shaped.',
+    signal: eeg ? "The EEG as a neurologist reads it, with the clinician's seizure marks and the chip's flags underneath." : "Brain oxygen as a neonatal nurse reads it, with the alarm line, the clinician's marks and the chip's flags underneath.",
+    sensors: eeg ? 'Where the electrodes sit on the head, and the ones this chip actually listens to.' : "The light sources and detectors on the newborn's forehead patch, and the ones this chip uses.",
+    tradeoff: 'Each dot is one candidate chip: how it does for its worst unseen patient against how big it is.',
+    patients: `One tile per ${u.one} the chip has never seen. The worst one decides whether the chip passes.`,
+    device: 'The chip drawn to scale next to the sensor patch, with what it means for power and battery. All figures are estimates.'
+  }[key];
+  const fig = { chip: figChip, signal: figSignal, sensors: figSensors, tradeoff: figTrade, patients: figPatients, device: figDevice }[key](run, t, ph, best);
+  $('#body').innerHTML = `<div class="vis"><div class="visin">
+    <div class="picker" role="tablist">${main.map(v => `<button role="tab" aria-selected="${v.key === key}" class="${v.key === key ? 'on' : ''}" data-vis="${v.key}">${v.name}</button>`).join('')}
+      <button id="vmore" class="${moreOn ? 'on' : ''}" aria-haspopup="menu">${moreOn ? vis.name : 'More'}${ic('chev')}</button></div>
+    <h2 class="vh">${vis.name}</h2><p class="vs">${sent}</p>
+    ${fig}
+  </div></div>`;
+  $$('[data-vis]').forEach(b => b.onclick = () => go(href(run.id, 'visual', b.dataset.vis)));
+  $('#vmore').onclick = e => { e.stopPropagation(); menu(e.currentTarget, VIS.filter(v => v.more).map(v => ({ label: v.name, on: v.key === key, act: () => go(href(run.id, 'visual', v.key)) }))); };
+  if (key === 'signal') S.sigRun = run.id;
+}
+function updatePred() {
+  const b = $('#predbox'), tx = $('#predtxt'), run = byId(S.route.id);
+  if (!b || !tx || !bestAt(run, elapsed(run)).best) return;
+  const yes = ((now() / 1000) % 12) < 3.2;
+  b.setAttribute('fill', yes ? '#fef2f2' : '#fff'); b.setAttribute('stroke', yes ? '#fca5a5' : '#d4d4dc');
+  tx.setAttribute('fill', yes ? '#b91c1c' : '#666676'); tx.textContent = yes ? tx.dataset.yes : tx.dataset.no;
+}
+
+function figChip(run, t, ph, best) {
+  const u = UC[run.uc], eeg = run.uc === 'eeg';
+  const ft = ph.key === 'finetune' && status(run) === 'running';
+  const g = best ? best.gates : 0;
+  // gate grid: one dot per ~40 gates, laid out in the model block
+  const n = best ? Math.min(260, Math.round(g / 38)) : 0;
+  const cols = 20, cell = 9.5, gx = 392, gy = 168;
+  let dots = '';
+  for (let i = 0; i < n; i++) { const c = i % cols, r = Math.floor(i / cols); dots += `<rect x="${gx + c * cell}" y="${gy + r * cell}" width="6" height="6" rx="1.2" fill="${(hash(i, best ? best.r : 0) % 9) ? '#93c5fd' : '#3b82f6'}"/>`; }
+  const pins = [];
+  for (let i = 0; i < 9; i++) { const x = 340 + i * 34; pins.push(`<rect x="${x}" y="58" width="8" height="12" rx="1.5" fill="#c9cbd6"/><rect x="${x}" y="402" width="8" height="12" rx="1.5" fill="#c9cbd6"/>`); }
+  for (let i = 0; i < 9; i++) { const y = 96 + i * 34; pins.push(`<rect x="306" y="${y}" width="12" height="8" rx="1.5" fill="#c9cbd6"/><rect x="654" y="${y}" width="12" height="8" rx="1.5" fill="#c9cbd6"/>`); }
+  const label = best ? `${fmt(g)} gates` : 'No chip yet';
+  const sens = (y, s) => `<g><rect x="26" y="${y}" width="200" height="72" rx="12" fill="#fff" stroke="#d4d4dc"/>
+     <text x="46" y="${y + 30}" font-size="13" font-weight="600" fill="#1a1a2e">${s[0]}</text><text x="46" y="${y + 51}" font-size="12.5" fill="#666676">${s[1]}</text>
+     <path d="M168 ${y + 36} l6 0 l4 -10 l5 18 l5 -14 l4 6 l8 0" fill="none" stroke="${eeg ? '#7c3aed' : '#ef4444'}" stroke-width="1.6" stroke-linejoin="round"/></g>`;
+  return `<div class="panel"><svg class="fig" viewBox="0 0 980 470" role="img" aria-label="Chip diagram: sensors feed the chip, the AI model makes a prediction">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#8a8a99"/></marker>
+    <linearGradient id="die" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f8f8fb"/><stop offset="1" stop-color="#eef0f6"/></linearGradient></defs>
+    ${sens(120, u.s1)}${sens(282, u.s2)}
+    <path d="M226 156 C 270 156, 280 200, 316 220" fill="none" stroke="#8a8a99" stroke-width="1.6" marker-end="url(#ar)"/>
+    <path d="M226 318 C 270 318, 280 270, 316 252" fill="none" stroke="#8a8a99" stroke-width="1.6" marker-end="url(#ar)"/>
+    ${pins.join('')}
+    <rect x="318" y="70" width="336" height="332" rx="14" fill="url(#die)" stroke="#b0b0be" stroke-width="1.4"/>
+    <text x="338" y="98" font-size="11.5" fill="#8a8a99">Chip</text>
+    <rect x="${ft ? 338 : 338}" y="108" width="140" height="34" rx="8" fill="${ft ? '#eff6ff' : '#fff'}" stroke="${ft ? '#60a5fa' : '#d4d4dc'}" ${ft ? 'stroke-dasharray="4 3"' : ''}/>
+    <text x="352" y="130" font-size="12.5" fill="${ft ? '#1d4ed8' : '#4a4a5a'}">Fine-tune${ft ? `, round ${ph.round}` : ''}</text>
+    <path d="M408 142 L 408 154" stroke="#8a8a99" stroke-width="1.6" marker-end="url(#ar)"/>
+    <rect x="376" y="156" width="222" height="${best ? Math.max(70, Math.ceil(n / cols) * cell + 52) : 120}" rx="10" fill="#fff" stroke="#60a5fa" stroke-width="1.4"/>
+    ${dots}
+    <text x="392" y="${best ? 156 + Math.max(70, Math.ceil(n / cols) * cell + 52) - 14 : 220}" font-size="13" font-weight="600" fill="#1a1a2e">AI model<tspan font-weight="400" fill="#666676"> ${best ? '' : '(first chip after round 1)'}</tspan></text>
+    <text x="638" y="98" font-size="12.5" font-weight="600" fill="#1d4ed8" text-anchor="end">${label}</text>
+    <path d="M654 236 L 744 236" stroke="#8a8a99" stroke-width="1.6" marker-end="url(#ar)"/>
+    <rect id="predbox" x="750" y="196" width="200" height="80" rx="12" fill="#fff" stroke="#d4d4dc"/>
+    <text x="770" y="226" font-size="13" font-weight="600" fill="#1a1a2e">Prediction</text>
+    <text id="predtxt" x="770" y="250" font-size="12.5" fill="#666676" data-yes="${u.yes}" data-no="${u.no}">${best ? u.no : 'Waiting for a chip'}</text>
+  </svg></div>
+  <div class="foot">${best ? `Round ${best.r} chip, listening to ${chanWords(u, best.chans, run)}. ${best.meet === u.N ? 'Meets the clinical line.' : `Meets the clinical line on ${best.meet} of ${u.N} ${u.who}.`}` : 'The reference model is far too big for a chip; the rounds shrink it.'}</div>`;
+}
+
+function figSignal(run, t, ph, best) {
+  return `<div class="panel" style="padding:12px 14px"><canvas class="sig" id="sig" aria-label="Sensor signal with clinician marks and chip flags"></canvas></div>
+    <div class="foot"><span class="lg"><i style="background:rgb(245 158 11/.25)"></i>Clinician's mark</span><span class="lg"><i style="background:#3b82f6"></i>Chip's flag</span>
+    ${best ? `<span>Round ${best.r} chip, ${chanWords(UC[run.uc], best.chans, run)}.</span>` : '<span>No chip yet: flags appear after round 1.</span>'}</div>`;
+}
+// signal generators
+function eegVal(ch, s) {
+  const per = 24, ph = ((s % per) + per) % per, seiz = ph > 10 && ph < 17;
+  const a = Math.sin(s * 2 * Math.PI * 9.5 + ch * 1.7) * 0.09 + Math.sin(s * 2 * Math.PI * 4.6 + ch) * 0.2 + Math.sin(s * 2 * Math.PI * 1.4 + ch * 2) * 0.32 + Math.sin(s * 2 * Math.PI * 0.6 + ch * 3) * 0.18;
+  const n = (Math.sin(s * 71.7 + ch * 13.1) * Math.sin(s * 23.3 + ch)) * 0.1;
+  if (!seiz) return a + n;
+  const k = Math.min(1, (ph - 10) / 1.5) * Math.min(1, (17 - ph) / 1);
+  const f = 3.1 + ch * 0.05, x = (s * f) % 1;
+  const spike = x < 0.12 ? -Math.sin(x / 0.12 * Math.PI) * 2.1 : Math.sin((x - 0.12) / 0.88 * Math.PI) * 0.9;
+  const amp = ch < 2 ? 1 : 0.65;
+  return a * (1 - k * 0.5) + n + spike * k * amp;
+}
+function nirsVal(s) {
+  const per = 2600, ph = ((s % per) + per) % per;
+  let v = 71 + Math.sin(s / 410) * 3.2 + Math.sin(s / 97 + 1) * 1.4 + Math.sin(s * 0.37) * Math.sin(s * 0.11) * 0.8;
+  if (ph > 1500 && ph < 2100) { const k = Math.sin((ph - 1500) / 600 * Math.PI); v -= 28 * Math.pow(k, 1.3); }
+  if (ph > 500 && ph < 700) v -= 9 * Math.sin((ph - 500) / 200 * Math.PI);
+  return v;
+}
+function drawSignal() {
+  const cv = $('#sig'); if (!cv) return;
+  const run = byId(S.route.id); if (!run) return;
+  const W = cv.clientWidth, H = cv.clientHeight, dpr = devicePixelRatio || 1;
+  if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+  const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);
+  const t = elapsed(run), { best } = bestAt(run, t), u = UC[run.uc], eeg = run.uc === 'eeg';
+  const live = status(run) === 'running';
+  const L = 58, Rr = 8, chipH = 34, axisH = 22, top = 24, plotB = H - chipH - axisH - 14;
+  c.font = '11px ' + getComputedStyle(document.body).fontFamily;
+  const wall = live ? now() / 1000 : (run.seed % 1000);
+  if (eeg) {
+    const span = 12, s0 = wall - span; // window seconds
+    const X = s => L + (s - s0) / span * (W - L - Rr);
+    const chans = best ? EEG_SETS[best.chans].slice(0, 4) : ['T3', 'T4', 'T5', 'T6'];
+    // clinician marks
+    const per = 24;
+    for (let k = Math.floor(s0 / per) - 1; k <= Math.ceil((s0 + span) / per); k++) {
+      const a = k * per + 10.3, b = k * per + 16.8;
+      const xa = Math.max(L, X(a)), xb = Math.min(W - Rr, X(b));
+      if (xb > xa) { c.fillStyle = 'rgba(245,158,11,.14)'; c.fillRect(xa, top, xb - xa, plotB - top); c.fillStyle = '#b45309'; if (xb - xa > 110) c.fillText("Clinician's mark", xa + 4, 14); }
+      // chip flags
+      if (best) {
+        const lat = [2.6, 2.0, 1.5, 1.2][best.r - 1];
+        const fa = X(a + lat), fb = X(b + 0.6);
+        const ya = plotB + 10;
+        if (Math.min(W - Rr, fb) > Math.max(L, fa)) { c.fillStyle = '#3b82f6'; roundRect(c, Math.max(L, fa), ya, Math.min(W - Rr, fb) - Math.max(L, fa), 14, 3); if (fa >= L && fa < W - 120) { c.fillStyle = '#1d4ed8'; c.fillText(`flagged ${lat.toFixed(1)} s after onset`, fa + 2, ya + 28); } }
+        if (best.r === 1) { const fx = X(k * per + 3), fy = X(k * per + 3.9); if (fy > L && fx < W - Rr) { c.fillStyle = 'rgba(239,68,68,.7)'; roundRect(c, Math.max(L, fx), ya, Math.min(W - Rr, fy) - Math.max(L, fx), 14, 3); if (fx >= L && fx < W - 90) { c.fillStyle = '#b91c1c'; c.fillText('false alarm', fx, ya + 28); } } }
+      }
+    }
+    const rowH = (plotB - top) / chans.length;
+    chans.forEach((ch, i) => {
+      const y0 = top + rowH * (i + 0.5);
+      c.fillStyle = '#4a4a5a'; c.fillText(ch, 12, y0 + 4);
+      c.strokeStyle = '#1a1a2e'; c.lineWidth = 1; c.beginPath();
+      for (let x = L; x <= W - Rr; x += 1) { const s = s0 + (x - L) / (W - L - Rr) * span; const v = eegVal(i, s); const y = y0 - v * rowH * 0.22; x === L ? c.moveTo(x, y) : c.lineTo(x, y); }
+      c.stroke();
+    });
+    c.fillStyle = '#4a4a5a'; c.fillText('Chip', 12, plotB + 21);
+    if (!best) { c.fillStyle = '#8a8a99'; c.fillText('No chip yet: flags appear after round 1', L + 4, plotB + 21); }
+    c.fillStyle = '#8a8a99'; c.strokeStyle = '#e8e8ec';
+    for (let s = Math.ceil(s0 / 3) * 3; s <= s0 + span - 1; s += 3) { const x = X(s); if (x < L + 10) continue; c.beginPath(); c.moveTo(x, H - axisH - 4); c.lineTo(x, H - axisH); c.stroke(); c.fillText(`${Math.round(s - s0 - span)} s`, x - 10, H - 6); }
+  } else {
+    const span = 7200, s0 = wall * 60 - span;
+    const X = s => L + (s - s0) / span * (W - L - Rr);
+    const vmin = 30, vmax = 90, Y = v => top + (vmax - v) / (vmax - vmin) * (plotB - top);
+    const per = 2600;
+    for (let k = Math.floor(s0 / per) - 1; k <= Math.ceil((s0 + span) / per); k++) {
+      const a = k * per + 1640, b = k * per + 1960;
+      const xa = Math.max(L, X(a)), xb = Math.min(W - Rr, X(b));
+      if (xb > xa) { c.fillStyle = 'rgba(245,158,11,.14)'; c.fillRect(xa, top, xb - xa, plotB - top); c.fillStyle = '#b45309'; if (xb - xa > 60 && xa < W - 110) c.fillText("Clinician's mark", xa + 4, 14); }
+      if (best) {
+        const lat = [95, 62, 44, 33][best.r - 1];
+        const fa = X(a + lat), fb = X(b + 20), ya = plotB + 10;
+        if (Math.min(W - Rr, fb) > Math.max(L, fa)) { c.fillStyle = '#3b82f6'; roundRect(c, Math.max(L, fa), ya, Math.min(W - Rr, fb) - Math.max(L, fa), 14, 3); if (fa >= L && fa < W - 140) { c.fillStyle = '#1d4ed8'; c.fillText(`flagged ${lat} s after the drop`, fa + 2, ya + 28); } }
+        if (best.r === 1) { const fx = X(k * per + 560), fy = X(k * per + 640); if (fy > L && fx < W - Rr) { c.fillStyle = 'rgba(239,68,68,.7)'; roundRect(c, Math.max(L, fx), ya, Math.min(W - Rr, fy) - Math.max(L, fx), 14, 3); if (fx >= L && fx < W - 90) { c.fillStyle = '#b91c1c'; c.fillText('false alarm', fx, ya + 28); } } }
+      }
+    }
+    c.strokeStyle = '#e8e8ec'; c.fillStyle = '#8a8a99'; c.lineWidth = 1;
+    [40, 60, 80].forEach(v => { c.beginPath(); c.moveTo(L, Y(v)); c.lineTo(W - Rr, Y(v)); c.stroke(); c.fillText(v + '%', 18, Y(v) + 4); });
+    c.setLineDash([5, 4]); c.strokeStyle = '#ef4444'; c.beginPath(); c.moveTo(L, Y(50)); c.lineTo(W - Rr, Y(50)); c.stroke(); c.setLineDash([]);
+    c.fillStyle = '#b91c1c'; c.fillText('Alarm line 50%', W - Rr - 96, Y(50) - 6);
+    c.strokeStyle = '#1a1a2e'; c.lineWidth = 1.6; c.beginPath();
+    for (let x = L; x <= W - Rr; x += 1) { const s = s0 + (x - L) / (W - L - Rr) * span; const y = Y(nirsVal(s)); x === L ? c.moveTo(x, y) : c.lineTo(x, y); }
+    c.stroke();
+    c.fillStyle = '#4a4a5a'; c.save(); c.translate(10, (top + plotB) / 2 + 40); c.rotate(-Math.PI / 2); c.fillText('Brain oxygen', 0, 0); c.restore();
+    c.fillText('Chip', 12, plotB + 21);
+    if (!best) { c.fillStyle = '#8a8a99'; c.fillText('No chip yet: flags appear after round 1', L + 4, plotB + 21); }
+    c.fillStyle = '#8a8a99'; c.strokeStyle = '#e8e8ec';
+    for (let s = Math.ceil(s0 / 1800) * 1800; s <= s0 + span; s += 1800) { const x = X(s); if (x < L + 10) continue; c.beginPath(); c.moveTo(x, H - axisH - 4); c.lineTo(x, H - axisH); c.stroke(); const m = Math.round((s - s0 - span) / 60); c.fillText(`${m} min`, x - 16, H - 6); }
+  }
+  c.fillStyle = '#8a8a99'; c.fillText('now', W - Rr - 22, H - 6);
+}
+function roundRect(c, x, y, w, h, r) { if (w <= 0) return; c.beginPath(); c.roundRect ? c.roundRect(x, y, w, h, Math.min(r, w / 2)) : c.rect(x, y, w, h); c.fill(); }
+
+const EEG_POS = { Fp1: [-.28, .87], Fp2: [.28, .87], F7: [-.74, .54], F3: [-.36, .46], Fz: [0, .46], F4: [.36, .46], F8: [.74, .54], T3: [-.92, 0], C3: [-.46, 0], Cz: [0, 0], C4: [.46, 0], T4: [.92, 0], T5: [-.74, -.54], P3: [-.36, -.46], Pz: [0, -.46], P4: [.36, -.46], T6: [.74, -.54], O1: [-.28, -.87], O2: [.28, -.87] };
+function figSensors(run, t, ph, best) {
+  const u = UC[run.uc];
+  if (run.uc === 'eeg') {
+    const used = best ? EEG_SETS[best.chans] : Object.keys(EEG_POS);
+    const cx = 490, cy = 232, R = 180;
+    const el = Object.entries(EEG_POS).map(([n, [x, y]]) => {
+      const on = used.includes(n), X = cx + x * R, Y = cy - y * R;
+      return `<g><circle cx="${X}" cy="${Y}" r="17" fill="${on ? (best ? '#3b82f6' : '#bfdbfe') : '#fff'}" stroke="${on ? (best ? '#1d4ed8' : '#93c5fd') : '#d4d4dc'}" stroke-width="1.4"/>
+        <text x="${X}" y="${Y + 4}" text-anchor="middle" font-size="11" font-weight="600" fill="${on && best ? '#fff' : '#666676'}">${n}</text></g>`;
+    }).join('');
+    return `<div class="panel"><svg class="fig" viewBox="0 0 980 470" role="img" aria-label="Electrode map seen from above">
+      <path d="M${cx - 22} ${cy - R - 16} L${cx} ${cy - R - 40} L${cx + 22} ${cy - R - 16}" fill="#fff" stroke="#b0b0be" stroke-width="1.4"/>
+      <ellipse cx="${cx - R - 16}" cy="${cy}" rx="14" ry="34" fill="#fff" stroke="#b0b0be" stroke-width="1.4"/>
+      <ellipse cx="${cx + R + 16}" cy="${cy}" rx="14" ry="34" fill="#fff" stroke="#b0b0be" stroke-width="1.4"/>
+      <circle cx="${cx}" cy="${cy}" r="${R + 20}" fill="#fcfcfd" stroke="#b0b0be" stroke-width="1.4"/>
+      ${el}
+      <text x="${cx}" y="458" text-anchor="middle" font-size="11" fill="#8a8a99">Seen from above, nose at the top</text>
+      <text x="40" y="200" font-size="40" font-family="Iowan Old Style, Georgia, serif" fill="#1a1a2e">${used.length}<tspan font-size="18" fill="#8a8a99"> of 19</tspan></text>
+      <text x="40" y="226" font-size="12.5" fill="#666676">${best ? 'electrodes this chip uses' : 'used by the reference model'}</text>
+    </svg></div><div class="foot">${best ? `The scientists found ${used.length} electrodes enough: ${used.join(', ')}. Fewer electrodes means a smaller, lighter headband.` : 'The first chip, after round 1, will use far fewer.'}</div>`;
+  }
+  const k = best ? best.chans : 4, pairs = NIRS_PAIRS.slice(0, k);
+  const usedS = new Set(pairs.map(p => p[0])), usedD = new Set(pairs.map(p => p[1]));
+  // patch enlarged: 30 x 15 mm at 18 px/mm
+  const px = 400, py = 150, s = 18;
+  const pos = { S1: [8, 7.5], S2: [22, 7.5], D1: [2.5, 4], D2: [13, 4], D3: [17, 11], D4: [27.5, 11] };
+  const opt = Object.entries(pos).map(([n, [x, y]]) => {
+    const isS = n[0] === 'S', on = isS ? usedS.has(n) : usedD.has(n), X = px + x * s, Y = py + y * s;
+    return isS ? `<g><circle cx="${X}" cy="${Y}" r="13" fill="${on ? '#ef4444' : '#fff'}" stroke="${on ? '#b91c1c' : '#d4d4dc'}" stroke-width="1.4"/><text x="${X}" y="${Y + 30}" text-anchor="middle" font-size="11" fill="#666676">${n}</text></g>`
+      : `<g><rect x="${X - 12}" y="${Y - 12}" width="24" height="24" rx="4" fill="${on ? '#1a1a2e' : '#fff'}" stroke="${on ? '#1a1a2e' : '#d4d4dc'}" stroke-width="1.4"/><text x="${X}" y="${Y + 30}" text-anchor="middle" font-size="11" fill="#666676">${n}</text></g>`;
+  }).join('');
+  const arcs = pairs.map(([a, b]) => { const [x1, y1] = pos[a], [x2, y2] = pos[b]; const X1 = px + x1 * s, Y1 = py + y1 * s, X2 = px + x2 * s, Y2 = py + y2 * s; return `<path d="M${X1} ${Y1} Q ${(X1 + X2) / 2} ${(Y1 + Y2) / 2 + 60} ${X2} ${Y2}" fill="none" stroke="#f87171" stroke-width="2" stroke-dasharray="3 4" opacity=".8"/>`; }).join('');
+  return `<div class="panel"><svg class="fig" viewBox="0 0 980 470" role="img" aria-label="Newborn forehead patch with light sources and detectors">
+    <ellipse cx="170" cy="250" rx="120" ry="150" fill="#fdf8f4" stroke="#b0b0be" stroke-width="1.4"/>
+    <ellipse cx="50" cy="260" rx="12" ry="26" fill="#fdf8f4" stroke="#b0b0be" stroke-width="1.4"/><ellipse cx="290" cy="260" rx="12" ry="26" fill="#fdf8f4" stroke="#b0b0be" stroke-width="1.4"/>
+    <rect x="126" y="112" width="88" height="44" rx="10" fill="#fff" stroke="#3b82f6" stroke-width="1.6"/>
+    <text x="170" y="430" text-anchor="middle" font-size="11" fill="#8a8a99">Newborn, seen from above</text>
+    <path d="M214 122 L ${px - 10} ${py + 20}" stroke="#d4d4dc" stroke-dasharray="3 3"/>
+    <rect x="${px - 10}" y="${py - 10}" width="${30 * s + 20}" height="${15 * s + 20}" rx="22" fill="#fbfbfd" stroke="#b0b0be" stroke-width="1.4"/>
+    ${arcs}${opt}
+    <text x="${px}" y="${py - 24}" font-size="12.5" fill="#666676">The forehead patch, enlarged</text>
+    <g transform="translate(${px} 448)"><circle cx="6" cy="-4" r="6" fill="#ef4444"/><text x="18" y="0" font-size="11.5" fill="#4a4a5a">Light source</text><rect x="110" y="-10" width="12" height="12" rx="2" fill="#1a1a2e"/><text x="130" y="0" font-size="11.5" fill="#4a4a5a">Detector</text><path d="M212 -4 h22" stroke="#f87171" stroke-width="2" stroke-dasharray="3 4"/><text x="242" y="0" font-size="11.5" fill="#4a4a5a">Light path the chip reads</text></g>
+  </svg></div><div class="foot">${best ? `This chip reads ${k} light path${k > 1 ? 's' : ''}: ${usedS.size} source${usedS.size > 1 ? 's' : ''} and ${usedD.size} detector${usedD.size > 1 ? 's' : ''}. Unlit ones could be left off the patch.` : 'The reference model reads all four light paths; the first chip arrives after round 1.'}</div>`;
+}
+
+function figTrade(run, t, ph, best) {
+  const u = UC[run.uc], R = roundsOf(run);
+  const W = 980, H = 440, L = 70, Rr = 30, T = 20, B = 60;
+  const gx = g => L + (Math.log10(g) - 2.8) / (4.4 - 2.8) * (W - L - Rr);
+  const vy = v => T + (100 - v) / (100 - 70) * (H - T - B);
+  let dots = '';
+  const doneR = R.filter(rd => roundEnd(rd.r) <= t);
+  const cur = ph.key !== 'done' && ph.round ? R[ph.round - 1] : null;
+  const show = [...doneR];
+  let partial = 0;
+  if (cur && !doneR.includes(cur) && ['finetune', 'compile', 'verify'].includes(ph.key)) { show.push(cur); partial = ph.key === 'finetune' ? ph.f : 1; }
+  show.forEach(rd => {
+    const rnd = rng(hash(rd.r, run.seed)); const n = 46;
+    const isCur = cur && rd === cur && !doneR.includes(cur), latest = best && rd.r === best.r;
+    const lim = isCur ? Math.floor(n * partial) : n;
+    for (let i = 0; i < lim; i++) {
+      const g = rd.gates * Math.exp(rnd() * 2.3 - 0.75);
+      const d = Math.log2(g / rd.gates);
+      let v = (d >= 0 ? 100 - (100 - rd.worst) * Math.pow(0.6, d) : rd.worst + 7 * d - 1.5) + (rnd() - 0.5) * 4;
+      v = Math.max(71, Math.min(99.4, v));
+      if (g > 23000 || g < 700) continue;
+      if (Math.abs(g - rd.gates) / rd.gates < 0.05) continue;
+      dots += `<circle cx="${gx(g).toFixed(1)}" cy="${vy(v).toFixed(1)}" r="4" fill="${isCur ? '#3b82f6' : latest ? '#93c5fd' : '#d4d4dc'}" opacity="${isCur ? .9 : .85}"/>`;
+    }
+  });
+  const line = cur ? cur.line : best ? best.line : run.line;
+  const ticks = [1000, 2000, 5000, 10000, 20000].map(g => `<line x1="${gx(g)}" x2="${gx(g)}" y1="${H - B}" y2="${H - B + 5}" stroke="#b0b0be"/><text x="${gx(g)}" y="${H - B + 20}" text-anchor="middle" font-size="11.5" fill="#666676">${fmt(g)}</text>`).join('');
+  const yt = [70, 80, 90, 100].map(v => `<line x1="${L}" x2="${W - Rr}" y1="${vy(v)}" y2="${vy(v)}" stroke="#f3f3f6"/><text x="${L - 10}" y="${vy(v) + 4}" text-anchor="end" font-size="11.5" fill="#666676">${v}%</text>`).join('');
+  const bm = best ? `<circle cx="${gx(best.gates)}" cy="${vy(best.worst)}" r="7" fill="#1d4ed8"/><circle cx="${gx(best.gates)}" cy="${vy(best.worst)}" r="13" fill="none" stroke="#1d4ed8" stroke-width="1.5"/>
+    <text x="${gx(best.gates) > W - 340 ? gx(best.gates) - 18 : gx(best.gates) + 18}" text-anchor="${gx(best.gates) > W - 340 ? 'end' : 'start'}" y="${vy(best.worst) + 30}" font-size="12.5" font-weight="600" fill="#1d4ed8" stroke="#fff" stroke-width="5" paint-order="stroke">Best: ${fmt(best.gates)} gates, worst ${u.one} ${best.worst}%</text>` : '';
+  const empty = !show.length ? `<text x="${(L + W - Rr) / 2}" y="${(T + H - B) / 2}" text-anchor="middle" font-size="13" fill="#8a8a99">Candidates appear here once round 1 starts fine-tuning.</text>` : '';
+  return `<div class="panel"><svg class="fig" viewBox="0 0 ${W} ${H}" role="img" aria-label="Accuracy against chip size">
+    ${yt}${ticks}
+    <line x1="${L}" x2="${W - Rr}" y1="${H - B}" y2="${H - B}" stroke="#b0b0be"/>
+    <line x1="${L}" x2="${W - Rr}" y1="${vy(line)}" y2="${vy(line)}" stroke="#ef4444" stroke-dasharray="6 5" stroke-width="1.4"/>
+    <text x="${L + 8}" y="${vy(line) - 8}" font-size="12" fill="#b91c1c">Clinical line ${line}%</text>
+    ${dots}${bm}${empty}
+    <text x="${(L + W - Rr) / 2}" y="${H - 14}" text-anchor="middle" font-size="12" fill="#4a4a5a">Chip size in logic gates (smaller is better)</text>
+    <text transform="translate(18 ${(T + H - B) / 2}) rotate(-90)" text-anchor="middle" font-size="12" fill="#4a4a5a">Worst ${u.one}, ${u.metric}</text>
+  </svg></div><div class="foot"><span class="lg"><i style="background:#3b82f6;border-radius:50%;width:8px"></i>This round</span><span class="lg"><i style="background:#d4d4dc;border-radius:50%;width:8px"></i>Earlier rounds</span><span>A sample of ${fmt(run.cands)} candidates per round.</span></div>`;
+}
+
+function figPatients(run, t, ph, best) {
+  const u = UC[run.uc];
+  if (!best) return `<div class="panel"><div class="empty">Patient results arrive when round 1's chip has been checked, in about ${mins(roundEnd(1) - t)} minutes.</div></div>`;
+  const tiles = best.vals.map((v, i) => {
+    const ok = v >= best.line, worst = i === best.worstIdx;
+    return `<div class="pt${worst ? ' worst' + (ok ? ' okw' : '') : ''}"><div class="pn"><span>${u.One} ${i + 1}</span>${worst ? '<span style="font-weight:600;color:var(--i800)">Worst</span>' : ''}</div>
+      <div class="pv">${v}%</div><div class="bar"><i style="width:${(v - 60) / 40 * 100}%;background:${ok ? '#34d399' : '#f87171'}"></i><b style="left:${(best.line - 60) / 40 * 100}%"></b></div>
+      <div class="ps ${ok ? 'ok' : 'no'}">${ok ? 'Meets the line' : 'Below the line'}</div></div>`;
+  }).join('');
+  return `<div class="panel">${`<div class="ptiles">${tiles}</div>`}</div>
+    <div class="foot"><span>${u.metric.charAt(0).toUpperCase() + u.metric.slice(1)} for each unseen ${u.one}, round ${best.r} chip. The black tick is the ${best.line}% line.</span></div>`;
+}
+
+function figDevice(run, t, ph, best) {
+  const u = UC[run.uc];
+  if (!best) return `<div class="panel"><div class="empty">The size and power estimates arrive with the first chip, after round 1.</div></div>`;
+  const [pw, ph2] = u.patch, k = 11, ox = 40, oy = 60;
+  const core = coreMM2(best.gates), coreSide = Math.sqrt(core);
+  const die = 1.0; // pad-limited die, mm
+  const dieX = ox + pw * k * 0.62, dieY = oy + ph2 * k * 0.5 - die * k / 2;
+  const mag = 190, cx = 760, cy = 210, rr = 150;
+  const eeg = run.uc === 'eeg';
+  const extras = eeg
+    ? `<circle cx="${ox + 9 * k}" cy="${oy + ph2 * k / 2}" r="${4 * k}" fill="#f3f3f6" stroke="#d4d4dc"/><circle cx="${ox + 9 * k}" cy="${oy + ph2 * k / 2}" r="${1.6 * k}" fill="#d4d4dc"/><text x="${ox + 9 * k}" y="${oy + ph2 * k / 2 + 4 * k + 18}" text-anchor="middle" font-size="13" fill="#8a8a99">electrode</text>`
+    : `<circle cx="${ox + 6 * k}" cy="${oy + ph2 * k / 2}" r="${1.5 * k}" fill="#fecaca" stroke="#f87171"/><rect x="${ox + 22 * k}" y="${oy + ph2 * k / 2 - 1.5 * k}" width="${3 * k}" height="${3 * k}" rx="3" fill="#4a4a5a"/>`;
+  return `<div class="dev"><div class="panel"><svg class="fig" viewBox="0 0 980 420" role="img" aria-label="Chip drawn to scale on the sensor patch">
+    <rect x="${ox}" y="${oy}" width="${pw * k}" height="${ph2 * k}" rx="${eeg ? 40 : 60}" fill="#fbfbfd" stroke="#b0b0be" stroke-width="1.4"/>
+    ${extras}
+    <rect x="${dieX}" y="${dieY}" width="${die * k}" height="${die * k}" fill="#1d4ed8"/>
+    <text x="${ox}" y="${oy - 16}" font-size="14" fill="#4a4a5a">${u.patchName.charAt(0).toUpperCase() + u.patchName.slice(1)}, ${pw} × ${ph2} mm</text>
+    <g transform="translate(${ox} ${oy + ph2 * k + 56})"><line x1="0" x2="${10 * k}" y1="0" y2="0" stroke="#1a1a2e" stroke-width="1.6"/><line x1="0" x2="0" y1="-5" y2="5" stroke="#1a1a2e"/><line x1="${10 * k}" x2="${10 * k}" y1="-5" y2="5" stroke="#1a1a2e"/><text x="${5 * k}" y="22" text-anchor="middle" font-size="13" fill="#4a4a5a">10 mm</text></g>
+    <line x1="${dieX + die * k}" y1="${dieY}" x2="${cx - rr * .7}" y2="${cy - rr * .7}" stroke="#93c5fd"/><line x1="${dieX + die * k}" y1="${dieY + die * k}" x2="${cx - rr * .7}" y2="${cy + rr * .7}" stroke="#93c5fd"/>
+    <circle cx="${cx}" cy="${cy}" r="${rr}" fill="#fff" stroke="#93c5fd" stroke-width="1.4"/>
+    <rect x="${cx - mag / 2}" y="${cy - mag / 2}" width="${mag}" height="${mag}" rx="4" fill="#eef2ff" stroke="#1d4ed8" stroke-width="1.4"/>
+    ${[...Array(8)].map((_, i) => `<rect x="${cx - mag / 2 + 10 + i * 22}" y="${cy - mag / 2 + 6}" width="12" height="12" fill="#c7d2fe"/><rect x="${cx - mag / 2 + 10 + i * 22}" y="${cy + mag / 2 - 18}" width="12" height="12" fill="#c7d2fe"/>`).join('')}
+    <rect x="${cx - coreSide * mag / 2}" y="${cy - coreSide * mag / 2}" width="${Math.max(4, coreSide * mag)}" height="${Math.max(4, coreSide * mag)}" fill="#1d4ed8"/>
+    <text x="${cx}" y="${cy + coreSide * mag / 2 + 22}" text-anchor="middle" font-size="13" fill="#1d4ed8">AI model, ${coreSide.toFixed(2)} mm across</text>
+    <text x="${cx}" y="${cy + rr + 26}" text-anchor="middle" font-size="13" fill="#666676">The 1 × 1 mm chip, enlarged ${Math.round(mag / k)} times</text>
+  </svg></div>
+  <div class="stats">
+    <div class="stat"><div class="l">Chip area</div><div class="v">1.0 × 1.0 mm</div><div class="e">Estimate. The AI model fills ${core.toFixed(3)} mm² of it; the rest is pads.</div></div>
+    <div class="stat"><div class="l">Power</div><div class="v">${chipPower(best.gates).toFixed(0)} µW</div><div class="e">Estimate, for the chip alone.</div></div>
+    <div class="stat"><div class="l">Battery life</div><div class="v">${battDays(u, best.gates).toFixed(0)} days</div><div class="e">Estimate, whole device on a ${u.batt}.</div></div>
+  </div></div>`;
+}
+
+/* ---------------- layer: popovers, menus, drawers, modals ---------------- */
+function closeLayer() { $('#layer').innerHTML = ''; $$('[aria-expanded=true]').forEach(b => { if (b.classList.contains('more') || b.id === 'runmenu') b.setAttribute('aria-expanded', 'false'); }); }
+function place(el, anchor, align) {
+  const r = anchor.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
+  let x = align === 'right' ? r.right - w : r.left, y = r.bottom + 6;
+  if (y + h > innerHeight - 8) y = Math.max(8, r.top - h - 6);
+  x = Math.max(8, Math.min(innerWidth - w - 8, x));
+  el.style.left = x + 'px'; el.style.top = y + 'px';
+}
+function menu(anchor, items, opts = {}) {
+  closeLayer();
+  const el = document.createElement('div'); el.className = 'pop'; el.setAttribute('role', 'menu');
+  if (opts.width) el.style.width = opts.width + 'px';
+  el.innerHTML = (opts.cap ? `<div class="cap">${opts.cap}</div>` : '') + items.map((it, i) => it.sep ? '<div class="sep"></div>'
+    : `<button class="opt${it.on ? ' on' : ''}${it.dis ? ' dis' : ''}" role="menuitem" data-i="${i}">${it.icon ? ic(it.icon) : ''}<span>${it.label}${it.hint ? `<span class="oh">${it.hint}</span>` : ''}</span>${it.on ? `<span class="ck">${ic('check')}</span>` : ''}</button>`).join('');
+  $('#layer').appendChild(el); place(el, anchor, opts.align);
+  el.addEventListener('click', e => { e.stopPropagation(); const b = e.target.closest('[data-i]'); if (!b) return; const it = items[+b.dataset.i]; if (it.dis) return; closeLayer(); it.act && it.act(); });
+  const f = el.querySelector('button'); f && f.focus({ preventScroll: true });
+}
+function drawer(html) {
+  closeLayer();
+  $('#layer').innerHTML = `<div class="scrim" id="scrimL"></div><div class="drawer" role="dialog" aria-modal="true"><button class="iconbtn x" id="dx" aria-label="Close">${ic('x')}</button>${html}</div>`;
+  $('#scrimL').onclick = closeLayer; $('#dx').onclick = closeLayer; $('#dx').focus();
+}
+function modal(html, after) {
+  closeLayer();
+  $('#layer').innerHTML = `<div class="scrim" id="scrimL"></div><div class="modal" role="dialog" aria-modal="true">${html}</div>`;
+  $('#scrimL').onclick = closeLayer; after && after();
+}
+function toast(msg) { const el = document.createElement('div'); el.className = 'toast'; el.textContent = msg; document.body.appendChild(el); setTimeout(() => el.remove(), 2200); }
+function advPopover(anchor) {
+  closeLayer();
+  const A = S.adv, el = document.createElement('div'); el.className = 'pop adv';
+  el.innerHTML = `<h4>Advanced</h4><div style="font-size:12px;color:var(--i550)">For this run only. Defaults live in Configure.</div>
+    <div class="field"><div class="fl">Clinical line</div><select id="aLine">${[85, 88, 90, 95].map(v => `<option value="${v}"${A.line === v ? ' selected' : ''}>${v}% caught</option>`).join('')}</select></div>
+    <div class="field"><div class="fl">Gate budget</div><input id="aBud" type="number" step="1000" min="1000" value="${A.budget}"></div>
+    <div class="field"><div class="fl">Scientists</div><select id="aSci">${['Claude Agent', 'OpenHands'].map(v => `<option${A.scientists === v ? ' selected' : ''}>${v}</option>`).join('')}</select></div>
+    <div class="field"><div class="fl">Lead model</div><select id="aMod">${['Claude Opus', 'Claude Sonnet'].map(v => `<option${A.model === v ? ' selected' : ''}>${v}</option>`).join('')}</select></div>
+    <a class="link" href="#/configure">All settings</a>`;
+  $('#layer').appendChild(el); place(el, anchor);
+  $('#aLine').onchange = e => A.line = +e.target.value; $('#aBud').onchange = e => A.budget = +e.target.value || 20000;
+  $('#aSci').onchange = e => A.scientists = e.target.value; $('#aMod').onchange = e => A.model = e.target.value;
+  $('#aLine').focus();
+}
+function openSearch() {
+  modal(`<input id="sq" placeholder="Find a run by name" aria-label="Find a run by name"><div class="list" id="sl"></div>`, () => {
+    const q = $('#sq'), l = $('#sl');
+    const draw = () => { const v = q.value.toLowerCase(); const m = runs.filter(r => r.title.toLowerCase().includes(v));
+      l.innerHTML = m.map(r => `<a class="row" href="${href(r.id)}">${glyph(r)}<span class="t">${esc(r.title)}</span></a>`).join('') || '<div style="padding:12px;color:var(--i550)">No run matches.</div>'; };
+    q.oninput = draw; draw(); q.focus();
+  });
+}
+
+/* ---------------- global events ---------------- */
+document.addEventListener('click', e => {
+  const t = e.target;
+  if (t.closest('#layer')) return;
+  if (t.closest('#tgl')) { if (innerWidth < 768) document.body.classList.remove('drawer-open'); else document.body.classList.toggle('col'); S.userCol = document.body.classList.contains('col'); return; }
+  if (t.closest('#ham')) { document.body.classList.add('drawer-open'); return; }
+  if (t.closest('#scrim')) { document.body.classList.remove('drawer-open'); return; }
+  if (t.closest('#srch')) { e.preventDefault(); openSearch(); return; }
+  const rm = t.closest('[data-rowmenu]');
+  if (rm) {
+    e.preventDefault(); e.stopPropagation();
+    const r = byId(rm.dataset.rowmenu);
+    menu(rm, [
+      { label: r.starred ? 'Unstar' : 'Star', icon: 'star', act: () => { r.starred = !r.starred; S.sbSig = ''; render(); } },
+      { label: 'Rename', icon: 'pencil', act: () => { S.renaming = r.id; S.sbSig = ''; renderSidebar(); } },
+      { label: 'Delete', icon: 'trash', act: () => confirmDelete(r) }
+    ]);
+    rm.setAttribute('aria-expanded', 'true');
+    return;
+  }
+  if (t.closest('#acct')) {
+    menu(t.closest('#acct'), [
+      { label: 'Configure', icon: 'settings', act: () => go('#/configure') },
+      { label: 'Usage', icon: 'chart', act: () => modal(`<div class="pad"><h3>Usage</h3><div class="kv"><span>Runs</span><span>${runs.length}</span></div><div class="kv"><span>Spend this month</span><span>$${(runs.reduce((s, r) => s + spend(elapsed(r)), 0)).toFixed(2)}</span></div><div class="kv"><span>Run time this month</span><span>${clock(runs.reduce((s, r) => s + elapsed(r), 0))}</span></div></div>`) },
+      { label: 'Help', icon: 'help', act: () => modal(`<div class="pad"><h3>How a run works</h3><p style="font-size:13.5px;line-height:1.6;color:var(--i700);margin:0">You describe the device and its job. The AI scientists set a clinical line, train a reference model, then repeat four rounds: propose chip designs, fine-tune them all at once, compile the best into logic gates, and check the circuit bit for bit before testing it on unseen patients. Write to them in Chat at any time to change course.</p></div>`) }
+    ]);
+    return;
+  }
+  const pop = t.closest('[data-pop]');
+  if (pop) {
+    const k = pop.dataset.pop;
+    if (k === 'uc') menu(pop, Object.entries(UC).map(([key, v]) => ({ label: v.name, icon: v.icon, hint: key === 'eeg' ? 'EEG devices: seizures, sleep, alertness' : 'Brain oxygen in newborns, by near-infrared light', on: S.uc === key, act: () => { S.uc = key; S._draft = $('#prompt').value; renderStart(); } })), { cap: 'Use case', width: 280 });
+    if (k === 'preset') menu(pop, PRESETS.map(p => ({ label: p.name, icon: p.icon, hint: p.hint, on: S.preset === p.name, act: () => { S.preset = p.name; S._draft = $('#prompt').value; renderStart(); } })), { cap: 'Preset', width: 220 });
+    if (k === 'machine') menu(pop, MACHINES.map(m => ({ label: m.name, icon: m.icon, hint: m.hint, on: S.machine === m.name, act: () => { S.machine = m.name; S._draft = $('#prompt').value; renderStart(); } })), { cap: 'Machine', width: 260 });
+    if (k === 'adv') advPopover(pop);
+    return;
+  }
+  if (t.closest('#runmenu')) {
+    const run = byId(S.route.id), b = t.closest('#runmenu');
+    menu(b, [
+      { label: 'Run settings', icon: 'sliders', act: () => runSettings(run) },
+      { label: 'Copy link', icon: 'link', act: () => { const u = location.href; (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(() => toast('Link copied'), () => toast('Link is in the address bar')); } },
+      { sep: true },
+      { label: 'Restart run', icon: 'restart', hint: 'Start this demo run again from the beginning', act: () => { run.base = 0; run.anchor = now(); run.paused = false; run.redirects = []; S.lastNum[run.id] = null; S.open.clear(); S.sbSig = ''; render(); toast('Run restarted'); } }
+    ], { align: 'right', width: 240 });
+    b.setAttribute('aria-expanded', 'true');
+    return;
+  }
+  if (t.closest('#pp')) {
+    const run = byId(S.route.id); if (status(run) === 'done') return;
+    run.base = elapsed(run); run.anchor = now(); run.paused = !run.paused; S.sig = ''; updateTop(); updateBody(true); return;
+  }
+  if (!t.closest('.pop')) closeLayer();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeLayer(); document.body.classList.remove('drawer-open'); } });
+function confirmDelete(r) {
+  modal(`<div class="pad"><h3>Delete this run?</h3><p style="color:var(--i700);margin:0 0 18px">"${esc(r.title)}" and its chip will be gone for good.</p>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button class="chip" id="dn">Keep it</button><button class="chip" id="dy" style="background:#b91c1c;color:#fff;border-color:#b91c1c">Delete</button></div></div>`, () => {
+    $('#dn').onclick = closeLayer; $('#dn').focus();
+    $('#dy').onclick = () => { runs.splice(runs.indexOf(r), 1); closeLayer(); S.sbSig = ''; if (S.route.id === r.id) go('#/'); else render(); };
+  });
+}
+function runSettings(run) {
+  const u = UC[run.uc];
+  drawer(`<h3>Run settings</h3><p class="dsub">Fixed once a run starts. Change the defaults for new runs in Configure.</p>
+    <div class="kv"><span>Use case</span><span>${u.name}</span></div>
+    <div class="kv"><span>Clinical line</span><span>${run.line}% caught, worst ${u.one}</span></div>
+    <div class="kv"><span>Gate budget</span><span>${fmt(run.budget)}</span></div>
+    <div class="kv"><span>Rounds</span><span>${ROUNDS}</span></div>
+    <div class="kv"><span>Preset</span><span>${run.preset}, ${fmt(run.cands)} candidates a round</span></div>
+    <div class="kv"><span>Machine</span><span>${run.machine}</span></div>
+    <div class="kv"><span>Scientists</span><span>${run.scientists}</span></div>
+    <div class="kv"><span>Bit-for-bit check</span><span>On</span></div>
+    <p style="margin-top:18px"><a class="link" href="#/configure">Open Configure</a></p>`);
+}
+
+/* ---------------- render and tick ---------------- */
+function render() {
+  if (S.userCol === undefined) { document.body.classList.toggle('col', innerWidth < 1024 && innerWidth >= 768); }
+  S.sbSig = sbSig(); renderSidebar();
+  const p = S.route.page;
+  if (p === 'run') renderRun(); else if (p === 'configure') renderConfigure(); else renderStart();
+  $('#main').scrollTop = 0;
+}
+window.addEventListener('resize', () => { if (S.userCol === undefined) document.body.classList.toggle('col', innerWidth < 1024 && innerWidth >= 768); if (innerWidth >= 768) document.body.classList.remove('drawer-open'); });
+setInterval(() => {
+  const sig = sbSig();
+  if (sig !== S.sbSig && !S.renaming && !$('#layer .pop')) { S.sbSig = sig; renderSidebar(); }
+  if (S.route.page === 'run' && byId(S.route.id)) { updateTop(); updateBody(false);
+    if (S.route.view === 'visual' && S.route.vis === 'chip') updatePred();
+  } else if (S.route.page === 'run') go('#/');
+}, 250);
+(function loop() { if (S.route.page === 'run' && S.route.view === 'visual' && S.route.vis === 'signal') drawSignal(); requestAnimationFrame(loop); })();
+
+S.route = parse();
+if (!location.hash) history.replaceState(null, '', '#/');
+render();
+})();
+</script>
+</body>
+</html>

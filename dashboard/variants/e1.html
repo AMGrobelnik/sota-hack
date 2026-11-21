@@ -1,0 +1,1426 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Scientist</title>
+<style>
+:root{
+  --wash:#fafaf9; --card:#fff; --glass:rgb(255 253 250 / .7); --glass-strong:rgb(255 253 250 / .95);
+  --i900:#1a1a2e; --i800:#3a3a4a; --i700:#4a4a5a; --i600:#5a5a6a; --i550:#666676; --i500:#6c6c85;
+  --i400:#8a8a99; --i300:#b0b0be; --i200:#d4d4dc; --i150:#e8e8ec; --i100:#f3f3f6;
+  --blue:#3b82f6; --blue6:#2563eb; --blue7:#1d4ed8;
+  --violet:#a78bfa; --sky:#60a5fa; --orange:#fb923c;
+  --ok:#10b981; --ok-t:#047857; --ok-bg:#ecfdf5; --ok-r:#a7f3d0;
+  --bad:#ef4444; --bad-t:#b91c1c; --bad-bg:#fef2f2; --bad-r:#fecaca;
+  --warn-t:#92400e; --warn-bg:#fffbeb; --warn-r:#fde68a;
+  --teal:#0d9488; --indigo:#6366f1; --purple:#8b5cf6;
+  --hair:rgb(0 0 0 / .06);
+  --sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --serif: "Source Serif 4", "Iowan Old Style", Palatino, Georgia, serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --sh-card:0 2px 8px rgb(0 0 0 / .08); --sh-menu:0 4px 20px rgb(0 0 0 / .1); --sh-hair:0 1px 3px rgb(0 0 0 / .04);
+  --ease:cubic-bezier(.4,0,.2,1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:var(--sans);color:var(--i900);background:var(--wash);font-size:14px;-webkit-font-smoothing:antialiased;overflow:hidden;overflow-wrap:break-word}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+input,textarea,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px;border-radius:6px}
+svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+svg.i.s12{width:12px;height:12px} svg.i.s13{width:13px;height:13px} svg.i.s14{width:14px;height:14px} svg.i.s16{width:16px;height:16px}
+.caps{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--i550)}
+
+/* frame */
+.app{display:flex;height:100vh;height:100dvh}
+.sb{width:252px;flex:none;display:flex;flex-direction:column;background:var(--glass);backdrop-filter:blur(12px);border-right:1px solid rgb(0 0 0 / .04);transition:width .15s var(--ease);position:relative;z-index:20}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;position:relative}
+#page{flex:1;min-height:0;display:flex;flex-direction:column}
+.mhead{display:none}
+
+/* sidebar */
+.sb-head{height:52px;display:flex;align-items:center;gap:9px;padding:0 12px;border-bottom:1px solid var(--hair);flex:none}
+.logo{width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#818cf8,#a78bfa 55%,#f0abfc);display:grid;place-items:center;flex:none;color:#fff}
+.logo svg{width:16px;height:16px;stroke:#fff}
+.word{font-size:14px;font-weight:800;letter-spacing:-.02em;white-space:nowrap}
+.sqbtn{width:28px;height:28px;border-radius:6px;display:grid;place-items:center;color:var(--i550);transition:background .1s}
+.sqbtn:hover{background:rgb(0 0 0 / .05)}
+.sb-head .sqbtn{margin-left:auto}
+.nav{padding:8px;display:flex;flex-direction:column;gap:1px;flex:none}
+.nav button{height:36px;display:flex;align-items:center;gap:10px;padding:0 10px;border-radius:7px;font-size:12.5px;font-weight:500;color:var(--i500);text-align:left;transition:background .1s}
+.nav button:hover{background:rgb(0 0 0 / .03)}
+.nav button.on{background:rgb(37 99 235 / .06);color:var(--i900)}
+.nav .count{margin-left:auto;font-size:10px;font-weight:600;color:var(--blue6);background:rgb(37 99 235 / .07);padding:1px 6px;border-radius:99px}
+.sb-div{height:1px;background:var(--hair);margin:0 12px;flex:none}
+.runs{flex:1;overflow:auto;padding:8px 8px 12px}
+.runs .cap{display:flex;align-items:center;padding:10px 10px 6px}
+.runs .cap a{margin-left:auto;font-size:10px;color:var(--i550);cursor:pointer;text-decoration:none}
+.runs .cap a:hover{color:var(--i900)}
+.row{position:relative;display:flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;font-size:12.5px;font-weight:500;color:var(--i700);cursor:pointer;width:100%;text-align:left}
+.row:hover{background:rgb(0 0 0 / .025)}
+.row.on{background:rgb(37 99 235 / .06);color:var(--i900)}
+.row .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .more{position:absolute;right:4px;top:4px;width:20px;height:20px;border-radius:5px;display:none;place-items:center;color:var(--i550)}
+.row:hover .more,.row .more.open{display:grid}
+.row .more:hover{background:rgb(0 0 0 / .06)}
+.row input{flex:1;min-width:0;font-size:12.5px;border:0;outline:2px solid var(--blue);border-radius:4px;padding:1px 4px;background:#fff}
+.g{width:12px;height:12px;flex:none}
+.spin{animation:spin 1s linear infinite;transform-origin:50% 50%}
+@keyframes spin{to{transform:rotate(360deg)}}
+.acct{border-top:1px solid var(--hair);padding:8px;flex:none}
+.acct button{display:flex;align-items:center;gap:9px;width:100%;padding:6px;border-radius:8px;text-align:left}
+.acct button:hover{background:rgb(0 0 0 / .03)}
+.av{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--indigo),var(--purple));color:#fff;font-size:10px;font-weight:600;display:grid;place-items:center;flex:none}
+.acct .nm{font-size:12.5px;font-weight:500;color:var(--i800);line-height:1.2}
+.acct .em{font-size:10px;color:var(--i550)}
+.sb.col{width:52px}
+.sb.col .word,.sb.col .nav span,.sb.col .count,.sb.col .runs,.sb.col .sb-div,.sb.col .acct .who,.sb.col .logo{display:none}
+.sb.col .sb-head{padding:0 12px}
+.sb.col .sb-head .sqbtn{margin:0}
+.sb.col .nav button{padding:0 9px}
+
+/* demo label */
+.demo{position:fixed;right:12px;bottom:8px;font-size:10px;color:var(--i400);z-index:5;pointer-events:none}
+
+/* start page */
+.start{flex:1;overflow:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 16px 64px}
+.start .col{width:100%;max-width:672px}
+.greet{font-family:var(--serif);font-size:38px;line-height:1.1;font-weight:400;text-align:center;margin:0;letter-spacing:-.01em}
+.subt{font-size:16px;color:var(--i550);text-align:center;margin:12px 0 32px}
+.box{background:var(--glass);border:1px solid var(--hair);border-radius:24px;box-shadow:0 1px 1px rgb(0 0 0 / .03);padding:20px 20px 12px;backdrop-filter:blur(8px)}
+.box textarea{display:block;width:100%;border:0;outline:0;resize:none;background:none;font-size:14px;line-height:1.5;min-height:21px;max-height:280px;padding:0}
+.box textarea::placeholder{color:var(--i500)}
+.box .ctl{display:flex;align-items:center;gap:6px;margin-top:12px;min-height:36px;flex-wrap:wrap}
+.plus{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;color:var(--i550)}
+.plus:hover{background:rgb(0 0 0 / .04)}
+.pill{height:24px;display:inline-flex;align-items:center;gap:5px;padding:0 9px;border-radius:99px;border:1px solid rgb(0 0 0 / .08);background:#fff;font-size:11.5px;font-weight:500;color:var(--i800);white-space:nowrap}
+.pill:hover{border-color:rgb(0 0 0 / .14)}
+.pill .chev{opacity:.5}
+.pill.static{cursor:default}
+.send{margin-left:auto;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--i150);color:var(--i300);transition:background .12s,box-shadow .12s;flex:none}
+.send.ready{background:#fff;color:var(--i900);box-shadow:0 1px 4px rgb(0 0 0 / .16)}
+.chips{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:16px}
+.chip{height:36px;display:inline-flex;align-items:center;gap:7px;padding:0 14px;border-radius:99px;border:1px solid rgb(0 0 0 / .08);background:#fff;font-size:12.5px;color:var(--i700)}
+.chip:hover{border-color:rgb(0 0 0 / .16);color:var(--i900)}
+.chip svg{color:var(--i550)}
+
+/* popovers, menus, dialogs */
+#layer{position:fixed;inset:0;pointer-events:none;z-index:100}
+#layer>*{pointer-events:auto}
+.pop{position:fixed;background:#fff;border:1px solid var(--hair);border-radius:10px;box-shadow:var(--sh-menu);padding:6px;min-width:176px;animation:popin .12s var(--ease)}
+@keyframes popin{from{opacity:0;transform:translateY(3px)}}
+.pop .pcap{padding:6px 8px 4px}
+.opt{display:flex;align-items:flex-start;gap:9px;width:100%;text-align:left;padding:7px 8px;border-radius:6px;font-size:12.5px;color:var(--i800)}
+.opt:hover{background:var(--i100)}
+.opt.sel{background:rgb(37 99 235 / .1)}
+.opt .h{display:block;font-size:11px;color:var(--i550);margin-top:1px}
+.opt .ck{margin-left:auto;color:var(--blue6)}
+.opt[disabled]{opacity:.45;cursor:not-allowed}
+.opt.danger{color:var(--bad-t)}
+.sep{height:1px;background:var(--hair);margin:4px 2px}
+.seg{display:flex;background:var(--i100);border-radius:8px;padding:2px;gap:2px;margin:4px 4px 8px}
+.seg button{flex:1;height:26px;border-radius:6px;font-size:11.5px;font-weight:500;color:var(--i600)}
+.seg button.on{background:var(--blue6);color:#fff}
+.scrim{position:fixed;inset:0;background:rgb(10 10 20 / .18);display:grid;place-items:center;animation:fade .15s}
+@keyframes fade{from{opacity:0}}
+.dlg{background:#fff;border-radius:12px;box-shadow:var(--sh-menu);width:min(400px,calc(100vw - 32px));padding:20px}
+.dlg h3{margin:0 0 6px;font-size:16px}
+.dlg p{margin:0 0 16px;font-size:13px;color:var(--i600);line-height:1.5}
+.dlg .acts{display:flex;justify-content:flex-end;gap:8px}
+.btn{height:32px;padding:0 14px;border-radius:8px;font-size:12.5px;font-weight:500;border:1px solid rgb(0 0 0 / .1);background:#fff}
+.btn:hover{background:var(--i100)}
+.btn.pri{background:var(--i900);color:#fff;border-color:var(--i900)}
+.btn.red{background:var(--bad-t);border-color:var(--bad-t);color:#fff}
+.search{width:min(520px,calc(100vw - 32px));background:#fff;border-radius:12px;box-shadow:var(--sh-menu);overflow:hidden;align-self:start;margin-top:14vh}
+.search input{width:100%;border:0;border-bottom:1px solid var(--hair);padding:14px 16px;outline:0;font-size:14px}
+.search .list{padding:6px;max-height:340px;overflow:auto}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--i900);color:#fff;font-size:12.5px;padding:8px 14px;border-radius:8px;box-shadow:var(--sh-menu);animation:popin .15s}
+
+/* run page */
+.topbar{height:40px;flex:none;display:flex;align-items:center;gap:12px;padding:0 12px 0 16px;border-bottom:1px solid var(--hair);background:rgb(255 255 255 / .6)}
+.tabs{display:flex;height:100%;gap:2px;flex:none}
+.tab{height:100%;padding:0 10px;font-size:11.5px;font-weight:500;color:var(--i550);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab:hover{color:var(--i900)}
+.tab.on{color:var(--blue6);font-weight:600;border-bottom-color:var(--blue6)}
+.spill{height:20px;display:inline-flex;align-items:center;padding:0 8px;border-radius:99px;font-size:11.5px;font-weight:500;flex:none}
+.spill.done{background:var(--ok-bg);color:var(--ok-t);box-shadow:inset 0 0 0 1px var(--ok-r)}
+.spill.paused{background:var(--i100);color:var(--i600);box-shadow:inset 0 0 0 1px var(--i150)}
+.rtitle{font-size:11.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:40px;max-width:260px;flex:0 1 auto}
+.play{flex:1;min-width:120px;max-width:680px;display:flex;align-items:center;gap:8px}
+.play .pp{width:24px;height:24px;border-radius:6px;display:grid;place-items:center;color:var(--i700);flex:none}
+.play .pp:hover{background:rgb(0 0 0 / .05)}
+.clock{font-family:var(--mono);font-size:11px;padding:2px 6px;border-radius:5px;background:var(--i100);color:var(--i700);flex:none}
+.clock.live{background:rgb(239 68 68 / .1);color:var(--bad-t)}
+.track{flex:1;height:16px;position:relative;cursor:pointer;min-width:40px}
+.track::before{content:"";position:absolute;left:0;right:0;top:6px;height:4px;border-radius:2px;background:var(--i150)}
+.track .fill{position:absolute;left:0;top:6px;height:4px;border-radius:2px;background:#8b8cf6}
+.track .th{position:absolute;top:3px;width:10px;height:10px;border-radius:50%;background:#7c7cf0;margin-left:-5px;box-shadow:0 0 0 2px #fff}
+.track.live .fill{background:#f87171}.track.live .th{background:var(--bad)}
+.livep{height:18px;display:inline-flex;align-items:center;gap:5px;padding:0 7px;border-radius:99px;font-size:9px;font-weight:800;letter-spacing:.08em;background:rgb(239 68 68 / .1);color:var(--bad-t);flex:none}
+.livep i{width:5px;height:5px;border-radius:50%;background:var(--bad);animation:blink 1.3s infinite}
+.livep.off{background:var(--i100);color:var(--i550)} .livep.off i{background:var(--i400);animation:none}
+@keyframes blink{50%{opacity:.2}}
+.rc{display:flex;align-items:center;gap:4px;margin-left:auto;flex:none}
+.rc .pill{height:24px}
+.runbody{flex:1;min-height:0;display:flex}
+.runmain{flex:1;min-width:0;display:flex;flex-direction:column}
+.scroll{flex:1;min-height:0;overflow:auto}
+.rail{width:36px;flex:none;border-left:1px solid var(--hair);display:flex;flex-direction:column;align-items:center;gap:4px;padding-top:8px;background:rgb(255 255 255 / .4)}
+.rail .sqbtn.on{background:rgb(37 99 235 / .08);color:var(--blue6)}
+.drawer{width:300px;flex:none;border-left:1px solid var(--hair);background:#fff;display:flex;flex-direction:column;animation:slidein .15s var(--ease)}
+@keyframes slidein{from{opacity:0;transform:translateX(8px)}}
+.drawer .dh{height:44px;display:flex;align-items:center;padding:0 8px 0 14px;border-bottom:1px solid var(--hair);font-size:13px;font-weight:600}
+.drawer .dh .sqbtn{margin-left:auto}
+.drawer .db{padding:14px;overflow:auto;font-size:12.5px;color:var(--i700)}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tile{border:1px solid var(--hair);border-radius:10px;padding:10px}
+.tile b{display:block;font-size:16px;color:var(--i900);margin-top:4px;font-weight:600}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--hair)}
+.kv span:first-child{color:var(--i550)}
+.file{display:flex;align-items:center;gap:8px;padding:7px 4px;border-radius:6px}
+.file:hover{background:var(--i100)}
+.file span{flex:1;font-family:var(--mono);font-size:11.5px}
+
+/* composer */
+.comp-wrap{flex:none;padding:8px 16px 18px}
+.comp{max-width:672px;margin:0 auto;padding:16px 16px 10px}
+.comp .ctl{margin-top:8px}
+.comp textarea:disabled{cursor:not-allowed}
+
+/* overview */
+.ov{max-width:900px;margin:0 auto;padding:14px 16px 8px}
+.cards{display:grid;grid-template-columns:1fr 22px 1fr 22px 1fr;align-items:start}
+.arrow{height:72px;display:grid;place-items:center;color:var(--i300)}
+.mc{position:relative;overflow:hidden;background:#fff;border:1px solid var(--hair);border-radius:10px;box-shadow:0 1px 2px rgb(0 0 0 / .05);padding:14px 16px 10px}
+.mc .hd{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.mc .tl{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;flex:none}
+.mc .tl svg{width:18px;height:18px}
+.mc .nm{font-size:14px;font-weight:700;line-height:1.25}
+.mc .st{font-size:10px;font-weight:500;color:var(--i550);margin-top:1px}
+.mc .ring{margin-left:auto;flex:none;width:44px;height:44px;position:relative}
+.ring>svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ring .pct{position:absolute;inset:0;display:grid;place-items:center;font-size:10px;font-weight:600;color:var(--i700)}
+.ring.spinning>svg{animation:ringspin 4s var(--ease) infinite}
+@keyframes ringspin{to{transform:rotate(270deg)}}
+.spark{height:24px;margin-bottom:10px;display:block;width:100%}
+.bar{height:4px;border-radius:2px;background:var(--i100);overflow:hidden;margin-bottom:9px}
+.bar i{display:block;height:100%;border-radius:2px;transition:width .5s linear}
+.mc .ft{display:flex;font-size:11.5px;color:var(--i550)}
+.mc .ft b{margin-left:auto;font-weight:600}
+.mc.dim>*{opacity:.55}
+.mc.run{animation:none}
+.mc.run::after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 30%,rgb(255 255 255 / .7) 50%,transparent 70%);transform:translateX(-100%);animation:shimmer 3.5s ease-in-out infinite;pointer-events:none}
+@keyframes shimmer{60%,100%{transform:translateX(100%)}}
+.mc.mini{padding:10px 12px 8px;cursor:pointer;text-align:left;width:100%;display:block}
+.mc.mini .hd{margin-bottom:8px;gap:10px}
+.mc.mini .tl{width:28px;height:28px;border-radius:8px}
+.mc.mini .tl svg{width:15px;height:15px}
+.mc.mini .ring{width:34px;height:34px}
+.mc.mini .ring .pct{font-size:9px}
+.mc.mini .bar{margin-bottom:6px}
+.tree{margin:8px 0 0 14px;border-left:1px solid var(--i150);padding:2px 0 2px 0}
+.tr{display:flex;align-items:center;gap:7px;padding:3px 8px 3px 0;font-size:12px;color:var(--i600);cursor:pointer;position:relative;border-radius:5px;width:100%;text-align:left}
+.tr::before{content:"";width:10px;height:1px;background:var(--i150);flex:none}
+.tr:hover{color:var(--i900);background:rgb(0 0 0 / .02)}
+.tr.sub{padding-left:14px}
+.tr.sub::before{width:8px}
+.tr .d{width:7px;height:7px;border-radius:50%;background:var(--i200);flex:none}
+.tr.now{color:var(--i900);font-weight:500}
+.tr.now .d{background:var(--blue);box-shadow:0 0 0 3px rgb(59 130 246 / .18)}
+.tr .chv{margin-left:auto;color:var(--i300)}
+.tr.more{font-size:10px;color:var(--i400);cursor:default}
+.tr.more:hover{background:none;color:var(--i400)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px}
+.panel{background:var(--glass);border:1px solid var(--hair);border-radius:12px;min-height:250px;display:flex;flex-direction:column;overflow:hidden}
+.panel .ph{display:flex;align-items:center;gap:8px;padding:12px 16px 10px}
+.panel .ph .stepper{margin-left:auto;display:flex;align-items:center;gap:2px;font-size:10px;color:var(--i550)}
+.stepper button{width:18px;height:18px;border-radius:4px;display:grid;place-items:center;color:var(--i550)}
+.stepper button:hover:not([disabled]){background:rgb(0 0 0 / .05)}
+.stepper button[disabled]{opacity:.35;cursor:default}
+.sumb{padding:0 16px 16px;font-size:12.5px;line-height:1.6;color:var(--i700)}
+.sumb .verdict{font-size:13.5px;font-weight:600;color:var(--i900);line-height:1.45;margin:0 0 8px}
+.sumb p{margin:0 0 8px}
+.vk{display:inline-flex;width:16px;height:16px;border-radius:50%;vertical-align:-3px;margin-right:6px;align-items:center;justify-content:center}
+.vk.ok{background:var(--ok-bg);color:var(--ok-t)} .vk.no{background:var(--warn-bg);color:var(--warn-t)} .vk.wait{background:var(--i100);color:var(--i500)}
+.acts{padding:0 8px 10px}
+.ar{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;font-size:12.5px;color:var(--i700);cursor:pointer}
+.ar:hover{background:rgb(0 0 0 / .025)}
+.ar time{font-family:var(--mono);font-size:9px;color:var(--i400);flex:none;width:30px}
+.ar .msg{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ar.open .msg{white-space:normal}
+.ar.fresh{animation:glow 1.6s var(--ease)}
+@keyframes glow{from{background:rgb(59 130 246 / .12)}}
+.cat{min-width:64px;height:17px;padding:0 6px;border-radius:4px;font-size:9px;font-weight:700;letter-spacing:.04em;display:inline-grid;place-items:center;flex:none;position:relative}
+.cat.AGENT{background:#f5f3ff;color:#6d28d9}
+.cat.TOOL{background:#eff6ff;color:var(--blue7)}
+.cat.SEARCH{background:#f0fdfa;color:#0f766e}
+.cat.USER{background:var(--i900);color:#fff}
+.cat.RESULT{background:var(--ok-bg);color:var(--ok-t)}
+.cat.SYSTEM{background:var(--i100);color:var(--i600)}
+
+/* chat */
+.chat{flex:1;min-height:0;display:flex}
+.crail{width:264px;flex:none;border-right:1px solid var(--hair);overflow:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+.cmain{flex:1;min-width:0;display:flex;flex-direction:column}
+.feed{max-width:760px;margin:0 auto;padding:14px 20px 12px}
+.fr{display:flex;gap:10px;padding:7px 0;align-items:flex-start}
+.fr .ft{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;flex:none;border:1px solid var(--hair);background:#fff;color:var(--i550);position:relative}
+.fr .ft svg{width:13px;height:13px}
+.fr .fb{flex:1;min-width:0}
+.fr .fc{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--blue6);margin:4px 0 2px}
+.fr .fc.v{color:#7c3aed}.fr .fc.gr{color:var(--ok-t)}.fr .fc.t{color:#0f766e}
+.fr .tx{font-size:13px;line-height:1.55;color:var(--i800)}
+.fr.tool .tx{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--i700);font-size:12.5px}
+.fr.tool .head{display:flex;align-items:center;gap:6px;cursor:pointer;width:100%;text-align:left}
+.fr.tool .head:hover .tx{color:var(--i900)}
+.fr.tool .chv{color:var(--i400);transition:transform .15s;flex:none}
+.fr.tool.open .chv{transform:rotate(90deg)}
+.fr .det{display:none;margin-top:6px;background:var(--i100);border-radius:8px;padding:8px 10px;font-family:var(--mono);font-size:11px;line-height:1.6;color:var(--i700);white-space:pre-wrap}
+.fr.tool.open .det{display:block}
+.fr .pend{position:absolute;inset:-3px;border-radius:50%;border:1.5px solid transparent;border-top-color:var(--blue);animation:spin 1s linear infinite}
+.fr.user{justify-content:flex-end}
+.bubble{max-width:75%;background:var(--teal);color:#fff;border-radius:14px 14px 4px 14px;padding:8px 12px;font-size:13px;line-height:1.5}
+.stepdiv{display:flex;align-items:center;gap:10px;margin:14px 0 4px;font-size:10px;color:var(--i400);font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.stepdiv::after{content:"";flex:1;height:1px;background:var(--hair)}
+.typing{display:inline-flex;gap:3px;padding:6px 0}
+.typing i{width:5px;height:5px;border-radius:50%;background:var(--i300);animation:blink 1s infinite}
+.typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
+.flash{animation:glow 1.6s var(--ease)}
+
+/* visual */
+.vis{max-width:1080px;margin:0 auto;padding:16px 24px 24px}
+.picker{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px}
+.picker button{height:28px;padding:0 12px;border-radius:99px;font-size:12px;font-weight:500;color:var(--i600);border:1px solid transparent}
+.picker button:hover{background:rgb(0 0 0 / .04)}
+.picker button.on{background:#fff;border-color:rgb(0 0 0 / .1);color:var(--i900);box-shadow:var(--sh-hair)}
+.vh{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.vh h2{margin:0;font-size:20px;font-weight:600;letter-spacing:-.01em}
+.vh .uc{font-size:11.5px;color:var(--i550)}
+.vs{margin:4px 0 14px;font-size:13px;color:var(--i550)}
+.vcard{background:#fff;border:1px solid var(--hair);border-radius:12px;box-shadow:var(--sh-hair);padding:18px;position:relative}
+.vcard svg.v{width:100%;height:auto;display:block}
+.vfoot{margin-top:12px;font-size:12.5px;color:var(--i600)}
+.pop-in{animation:popchip .7s var(--ease)}
+@keyframes popchip{0%{opacity:.2;transform:scale(.985)}100%{opacity:1;transform:none}}
+.pts{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+.pt{border:1px solid var(--hair);border-radius:10px;padding:12px;background:#fff}
+.pt .pn{font-size:11px;color:var(--i550);display:flex;align-items:center;gap:6px}
+.pt .pv{font-size:22px;font-weight:600;margin-top:6px;letter-spacing:-.01em}
+.pt .pm{font-size:11px;margin-top:2px}
+.pt.ok .pm{color:var(--ok-t)} .pt.no .pm{color:var(--bad-t)}
+.pt.worst{border-color:var(--i900);box-shadow:0 0 0 1px var(--i900)}
+.pt.wait .pv{color:var(--i300)}
+.est{font-size:9.5px;font-weight:600;color:var(--warn-t);background:var(--warn-bg);border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:2px}
+.dv{display:grid;grid-template-columns:1.4fr 1fr;gap:24px;align-items:center}
+.stat{padding:12px 0;border-bottom:1px solid var(--hair)}
+.stat:last-child{border-bottom:0}
+.stat .sl{font-size:12px;color:var(--i550)}
+.stat .sv{font-size:24px;font-weight:600;margin-top:2px}
+.stat .sh{font-size:11.5px;color:var(--i500)}
+
+/* configure / gallery */
+.cfg{flex:1;min-height:0;display:flex}
+.cfg .side{width:220px;flex:none;border-right:1px solid var(--hair);padding:18px 12px;overflow:auto}
+.cfg .side .caps{padding:0 8px 6px;display:block}
+.cfg .side button{display:flex;align-items:center;gap:8px;width:100%;height:32px;padding:0 8px;border-radius:6px;font-size:12.5px;color:var(--i600);text-align:left}
+.cfg .side button:hover{background:rgb(0 0 0 / .03)}
+.cfg .side button.on{background:rgb(37 99 235 / .06);color:var(--i900);font-weight:500}
+.cfg .pane{flex:1;overflow:auto;padding:32px 40px}
+.cfg h1{font-size:26px;font-weight:600;margin:0 0 4px;letter-spacing:-.01em}
+.cfg .lead{color:var(--i550);margin:0 0 24px;font-size:13px}
+.field{max-width:520px;display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--hair)}
+.field .fl{flex:1}
+.field .fl b{display:block;font-size:13px;font-weight:500}
+.field .fl span{font-size:11.5px;color:var(--i550)}
+.field input[type=number],.field select{width:120px;height:32px;border:1px solid var(--i150);border-radius:8px;padding:0 8px;background:#fff;font-size:12.5px}
+.sw{width:34px;height:20px;border-radius:99px;background:var(--i200);position:relative;flex:none;transition:background .12s}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgb(0 0 0 / .2);transition:transform .12s}
+.sw.on{background:var(--blue6)}.sw.on::after{transform:translateX(14px)}
+.gal{flex:1;overflow:auto;padding:32px 40px}
+.gal h1{font-size:26px;font-weight:600;margin:0 0 20px}
+.gcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;max-width:900px}
+.gcard{background:#fff;border:1px solid var(--hair);border-radius:10px;padding:14px;text-align:left;box-shadow:var(--sh-hair)}
+.gcard:hover{box-shadow:var(--sh-card)}
+.gcard b{display:block;font-size:13.5px;margin-bottom:4px}
+.gcard span{font-size:12px;color:var(--i550)}
+
+/* responsive */
+@media (max-width:1279px){.rc .pill .lbl{display:none}}
+@media (max-width:1100px){.crail{display:none}}
+@media (max-width:1023px){
+  .sb{width:52px}
+  .sb .word,.sb .nav span,.sb .count,.sb .runs,.sb .sb-div,.sb .acct .who,.sb .logo{display:none}
+  .sb .sb-head .sqbtn{margin:0}
+  .sb .nav button{padding:0 9px}
+  .sb.peek{position:absolute;left:0;top:0;bottom:0;width:252px;box-shadow:var(--sh-menu);background:var(--glass-strong)}
+  .sb.peek .word,.sb.peek .nav span,.sb.peek .count,.sb.peek .acct .who,.sb.peek .logo{display:revert}
+  .sb.peek .runs{display:block}.sb.peek .sb-div{display:block}
+  .sb.peek .sb-head .sqbtn{margin-left:auto}
+  .rtitle{max-width:160px}
+}
+@media (max-width:860px){
+  .cards{grid-template-columns:1fr}
+  .arrow{display:none}
+  .cards .slot{margin-bottom:10px}
+  .pair{grid-template-columns:1fr}
+  .pts{grid-template-columns:repeat(3,1fr)}
+  .dv{grid-template-columns:1fr}
+}
+@media (max-width:767px){
+  .sb{display:none}
+  .sb.drawer-open{display:flex;position:fixed;left:0;top:0;bottom:0;width:252px;box-shadow:var(--sh-menu);background:var(--glass-strong);z-index:60}
+  .sb.drawer-open .word,.sb.drawer-open .nav span,.sb.drawer-open .count,.sb.drawer-open .acct .who,.sb.drawer-open .logo{display:revert}
+  .sb.drawer-open .runs,.sb.drawer-open .sb-div{display:block}
+  .sb.drawer-open .sb-head .sqbtn{margin-left:auto}
+  .mhead{display:flex;align-items:center;gap:8px;height:48px;padding:0 10px;border-bottom:1px solid var(--hair);flex:none;background:var(--glass)}
+  .mhead .demo-m{margin-left:auto;font-size:10px;color:var(--i400)}
+  .demo{display:none}
+  .topbar{gap:8px;padding:0 8px;overflow:hidden}
+  .rtitle,.track,.rc .pill,.rail{display:none}
+  .play{min-width:0;flex:1}
+  .tab{padding:0 7px}
+  .greet{font-size:30px}
+  .rc .share{display:none}
+  .ov{padding:12px}
+  .tree{display:none}
+  .vis{padding:14px}
+  .pts{grid-template-columns:repeat(2,1fr)}
+  .cfg .side{display:none}.cfg .pane,.gal{padding:20px}
+  .drawer{position:fixed;right:0;top:0;bottom:0;z-index:50;box-shadow:var(--sh-menu)}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sb" id="sb" aria-label="Sidebar"></aside>
+  <div class="main">
+    <header class="mhead" id="mhead"></header>
+    <div id="page"></div>
+  </div>
+</div>
+<div class="demo" id="demo"></div>
+<div id="layer"></div>
+<script>
+(function(){
+"use strict";
+
+/* ---------- the product name lives here, and only here ---------- */
+const PRODUCT = {name:"Chipmonk AI Scientist", short:"Chipmonk"};
+const DEMO_LABEL = "Simulated run, demo data";
+
+/* ---------- icons ---------- */
+const P = {
+  plus:'<path d="M5 12h14M12 5v14"/>',
+  gear:'<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  grid:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
+  panel:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>',
+  down:'<path d="m6 9 6 6 6-6"/>', right:'<path d="m9 18 6-6-6-6"/>', left:'<path d="m15 18-6-6 6-6"/>',
+  up:'<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  dots:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  star:'<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+  pencil:'<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
+  trash:'<path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
+  pause:'<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
+  play:'<polygon points="6 3 20 12 6 21 6 3"/>',
+  share:'<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98"/>',
+  cpu:'<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"/>',
+  file:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4M10 9H8M16 13H8M16 17H8"/>',
+  bars:'<path d="M3 3v18h18M18 17V9M13 17V5M8 17v-3"/>',
+  folder:'<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+  sliders:'<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+  x:'<path d="M18 6 6 18M6 6l12 12"/>',
+  menu:'<path d="M4 6h16M4 12h16M4 18h16"/>',
+  target:'<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+  flask:'<path d="M10 2v7.53a2 2 0 0 1-.21.9L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.07-10.13A2 2 0 0 1 14 9.53V2M8.5 2h7M7 16h10"/>',
+  zap:'<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+  trend:'<path d="M22 7 13.5 15.5 8.5 10.5 2 17"/><path d="M16 7h6v6"/>',
+  sparkle:'<path d="M12 3l1.9 5.8L20 10.5l-6.1 1.7L12 18l-1.9-5.8L4 10.5l6.1-1.7z"/>',
+  wave:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+  drop:'<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>',
+  clip:'<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+  wrench:'<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+  restart:'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  download:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+  clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  alert:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/>',
+  user:'<circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 0 0-16 0"/>',
+  help:'<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>',
+  logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'
+};
+const ic = (n, c) => `<svg class="i ${c||''}" viewBox="0 0 24 24" aria-hidden="true">${P[n]}</svg>`;
+const esc = s => String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const fmt = n => Math.round(n).toLocaleString('en-US');
+const $ = (s, r) => (r||document).querySelector(s);
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+function rng(seed){ let a = seed >>> 0; return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ---------- domain ---------- */
+const UC = {
+  bw:{ name:'Brainwave sensing', icon:'wave', device:'EEG headband', aDevice:'an EEG headband', subj:'patient', subjs:'patients', Subj:'Patient',
+       line:90, lineShort:'90% of seizures caught, per patient', ref:95.8, allCh:18, chWord:'channels', chOne:'channel',
+       event:'seizure', events:'seizures', windowWord:'2-second windows', worstIdx:6,
+       patch:{w:42,h:18,name:'headband sensor pod'}, basePower:0.9 },
+  nb:{ name:'Newborn sensing', icon:'drop', device:'near-infrared cap', aDevice:'a near-infrared cap', subj:'newborn', subjs:'newborns', Subj:'Newborn',
+       line:95, lineShort:'95% of oxygen drops caught, per newborn', ref:97.9, allCh:4, chWord:'light paths', chOne:'light path',
+       event:'oxygen drop', events:'oxygen drops', windowWord:'10-second windows', worstIdx:3,
+       patch:{w:30,h:20,name:'forehead sensor patch'}, basePower:2.4 }
+};
+const BASE = {
+  bw:[{ch:4,g:18400,w:86.1},{ch:2,g:9800,w:89.4},{ch:2,g:6200,w:91.2},{ch:2,g:5300,w:90.6},{ch:2,g:4800,w:90.3}],
+  nb:[{ch:3,g:12600,w:93.0},{ch:2,g:7100,w:95.6},{ch:2,g:5300,w:94.6},{ch:2,g:4700,w:95.2},{ch:2,g:4300,w:95.0}]
+};
+const PROPOSE = {
+  bw:['proposing 24 chip designs that read 1 to 4 channels in 2-second windows.',
+      'round 1 needed 4 channels. Trying 2 channels with longer 4-second windows, which held up best in the reference model.',
+      'keeping 2 channels and shrinking the model; most of the gates sit in the first layer.',
+      'trimming the windowing logic to save more gates.',
+      'trying 6-bit weights in the last layer.'],
+  nb:['proposing 24 chip designs that read 2 to 4 light paths in 10-second windows.',
+      'the deep light paths carry most of the signal. Trying 2 paths with 30-second windows.',
+      'keeping 2 light paths and using fewer bits per weight.',
+      'trimming the trend filter to save more gates.',
+      'trying 6-bit weights in the last layer.']
+};
+
+/* ---------- run timeline ---------- */
+const STAGES = [
+  {name:'Set Target', icon:'target', hue:'#a78bfa', tile:'#f5f3ff', grad:'linear-gradient(90deg,#c4b5fd,#a78bfa)'},
+  {name:'Design Chip', icon:'cpu', hue:'#60a5fa', tile:'#eff6ff', grad:'linear-gradient(90deg,#93c5fd,#60a5fa)'},
+  {name:'Report Chip', icon:'file', hue:'#fb923c', tile:'#fff7ed', grad:'linear-gradient(90deg,#fdba74,#fb923c)'}
+];
+const RP = [8,16,8,8], RNAMES = ['Propose','Fine-tune','Compile','Verify'];
+function steps(run){
+  if (run._st && run._stR === run.rounds) return run._st;
+  const a = [{st:0,name:'Spec',s:0,e:10},{st:0,name:'Reference',s:10,e:26}];
+  let s = 26;
+  for (let r=0; r<run.rounds; r++) RNAMES.forEach((n,i) => { a.push({st:1,r,name:n,s,e:s+RP[i]}); s += RP[i]; });
+  a.push({st:2,name:'Write report',s,e:s+12}); a.push({st:2,name:'Package chip',s:s+12,e:s+18});
+  run._st = a; run._stR = run.rounds; return a;
+}
+const total = run => steps(run)[steps(run).length-1].e;
+const roundStart = (run,r) => 26 + r*40;
+function elapsed(run){
+  const e = run.acc + (run.paused ? 0 : (Date.now() - run.resumeAt)/1000);
+  return clamp(e, 0, total(run));
+}
+function viewT(run){ return run.viewT != null ? Math.min(run.viewT, elapsed(run)) : elapsed(run); }
+function isDone(run){ return elapsed(run) >= total(run) - 1e-6; }
+function stepAt(run,t){ const st = steps(run); for (const x of st) if (t < x.e) return x; return null; }
+function stageSpan(run,i){ const st = steps(run).filter(x => x.st === i); return [st[0].s, st[st.length-1].e]; }
+
+function roundResult(run, r){
+  const b = BASE[run.uc][Math.min(r,4)];
+  let g = b.g, w = b.w, ch = b.ch;
+  for (const d of run.redirects) if (d.from != null && d.from <= r){ g *= d.eff.g; w += d.eff.w; ch = Math.max(1, ch + d.eff.ch); }
+  g = Math.round(g/50)*50; w = Math.round(w*10)/10;
+  const R = rng(run.seed*31 + r*7 + 3), u = UC[run.uc], pats = [];
+  for (let i=0;i<12;i++){ const off = i === u.worstIdx ? 0 : 0.4 + R()*(98.8 - w); pats.push(Math.min(99.4,Math.round((w+off)*10)/10)); }
+  const meets = pats.filter(v => v >= u.line).length;
+  return {r, g, w, ch, pats, meets, n:12, all: meets === 12};
+}
+function verified(run,t){ let n=0; for (let r=0;r<run.rounds;r++) if (t >= roundStart(run,r)+40) n++; return n; }
+function best(run,t){ const n = verified(run,t); return n ? roundResult(run, n-1) : null; }
+
+function verdict(run, b){
+  const u = UC[run.uc];
+  if (!b) return {k:'wait', text:'No chip yet. The first one is checked after round 1.'};
+  return {k: b.all ? 'ok' : 'no',
+    text: `Best chip: ${fmt(b.g)} gates. Meets the clinical line on ${b.meets} of 12 unseen ${u.subjs}.`,
+    short: `meets the clinical line on ${b.meets} of 12 unseen ${u.subjs}`};
+}
+function nowLine(run,t){
+  if (run.paused && !isDone(run)) return 'Paused. Press play to continue.';
+  const s = stepAt(run,t); if (!s) return 'Finished. The report and chip files are ready.';
+  const R = s.r != null ? `Round ${s.r+1}: ` : '';
+  return R + ({Spec:'reading the brief and the recordings.',Reference:'training a full-size reference model to set the ceiling.',
+    Propose:'proposing 24 chip designs.','Fine-tune':'fine-tuning 3,072 small models at once.',
+    Compile:'compiling the best 240 models into logic gates.',Verify:'checking each circuit bit for bit against its model.',
+    'Write report':'writing the report.','Package chip':'packaging the chip files.'})[s.name].replace(/^./, c => R ? c : c.toUpperCase());
+}
+
+/* ---------- events (one list drives Activity and Chat) ---------- */
+function events(run){
+  const key = run.rounds + '|' + run.redirects.length + '|' + run.ver;
+  if (run._ev && run._evK === key) return run._ev;
+  const u = UC[run.uc], E = [];
+  const add = (t,cat,text,o) => E.push(Object.assign({t,cat,text,id:E.length+'-'+Math.round(t*10)}, o||{}));
+  const bw = run.uc === 'bw';
+  add(1,'AGENT', bw ? `Reading your brief: ${u.aDevice} that flags seizures, worn for days at a time. A missed seizure counts as worse than a false alarm.`
+                    : `Reading your brief: ${u.aDevice} that warns when a newborn's brain oxygen drops. A missed drop counts as worse than an extra alarm.`, {step:'Spec'});
+  add(3,'TOOL','Read the brief and 2 example recordings',{step:'Spec',det:bw?'recording_a.edf  18 channels, 256 Hz, 41 min\nrecording_b.edf  18 channels, 256 Hz, 63 min':'cap_a.csv  4 light paths, 10 Hz, 52 min\ncap_b.csv  4 light paths, 10 Hz, 47 min'});
+  add(6,'TOOL', bw ? 'Load dataset: 24 patients, 18 channels, 980 hours' : 'Load dataset: 24 newborns, 4 light paths, 310 hours', {step:'Spec',det:`Split by ${u.subj}: 12 for training, 12 held out.\nThe held-out ${u.subjs} are never seen until Verify.`});
+  add(9,'AGENT', `Clinical line set: the chip must catch at least ${u.line}% of ${u.events} for every unseen ${u.subj}, not just on average.`, {step:'Spec'});
+  add(11,'SEARCH', bw ? 'Search: published seizure detectors for wearable EEG' : 'Search: oxygen-drop alarms for neonatal near-infrared monitors', {step:'Reference',det:bw?'14 papers read. Most use 4 to 8 channels and 2 to 4-second windows.':'9 papers read. Most alarm when oxygen stays below 55% for over a minute.'});
+  add(14,'TOOL', bw ? 'Train reference model (full size, all 18 channels)' : 'Train reference model (full size, all 4 light paths)', {step:'Reference',det:'Floating point, about 1.2 million weights.\nNot meant for a chip; it sets the ceiling.'});
+  add(24,'AGENT', `Reference model catches ${u.ref}% of ${u.events} on the worst unseen ${u.subj}. That is the ceiling; every chip will be smaller.`, {step:'Reference'});
+  for (let r=0; r<run.rounds; r++){
+    const s0 = roundStart(run,r), res = roundResult(run,r), sr = {step:RNAMES[0], r};
+    const red = run.redirects.filter(d => d.from === r);
+    let p = `Round ${r+1}: ` + PROPOSE[run.uc][Math.min(r,4)];
+    if (red.length) p += ' ' + red[red.length-1].eff.note;
+    add(s0+1,'AGENT', p, sr);
+    add(s0+9,'TOOL', 'Fine-tune 3,072 small models at once (24 designs, 128 settings each)', {step:'Fine-tune', r, det:`Batch on one GPU. Trained on 12 ${u.subjs}.\nScored by the worst ${u.subj}, not the average.`});
+    add(s0+22,'AGENT', `Kept the best 240 models by worst-${u.subj} sensitivity.`, {step:'Fine-tune', r});
+    add(s0+25,'TOOL', 'Compile 240 models into logic gates, weights wired in', {step:'Compile', r, det:`240 netlists written.\nSmallest: ${fmt(res.g*0.82)} gates. Largest: ${fmt(res.g*2.9)} gates.`});
+    add(s0+31,'AGENT', `Smallest candidate that clears the line on the training ${u.subjs}: ${fmt(res.g)} gates, ${res.ch} ${res.ch===1?u.chOne:u.chWord}.`, {step:'Compile', r});
+    add(s0+33,'TOOL', 'Check each circuit bit for bit against its model', {step:'Verify', r, det:'2.1 million windows replayed through circuit and model.\nMismatches: 0.'});
+    const worstV = Math.min(...res.pats), wi = res.pats.indexOf(worstV);
+    add(s0+39.5,'RESULT', `Round ${r+1} chip: ${fmt(res.g)} gates, ${res.ch} ${res.ch===1?u.chOne:u.chWord}. Meets the clinical line on ${res.meets} of 12 unseen ${u.subjs}.` +
+      (res.all ? '' : ` ${u.Subj} ${wi+1} is at ${worstV}%.`), {step:'Verify', r});
+  }
+  for (const d of run.redirects){
+    add(d.t,'USER', d.text, {user:true, step:d.step, r:d.r});
+    add(d.t+2.5,'AGENT', d.reply, {step:d.step, r:d.r, reply:true});
+  }
+  const rs = 26 + run.rounds*40;
+  add(rs+1,'AGENT','Writing the report: the chosen chip, how it does per patient, and what it means for the device.', {step:'Write report'});
+  add(rs+9,'TOOL','Export netlist, test vectors and the patient table', {step:'Write report', det:'chip.v, test_vectors.bin, patients.csv'});
+  const fin = roundResult(run, run.rounds-1);
+  add(rs+17,'RESULT', `Done. Chosen chip: ${fmt(fin.g)} gates, ${fin.ch} ${fin.ch===1?u.chOne:u.chWord}, meets the clinical line on ${fin.meets} of 12 unseen ${u.subjs}.`, {step:'Package chip'});
+  E.sort((a,b) => a.t - b.t);
+  run._ev = E; run._evK = key; return E;
+}
+
+function summaryVersions(run,t){
+  const u = UC[run.uc], v = [];
+  if (t >= 10) v.push({verdict:null, p:`The scientists set the target: a chip for ${u.aDevice} that catches at least ${u.line}% of ${u.events} for every unseen ${u.subj}.`});
+  if (t >= 26) v.push({verdict:null, p:`The full-size reference model reaches ${u.ref}% on the worst unseen ${u.subj} using all ${u.allCh} ${u.chWord}. That is the ceiling for any chip.`});
+  for (let r=0; r<verified(run,t); r++){
+    const b = roundResult(run,r);
+    v.push({r, p: r === 0 ? `Round 1 found a working chip with ${b.ch} ${u.chWord}. Later rounds try to make it smaller without losing the worst ${u.subj}.`
+      : `Round ${r+1} ${b.g < roundResult(run,r-1).g ? 'shrank' : 'changed'} the chip from ${fmt(roundResult(run,r-1).g)} to ${fmt(b.g)} gates.`});
+  }
+  if (isDone(run) && t >= total(run)) v.push({p:`The report is ready, with the netlist, the test vectors and a table of every unseen ${u.subj}.`});
+  return v;
+}
+
+/* ---------- runs ---------- */
+const now = Date.now();
+const mk = (o) => Object.assign({rounds:3, redirects:[], paused:false, starred:false, viewT:null, ver:0, compute:'GPU Basic', preset:'Lite', resumeAt:now}, o);
+const RUNS = [
+  mk({id:'seizure-headband', title:'Seizure alarm headband', uc:'bw', seed:11, acc:52}),
+  mk({id:'oxygen-drop-alarm', title:'Newborn oxygen-drop alarm', uc:'nb', seed:23, acc:1e9}),
+  mk({id:'behind-ear-eeg', title:'Seizure alarm, behind-the-ear EEG', uc:'bw', seed:37, acc:1e9}),
+  mk({id:'nirs-cap-v1', title:'Low brain-oxygen alert, cap v1', uc:'nb', seed:41, acc:1e9})
+];
+let newCount = 0;
+const byId = id => RUNS.find(r => r.id === id);
+
+/* ---------- app state ---------- */
+const S = { route:{page:'start'}, uc:'bw', preset:'Lite', compute:'GPU Basic', draft:'', drawer:null, cfgTab:'Clinical line', cfgMode:'Lite',
+  agent:'Claude Agent', open:new Set(), chatStage:null, sumIdx:null, sbCol:false };
+
+function parseHash(){
+  const h = decodeURIComponent(location.hash.replace(/^#\/?/, '')).split('/');
+  if (h[0] === 'run' && byId(h[1])) return {page:'run', id:h[1], view:['overview','chat','visual'].includes(h[2])?h[2]:'overview', vis:h[3]||'chip'};
+  if (h[0] === 'configure') return {page:'configure'};
+  if (h[0] === 'gallery') return {page:'gallery'};
+  return {page:'start'};
+}
+function go(path){ if (location.hash !== '#/'+path) location.hash = '/'+path; else route(); }
+function runPath(id, view, vis){ return `run/${id}/${view||'overview'}` + (view === 'visual' ? '/'+(vis||'chip') : ''); }
+
+/* ---------- layer: popovers, dialogs, toast ---------- */
+const layer = $('#layer');
+let popCleanup = null;
+function closePop(){ layer.innerHTML = ''; if (popCleanup){ popCleanup(); popCleanup = null; } }
+function openPop(anchor, html, opts){
+  closePop(); opts = opts||{};
+  const el = document.createElement('div'); el.className = 'pop'; el.innerHTML = html; if (opts.w) el.style.width = opts.w+'px';
+  layer.appendChild(el);
+  const r = anchor.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
+  let left = clamp(opts.alignRight ? r.right - w : r.left, 8, innerWidth - w - 8);
+  let top = opts.up || (r.bottom + h + 8 > innerHeight) ? r.top - h - 6 : r.bottom + 6;
+  el.style.left = left+'px'; el.style.top = Math.max(8, top)+'px';
+  if (anchor.classList.contains('more')) { anchor.classList.add('open'); popCleanup = () => anchor.classList.remove('open'); }
+  setTimeout(() => document.addEventListener('mousedown', outside, true), 0);
+  function outside(e){ if (!el.contains(e.target)){ document.removeEventListener('mousedown', outside, true); if (el.isConnected) closePop(); } }
+  return el;
+}
+function dialog(title, body, acts){
+  closePop();
+  const sc = document.createElement('div'); sc.className = 'scrim';
+  sc.innerHTML = `<div class="dlg" role="dialog" aria-modal="true"><h3>${esc(title)}</h3><p>${esc(body)}</p><div class="acts"></div></div>`;
+  const a = sc.querySelector('.acts');
+  acts.forEach(x => { const b = document.createElement('button'); b.className = 'btn '+(x.cls||''); b.textContent = x.label; b.onclick = () => { closePop(); x.fn && x.fn(); }; a.appendChild(b); });
+  sc.addEventListener('mousedown', e => { if (e.target === sc) closePop(); });
+  layer.appendChild(sc); a.lastChild.focus();
+}
+let toastT;
+function toast(msg){ document.querySelectorAll('.toast').forEach(x => x.remove()); const t = document.createElement('div'); t.className='toast'; t.textContent = msg; document.body.appendChild(t); clearTimeout(toastT); toastT = setTimeout(() => t.remove(), 2200); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePop(); });
+
+/* ---------- sidebar ---------- */
+function glyph(run){
+  if (run.paused && !isDone(run)) return '<span class="g"></span>';
+  if (!isDone(run)) return `<svg class="g spin" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" fill="none" stroke="#dbeafe" stroke-width="1.5"/><path d="M6 1.5a4.5 4.5 0 0 1 4.5 4.5" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+  return `<svg class="g" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`;
+}
+let sbSig = '';
+function renderSidebar(force){
+  const sig = RUNS.map(r => r.id+r.title+r.starred+(r.paused?'p':'')+(isDone(r)?'d':'r')).join('|') + '|' + JSON.stringify(S.route) + S.sbCol;
+  if (!force && sig === sbSig) return; sbSig = sig;
+  const sb = $('#sb'), cur = S.route.page === 'run' ? S.route.id : null;
+  const rowsOf = list => list.map(r => `<div class="row ${r.id===cur?'on':''}" data-run="${r.id}" title="${esc(r.title)}" role="button" tabindex="0">${glyph(r)}<span class="t">${esc(r.title)}</span><button class="more" data-more="${r.id}" aria-label="More for ${esc(r.title)}">${ic('dots','s14')}</button></div>`).join('');
+  const starred = RUNS.filter(r => r.starred), rec = RUNS.filter(r => !r.starred);
+  sb.classList.toggle('col', S.sbCol);
+  sb.innerHTML = `
+    <div class="sb-head"><div class="logo">${ic('cpu')}</div><div class="word">${esc(PRODUCT.short)}</div>
+      <button class="sqbtn" id="sbToggle" aria-label="Toggle sidebar">${ic('panel','s16')}</button></div>
+    <nav class="nav">
+      <button data-nav="start" class="${S.route.page==='start'?'on':''}">${ic('plus')}<span>New chip</span></button>
+      <button data-nav="configure" class="${S.route.page==='configure'?'on':''}">${ic('gear')}<span>Configure</span></button>
+      <button data-nav="search">${ic('search')}<span>Search</span><em class="count" style="font-style:normal">${RUNS.length}</em></button>
+      <button data-nav="gallery" class="${S.route.page==='gallery'?'on':''}">${ic('grid')}<span>Gallery</span></button>
+    </nav>
+    <div class="sb-div"></div>
+    <div class="runs">
+      ${starred.length ? `<div class="cap"><span class="caps">Starred</span></div>${rowsOf(starred)}` : ''}
+      <div class="cap"><span class="caps">Recents</span><a data-nav="search">View all</a></div>
+      ${rowsOf(rec)}
+    </div>
+    <div class="acct"><button id="acctBtn"><span class="av">DL</span><span class="who"><div class="nm">Demo lab</div><div class="em">Lab workspace</div></span></button></div>`;
+}
+$('#sb').addEventListener('click', e => {
+  const more = e.target.closest('[data-more]');
+  if (more){ e.stopPropagation(); runMenu(more, byId(more.dataset.more)); return; }
+  const row = e.target.closest('[data-run]');
+  if (row && !e.target.closest('input')){ closeMobile(); go(runPath(row.dataset.run, S.route.page==='run' ? S.route.view : 'overview', S.route.vis)); return; }
+  const nav = e.target.closest('[data-nav]');
+  if (nav){ const n = nav.dataset.nav; if (n === 'search') return openSearch(); closeMobile(); go(n === 'start' ? '' : n); return; }
+  if (e.target.closest('#sbToggle')){ if (innerWidth < 768) return closeMobile(); if (innerWidth < 1024){ $('#sb').classList.toggle('peek'); return; } S.sbCol = !S.sbCol; renderSidebar(true); return; }
+  if (e.target.closest('#acctBtn')) acctMenu(e.target.closest('#acctBtn'));
+});
+$('#sb').addEventListener('keydown', e => { const row = e.target.closest('[data-run]'); if (row && e.key === 'Enter' && e.target === row) row.click(); });
+function closeMobile(){ $('#sb').classList.remove('drawer-open','peek'); }
+function runMenu(anchor, run){
+  const el = openPop(anchor, `
+    <button class="opt" data-a="star">${ic('star','s14')}${run.starred?'Unstar':'Star'}</button>
+    <button class="opt" data-a="rename">${ic('pencil','s14')}Rename</button>
+    <button class="opt danger" data-a="delete">${ic('trash','s14')}Delete</button>`);
+  el.onclick = e => { const a = e.target.closest('[data-a]'); if (!a) return; closePop();
+    if (a.dataset.a === 'star'){ run.starred = !run.starred; renderSidebar(true); }
+    if (a.dataset.a === 'rename') rename(run);
+    if (a.dataset.a === 'delete') dialog('Delete this run?', `"${run.title}" and its chip files will be removed for good.`, [{label:'Cancel'},{label:'Delete', cls:'red', fn:() => { RUNS.splice(RUNS.indexOf(run),1); if (S.route.id === run.id) go(''); else renderSidebar(true); }}]);
+  };
+}
+function rename(run){
+  const row = document.querySelector(`.row[data-run="${run.id}"]`); if (!row) return;
+  const t = row.querySelector('.t'); const inp = document.createElement('input'); inp.value = run.title; t.replaceWith(inp); inp.focus(); inp.select();
+  const done = save => { if (save && inp.value.trim()) run.title = inp.value.trim(); renderSidebar(true); if (S.route.id === run.id) renderTopbar(true); };
+  inp.onkeydown = e => { if (e.key === 'Enter') done(true); if (e.key === 'Escape') done(false); };
+  inp.onblur = () => done(true);
+}
+function acctMenu(anchor){
+  const el = openPop(anchor, `<div class="pcap"><div style="font-size:12.5px;font-weight:600">Demo lab</div><div style="font-size:11px;color:var(--i550)">Lab workspace</div></div><div class="sep"></div>
+    <button class="opt" data-a="usage">${ic('bars','s14')}Usage</button><button class="opt" data-a="settings">${ic('gear','s14')}Settings</button>
+    <button class="opt" data-a="help">${ic('help','s14')}Help</button><div class="sep"></div><button class="opt" data-a="out">${ic('logout','s14')}Log out</button>`, {up:true, w:220});
+  el.onclick = e => { const a = e.target.closest('[data-a]'); if (!a) return; closePop();
+    if (a.dataset.a === 'settings') go('configure'); else toast(a.dataset.a === 'usage' ? `${RUNS.length} runs, $${(RUNS.reduce((s,r)=>s+costAt(r,viewT(r)),0)).toFixed(2)} spent in this demo` : 'Not part of this demo'); };
+}
+function openSearch(){
+  closePop();
+  const sc = document.createElement('div'); sc.className = 'scrim'; sc.style.alignItems = 'start';
+  sc.innerHTML = `<div class="search"><input placeholder="Search runs" aria-label="Search runs"><div class="list"></div></div>`;
+  layer.appendChild(sc);
+  const inp = sc.querySelector('input'), list = sc.querySelector('.list');
+  const draw = () => { const q = inp.value.toLowerCase(); const m = RUNS.filter(r => r.title.toLowerCase().includes(q));
+    list.innerHTML = m.length ? m.map(r => `<button class="opt" data-id="${r.id}">${glyph(r)}<span style="flex:1">${esc(r.title)}<span class="h">${UC[r.uc].name}, ${isDone(r)?'finished':r.paused?'paused':'running'}</span></span></button>`).join('') : `<div style="padding:12px;font-size:12.5px;color:var(--i550)">No run matches "${esc(inp.value)}".</div>`; };
+  draw(); inp.oninput = draw; inp.focus();
+  list.onclick = e => { const b = e.target.closest('[data-id]'); if (b){ closePop(); go(runPath(b.dataset.id)); } };
+  sc.addEventListener('mousedown', e => { if (e.target === sc) closePop(); });
+}
+
+/* ---------- start page ---------- */
+const EXAMPLES = [
+  {label:'Seizure alarm headband', icon:'wave', uc:'bw', text:'A soft EEG headband for adults with epilepsy, worn at home for days. The chip should raise an alarm within seconds of a seizure starting, using as few electrodes as possible, and run for a week on one charge.'},
+  {label:'Newborn brain-oxygen alarm', icon:'drop', uc:'nb', text:'A near-infrared patch for the forehead of newborns in intensive care. The chip should warn the nurse when brain oxygen drops and stays low, without alarming on every movement.'}
+];
+const PRESETS = [{n:'Lite',i:'zap',h:'3 rounds. Quick first chip.'},{n:'Pro',i:'flask',h:'5 rounds. Smaller chips.'},{n:'Max',i:'trend',h:'8 rounds, more designs per round.'},{n:'Ultra',i:'sparkle',h:'12 rounds. The smallest chip we can find.'}];
+const COMPUTE = [{n:'CPU Basic',h:'The small machine. Slow fine-tuning.'},{n:'GPU Basic',h:'One GPU. About 3,000 models a round.'},{n:'GPU Plus',h:'A bigger GPU. Twice as many models.'},{n:'GPU Cluster',h:'Several GPUs. Above your plan.',off:true}];
+function greeting(){ const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; }
+function renderStart(){
+  const u = UC[S.uc];
+  $('#page').innerHTML = `<div class="start"><div class="col">
+    <h1 class="greet">${greeting()}</h1>
+    <p class="subt">Start a new run by describing the device and the job its chip must do.</p>
+    <div class="box">
+      <textarea id="prompt" rows="1" placeholder="What should your device's chip do?" aria-label="Describe your device">${esc(S.draft)}</textarea>
+      <div class="ctl">
+        <button class="plus" id="attach" aria-label="Add files">${ic('plus','s16')}</button>
+        <button class="pill" id="pUc">${ic(u.icon,'s13')}${u.name}${ic('down','s12 chev')}</button>
+        <button class="pill" id="pPreset">${ic(PRESETS.find(p=>p.n===S.preset).i,'s13')}${S.preset}${ic('down','s12 chev')}</button>
+        <button class="pill" id="pCompute">${ic('cpu','s13')}${S.compute}${ic('down','s12 chev')}</button>
+        <button class="send ${S.draft.trim()?'ready':''}" id="go" aria-label="Start run">${ic('up','s16')}</button>
+      </div>
+    </div>
+    <div class="chips">${EXAMPLES.map((x,i) => `<button class="chip" data-ex="${i}">${ic(x.icon,'s14')}${x.label}</button>`).join('')}</div>
+  </div></div>`;
+  const ta = $('#prompt'), go_ = $('#go');
+  const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.min(280, ta.scrollHeight)+'px'; };
+  ta.oninput = () => { S.draft = ta.value; go_.classList.toggle('ready', !!ta.value.trim()); grow(); };
+  ta.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); startRun(); } };
+  grow();
+  go_.onclick = startRun;
+  $('#attach').onclick = e => { const el = openPop(e.currentTarget, `<button class="opt">${ic('clip','s14')}Add recordings or files</button>`); el.onclick = () => { closePop(); toast('File upload is not part of this demo'); }; };
+  $('#pUc').onclick = e => choose(e.currentTarget, 'Use case', Object.entries(UC).map(([k,v]) => ({k, n:v.name, i:v.icon, h: k==='bw' ? 'EEG headbands and patches' : 'Near-infrared brain oxygen'})), S.uc, k => { S.uc = k; renderStart(); });
+  $('#pPreset').onclick = e => choose(e.currentTarget, 'Preset', PRESETS.map(p => ({k:p.n, n:p.n, i:p.i, h:p.h})), S.preset, k => { S.preset = k; renderStart(); }, 220);
+  $('#pCompute').onclick = e => choose(e.currentTarget, 'Machine', COMPUTE.map(p => ({k:p.n, n:p.n, i:'cpu', h:p.h, off:p.off})), S.compute, k => { S.compute = k; renderStart(); }, 256);
+  document.querySelectorAll('[data-ex]').forEach(b => b.onclick = () => {
+    const x = EXAMPLES[+b.dataset.ex];
+    const apply = () => { S.draft = x.text; S.uc = x.uc; renderStart(); $('#prompt').focus(); };
+    if (S.draft.trim() && !EXAMPLES.some(e => e.text === S.draft)) dialog('Replace your draft?', 'The example will replace what you have typed.', [{label:'Keep mine'},{label:'Replace', cls:'pri', fn:apply}]); else apply();
+  });
+}
+function choose(anchor, cap, items, cur, fn, w){
+  const el = openPop(anchor, `<div class="pcap caps">${cap}</div>` + items.map(x => `<button class="opt ${x.k===cur?'sel':''}" data-k="${x.k}" ${x.off?'disabled':''}>${ic(x.i,'s14')}<span>${x.n}<span class="h">${x.h}</span></span>${x.k===cur?`<span class="ck">${ic('check','s14')}</span>`:''}</button>`).join(''), {w:w||240});
+  el.onclick = e => { const b = e.target.closest('[data-k]'); if (!b || b.disabled) return; closePop(); fn(b.dataset.k); };
+}
+function startRun(){
+  const text = S.draft.trim(); if (!text) { $('#prompt').focus(); return; }
+  const ex = EXAMPLES.find(x => x.text === text);
+  let title = ex ? ex.label : text.replace(/\s+/g,' ').split(' ').slice(0,5).join(' ').replace(/[.,;:]$/,'');
+  title = title.charAt(0).toUpperCase() + title.slice(1);
+  const id = 'new-' + (++newCount);
+  RUNS.unshift(mk({id, title, uc:S.uc, seed:57+newCount*13, acc:0, resumeAt:Date.now(), compute:S.compute, preset:S.preset}));
+  S.draft = '';
+  go(runPath(id));
+}
+
+/* ---------- run page ---------- */
+let RV = {}; // per-render cache
+function costAt(run,t){ let c = 0; for (const s of steps(run)){ const d = clamp(t - s.s, 0, s.e - s.s); c += d * [0.004,0.011,0.003][s.st]; } return c; }
+function stageInfo(run,i,t){
+  const [s,e] = stageSpan(run,i), u = UC[run.uc];
+  const pct = clamp((t-s)/(e-s), 0, 1);
+  let state = t >= e ? 'done' : t >= s ? (run.paused ? 'paused' : 'running') : 'pending';
+  let word = {done:'Done', running:'Running', paused:'Paused', pending:'Pending'}[state];
+  const dur = clamp(t - s, 0, e - s);
+  let c = 0; for (const x of steps(run)) if (x.st === i) c += clamp(t - x.s, 0, x.e - x.s) * [0.004,0.011,0.003][i];
+  return {pct, state, word, dur, cost:c};
+}
+const fmtDur = s => s < 60 ? Math.floor(s)+'s' : Math.floor(s/60)+'m '+String(Math.floor(s%60)).padStart(2,'0')+'s';
+const clock = s => String(Math.floor(s/60)).padStart(2,'0')+':'+String(Math.floor(s%60)).padStart(2,'0');
+function sparkPath(run,i,t,w,h){
+  const [s,e] = stageSpan(run,i), R = rng(run.seed*5+i), n = 24, pts = [];
+  for (let k=0;k<n;k++){ const tk = s + (e-s)*k/(n-1); const v = tk > t ? 0 : 0.35 + 0.45*Math.abs(Math.sin(k*0.7+i)) + R()*0.2; pts.push([k/(n-1)*w, h - 2 - v*(h-4)]); }
+  let d = `M${pts[0][0]},${pts[0][1]}`; for (let k=1;k<n;k++){ const [x0,y0] = pts[k-1], [x1,y1] = pts[k]; const mx = (x0+x1)/2; d += ` C${mx},${y0} ${mx},${y1} ${x1},${y1}`; }
+  return {line:d, area:d + ` L${w},${h} L0,${h} Z`};
+}
+function ringSvg(pct, color, done){
+  const r = 18, c = 2*Math.PI*r;
+  return `<svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="${r}" fill="none" stroke="#f0f0f3" stroke-width="3.5"/><circle class="arc" cx="22" cy="22" r="${r}" fill="none" stroke="${color}" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c*(1-pct)}"/></svg><span class="pct">${done ? `<svg class="i s14" viewBox="0 0 24 24" style="stroke:${color};stroke-width:2.4">${P.check}</svg>` : Math.round(pct*100)+'%'}</span>`;
+}
+function stageCard(run,i,t,mini){
+  const g = STAGES[i], s = stageInfo(run,i,t), sp = sparkPath(run,i,t,240,24);
+  const cls = ['mc', mini?'mini':'', s.state==='running'?'run':'', (s.state==='done'||s.state==='pending')?'dim':''].join(' ');
+  const style = s.state==='running' ? `border-color:${g.hue}59;box-shadow:0 0 0 3px ${g.hue}14, 0 1px 2px rgb(0 0 0 / .05)` : '';
+  return `<${mini?'button':'div'} class="${cls}" data-stage="${i}" style="${style}">
+    <div class="hd"><div class="tl" style="background:${g.tile};color:${g.hue}">${ic(g.icon)}</div>
+      <div><div class="nm">${g.name}</div><div class="st">${s.word}</div></div>
+      <div class="ring ${s.state==='running'?'spinning':''}">${ringSvg(s.pct, g.hue, s.state==='done')}</div></div>
+    ${mini ? '' : `<svg class="spark" viewBox="0 0 240 24" preserveAspectRatio="none"><path d="${sp.area}" fill="${g.hue}" opacity=".1"/><path d="${sp.line}" fill="none" stroke="${g.hue}" stroke-width="1.5"/></svg>`}
+    <div class="bar"><i style="width:${s.pct*100}%;background:${g.grad}"></i></div>
+    <div class="ft"><span>${s.state==='pending'?'0s':fmtDur(s.dur)}</span><b>$${s.cost.toFixed(2)}</b></div>
+  </${mini?'button':'div'}>`;
+}
+function treeRows(run,i,t){
+  const st = steps(run).filter(x => x.st === i), cur = stepAt(run,t), rows = [];
+  const dot = x => t >= x.e ? `<svg class="g" viewBox="0 0 24 24" fill="none" stroke="${STAGES[i].hue}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>` : '<span class="d"></span>';
+  if (i !== 1){
+    st.forEach(x => rows.push(`<button class="tr ${cur===x?'now':''}" data-jump="${x.name}">${dot(x)}${x.name}</button>`));
+  } else {
+    const sDone = t >= stageSpan(run,1)[1];
+    const curR = cur && cur.st === 1 ? cur.r : (sDone ? run.rounds-1 : 0);
+    const first = Math.max(0, curR-1);
+    if (first > 0) rows.push(`<div class="tr more">+${first} more</div>`);
+    for (let r=first; r<=curR; r++){
+      const rs = roundStart(run,r), rd = {s:rs, e:rs+40};
+      rows.push(`<button class="tr ${r===curR&&cur&&cur.r===r?'now':''}" data-jump="r${r}">${dot(rd)}Round ${r+1}${ic('right','s12 chv')}</button>`);
+      if (r === curR && !sDone) st.filter(x => x.r === r).forEach(x => rows.push(`<button class="tr sub ${cur===x?'now':''}" data-jump="${x.name}" data-r="${r}">${dot(x)}${x.name}</button>`));
+    }
+    if (curR < run.rounds-1) rows.push(`<div class="tr more">+${run.rounds-1-curR} more</div>`);
+  }
+  return `<div class="tree">${rows.join('')}</div>`;
+}
+
+function renderRun(){
+  const run = byId(S.route.id); if (!run) return go('');
+  RV = {run: run.id, view: S.route.view};
+  $('#page').innerHTML = `<div class="topbar" id="topbar"></div><div class="runbody"><div class="runmain" id="runmain"></div><div id="drawerSlot" style="display:contents"></div>${S.route.view!=='visual'?`<div class="rail" id="rail"></div>`:''}</div>`;
+  renderTopbar(true);
+  if (S.route.view === 'overview') renderOverview(run);
+  if (S.route.view === 'chat') renderChat(run);
+  if (S.route.view === 'visual') renderVisual(run);
+  renderRail(run);
+}
+function renderTopbar(full){
+  const run = byId(S.route.id), tb = $('#topbar'); if (!run || !tb) return;
+  const t = viewT(run), done = isDone(run), live = run.viewT == null && !done && !run.paused;
+  if (full || RV.tbSig !== `${done}${run.paused}${run.viewT==null}${run.title}`){
+    RV.tbSig = `${done}${run.paused}${run.viewT==null}${run.title}`;
+    tb.innerHTML = `
+      <nav class="tabs">${['overview','chat','visual'].map(v => `<button class="tab ${S.route.view===v?'on':''}" data-view="${v}">${v[0].toUpperCase()+v.slice(1)}</button>`).join('')}</nav>
+      ${done ? '<span class="spill done">Done</span>' : run.paused ? '<span class="spill paused">Paused</span>' : ''}
+      <span class="rtitle" title="${esc(run.title)}">${esc(run.title)}</span>
+      <div class="play">
+        <button class="pp" id="pp" aria-label="${done?'Replay from start':run.paused?'Resume run':'Pause run'}">${ic(done||run.paused?'play':'pause','s14')}</button>
+        <span class="clock" id="clk"></span>
+        <div class="track" id="trk"><div class="fill"></div><div class="th"></div></div>
+        ${done ? '' : `<button class="livep" id="livep"><i></i>LIVE</button>`}
+      </div>
+      <div class="rc">
+        <span class="pill static" title="Machine">${ic('cpu','s13')}<span class="lbl">${run.compute}</span></span>
+        <button class="sqbtn share" id="shareBtn" aria-label="Share">${ic('share','s16')}</button>
+        <button class="sqbtn" id="runMore" aria-label="More">${ic('dots','s16')}</button>
+      </div>`;
+    tb.querySelectorAll('[data-view]').forEach(b => b.onclick = () => go(runPath(run.id, b.dataset.view, S.route.vis)));
+    $('#pp').onclick = () => {
+      if (isDone(run)){ run.viewT = 0; tick(); return; }
+      if (run.paused){ run.paused = false; run.resumeAt = Date.now(); } else { run.acc = elapsed(run); run.paused = true; }
+      renderTopbar(true); tick(true);
+    };
+    const lp = $('#livep'); if (lp) lp.onclick = () => { run.viewT = null; tick(true); };
+    $('#trk').onclick = e => { const r = e.currentTarget.getBoundingClientRect(); const f = clamp((e.clientX - r.left)/r.width, 0, 1); const tt = f*total(run); run.viewT = tt >= elapsed(run)-0.5 ? null : tt; tick(true); };
+    $('#shareBtn').onclick = e => { const el = openPop(e.currentTarget, `<div class="pcap caps">Share</div><button class="opt" data-a="link">${ic('share','s14')}<span>Copy a view-only link<span class="h">Anyone with the link can watch this run.</span></span></button>`, {alignRight:true, w:260}); el.onclick = () => { closePop(); toast('Sharing is not part of this demo'); }; };
+    $('#runMore').onclick = e => {
+      const el = openPop(e.currentTarget, `${done ? `<div class="pcap caps">Outputs</div><button class="opt" data-a="o">${ic('file','s14')}Report (PDF)</button><button class="opt" data-a="o">${ic('cpu','s14')}Chip netlist</button><button class="opt" data-a="o">${ic('download','s14')}Test vectors</button><div class="sep"></div>` : ''}
+        <button class="opt" data-a="restart">${ic('restart','s14')}<span>Restart demo run<span class="h">Plays this run again from the start.</span></span></button>`, {alignRight:true, w:230});
+      el.onclick = ev => { const a = ev.target.closest('[data-a]'); if (!a) return; closePop();
+        if (a.dataset.a === 'restart'){ Object.assign(run, {acc:0, resumeAt:Date.now(), paused:false, viewT:null, redirects:[], rounds:3, ver:run.ver+1}); S.open.clear(); renderRun(); renderSidebar(true); }
+        else toast('Downloads are not part of this demo'); };
+    };
+  }
+  const T = total(run), clk = $('#clk'), trk = $('#trk');
+  clk.textContent = clock(t); clk.classList.toggle('live', live);
+  trk.classList.toggle('live', run.viewT == null && !done);
+  trk.querySelector('.fill').style.width = (t/T*100)+'%'; trk.querySelector('.th').style.left = (t/T*100)+'%';
+  const lp = $('#livep'); if (lp) lp.classList.toggle('off', run.viewT != null || run.paused);
+}
+
+function composerHtml(run){
+  const t = viewT(run), done = isDone(run), cur = stepAt(run, elapsed(run));
+  const stepName = done ? 'Finished' : cur.r != null ? `Round ${cur.r+1}, ${cur.name}` : cur.name;
+  return `<div class="comp-wrap"><div class="box comp">
+    <textarea id="cmp" rows="1" placeholder="${done ? 'Run finished. Start a new run to try another direction.' : 'Message the scientists...'}" ${done?'disabled':''} aria-label="Message the scientists"></textarea>
+    <div class="ctl"><span class="pill static" id="cmpStep" title="Where the run is now">${ic('clock','s13')}<span>${stepName}</span></span>
+    <button class="send" id="cmpGo" aria-label="Send" ${done?'disabled':''}>${ic('up','s16')}</button></div></div></div>`;
+}
+function wireComposer(run){
+  const ta = $('#cmp'), b = $('#cmpGo'); if (!ta) return;
+  const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.min(160, ta.scrollHeight)+'px'; };
+  ta.oninput = () => { b.classList.toggle('ready', !!ta.value.trim()); grow(); };
+  const send = () => { const v = ta.value.trim(); if (!v) return; ta.value = ''; b.classList.remove('ready'); grow(); redirect(run, v); };
+  ta.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); } };
+  b.onclick = send;
+}
+function updateComposerStep(run){
+  const el = $('#cmpStep span'); if (!el) return;
+  const cur = stepAt(run, elapsed(run));
+  el.textContent = isDone(run) ? 'Finished' : cur.r != null ? `Round ${cur.r+1}, ${cur.name}` : cur.name;
+}
+
+function redirect(run, text){
+  const e = elapsed(run), cur = stepAt(run, e), u = UC[run.uc];
+  if (run.viewT != null) run.viewT = null;
+  const low = text.toLowerCase();
+  let eff;
+  if (/fewer gate|smaller|less gate|cheaper|tiny|shrink|lower power|less power/.test(low)) eff = {g:.72, w:-1.2, ch:0, note:'Following your note: aiming for about 30% fewer gates and accepting a little less sensitivity.', say:'aim for about 30% fewer gates and accept a little less sensitivity'};
+  else if (/fewer channel|one channel|single|fewer light|fewer electrode|less channel/.test(low)) eff = {g:.82, w:-1.8, ch:-1, note:`Following your note: dropping to fewer ${u.chWord}.`, say:`drop one ${u.chOne} and see what the worst ${u.subj} loses`};
+  else if (/sensitiv|accura|miss|safer|catch more|worst/.test(low)) eff = {g:1.3, w:1.6, ch:0, note:`Following your note: allowing more gates to lift the worst ${u.subj}.`, say:`allow about 30% more gates to lift the worst ${u.subj}`};
+  else eff = {g:.95, w:0, ch:0, note:'Following your note in the designs.', say:'fold that into the designs'};
+  const d = {t:e, text, eff, step: cur ? cur.name : 'Package chip', r: cur ? cur.r : undefined, from:null};
+  if (!cur || cur.st === 2){
+    d.reply = 'The design rounds are finished and the report is being written, so this run cannot change course now. Start a new run with this as the brief and it will be the target from round 1.';
+  } else {
+    let from = cur.st === 0 ? 0 : cur.r + 1;
+    if (from >= run.rounds){ if (run.rounds < 5) run.rounds++; else from = null; }
+    d.from = from;
+    d.reply = from == null ? 'This is the last round allowed in this run, so I will note it in the report.'
+      : `Understood. In round ${from+1} we will ${eff.say}. ${from >= 3 && run.rounds === from+1 ? `I added round ${from+1} for this, so the run takes about 40 seconds longer.` : 'The current round finishes as planned.'}`;
+  }
+  run.redirects.push(d); run._ev = null;
+  if (S.route.view !== 'chat') go(runPath(run.id, 'chat')); else { renderChatFeed(run, true); tick(true); }
+}
+
+/* ----- overview ----- */
+function renderOverview(run){
+  $('#runmain').innerHTML = `<div class="scroll"><div class="ov">
+    <div class="cards" id="cards"></div>
+    <div class="pair">
+      <section class="panel"><div class="ph"><span class="caps">Summary</span><div class="stepper" id="stp"></div></div><div class="sumb" id="sum"></div></section>
+      <section class="panel"><div class="ph"><span class="caps">Activity</span><span id="actLive"></span></div><div class="acts" id="acts"></div></section>
+    </div></div></div>${composerHtml(run)}`;
+  wireComposer(run);
+  $('#cards').onclick = e => { const j = e.target.closest('[data-jump]'); if (!j) return; S.chatJump = {name:j.dataset.jump, r:j.dataset.r}; go(runPath(run.id,'chat')); };
+  $('#acts').onclick = e => { const a = e.target.closest('.ar'); if (a) a.classList.toggle('open'); };
+  $('#stp').onclick = e => { const b = e.target.closest('button'); if (!b || b.disabled) return; const n = summaryVersions(run, viewT(run)).length; S.sumIdx = clamp((S.sumIdx==null?n-1:S.sumIdx) + (+b.dataset.d), 0, n-1); RV.sumSig = null; updateOverview(run); };
+  S.sumIdx = null;
+  updateOverview(run, true);
+}
+function updateOverview(run, force){
+  const t = viewT(run), cur = stepAt(run,t);
+  const cSig = [0,1,2].map(i => stageInfo(run,i,t).state).join() + (cur ? cur.name+cur.r : 'x') + run.rounds;
+  if (force || cSig !== RV.cSig){
+    RV.cSig = cSig;
+    $('#cards').innerHTML = [0,1,2].map(i => `<div class="slot">${stageCard(run,i,t)}${treeRows(run,i,t)}</div>${i<2?`<div class="arrow">${ic('right','s16')}</div>`:''}`).join('');
+  } else {
+    document.querySelectorAll('#cards .mc').forEach((el,i) => {
+      const s = stageInfo(run,i,t), r = 18, c = 2*Math.PI*r;
+      el.querySelector('.arc').setAttribute('stroke-dashoffset', c*(1-s.pct));
+      const p = el.querySelector('.pct'); if (s.state !== 'done') p.textContent = Math.round(s.pct*100)+'%';
+      el.querySelector('.bar i').style.width = (s.pct*100)+'%';
+      el.querySelector('.ft span').textContent = s.state==='pending'?'0s':fmtDur(s.dur);
+      el.querySelector('.ft b').textContent = '$'+s.cost.toFixed(2);
+      if (s.state === 'running'){ const sp = sparkPath(run,i,t,240,24), ps = el.querySelectorAll('.spark path'); ps[0].setAttribute('d', sp.area); ps[1].setAttribute('d', sp.line); }
+    });
+  }
+  // summary
+  const vs = summaryVersions(run,t), b = best(run,t), vd = verdict(run,b), idx = S.sumIdx==null ? vs.length-1 : Math.min(S.sumIdx, vs.length-1);
+  const sSig = vs.length+'|'+idx+'|'+vd.text+'|'+nowLine(run,t);
+  if (force || sSig !== RV.sumSig){
+    RV.sumSig = sSig;
+    $('#stp').innerHTML = vs.length ? `<button data-d="-1" ${idx<=0?'disabled':''} aria-label="Older summary">${ic('left','s12')}</button><span>${idx+1}/${vs.length}</span><button data-d="1" ${idx>=vs.length-1?'disabled':''} aria-label="Newer summary">${ic('right','s12')}</button>` : '';
+    const mark = vd.k === 'ok' ? `<span class="vk ok">${ic('check','s12')}</span>` : vd.k === 'no' ? `<span class="vk no">${ic('alert','s12')}</span>` : `<span class="vk wait">${ic('clock','s12')}</span>`;
+    $('#sum').innerHTML = `<p class="verdict">${mark}${vd.text}</p><p><b style="font-weight:600;color:var(--i800)">Now:</b> ${nowLine(run,t)}</p>${vs.length ? `<p>${vs[idx].p}</p>` : `<p style="color:var(--i500)">No summary yet. The first one is written when the target is set.</p>`}`;
+  }
+  // activity
+  const ev = events(run).filter(e => e.t <= t), last = ev.slice(-8).reverse();
+  const aSig = ev.length + '|' + run.ver;
+  const live = run.viewT == null && !isDone(run) && !run.paused;
+  $('#actLive').innerHTML = live ? '<span class="livep"><i></i>LIVE</span>' : '';
+  if (force || aSig !== RV.aSig){
+    const fresh = RV.aSig && !force;
+    RV.aSig = aSig;
+    $('#acts').innerHTML = last.length ? last.map((e,k) => `<div class="ar ${fresh&&k===0?'fresh':''}" title="${esc(e.text)}"><time>${clock(e.t)}</time><span class="cat ${e.cat}">${e.cat}</span><span class="msg">${esc(e.text)}</span></div>`).join('')
+      : '<div class="ar"><span class="msg" style="color:var(--i500)">Starting the run...</span></div>';
+  }
+  updateComposerStep(run);
+}
+
+/* ----- chat ----- */
+function renderChat(run){
+  $('#runmain').innerHTML = `<div class="chat"><aside class="crail" id="crail"></aside><div class="cmain"><div class="scroll" id="feedScroll"><div class="feed" id="feed"></div></div>${composerHtml(run)}</div></div>`;
+  wireComposer(run);
+  $('#crail').onclick = e => {
+    const j = e.target.closest('[data-jump]'); if (j){ jumpTo(run, j.dataset.jump, j.dataset.r); return; }
+    const c = e.target.closest('[data-stage]'); if (c){ S.chatStage = +c.dataset.stage; RV.rSig = null; updateChat(run); }
+  };
+  $('#feed').onclick = e => { const h = e.target.closest('.head'); if (!h) return; const row = h.closest('.fr'); row.classList.toggle('open'); if (row.classList.contains('open')) S.open.add(row.dataset.id); else S.open.delete(row.dataset.id); };
+  S.chatStage = null; RV.rSig = null;
+  renderChatFeed(run, true);
+  updateChat(run, true);
+  if (S.chatJump){ const j = S.chatJump; S.chatJump = null; setTimeout(() => jumpTo(run, j.name, j.r), 30); }
+  else { const sc = $('#feedScroll'); sc.scrollTop = sc.scrollHeight; }
+}
+function jumpTo(run, name, r){
+  let sel;
+  if (/^r\d+$/.test(name)) sel = `.stepdiv[data-r="${name.slice(1)}"]`;
+  else sel = `.stepdiv[data-step="${name}"]` + (r != null && r !== '' && r !== undefined ? `[data-r="${r}"]` : '');
+  const el = document.querySelector(sel);
+  if (el){ el.scrollIntoView({block:'start', behavior:'smooth'}); el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+  else toast('That step has not started yet');
+}
+function feedRow(e, run, t){
+  const u = UC[run.uc];
+  if (e.user) return `<div class="fr user" data-id="${e.id}"><div class="bubble">${esc(e.text)}</div></div>`;
+  const tool = e.cat === 'TOOL' || e.cat === 'SEARCH';
+  const tile = {AGENT:['sparkle','#7c3aed'], RESULT:['check','#047857'], TOOL:['wrench','#2563eb'], SEARCH:['search','#0f766e']}[e.cat];
+  const capCls = {AGENT:'v', RESULT:'gr', TOOL:'', SEARCH:'t'}[e.cat];
+  const label = e.cat === 'AGENT' ? 'Scientist' : e.cat === 'RESULT' ? 'Result' : e.cat === 'SEARCH' ? 'Search' : 'Tool';
+  const s = stepOfEvent(run, e), pending = tool && s && t < s.e && t >= e.t && !nextToolAfter(run, e, t);
+  if (tool) return `<div class="fr tool ${S.open.has(e.id)?'open':''}" data-id="${e.id}"><div class="ft" style="color:${tile[1]}">${ic(tile[0])}${pending?'<span class="pend"></span>':''}</div><div class="fb"><div class="fc ${capCls}">${label}</div>
+    <button class="head">${ic('right','s12 chv')}<span class="tx">${esc(e.text)}</span></button><div class="det">${esc(e.det||'')}</div></div></div>`;
+  return `<div class="fr" data-id="${e.id}"><div class="ft" style="color:${tile[1]}">${ic(tile[0])}</div><div class="fb"><div class="fc ${capCls}">${label}</div><div class="tx">${esc(e.text)}</div></div></div>`;
+}
+function stepOfEvent(run,e){ return steps(run).find(s => s.name === e.step && (s.r === e.r || (s.r == null && e.r == null))); }
+function nextToolAfter(run,e,t){ return events(run).some(x => x.t > e.t && x.t <= t && x.step === e.step && x.r === e.r && !x.user); }
+function renderChatFeed(run, force){
+  const t = viewT(run), ev = events(run).filter(e => e.t <= t);
+  const pendingReply = run.redirects.some(d => d.t <= t && d.t + 2.5 > t);
+  const sig = ev.length + '|' + pendingReply + '|' + run.ver + '|' + ev.filter(e => e.cat==='TOOL'||e.cat==='SEARCH').map(e => { const s = stepOfEvent(run,e); return s && t < s.e ? 1 : 0; }).join('');
+  if (!force && sig === RV.fSig) return;
+  const sc = $('#feedScroll'), atBottom = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 60;
+  const prevCount = RV.fCount || 0;
+  RV.fSig = sig; RV.fCount = ev.length;
+  let html = '', lastKey = '';
+  ev.forEach(e => {
+    const key = (e.r != null ? 'r'+e.r : '') + e.step;
+    if (key !== lastKey && !e.user && !e.reply){ lastKey = key; html += `<div class="stepdiv" data-step="${e.step}" ${e.r!=null?`data-r="${e.r}"`:''}>${e.r!=null?`Round ${e.r+1}, `:''}${e.step}</div>`; }
+    html += feedRow(e, run, t);
+  });
+  if (pendingReply) html += `<div class="fr"><div class="ft" style="color:#7c3aed">${ic('sparkle')}</div><div class="fb"><div class="fc v">Scientist</div><span class="typing"><i></i><i></i><i></i></span></div></div>`;
+  if (!ev.length) html = `<div class="fr"><div class="ft">${ic('clock')}</div><div class="fb"><div class="fc">Starting</div><div class="tx">The scientists are reading your brief.</div></div></div>`;
+  $('#feed').innerHTML = html;
+  if (!force && ev.length > prevCount){ const rows = $('#feed').querySelectorAll('.fr'); const lastRow = rows[rows.length-1]; if (lastRow) lastRow.classList.add('flash'); }
+  if (atBottom || force) sc.scrollTop = sc.scrollHeight;
+}
+function updateChat(run, force){
+  const t = viewT(run), cur = stepAt(run,t);
+  const active = S.chatStage != null ? S.chatStage : cur ? cur.st : 2;
+  const sig = [0,1,2].map(i => stageInfo(run,i,t).state).join() + active + (cur?cur.name+cur.r:'') + run.rounds;
+  if (force || sig !== RV.rSig){
+    RV.rSig = sig;
+    $('#crail').innerHTML = [0,1,2].map(i => stageCard(run,i,t,true).replace('class="mc', `class="mc ${i===active?'':''}`) + (i === active ? treeRows(run,i,t) : '')).join('');
+    const sel = $('#crail').querySelectorAll('.mc')[active]; if (sel) sel.style.boxShadow = `0 0 0 2px ${STAGES[active].hue}`;
+  } else {
+    document.querySelectorAll('#crail .mc').forEach((el,i) => { const s = stageInfo(run,i,t), c = 2*Math.PI*18;
+      el.querySelector('.arc').setAttribute('stroke-dashoffset', c*(1-s.pct)); const p = el.querySelector('.pct'); if (s.state!=='done') p.textContent = Math.round(s.pct*100)+'%';
+      el.querySelector('.bar i').style.width = (s.pct*100)+'%'; el.querySelector('.ft span').textContent = s.state==='pending'?'0s':fmtDur(s.dur); el.querySelector('.ft b').textContent = '$'+s.cost.toFixed(2); });
+  }
+  renderChatFeed(run);
+  updateComposerStep(run);
+}
+
+/* ----- right rail and drawer ----- */
+function renderRail(run){
+  const rail = $('#rail'); if (!rail) return;
+  rail.innerHTML = [['stats','bars','Statistics'],['files','folder','Files'],['settings','sliders','Run settings']].map(([k,i,l]) => `<button class="sqbtn ${S.drawer===k?'on':''}" data-dr="${k}" title="${l}" aria-label="${l}">${ic(i,'s16')}</button>`).join('');
+  rail.onclick = e => { const b = e.target.closest('[data-dr]'); if (!b) return; S.drawer = S.drawer === b.dataset.dr ? null : b.dataset.dr; renderRail(run); renderDrawer(run, true); };
+  renderDrawer(run, true);
+}
+function renderDrawer(run, force){
+  const slot = $('#drawerSlot'); if (!slot) return;
+  if (!S.drawer || S.route.view === 'visual'){ slot.innerHTML = ''; return; }
+  const t = viewT(run), u = UC[run.uc], b = best(run,t);
+  const sig = S.drawer + Math.floor(t) + verified(run,t);
+  if (!force && sig === RV.dSig) return; RV.dSig = sig;
+  let title = '', body = '';
+  if (S.drawer === 'stats'){
+    title = 'Statistics';
+    const rounds = verified(run,t), cur = stepAt(run,t);
+    const tried = 3072 * (rounds + (cur && cur.st===1 && (cur.name!=='Propose') ? 1 : 0));
+    body = `<div class="tiles"><div class="tile"><span class="caps">Cost</span><b>$${costAt(run,t).toFixed(2)}</b></div><div class="tile"><span class="caps">Runtime</span><b>${clock(t)}</b></div>
+      <div class="tile"><span class="caps">Models tried</span><b>${fmt(tried)}</b></div><div class="tile"><span class="caps">Status</span><b>${isDone(run)?'Done':run.paused?'Paused':'Running'}</b></div></div>
+      <p style="margin:14px 0 0;color:var(--i550);font-size:12px;line-height:1.5">Each round fine-tunes 3,072 small models and compiles the best 240 into gates.</p>`;
+  } else if (S.drawer === 'files'){
+    title = 'Files';
+    const f = [];
+    if (t >= 10) f.push('brief.md'); if (t >= 26) f.push('reference_model.pt');
+    for (let r=0;r<verified(run,t);r++){ f.push(`round${r+1}_chip.v`); f.push(`round${r+1}_check.log`); }
+    if (isDone(run) && t >= total(run)) f.push('report.pdf','test_vectors.bin','patients.csv');
+    body = f.length ? f.map(x => `<div class="file">${ic('file','s14')}<span>${x}</span></div>`).join('') : '<p style="color:var(--i550)">Files appear here as the scientists write them.</p>';
+  } else {
+    title = 'Run settings';
+    body = [['Use case',u.name],['Preset',run.preset],['Machine',run.compute],['Clinical line',u.lineShort],['Gate budget','20,000 gates'],['Held-out '+u.subjs,'12'],['Agent','Claude Agent']].map(([k,v]) => `<div class="kv"><span>${k}</span><span style="text-align:right">${v}</span></div>`).join('') +
+      `<p style="margin:14px 0 0;font-size:12px;color:var(--i550)">Change the defaults for new runs in <a href="#/configure" style="color:var(--blue6)">Configure</a>.</p>`;
+  }
+  slot.innerHTML = `<aside class="drawer"><div class="dh">${title}<button class="sqbtn" id="drClose" aria-label="Close">${ic('x','s16')}</button></div><div class="db">${body}</div></aside>`;
+  $('#drClose').onclick = () => { S.drawer = null; renderRail(run); };
+}
+
+/* ----- visual ----- */
+const VIS = [
+  {k:'chip', n:'Chip'}, {k:'signal', n:'Signal'}, {k:'sensors', n:'Sensors'}, {k:'tradeoff', n:'Trade-off'}, {k:'patients', n:'Patients'}, {k:'device', n:'On the device'}
+];
+function renderVisual(run){
+  const vis = VIS.some(v => v.k === S.route.vis) ? S.route.vis : 'chip';
+  const shown = VIS.slice(0,5), extra = VIS.slice(5), inExtra = extra.some(v => v.k === vis);
+  $('#runmain').innerHTML = `<div class="scroll"><div class="vis">
+    <nav class="picker" aria-label="Choose a visual">${shown.map(v => `<button data-vis="${v.k}" class="${v.k===vis?'on':''}">${v.n}</button>`).join('')}
+      <button id="visMore" class="${inExtra?'on':''}" style="display:inline-flex;align-items:center;gap:4px">${inExtra ? VIS.find(v=>v.k===vis).n : 'More'}${ic('down','s12')}</button></nav>
+    <div id="visBody"></div></div></div>`;
+  $('#runmain').querySelectorAll('[data-vis]').forEach(b => b.onclick = () => go(runPath(run.id,'visual',b.dataset.vis)));
+  $('#visMore').onclick = e => { const el = openPop(e.currentTarget, extra.map(v => `<button class="opt ${v.k===vis?'sel':''}" data-k="${v.k}">${v.n}</button>`).join('')); el.onclick = ev => { const b = ev.target.closest('[data-k]'); if (b){ closePop(); go(runPath(run.id,'visual',b.dataset.k)); } }; };
+  RV.vSig = null; RV.vis = vis;
+  updateVisual(run);
+}
+function updateVisual(run){
+  const t = viewT(run), b = best(run,t), vis = RV.vis, cur = stepAt(run,t);
+  let extra = '';
+  if (vis === 'tradeoff') extra = compiledCount(run,t).join(',');
+  const sig = vis + (b ? b.r+'-'+b.g : 'none') + '|' + extra + '|' + run.ver;
+  if (sig === RV.vSig) return;
+  const changed = RV.vSig && RV.vBest !== (b ? b.r+'-'+b.g : 'none');
+  RV.vSig = sig; RV.vBest = b ? b.r+'-'+b.g : 'none';
+  const u = UC[run.uc], v = VIEWS[vis](run, t, b, u);
+  $('#visBody').innerHTML = `<div class="vh"><h2>${v.title}</h2><span class="uc">${u.name}</span></div><p class="vs">${v.sentence}</p><div class="vcard ${changed?'pop-in':''}">${v.body}</div>${v.foot?`<div class="vfoot">${v.foot}</div>`:''}`;
+}
+function chLabel(u, n){ return `${n} ${n===1?u.chOne:u.chWord}`; }
+function compiledCount(run,t){ const a = []; for (let r=0;r<run.rounds;r++){ const cs = roundStart(run,r)+24; a.push(Math.round(clamp((t-cs)/8,0,1)*120)); } return a; }
+
+const BW_PAIRS = [['F7','T7'],['F8','T8'],['T7','P7'],['T8','P8']];
+const NB_PAIRS = [['S1','D1'],['S2','D3'],['S1','D2'],['S2','D4']];
+const VIEWS = {
+  chip(run,t,b,u){
+    const g = b ? fmt(b.g)+' gates' : 'Waiting for round 1';
+    const pairs = run.uc === 'bw' ? BW_PAIRS : NB_PAIRS, ch = b ? b.ch : (run.uc==='bw'?4:3);
+    const used = pairs.slice(0, ch);
+    const left = used.filter((_,i) => i%2===0).map(p => p.join('–')), right = used.filter((_,i) => i%2===1).map(p => p.join('–'));
+    const s1 = run.uc==='bw' ? ['EEG, left side', left.join(', ')] : ['Light, left forehead', left.join(', ')];
+    const s2 = run.uc==='bw' ? ['EEG, right side', right.join(', ') || 'not used'] : ['Light, right forehead', right.join(', ') || 'not used'];
+    const pred = run.uc==='bw' ? ['Seizure alarm','yes or no, every 2 s'] : ['Oxygen-drop alarm','yes or no, every 10 s'];
+    // lattice inside the model box: density reflects gate count
+    const cells = b ? clamp(Math.round(Math.sqrt(b.g)/3.2), 10, 44) : 0, R = rng(run.seed + (b?b.r:0));
+    let lat = '';
+    if (b){ const W = 196, H = 92, cw = W/cells, rows = Math.round(H/cw);
+      for (let y=0;y<rows;y++) for (let x=0;x<cells;x++) if (R() < .62) lat += `<rect x="${402+x*cw+0.6}" y="${196+y*cw+0.6}" width="${Math.max(0.8,cw-1.2)}" height="${Math.max(0.8,cw-1.2)}" fill="#60a5fa" opacity="${(.25+R()*.55).toFixed(2)}"/>`; }
+    const pins = []; for (let k=0;k<9;k++){ const p = 23 + k*30.5; pins.push(`<rect x="${p}" y="0" width="10" height="10" rx="1"/>`); }
+    const pinRow = y => `<g transform="translate(352,${y})" fill="#d4d4dc">${pins.join('')}</g>`;
+    const body = `<svg class="v" viewBox="0 0 1000 440" role="img" aria-label="Chip diagram">
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10z" fill="#8a8a99"/></marker></defs>
+      ${[[110,s1,'Sensor 1'],[262,s2,'Sensor 2']].map(([y,s,n]) => `<g><rect x="30" y="${y}" width="200" height="74" rx="10" fill="#fff" stroke="#e8e8ec"/><text x="48" y="${y+26}" font-size="14" font-weight="600" fill="#1a1a2e">${n}</text><text x="48" y="${y+46}" font-size="12" fill="#666676">${s[0]}</text><text x="48" y="${y+63}" font-size="11" fill="#8a8a99" font-family="ui-monospace,Menlo,monospace">${s[1]}</text></g>`).join('')}
+      <path d="M230 147 H352" stroke="#8a8a99" stroke-width="1.6" fill="none" marker-end="url(#ah)"/><path d="M230 299 H352" stroke="#8a8a99" stroke-width="1.6" fill="none" marker-end="url(#ah)"/>
+      ${pinRow(80)}${pinRow(392)}
+      <rect x="352" y="90" width="296" height="302" rx="14" fill="#1a1a2e"/>
+      <rect x="362" y="100" width="276" height="282" rx="9" fill="none" stroke="#3a3a4a" stroke-dasharray="2 4"/>
+      <text x="376" y="124" font-size="11" font-weight="600" fill="#b0b0be" letter-spacing="1.1">CHIP</text>
+      <text x="624" y="124" font-size="12" font-weight="600" fill="#fff" text-anchor="end">${g}</text>
+      <rect x="392" y="170" width="216" height="140" rx="10" fill="#22223a" stroke="${b?'#60a5fa':'#5a5a6a'}" ${b?'':'stroke-dasharray="4 4"'}/>
+      <text x="500" y="188" font-size="13" font-weight="600" fill="#fff" text-anchor="middle">AI model</text>
+      ${lat}
+      ${b?'':'<text x="500" y="252" font-size="12" fill="#8a8a99" text-anchor="middle">first chip after round 1</text>'}
+      <text x="500" y="360" font-size="11" fill="#b0b0be" text-anchor="middle">weights wired into the gates</text>
+      <rect x="420" y="14" width="160" height="44" rx="10" fill="#f5f3ff" stroke="#ddd6fe"/>
+      <text x="500" y="35" font-size="13" font-weight="600" fill="#5b21b6" text-anchor="middle">Fine-tune</text><text x="500" y="50" font-size="10.5" fill="#7c3aed" text-anchor="middle">3,072 models a round</text>
+      <path d="M500 58 V168" stroke="#a78bfa" stroke-width="1.6" stroke-dasharray="4 3" fill="none" marker-end="url(#ah)"/>
+      <path d="M648 240 H768" stroke="#8a8a99" stroke-width="1.6" fill="none" marker-end="url(#ah)"/>
+      <rect x="770" y="200" width="200" height="80" rx="10" fill="#fff" stroke="#e8e8ec"/>
+      <text x="788" y="228" font-size="14" font-weight="600" fill="#1a1a2e">Prediction</text><text x="788" y="248" font-size="12" fill="#666676">${pred[0]}</text><text x="788" y="265" font-size="11" fill="#8a8a99">${pred[1]}</text>
+    </svg>`;
+    const vd = verdict(run,b);
+    return {title:'Chip', sentence:'The chip the scientists have found so far: sensors in, the AI model built from gates, one prediction out.', body,
+      foot: b ? `Round ${b.r+1} chip, ${chLabel(u,b.ch)}, ${fmt(b.g)} gates, ${vd.short}. It is redrawn when a better chip passes the check.` : 'The diagram fills in when round 1 has checked its first chip.'};
+  },
+  signal(run,t,b,u){
+    const R = rng(run.seed*3+1), weak = !b || !b.all, W = 1000;
+    if (run.uc === 'bw'){
+      const used = new Set(BW_PAIRS.slice(0, b ? b.ch : 4).map(p => p.join('–')));
+      const chans = ['F7–T7','T7–P7','F8–T8','T8–P8'], X0 = 90, X1 = 980, N = 1100, sz = [38,71];
+      const xs = s => X0 + (s/120)*(X1-X0);
+      let traces = '';
+      chans.forEach((c,ci) => { const y0 = 40 + ci*62, on = used.has(c); let d = '';
+        for (let k=0;k<=N;k++){ const s = k/N*120; let v = (R()-.5)*9 + Math.sin(s*7.3+ci)*4 + Math.sin(s*1.7+ci*2)*3;
+          if (s > sz[0] && s < sz[1]){ const f = Math.min(1,(s-sz[0])/6)*Math.min(1,(sz[1]-s)/4); v = v*.6 + f*22*Math.sin(s*2*Math.PI*(3.2-(s-sz[0])/40)) * (ci%2?0.8:1); }
+          d += (k?'L':'M') + xs(s).toFixed(1) + ',' + (y0 - v).toFixed(1); }
+        traces += `<text x="${X0-12}" y="${y0+4}" font-size="11" text-anchor="end" fill="${on?'#1a1a2e':'#b0b0be'}" font-family="ui-monospace,Menlo,monospace">${c}</text><path d="${d}" fill="none" stroke="${on?'#3a3a4a':'#d4d4dc'}" stroke-width="${on?1:.8}"/>`; });
+      const det = [[sz[0]+3.5, sz[1]+1.5]]; if (weak) det.push([94,99]);
+      const rowY = 300;
+      const body = `<svg class="v" viewBox="0 0 ${W} 380" role="img" aria-label="EEG traces with seizure marks">
+        <rect x="${xs(sz[0])}" y="8" width="${xs(sz[1])-xs(sz[0])}" height="${rowY+26-8}" fill="#fef3c7" opacity=".55"/>
+        ${traces}
+        <text x="${X0-12}" y="${rowY+4}" font-size="11.5" text-anchor="end" fill="#666676">Clinician</text>
+        <rect x="${xs(sz[0])}" y="${rowY-7}" width="${xs(sz[1])-xs(sz[0])}" height="14" rx="3" fill="#f59e0b"/>
+        <text x="${X0-12}" y="${rowY+34}" font-size="11.5" text-anchor="end" fill="#666676">Chip</text>
+        ${det.map(([a,z]) => `<rect x="${xs(a)}" y="${rowY+23}" width="${xs(z)-xs(a)}" height="14" rx="3" fill="#3b82f6"/>`).join('')}
+        ${weak ? `<text x="${xs(96.5)}" y="${rowY+56}" font-size="11" text-anchor="middle" fill="#b91c1c">false alarm</text>` : ''}
+        <line x1="${X0}" x2="${X1}" y1="${rowY+66}" y2="${rowY+66}" stroke="#e8e8ec"/>
+        ${[0,30,60,90,120].map(s => `<text x="${xs(s)}" y="${rowY+80}" font-size="10.5" fill="#8a8a99" text-anchor="middle">${s} s</text>`).join('')}
+      </svg>`;
+      return {title:'Signal', sentence:`Two minutes of EEG from an unseen ${u.subj}: the clinician's seizure mark in amber, the chip's alarm in blue underneath.`, body,
+        foot: b ? `The chip reads only the dark traces. It raised the alarm 3.5 s after the seizure began${weak ? ' and gave one false alarm, which later rounds remove' : ''}.` : 'Shown with the round 1 candidate until the first chip passes the check.'};
+    }
+    // newborn
+    const X0 = 70, X1 = 980, Y = v => 20 + (95 - v)/(95-35)*260, xs = m => X0 + m/60*(X1-X0);
+    const drops = [[17,24,47],[40,45,52]], N = 360; let d = '';
+    for (let k=0;k<=N;k++){ const m = k/N*60; let v = 72 + Math.sin(m*.35)*3 + (R()-.5)*2.2;
+      for (const [a,z,lo] of drops){ if (m > a-2 && m < z+2){ const f = m < a ? (m-(a-2))/2 : m > z ? 1-(m-z)/2 : 1; v = v*(1-f) + (lo + (R()-.5)*2)*f; } }
+      d += (k?'L':'M') + xs(m).toFixed(1) + ',' + Y(v).toFixed(1); }
+    const alarms = [[17.6,24.4],[weak?42.2:40.6,45.3]], rowY = 318;
+    const body = `<svg class="v" viewBox="0 0 ${W} 400" role="img" aria-label="Brain oxygen trace with alarm line">
+      ${drops.map(([a,z]) => `<rect x="${xs(a)}" y="20" width="${xs(z)-xs(a)}" height="${rowY+26-20}" fill="#fef3c7" opacity=".55"/>`).join('')}
+      ${[40,55,70,85].map(v => `<text x="${X0-10}" y="${Y(v)+4}" font-size="10.5" text-anchor="end" fill="#8a8a99">${v}%</text><line x1="${X0}" x2="${X1}" y1="${Y(v)}" y2="${Y(v)}" stroke="#f3f3f6"/>`).join('')}
+      <line x1="${X0}" x2="${X1}" y1="${Y(55)}" y2="${Y(55)}" stroke="#ef4444" stroke-dasharray="5 4"/>
+      <text x="${X1}" y="${Y(55)-6}" font-size="11" text-anchor="end" fill="#b91c1c">alarm line, 55%</text>
+      <path d="${d}" fill="none" stroke="#1a1a2e" stroke-width="1.4"/>
+      <text x="${X0-10}" y="${rowY+4}" font-size="11.5" text-anchor="end" fill="#666676">Clinician</text>
+      ${drops.map(([a,z]) => `<rect x="${xs(a)}" y="${rowY-7}" width="${xs(z)-xs(a)}" height="14" rx="3" fill="#f59e0b"/>`).join('')}
+      <text x="${X0-10}" y="${rowY+34}" font-size="11.5" text-anchor="end" fill="#666676">Chip</text>
+      ${alarms.map(([a,z]) => `<rect x="${xs(a)}" y="${rowY+23}" width="${xs(z)-xs(a)}" height="14" rx="3" fill="#3b82f6"/>`).join('')}
+      ${[0,15,30,45,60].map(m => `<text x="${xs(m)}" y="${rowY+64}" font-size="10.5" fill="#8a8a99" text-anchor="middle">${m} min</text>`).join('')}
+    </svg>`;
+    return {title:'Signal', sentence:`One hour of brain oxygen from an unseen ${u.subj}: the clinician's marked drops in amber, the chip's alarms in blue underneath.`, body,
+      foot: b ? (weak ? 'The chip caught both drops, but the second alarm came about 2 minutes late. That late alarm is why this chip falls short for one newborn.' : 'The chip caught both drops within about 40 seconds.') : 'Shown with the round 1 candidate until the first chip passes the check.'};
+  },
+  sensors(run,t,b,u){
+    const ch = b ? b.ch : null;
+    if (run.uc === 'bw'){
+      const E = {Fp1:[-.3,-.86],Fp2:[.3,-.86],F7:[-.72,-.52],F3:[-.38,-.46],Fz:[0,-.43],F4:[.38,-.46],F8:[.72,-.52],T7:[-.9,0],C3:[-.45,0],Cz:[0,0],C4:[.45,0],T8:[.9,0],P7:[-.72,.52],P3:[-.38,.46],Pz:[0,.43],P4:[.38,.46],P8:[.72,.52],O1:[-.3,.86],O2:[.3,.86]};
+      const cx = 300, cy = 215, r = 178, pos = n => [cx + E[n][0]*r*.92, cy + E[n][1]*r*.92];
+      const used = ch ? BW_PAIRS.slice(0,ch) : [], lit = new Set(used.flat());
+      const body = `<div class="dv"><svg class="v" viewBox="0 0 600 430" role="img" aria-label="Electrode map seen from above">
+        <path d="M${cx-22} ${cy-r+2} L${cx} ${cy-r-24} L${cx+22} ${cy-r+2}" fill="#fff" stroke="#d4d4dc" stroke-width="1.5"/>
+        <ellipse cx="${cx-r-4}" cy="${cy}" rx="12" ry="30" fill="#fff" stroke="#d4d4dc" stroke-width="1.5"/><ellipse cx="${cx+r+4}" cy="${cy}" rx="12" ry="30" fill="#fff" stroke="#d4d4dc" stroke-width="1.5"/>
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="#fff" stroke="#d4d4dc" stroke-width="1.5"/>
+        ${used.map(([a,z]) => { const [x1,y1] = pos(a), [x2,y2] = pos(z); return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#3b82f6" stroke-width="5" stroke-linecap="round" opacity=".35"/>`; }).join('')}
+        ${Object.keys(E).map(n => { const [x,y] = pos(n), on = lit.has(n); return `<circle cx="${x}" cy="${y}" r="${on?13:11}" fill="${on?'#3b82f6':'#f3f3f6'}" stroke="${on?'#1d4ed8':'#d4d4dc'}"/><text x="${x}" y="${y+3.5}" font-size="9.5" text-anchor="middle" fill="${on?'#fff':'#8a8a99'}" font-weight="${on?600:400}">${n}</text>`; }).join('')}
+        <text x="${cx}" y="${cy-r-30}" font-size="10.5" text-anchor="middle" fill="#8a8a99">nose</text>
+      </svg>
+      <div><div class="stat"><div class="sl">Channels this chip reads</div><div class="sv">${ch ? `${ch} of 18` : 'Waiting'}</div><div class="sh">${ch ? used.map(p => p.join('–')).join(', ') : 'Round 1 has not finished its check.'}</div></div>
+      <div class="stat"><div class="sl">Electrodes on the head</div><div class="sv">${ch ? lit.size : '–'}</div><div class="sh">${ch && ch <= 2 ? 'Both pairs sit by the temples, so a slim headband can carry them.' : 'Fewer channels means a smaller patch and less to wire.'}</div></div></div></div>`;
+      return {title:'Sensors', sentence:'The standard electrode positions seen from above, with the ones this chip actually reads lit in blue.', body};
+    }
+    const Pp = {S1:[-.32,-.8],S2:[.32,-.8],D1:[-.68,-.5],D2:[-.15,-.56],D3:[.68,-.5],D4:[.15,-.56]};
+    const cx = 300, cy = 225, rx = 165, ry = 190, pos = n => [cx + Pp[n][0]*rx, cy + Pp[n][1]*ry];
+    const used = ch ? NB_PAIRS.slice(0,ch) : [], all = NB_PAIRS;
+    const body = `<div class="dv"><svg class="v" viewBox="0 0 600 440" role="img" aria-label="Newborn head seen from above with light sources and detectors">
+      <ellipse cx="${cx}" cy="${cy+8}" rx="${rx}" ry="${ry}" fill="#fff" stroke="#d4d4dc" stroke-width="1.5"/>
+      <path d="M${cx-14} ${cy-ry+12} Q${cx} ${cy-ry-14} ${cx+14} ${cy-ry+12}" fill="#fff" stroke="#d4d4dc" stroke-width="1.5"/>
+      <text x="${cx}" y="${cy-ry-18}" font-size="10.5" text-anchor="middle" fill="#8a8a99">face</text>
+      <rect x="${cx-rx*.86}" y="${cy-ry*.98}" width="${rx*1.72}" height="${ry*.6}" rx="40" fill="none" stroke="#b0b0be" stroke-dasharray="4 4"/>
+      <text x="${cx}" y="${cy-ry*.98+ry*.6+16}" font-size="10.5" text-anchor="middle" fill="#8a8a99">sensor patch</text>
+      ${all.map(([a,z]) => { const [x1,y1] = pos(a), [x2,y2] = pos(z), on = used.some(p => p[0]===a && p[1]===z); const mx = (x1+x2)/2 + (cx-(x1+x2)/2)*.25, my = (y1+y2)/2 + 34;
+        return `<path d="M${x1} ${y1} Q${mx} ${my} ${x2} ${y2}" fill="none" stroke="${on?'#ef4444':'#e8e8ec'}" stroke-width="${on?7:4}" stroke-linecap="round" opacity="${on?.35:1}"/>`; }).join('')}
+      ${Object.keys(Pp).map(n => { const [x,y] = pos(n), src = n[0]==='S', on = used.some(p => p.includes(n)); return src
+        ? `<circle cx="${x}" cy="${y}" r="12" fill="${on?'#ef4444':'#f3f3f6'}" stroke="${on?'#b91c1c':'#d4d4dc'}"/><text x="${x}" y="${y+3.5}" font-size="9.5" text-anchor="middle" fill="${on?'#fff':'#8a8a99'}" font-weight="600">${n}</text>`
+        : `<rect x="${x-11}" y="${y-11}" width="22" height="22" rx="4" fill="${on?'#1a1a2e':'#f3f3f6'}" stroke="${on?'#1a1a2e':'#d4d4dc'}"/><text x="${x}" y="${y+3.5}" font-size="9.5" text-anchor="middle" fill="${on?'#fff':'#8a8a99'}" font-weight="600">${n}</text>`; }).join('')}
+      <g transform="translate(40,410)" font-size="11" fill="#666676"><circle cx="6" cy="-4" r="6" fill="#ef4444"/><text x="18" y="0">light source</text><rect x="110" y="-10" width="12" height="12" rx="2" fill="#1a1a2e"/><text x="128" y="0">detector</text></g>
+    </svg>
+    <div><div class="stat"><div class="sl">Light paths this chip reads</div><div class="sv">${ch ? `${ch} of 4` : 'Waiting'}</div><div class="sh">${ch ? used.map(p => p.join(' to ')).join(', ') : 'Round 1 has not finished its check.'}</div></div>
+    <div class="stat"><div class="sl">Parts on the forehead</div><div class="sv">${ch ? new Set(used.flat()).size : '–'}</div><div class="sh">The longer paths reach deeper into the brain; the short ones mostly see skin.</div></div></div></div>`;
+    return {title:'Sensors', sentence:"A newborn's head seen from above, with the light sources and detectors on the forehead; the paths this chip uses are lit.", body};
+  },
+  tradeoff(run,t,b,u){
+    const X0 = 70, X1 = 960, Y0 = 30, Y1 = 330, gmin = 2000, gmax = 60000, ymin = 75, ymax = 100;
+    const xs = g => X0 + Math.log(g/gmin)/Math.log(gmax/gmin)*(X1-X0), ys = v => Y1 - (clamp(v,ymin,ymax)-ymin)/(ymax-ymin)*(Y1-Y0);
+    const counts = compiledCount(run,t), cur = stepAt(run,t);
+    let dots = '', curR = cur && cur.st===1 && counts[cur.r] ? cur.r : -1;
+    for (let r=0;r<run.rounds;r++){ const n = counts[r]; if (!n) continue; const res = roundResult(run,r), R = rng(run.seed*97+r);
+      for (let k=0;k<n;k++){ const g = res.g * Math.exp(R()*1.9 - 0.15); const front = res.w + (u.ref - res.w) * (1 - Math.pow(res.g/g, .55)); const v = front - Math.pow(R(),1.6)*7 - (g < res.g ? (res.g-g)/res.g*12 : 0);
+        dots += `<circle cx="${xs(g).toFixed(1)}" cy="${ys(v).toFixed(1)}" r="3.2" fill="${r===curR?'#3b82f6':'#b0b0be'}" opacity="${r===curR?.75:.5}"/>`; } }
+    const total_ = counts.reduce((a,c) => a+c, 0);
+    const body = `<svg class="v" viewBox="0 0 1000 380" role="img" aria-label="Sensitivity against chip size">
+      ${[75,80,85,90,95,100].map(v => `<line x1="${X0}" x2="${X1}" y1="${ys(v)}" y2="${ys(v)}" stroke="#f3f3f6"/><text x="${X0-10}" y="${ys(v)+4}" font-size="10.5" text-anchor="end" fill="#8a8a99">${v}%</text>`).join('')}
+      ${[2000,5000,10000,20000,50000].map(g => `<text x="${xs(g)}" y="${Y1+20}" font-size="10.5" text-anchor="middle" fill="#8a8a99">${fmt(g)}</text>`).join('')}
+      <text x="${(X0+X1)/2}" y="${Y1+42}" font-size="11.5" text-anchor="middle" fill="#666676">Chip size, gates (smaller is better)</text>
+      <text x="18" y="${(Y0+Y1)/2}" font-size="11.5" text-anchor="middle" fill="#666676" transform="rotate(-90 18 ${(Y0+Y1)/2})">Worst ${u.subj}, ${u.events} caught</text>
+      <line x1="${X0}" x2="${X1}" y1="${ys(u.line)}" y2="${ys(u.line)}" stroke="#ef4444" stroke-dasharray="5 4"/>
+      <text x="${X0+8}" y="${ys(u.line)-7}" font-size="11" fill="#b91c1c">clinical line, ${u.line}%</text>
+      ${dots}
+      ${b ? `<circle cx="${xs(b.g)}" cy="${ys(b.w)}" r="7" fill="#1a1a2e" stroke="#fff" stroke-width="2"/><circle cx="${xs(b.g)}" cy="${ys(b.w)}" r="12" fill="none" stroke="#1a1a2e" stroke-width="1.2"/>
+        <text x="${xs(b.g)+16}" y="${ys(b.w)+22}" font-size="12" font-weight="600" fill="#1a1a2e">Current best, ${fmt(b.g)} gates</text>` : ''}
+      ${total_ ? '' : `<text x="${(X0+X1)/2}" y="${(Y0+Y1)/2}" font-size="13" text-anchor="middle" fill="#8a8a99">Dots appear as round 1 compiles its candidates.</text>`}
+    </svg>`;
+    return {title:'Trade-off', sentence:`Each dot is one compiled candidate chip: how big it is against how well it does on the worst ${u.subj}.`, body,
+      foot:`${fmt(total_)} candidates compiled so far${curR>=0?`; blue dots are from round ${curR+1}, still compiling`:''}. The ringed dot is the current best chip; dots above the red line meet it for the worst ${u.subj}.`};
+  },
+  patients(run,t,b,u){
+    const tiles = [];
+    for (let i=0;i<12;i++){
+      if (!b){ tiles.push(`<div class="pt wait"><div class="pn">${u.Subj} ${i+1}</div><div class="pv">–</div><div class="pm" style="color:var(--i400)">not checked yet</div></div>`); continue; }
+      const v = b.pats[i], ok = v >= u.line, worst = v === Math.min(...b.pats);
+      tiles.push(`<div class="pt ${ok?'ok':'no'} ${worst?'worst':''}"><div class="pn">${u.Subj} ${i+1}${worst?'<span style="margin-left:auto;font-weight:600;color:var(--i900)">worst</span>':''}</div><div class="pv">${v.toFixed(1)}%</div><div class="pm">${ok?'meets the line':'below the line'}</div></div>`);
+    }
+    return {title:'Patients', sentence:`One tile per unseen ${u.subj}: the share of ${u.events} the chip caught. The worst ${u.subj} is what counts.`,
+      body:`<div class="pts">${tiles.join('')}</div>`,
+      foot: b ? `${b.meets} of 12 meet the clinical line of ${u.line}%. Worst: ${Math.min(...b.pats).toFixed(1)}%.` : 'Tiles fill in when round 1 has checked its first chip on the unseen ' + u.subjs + '.'};
+  },
+  device(run,t,b,u){
+    const g = b ? b.g : null, area = g ? g*1.6e-5 + 0.02 : null, side = area ? Math.sqrt(area) : null, pw = g ? 0.005*g + 3 : null;
+    const days = g ? 222 / (u.basePower + pw/1000) / 24 : null;
+    const sc = 9, pw_ = u.patch.w*sc, ph_ = u.patch.h*sc, ox = 30, oy = 40, chipPx = side ? Math.max(1.5, side*sc) : 0, cxp = ox + pw_*0.55, cyp = oy + ph_*0.5;
+    const mag = 20, mside = side ? side*sc*mag : 0;
+    const body = `<div class="dv"><svg class="v" viewBox="0 0 560 ${oy+ph_+60+110}" role="img" aria-label="Chip drawn to scale on the sensor patch">
+      <rect x="${ox}" y="${oy}" width="${pw_}" height="${ph_}" rx="${ph_*0.35}" fill="#f3f3f6" stroke="#d4d4dc" stroke-width="1.5"/>
+      <text x="${ox}" y="${oy-14}" font-size="12" fill="#666676">${u.patch.name}, ${u.patch.w} by ${u.patch.h} mm</text>
+      <rect x="${ox+20}" y="${oy+ph_-38}" width="60" height="22" rx="4" fill="#e8e8ec"/><text x="${ox+50}" y="${oy+ph_-23}" font-size="10" text-anchor="middle" fill="#8a8a99">battery</text>
+      ${side ? `<rect x="${cxp-chipPx/2}" y="${cyp-chipPx/2}" width="${chipPx}" height="${chipPx}" fill="#1a1a2e"/>
+        <circle cx="${cxp}" cy="${cyp}" r="9" fill="none" stroke="#3b82f6" stroke-width="1.2"/>
+        <line x1="${cxp+7}" y1="${cyp+7}" x2="${cxp+20}" y2="${oy+ph_+60}" stroke="#3b82f6" stroke-width="1"/>
+        <rect x="${cxp+20}" y="${oy+ph_+60}" width="${mside}" height="${mside}" fill="#1a1a2e" rx="2"/>
+        <text x="${cxp+20+mside+12}" y="${oy+ph_+60+16}" font-size="12" font-weight="600" fill="#1a1a2e">the chip, ${mag} times larger</text>
+        <text x="${cxp+20+mside+12}" y="${oy+ph_+60+34}" font-size="11" fill="#666676">${side.toFixed(2)} by ${side.toFixed(2)} mm</text>`
+      : `<text x="${ox+pw_/2}" y="${oy+ph_/2+4}" font-size="12" text-anchor="middle" fill="#8a8a99">chip appears after round 1</text>`}
+      <line x1="${ox}" x2="${ox+10*sc}" y1="${oy+ph_+24}" y2="${oy+ph_+24}" stroke="#1a1a2e" stroke-width="1.5"/><text x="${ox+5*sc}" y="${oy+ph_+40}" font-size="10.5" text-anchor="middle" fill="#666676">10 mm</text>
+    </svg>
+    <div>
+      <div class="stat"><div class="sl">Chip area<span class="est">estimate</span></div><div class="sv">${area ? area.toFixed(2)+' mm²' : '–'}</div><div class="sh">${g ? fmt(g)+' gates on a 28 nm process' : 'Waiting for round 1'}</div></div>
+      <div class="stat"><div class="sl">Chip power<span class="est">estimate</span></div><div class="sv">${pw ? Math.round(pw)+' µW' : '–'}</div><div class="sh">Running all day, one prediction per window</div></div>
+      <div class="stat"><div class="sl">Battery life, whole device<span class="est">estimate</span></div><div class="sv">${days ? days.toFixed(1)+' days' : '–'}</div><div class="sh">60 mAh cell; the sensors${run.uc==='nb'?' and their lights':' and radio'} use most of it</div></div>
+    </div></div>`;
+    return {title:'On the device', sentence:`The chip drawn to scale on the ${u.patch.name}, with what it costs in area, power and battery.`, body};
+  }
+};
+
+/* ---------- configure, gallery ---------- */
+const CFG = {
+  'Clinical line':{lead:'What every chip must reach before it counts. Applies to new runs.', f:[
+    ['Seizures caught, per patient','Brainwave sensing. The worst unseen patient must reach this.','num','90','%'],
+    ['Oxygen drops caught, per newborn','Newborn sensing. The worst unseen newborn must reach this.','num','95','%'],
+    ['False alarms allowed','Per patient, per day.','num','2',''],
+    ['Patients held out','Never seen in training; used only to check chips.','num','12','']]},
+  'Chip':{lead:'Limits on the chips the scientists may propose.', f:[
+    ['Gate budget','The largest chip a round may return.','num','20000',''],
+    ['Bits per weight','Fewer bits, fewer gates.','sel','8|6|4',''],
+    ['Bit-for-bit check','Replay every window through circuit and model.','sw',true,'']]},
+  'Steps':{lead:'How much work each run does.', f:[
+    ['Rounds','Propose, fine-tune, compile and verify, repeated.','num','3',''],
+    ['Designs per round','Each design is fine-tuned in many settings.','num','24',''],
+    ['Models fine-tuned per design','','num','128',''],
+    ['Review each round','A second scientist reviews the round before the next starts.','sw',true,'']]},
+  'Agents':{lead:'Which agent and models do the thinking.', f:[
+    ['Agent','','seg','Claude Agent|OpenHands|Free',''],
+    ['Model for proposing designs','','sel','Claude Opus|Claude Sonnet',''],
+    ['Model for the report','','sel','Claude Sonnet|Claude Haiku','']]},
+  'Machine':{lead:'The smallest machine a run may use.', f:[
+    ['Default machine','','sel','GPU Basic|CPU Basic|GPU Plus',''],
+    ['Accept a smaller machine','Start sooner when the default is busy.','sw',false,'']]},
+  'Budget':{lead:'When a run should wrap up.', f:[['Spend cap per run, in dollars','The run writes its report when it reaches this.','num','5','']]}
+};
+function renderConfigure(){
+  const tab = CFG[S.cfgTab];
+  const field = ([label,hint,type,val,unit]) => {
+    let ctl = '';
+    if (type === 'num') ctl = `<span style="display:flex;align-items:center;gap:6px"><input type="number" value="${val}" aria-label="${label}"><span style="width:14px;color:var(--i550)">${unit}</span></span>`;
+    if (type === 'sel') ctl = `<select aria-label="${label}">${val.split('|').map(o => `<option>${o}</option>`).join('')}</select>`;
+    if (type === 'sw') ctl = `<button class="sw ${val?'on':''}" aria-label="${label}" aria-pressed="${!!val}"></button>`;
+    if (type === 'sel' || type === 'sw') ctl = `<span style="display:flex;align-items:center;gap:6px">${ctl}<span style="width:14px"></span></span>`;
+    if (type === 'seg') ctl = `<div class="seg" style="margin:0;width:300px">${val.split('|').map(o => `<button class="${o===S.agent?'on':''}" data-agent="${o}">${o}</button>`).join('')}</div>`;
+    return `<div class="field"><div class="fl"><b>${label}</b>${hint?`<span>${hint}</span>`:''}</div>${ctl}</div>`;
+  };
+  $('#page').innerHTML = `<div class="cfg"><aside class="side"><span class="caps">Mode</span>${PRESETS.map(p => `<button data-mode="${p.n}" class="${S.cfgMode===p.n?'on':''}">${ic(p.i,'s14')}${p.n}</button>`).join('')}
+    <div class="sep" style="margin:12px 4px"></div>${Object.keys(CFG).map(k => `<button data-tab="${k}" class="${S.cfgTab===k?'on':''}">${k}</button>`).join('')}</aside>
+    <div class="pane"><h1>${S.cfgTab}</h1><p class="lead">${tab.lead}</p>${tab.f.map(field).join('')}</div></div>`;
+  $('#page').onclick = e => {
+    const t = e.target.closest('[data-tab]'); if (t){ S.cfgTab = t.dataset.tab; renderConfigure(); return; }
+    const m = e.target.closest('[data-mode]'); if (m){ S.cfgMode = m.dataset.mode; S.preset = m.dataset.mode; renderConfigure(); return; }
+    const s = e.target.closest('.sw'); if (s){ s.classList.toggle('on'); s.setAttribute('aria-pressed', s.classList.contains('on')); return; }
+    const a = e.target.closest('[data-agent]'); if (a){ S.agent = a.dataset.agent; renderConfigure(); }
+  };
+}
+function renderGallery(){
+  const fin = RUNS.filter(r => isDone(r));
+  $('#page').innerHTML = `<div class="gal"><h1>Gallery</h1><div class="gcards">${fin.map(r => { const b = roundResult(r, r.rounds-1), u = UC[r.uc];
+    return `<button class="gcard" data-id="${r.id}"><b>${esc(r.title)}</b><span>${u.name}. ${fmt(b.g)} gates, ${chLabel(u,b.ch)}, meets the clinical line on ${b.meets} of 12 unseen ${u.subjs}.</span></button>`; }).join('')}</div></div>`;
+  $('#page').onclick = e => { const c = e.target.closest('[data-id]'); if (c) go(runPath(c.dataset.id)); };
+}
+
+/* ---------- routing and tick ---------- */
+function route(){
+  closePop();
+  S.route = parseHash();
+  $('#page').onclick = null;
+  if (S.route.page === 'run') renderRun();
+  else if (S.route.page === 'configure') renderConfigure();
+  else if (S.route.page === 'gallery') renderGallery();
+  else renderStart();
+  renderSidebar(true);
+  const run = S.route.page === 'run' ? byId(S.route.id) : null;
+  document.title = run ? `${run.title} - ${PRODUCT.short}` : PRODUCT.name;
+}
+function tick(force){
+  renderSidebar();
+  if (S.route.page !== 'run') return;
+  const run = byId(S.route.id); if (!run) return;
+  renderTopbar(force === true);
+  if (S.route.view === 'overview' && $('#cards')) updateOverview(run, force === true);
+  if (S.route.view === 'chat' && $('#feed')) updateChat(run, force === true);
+  if (S.route.view === 'visual' && $('#visBody')) updateVisual(run);
+  renderDrawer(run);
+}
+window.addEventListener('hashchange', route);
+setInterval(tick, 500);
+
+$('#mhead').innerHTML = `<button class="sqbtn" id="hamb" aria-label="Open menu">${ic('menu','s16')}</button><div class="logo">${ic('cpu')}</div><div class="word">${esc(PRODUCT.short)}</div><span class="demo-m">${DEMO_LABEL}</span>`;
+$('#hamb').onclick = () => $('#sb').classList.add('drawer-open');
+$('#demo').textContent = DEMO_LABEL;
+document.addEventListener('mousedown', e => { const sb = $('#sb'); if ((sb.classList.contains('drawer-open') || sb.classList.contains('peek')) && !sb.contains(e.target) && !e.target.closest('#hamb') && !e.target.closest('#layer')) closeMobile(); });
+route();
+})();
+</script>
+</body>
+</html>
