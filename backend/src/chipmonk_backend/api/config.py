@@ -20,7 +20,7 @@ class ApiConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    port: int = 8787
+    port: int = 8797
     keepalive_s: float = 15.0
     progress_poll_s: float = 0.5
     run_timeout_s: int = 14400

@@ -3,6 +3,7 @@
 The helper appends one JSON line per call to the run's ``progress.jsonl``::
 
     ./progress stage propose started [round]
+    ./progress stage finetune skipped "no recordings attached"
     ./progress metric gates 2330 [unit]
     ./progress status "ChipIn is wiring the weights into gates"
     ./progress artifact report.md [file|report|chip]
@@ -30,12 +31,14 @@ from chipmonk_backend.api.translate import clip
 PROGRESS_FILE = "progress.jsonl"
 HELPER_NAME = "progress"
 ARTIFACT_KINDS = ("file", "report", "chip")
+STAGE_STATES = ("started", "done", "skipped")
 
 _HELPER = '''\
 """ChipIn progress helper: tells the dashboard what this run is doing.
 
 usage:
   ./progress stage <{stages}> <started|done> [round]
+  ./progress stage <{stages}> skipped "<short reason>"
   ./progress metric <key> <number> [unit]
   ./progress status "<one present-tense line>"
   ./progress artifact <path in this folder> [{kinds}]
@@ -59,10 +62,16 @@ if not a:
 cmd, rest = a[0], a[1:]
 line = {{"ts": datetime.now(timezone.utc).isoformat(), "type": cmd}}
 if cmd == "stage":
-    if len(rest) not in (2, 3) or rest[0] not in STAGES or rest[1] not in ("started", "done"):
-        fail("stage needs a stage name and started|done")
-    line.update(name=rest[0], state=rest[1])
-    if len(rest) == 3:
+    if len(rest) >= 2 and rest[1] == "skipped":
+        reason = " ".join(rest[2:]).strip()
+        if rest[0] not in STAGES or not reason:
+            fail("a skipped stage needs a stage name and a reason")
+        line.update(name=rest[0], state="skipped", reason=reason)
+    elif len(rest) not in (2, 3) or rest[0] not in STAGES or rest[1] not in ("started", "done"):
+        fail("stage needs a stage name and started|done|skipped")
+    else:
+        line.update(name=rest[0], state=rest[1])
+    if len(rest) == 3 and rest[1] != "skipped":
         if not rest[2].isdigit():
             fail("round must be a whole number")
         line["round"] = int(rest[2])
@@ -161,13 +170,18 @@ class ProgressTailer:
     def _emit(self, item: dict[str, Any]) -> None:
         kind = item.get("type")
         if kind == "stage":
-            if item["name"] not in STAGES or item["state"] not in ("started", "done"):
+            if item["name"] not in STAGES or item["state"] not in STAGE_STATES:
                 raise ValueError("unknown stage or state")
+            reason = str(item.get("reason") or "").strip()
+            if item["state"] == "skipped" and not reason:
+                raise ValueError("a skipped stage needs a reason")
             round_ = item.get("round")
             self.log.append(
                 "stage",
                 name=item["name"],
+                stage=item["name"],
                 state=item["state"],
+                reason=clip(reason, 200) if item["state"] == "skipped" else None,
                 round=int(round_) if round_ is not None else None,
             )
         elif kind == "metric":

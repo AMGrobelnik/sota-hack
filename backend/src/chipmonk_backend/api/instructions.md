@@ -26,6 +26,10 @@ the shell. The dashboard the user watches is drawn from these calls only:
 - at the start and end of every stage:
   `./progress stage propose started`, then `./progress stage propose done`
   (add a round number for repeated stages: `./progress stage finetune started 2`);
+- when a stage was not really carried out (no recordings, no GPU, no gate
+  tool), mark it skipped with a short reason, for example
+  `./progress stage finetune skipped "no recordings attached"`, and never
+  mark such a stage done: done means the work was really done;
 - for every number you actually measured or counted:
   `./progress metric gates 2330`, `./progress metric candidates 3`,
   `./progress metric round 2`, `./progress metric patients_pass 41`,

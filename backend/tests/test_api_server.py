@@ -184,7 +184,7 @@ def test_serve_command_defaults() -> None:
         None,
         None,
     )
-    assert load_api_config().port == 8787
+    assert load_api_config().port == 8797
 
 
 # ---- run lifecycle ----
@@ -348,6 +348,8 @@ async def test_progress_helper_to_events(tmp_path: Path) -> None:
         (["metric", "power", "1.5", "mW"], 0),
         (["status", "ChipIn is wiring the weights into gates"], 0),
         (["artifact", "chip.v", "chip"], 0),
+        (["stage", "verify", "skipped", "no", "recordings", "attached"], 0),
+        (["stage", "compile", "skipped"], 2),
         (["stage", "dance", "started"], 2),
         (["metric", "gates", "many"], 2),
         (["artifact", "x", "movie"], 2),
@@ -357,23 +359,38 @@ async def test_progress_helper_to_events(tmp_path: Path) -> None:
         proc = subprocess.run([str(helper), *argv], cwd=workspace, capture_output=True, text=True, timeout=30)
         assert proc.returncode == code, (argv, proc.stderr)
     with progress_file.open("a") as handle:
-        handle.write('{"type": "stage", "name": "nope", "state": "started"}\nnot json\n{"type": "status"')
+        handle.write(
+            '{"type": "stage", "name": "nope", "state": "started"}\n'
+            '{"type": "stage", "name": "spec", "state": "skipped"}\n'
+            'not json\n{"type": "status"'
+        )
     log = EventLog(tmp_path / "events.jsonl", "r1", asyncio.get_running_loop())
     tailer = ProgressTailer(progress_file, log, tmp_path, workspace)
     tailer.drain()
     got = [{k: v for k, v in e.items() if k not in {"seq", "ts", "run_id"}} for e in log.since(1)]
     assert got == [
-        {"type": "stage", "name": "propose", "state": "started"},
-        {"type": "stage", "name": "finetune", "state": "started", "round": 2},
+        {"type": "stage", "name": "propose", "stage": "propose", "state": "started"},
+        {"type": "stage", "name": "finetune", "stage": "finetune", "state": "started", "round": 2},
         {"type": "metric", "key": "gates", "value": 2330},
         {"type": "metric", "key": "power", "value": 1.5, "unit": "mW"},
         {"type": "status", "text": "ChipIn is wiring the weights into gates"},
         {"type": "artifact", "name": "chip.v", "kind": "chip", "path": "workspace/chip.v"},
+        {
+            "type": "stage",
+            "name": "verify",
+            "stage": "verify",
+            "state": "skipped",
+            "reason": "no recordings attached",
+        },
     ]
+    # replay: a fresh log over the same file sees the skipped event unchanged
+    replay = EventLog(tmp_path / "events.jsonl", "r1", asyncio.get_running_loop())
+    assert replay.since(1)[-1]["state"] == "skipped"
+    assert replay.since(1)[-1]["reason"] == "no recordings attached"
     with progress_file.open("a") as handle:
         handle.write(', "text": "late line"}\n')
     tailer.drain()
-    assert log.since(7)[0]["text"] == "late line"
+    assert log.since(8)[0]["text"] == "late line"
 
 
 # ---- translation ----
