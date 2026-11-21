@@ -17,6 +17,7 @@ from pathlib import Path
 SITE = Path(__file__).resolve().parent.parent
 SRC_DIR = SITE / "variants"
 OUT_DIR = SITE / "waitlist"
+MAIN = "w3"  # the variant shown at /waitlist/ (also set as the join page's back target)
 VARIANTS = [f"v{i}" for i in range(1, 6)] + [f"w{i}" for i in range(1, 11)]
 
 TRY_LABEL = re.compile(r">(\s*)Try now(\s*)<")
@@ -63,6 +64,16 @@ def main() -> int:
         dest = OUT_DIR / f"{n}.html"
         dest.write_text(copy, encoding="utf-8")
         print(f"wrote {dest.relative_to(SITE)}")
+        if n == MAIN:
+            (OUT_DIR / "index.html").write_text(copy, encoding="utf-8")
+            print("wrote waitlist/index.html")
+    join = OUT_DIR / "join.html"
+    text = join.read_text(encoding="utf-8")
+    text, hits = re.subn(r'var MAIN = "[^"]*";', f'var MAIN = "{MAIN}";', text)
+    if hits != 1:
+        print("make_waitlist: FAILED: join.html has no MAIN line", file=sys.stderr)
+        return 1
+    join.write_text(text, encoding="utf-8")
     return 0
 
 
