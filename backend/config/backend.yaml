@@ -1,0 +1,86 @@
+# Chipmonk backend configuration (defaults; committed).
+#
+# Per-machine values (worker image ref, data center, volume id) go in the
+# gitignored sibling backend.local.yaml, deep-merged on top of this file.
+# Keys never go in YAML: they are read from the environment by NAME
+# (OPENROUTER_API_KEY, RUNPOD_API_KEY), see .env.example.
+# Unknown keys are an error. Relative paths are relative to backend/.
+
+runs_dir: runs        # one folder per run: run.json, events.jsonl, workspace/
+log_dir: logs         # backend.log, rotated at 10 MB
+log_level: INFO       # console level; the file always gets DEBUG
+
+# Direct OpenRouter calls (no agent loop).
+llm:
+  base_url: null      # null = https://openrouter.ai/api/v1
+  timeout_s: 120
+  max_attempts: 5     # 1 call + 4 retries on 429/5xx, 1-2-4-8 s backoff
+  default_model: deepseek/deepseek-v4-flash-0731
+  presets:            # short name -> OpenRouter model id
+    cheap: openai/gpt-5-nano
+    fast: deepseek/deepseek-v4-flash-0731
+    strong: deepseek/deepseek-v4-pro
+
+agents:
+  # claude_cli: the claude CLI under a PTY, on the machine's own Claude login.
+  # openrouter: OpenHands agent on any OpenRouter model (needs the
+  #             [openhands] extra and tmux). stub: no model, for tests.
+  default_backend: claude_cli
+  claude_cli:
+    cli_path: claude
+    cli_version: 2.1.322          # minimum CLI release the PTY driver supports
+    model: claude-opus-5-5
+    effort: high                  # low | medium | high | xhigh | max
+    permission_mode: bypassPermissions
+    skip_permissions: true        # agents act without asking; keep the env allowlist tight
+    setting_sources: []           # [] = load no settings files; [project] to load skills
+    config_dir: null              # null = $CLAUDE_CONFIG_DIR or ~/.claude
+    turn_timeout_s: 3600
+    stall_timeout_s: 1800         # no transcript progress this long = stalled
+  openrouter:
+    model: deepseek/deepseek-v4-flash-0731
+    effort: high
+    fallback_model: openai/gpt-5-nano
+    provider_order: []            # OpenRouter provider routing preference
+    allow_fallbacks: true
+
+compute:
+  # local:     in this process, any machine (dev, tests, inside a worker pod)
+  # flex:      on a team Mac, nothing rented (claude CLI logged in there)
+  # on_demand: one rented RunPod worker pod per agent
+  run_mode: local
+  tier: cpu_basic                 # cpu_basic | cpu_plus | gpu_basic | gpu_plus
+  max_concurrent_agents: 4
+
+  flex:
+    isolation: host               # host only for now; macOS-VM isolation deferred
+    require_macos: true
+
+  runpod:
+    dry_run: true                 # true = build and save the create request, never send it
+    cloud_type: SECURE            # SECURE | COMMUNITY
+    data_center_id: ""            # "" = any; a network volume pins pods to its data center
+    image: ""                     # the team's worker image; set in backend.local.yaml
+    network_volume_id: ""         # "" = no volume
+    pod_name_prefix: chipmonk_worker_   # every sweep matches this prefix only
+    pod_timeout_s: 7200           # hard TTL: the worker exits after this (+300 s grace)
+    healthcheck_timeout_s: 600    # image pull plus boot can take 5-10 minutes
+    max_usd_per_hr: 1.0           # never rent above this
+    disk_gb: 20
+    ports: ["22/tcp", "8080/http"]  # ssh, worker job API
+    # Machines raced per tier, in order. GPU tiers never fall back to CPU.
+    # Prices are indicative (Secure Cloud, autumn 2026); RunPod decides.
+    tier_chains:
+      cpu_basic: [cpu3g-2-8, cpu5g-2-8, cpu3c-4-8, cpu5c-4-8, cpu3c-2-4, cpu5c-2-4]
+      cpu_plus: [cpu3g-4-16, cpu5g-4-16, cpu3c-4-8, cpu5c-4-8]
+      gpu_basic:
+        - NVIDIA RTX A4000                # 16 GB, about $0.25/hr
+        - NVIDIA RTX 2000 Ada Generation  # 16 GB, about $0.24/hr
+        - NVIDIA RTX A4500                # 20 GB, about $0.25/hr
+        - NVIDIA RTX 4000 Ada Generation  # 20 GB, about $0.28/hr
+      gpu_plus:
+        - NVIDIA RTX PRO 4500 Blackwell   # 32 GB, about $0.72/hr
+        - NVIDIA GeForce RTX 5090         # 32 GB, about $0.99/hr
+        - NVIDIA RTX A5000                # 24 GB, about $0.27/hr
+        - NVIDIA L4                       # 24 GB, about $0.49/hr
+        - NVIDIA GeForce RTX 4090         # 24 GB, about $0.74/hr
