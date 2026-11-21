@@ -23,7 +23,10 @@ def add_serve_parser(
     serve_p.add_argument("--port", type=int, default=None, help="default: api.yaml port (8797)")
     serve_p.add_argument("--frontend", type=Path, default=None, help="static folder to serve at /")
     serve_p.add_argument(
-        "--agent", choices=["claude", "stub"], default="claude", help="stub: scripted, no model calls"
+        "--agent",
+        choices=["claude", "stub", "openrouter"],
+        default="claude",
+        help="stub: scripted, no model calls",
     )
     serve_p.add_argument(
         "--stub-step", type=float, default=None, help="seconds between the stub agent's steps (default 0.4)"

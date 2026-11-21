@@ -33,8 +33,7 @@ from chipin_backend.agents.output import (
 )
 from chipin_backend.agents.types import AgentEvent, AgentResult, AgentSpec, EventSink
 from chipin_backend.config import AgentsConfig, OpenRouterAgentConfig
-from chipin_backend.llm.endpoints import BASE_URL
-from chipin_backend.llm.keys import openrouter_api_key
+from chipin_backend.llm.providers import DEFAULT_PROVIDER, Provider, resolve_provider
 
 #: Per-request timeout for one model call.
 LLM_CALL_TIMEOUT_S = 600
@@ -56,9 +55,17 @@ RESUME_NUDGE = (
 )
 
 
-def normalize_model(model: str) -> str:
-    """``vendor/slug`` as LiteLLM's ``openrouter/vendor/slug``; a prefixed id passes through."""
+def normalize_model(model: str, provider: str = DEFAULT_PROVIDER) -> str:
+    """The id as LiteLLM names it.
+
+    OpenRouter: ``vendor/slug`` as ``openrouter/vendor/slug`` (a prefixed id passes
+    through). Any other provider is an OpenAI-compatible endpoint: ``openai/<id>``.
+    """
     model = model.strip()
+    if provider != DEFAULT_PROVIDER:
+        if not model:
+            raise ValueError("empty model id")
+        return model if model.startswith("openai/") else f"openai/{model}"
     if model.startswith("openrouter/"):
         return model
     if "/" not in model:
@@ -180,14 +187,17 @@ class OpenRouterAgentBackend(AgentBackend):
         """
         if spec.workdir is None:
             raise ValueError("spec.workdir must be set by the runner")
+        provider = resolve_provider(self.providers, spec.provider)
+        key = provider.api_key()
         try:
             from openhands.sdk import Conversation
         except ImportError as err:
             raise RuntimeError("the openrouter backend needs the openhands extra") from err
-        key = openrouter_api_key()
         workdir = spec.workdir.resolve()
         workdir.mkdir(parents=True, exist_ok=True)
-        model = normalize_model(spec.model or self.openrouter.model)
+        model_id = provider.model_for(spec.model, fallback=self.openrouter.model)
+        model = normalize_model(model_id, provider.name)
+        logger.info("agent {}: provider {} model {}", spec.name, provider.name, model_id)
         started = time.monotonic()
         lock = threading.Lock()
         activity = _Activity()
@@ -210,8 +220,8 @@ class OpenRouterAgentBackend(AgentBackend):
             if type(action).__name__ == "FinishAction":
                 final["text"] = action.message or final["text"]
 
-        emit("agent_start", {"backend": self.name, "model": model})
-        agent = self._build_agent(spec, model, key)
+        emit("agent_start", {"backend": self.name, "provider": provider.name, "model": model})
+        agent = self._build_agent(spec, model, key, provider)
         conversation = Conversation(
             agent=agent,
             workspace=str(workdir),
@@ -297,7 +307,9 @@ class OpenRouterAgentBackend(AgentBackend):
         if conversation is not None:
             await asyncio.to_thread(conversation.close)
 
-    def _build_llm(self, model: str, key: str, *, usage_id: str, fallback: Any = None) -> Any:
+    def _build_llm(
+        self, model: str, key: str, provider: Provider, *, usage_id: str, fallback: Any = None
+    ) -> Any:
         """One OpenRouter ``LLM`` for the SDK, retrying transient faults itself.
 
         ``fallback`` is a ``FallbackStrategy`` tried when a call still fails.
@@ -307,24 +319,25 @@ class OpenRouterAgentBackend(AgentBackend):
 
         cfg = self.openrouter
         extra_body: dict[str, Any] = {}
-        if cfg.provider_order:
+        is_openrouter = provider.name == DEFAULT_PROVIDER
+        if is_openrouter and cfg.provider_order:
             extra_body["provider"] = {"order": cfg.provider_order, "allow_fallbacks": cfg.allow_fallbacks}
         return LLM(
             model=model,
             api_key=SecretStr(key),
-            base_url=BASE_URL,
+            base_url=provider.base_url,
             usage_id=usage_id,
             timeout=LLM_CALL_TIMEOUT_S,
             num_retries=LLM_CALL_ATTEMPTS - 1,
             retry_min_wait=1,
             retry_max_wait=8,
             retry_multiplier=1.0,
-            reasoning_effort=cfg.effort,
+            reasoning_effort=cfg.effort if is_openrouter else None,
             litellm_extra_body=extra_body,
             fallback_strategy=fallback,
         )
 
-    def _build_agent(self, spec: AgentSpec, model: str, key: str) -> Any:
+    def _build_agent(self, spec: AgentSpec, model: str, key: str, provider: Provider) -> Any:
         """The OpenHands ``Agent``: LLM (with backup model), tools, prompt, MCP servers."""
         from openhands.sdk import Agent
         from openhands.sdk.llm.fallback_strategy import FallbackStrategy
@@ -332,12 +345,14 @@ class OpenRouterAgentBackend(AgentBackend):
         from openhands.tools import FileEditorTool, TaskTrackerTool, TerminalTool
 
         strategy = None
-        backup = self.openrouter.fallback_model
+        backup = self.openrouter.fallback_model if provider.name == DEFAULT_PROVIDER else None
         if backup and normalize_model(backup) != model:
             strategy = FallbackStrategy(fallback_llms=[backup])
             # Pre-filled, so the SDK never looks for a profile file holding the key.
-            strategy._resolved = [self._build_llm(normalize_model(backup), key, usage_id="agent-fallback")]
-        llm = self._build_llm(model, key, usage_id="agent", fallback=strategy)
+            strategy._resolved = [
+                self._build_llm(normalize_model(backup), key, provider, usage_id="agent-fallback")
+            ]
+        llm = self._build_llm(model, key, provider, usage_id="agent", fallback=strategy)
 
         classes = {"terminal": TerminalTool, "file_editor": FileEditorTool, "task_tracker": TaskTrackerTool}
         names = [n for n in TOOL_NAMES if spec.allowed_tools is None or n in spec.allowed_tools]

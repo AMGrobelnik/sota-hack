@@ -28,7 +28,8 @@ from chipin_backend.agents.base import BACKENDS
 from chipin_backend.agents.types import AgentSpec, utc_now
 from chipin_backend.api.cli import add_serve_parser, run_serve
 from chipin_backend.config import BackendConfig, ComputeTier, RunMode, load_config
-from chipin_backend.llm import OpenRouterClient
+from chipin_backend.llm import MissingKeyError, OpenRouterClient, expand_preset
+from chipin_backend.llm.providers import ProviderError, resolve_provider
 from chipin_backend.log import setup_logging
 from chipin_backend.orchestrate import LLM_CALLS_ENV, run_agent
 
@@ -64,6 +65,7 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--name", default="agent")
     run.add_argument("--backend", choices=sorted(BACKENDS), default=None)
     run.add_argument("--model", default=None)
+    run.add_argument("--provider", default=None, help="model provider from the config (openrouter backend)")
     run.add_argument("--mode", choices=get_args(RunMode), default=None)
     run.add_argument("--tier", choices=get_args(ComputeTier), default=None)
     run.add_argument("--timeout", type=int, default=None, help="whole-run wall clock in seconds")
@@ -72,15 +74,27 @@ def _parser() -> argparse.ArgumentParser:
     )
     ask = sub.add_parser("ask", parents=[common], help="one OpenRouter chat call; prints the answer")
     ask.add_argument("question")
-    ask.add_argument("--model", default=None, help="preset name or OpenRouter model id")
+    ask.add_argument("--model", default=None, help="preset name or model id of the provider")
+    ask.add_argument("--provider", default=None, help="model provider from the config (default openrouter)")
     ask.add_argument("--max-tokens", type=int, default=4096)
     add_serve_parser(sub, common)
     return parser
 
 
-@logger.catch(onerror=lambda _: sys.exit(1))
 def main(argv: list[str] | None = None) -> int:
-    """Entry point; returns the process exit code."""
+    """Entry point; returns the process exit code.
+
+    A provider or key problem is one clear error line and exit code 2, never a trace.
+    """
+    try:
+        return _main(argv)
+    except (ProviderError, MissingKeyError) as exc:
+        logger.error("{}", exc)
+        return 2
+
+
+@logger.catch(onerror=lambda _: sys.exit(1), exclude=(ProviderError, MissingKeyError))
+def _main(argv: list[str] | None) -> int:
     args = _parser().parse_args(argv)
     env_file: Path | None = getattr(args, "env_file", None)
     if env_file is not None:
@@ -96,13 +110,27 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "serve":
         return run_serve(args, config)
     if args.command == "ask":
-        return asyncio.run(_ask(config, args.question, model=args.model, max_tokens=args.max_tokens))
+        return asyncio.run(
+            _ask(config, args.question, model=args.model, max_tokens=args.max_tokens, provider=args.provider)
+        )
     prompts = list(args.prompt) + [path.read_text(encoding="utf-8").strip() for path in args.prompt_file]
     if not prompts:
         logger.error("give at least one --prompt or --prompt-file")
         return 2
+    backend = args.backend
+    if args.provider is not None:
+        if backend not in (None, "openrouter"):
+            logger.error("--provider needs the openrouter backend, not {}", backend)
+            return 2
+        backend = "openrouter"
+        resolve_provider(config.providers, args.provider).api_key()  # fail early, naming the variable
     spec = AgentSpec(
-        name=args.name, prompts=prompts, backend=args.backend, model=args.model, timeout_s=args.timeout
+        name=args.name,
+        prompts=prompts,
+        backend=backend,
+        model=expand_preset(args.model, args.provider, config.llm.presets),
+        provider=args.provider,
+        timeout_s=args.timeout,
     )
     try:
         run, result = asyncio.run(
@@ -115,26 +143,31 @@ def main(argv: list[str] | None = None) -> int:
     return 1 if result.failed else 0
 
 
-async def _ask(config: BackendConfig, question: str, *, model: str | None, max_tokens: int) -> int:
+async def _ask(
+    config: BackendConfig, question: str, *, model: str | None, max_tokens: int, provider: str | None = None
+) -> int:
     """Answer ``question`` with one OpenRouter call; log the call for the run record.
 
     An empty answer cut off at the token limit (a reasoning model that spent
     ``max_tokens`` thinking) is a failure: warn and return 1.
     """
-    async with OpenRouterClient(config.llm) as client:
+    endpoint = resolve_provider(config.providers, provider) if provider else None
+    async with OpenRouterClient(config.llm, endpoint=endpoint) as client:
         result = await client.chat(
             [{"role": "user", "content": question}], model=model, max_tokens=max_tokens
         )
     truncated_empty = not result.text.strip() and result.finish_reason in ("length", "max_tokens")
     if truncated_empty:
         logger.warning(
-            "ask: {} returned no text and stopped at the token limit; raise --max-tokens (now {})",
+            "ask: {} / {} returned no text and stopped at the token limit; raise --max-tokens (now {})",
+            result.provider,
             result.model,
             max_tokens,
         )
     print(result.text)
     logger.info(
-        "ask: {} answered, {} in / {} out tokens, ${:.6f}",
+        "ask: {} / {} answered, {} in / {} out tokens, ${:.6f}",
+        result.provider,
         result.model,
         result.input_tokens,
         result.output_tokens,
@@ -144,6 +177,7 @@ async def _ask(config: BackendConfig, question: str, *, model: str | None, max_t
     if calls_file:
         entry: dict[str, Any] = {
             "ts": utc_now(),
+            "provider": result.provider,
             "model": result.model,
             "question": question,
             "answer": result.text,

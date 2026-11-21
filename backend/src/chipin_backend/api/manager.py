@@ -36,6 +36,9 @@ from chipin_backend.api.scripted import STEP_ENV, register
 from chipin_backend.api.translate import Translator, clip
 from chipin_backend.compute.base import Runner
 from chipin_backend.config import BackendConfig, RunMode
+from chipin_backend.llm.keys import MissingKeyError
+from chipin_backend.llm.presets import expand_preset
+from chipin_backend.llm.providers import ProviderError, resolve_provider
 from chipin_backend.orchestrate import run_agent
 from chipin_backend.runs import JsonlEventSink, RunDir, is_safe_run_id, new_run_id
 
@@ -43,11 +46,11 @@ API_RECORD_FILE = "api.json"
 RAW_EVENTS_FILE = "agent_events.jsonl"
 INSTRUCTIONS_PATH = Path(__file__).with_name("instructions.md")
 
-ApiAgent = Literal["claude", "stub"]
+ApiAgent = Literal["claude", "stub", "openrouter"]
 ApiRunner = Literal["local"]
 ApiStatus = Literal["running", "succeeded", "failed", "stopped"]
 #: Contract agent name -> backend registry name.
-AGENT_BACKENDS: dict[str, str] = {"claude": "claude_cli", "stub": SCRIPTED}
+AGENT_BACKENDS: dict[str, str] = {"claude": "claude_cli", "stub": SCRIPTED, "openrouter": "openrouter"}
 #: Contract runner name -> backend run mode.
 RUNNER_MODES: dict[str, RunMode] = {"local": "flex"}
 #: ``machine`` values from the dashboard that mean this Mac.
@@ -198,6 +201,7 @@ class RunManager:
     def start(self, body: dict[str, Any]) -> ApiRun:
         """Validate a ``POST /api/runs`` body, make the run folder and start the agent."""
         prompt, preset, machine, answers, files = _validate(body, self.api)
+        provider, model = self._provider_choice(body)
         if len(self.running()) >= self.config.compute.max_concurrent_agents:
             raise RequestError("too many runs in progress; stop one first", status=429)
         run = ApiRunDir.create(self.runs_dir, new_run_id())
@@ -217,12 +221,17 @@ class RunManager:
             "preset": preset,
             "machine": machine,
         }
+        if self.agent == "openrouter":
+            record["provider"] = provider
+            record["model"] = model
         item = ApiRun(run, record, log)
         item.save()
         spec = AgentSpec(
             name="chipin",
             prompts=[_first_prompt(prompt)],
             backend=AGENT_BACKENDS[self.agent],  # type: ignore[arg-type]
+            model=model,
+            provider=provider,
             effort=self.api.presets[preset] if preset else None,
             system_prompt=self.instructions if self.agent == "claude" else None,
             timeout_s=self.api.run_timeout_s,
@@ -233,6 +242,27 @@ class RunManager:
         item.task = asyncio.create_task(self._drive(item, spec, translator), name=f"run-{item.id}")
         logger.info("run {} started: agent={} runner={} preset={}", item.id, self.agent, self.runner, preset)
         return item
+
+    def _provider_choice(self, body: dict[str, Any]) -> tuple[str | None, str | None]:
+        """The body's ``provider`` and ``model``, checked before a run folder is made.
+
+        Only the ``openrouter`` agent takes a provider; an unknown or unconfigured one,
+        or one whose key is not set, is a 400 that names the problem (never a key).
+        """
+        provider, model = body.get("provider"), body.get("model")
+        if provider is None and model is None:
+            return None, None
+        if not all(v is None or (isinstance(v, str) and v.strip()) for v in (provider, model)):
+            raise RequestError("provider and model must be non-empty strings")
+        if self.agent != "openrouter":
+            raise RequestError("provider and model need the server started with --agent openrouter")
+        try:
+            chosen = resolve_provider(self.config.providers, provider)
+            chosen.api_key()
+            chosen.model_for(model, fallback=self.config.agents.openrouter.model)
+        except (ProviderError, MissingKeyError) as exc:
+            raise RequestError(str(exc)) from None
+        return chosen.name, expand_preset(model, chosen.name, self.config.llm.presets)
 
     async def _drive(self, item: ApiRun, spec: AgentSpec, translator: Translator) -> None:
         """Run the agent through :func:`run_agent`; always ends the event log with ``run.finished``.

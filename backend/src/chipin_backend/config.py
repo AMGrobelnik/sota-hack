@@ -63,6 +63,20 @@ class LlmConfig(_Section):
     presets: dict[str, str] = Field(default_factory=dict)
 
 
+class ProviderConfig(_Section):
+    """One OpenAI-compatible model provider (the ``providers`` registry).
+
+    ``key_env`` is the NAME of the environment variable holding the key, never
+    the key. An empty ``base_url`` means the provider is not configured and
+    every use of it is refused with ``note``.
+    """
+
+    base_url: str = ""
+    key_env: str = ""
+    default_model: str = ""  # empty = the caller must pass a model
+    note: str = ""
+
+
 class ClaudeCliConfig(_Section):
     """The ``claude_cli`` agent backend: the interactive ``claude`` CLI under a PTY."""
 
@@ -154,6 +168,8 @@ class BackendConfig(_Section):
     log_dir: Path = Path("logs")
     log_level: str = "INFO"
     llm: LlmConfig = Field(default_factory=LlmConfig)
+    #: Model providers by name; see :mod:`chipin_backend.llm.providers`.
+    providers: dict[str, ProviderConfig] = Field(default_factory=dict)
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
     compute: ComputeConfig = Field(default_factory=ComputeConfig)
 
@@ -232,6 +248,7 @@ __all__ = [
     "LlmConfig",
     "OpenRouterAgentConfig",
     "PermissionMode",
+    "ProviderConfig",
     "RunMode",
     "RunPodConfig",
     "deep_merge",

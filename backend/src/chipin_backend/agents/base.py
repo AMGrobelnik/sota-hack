@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import importlib
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from typing import ClassVar
 
 from chipin_backend.agents.types import AgentResult, AgentSpec, EventSink
-from chipin_backend.config import AgentsConfig
+from chipin_backend.config import AgentsConfig, ProviderConfig
 
 
 class AgentBackend(ABC):
@@ -25,6 +26,8 @@ class AgentBackend(ABC):
 
     def __init__(self, config: AgentsConfig) -> None:
         self.config = config
+        #: The config's provider registry; set by :func:`backend_for`.
+        self.providers: Mapping[str, ProviderConfig] = {}
 
     @abstractmethod
     async def run(self, spec: AgentSpec, sink: EventSink) -> AgentResult:
@@ -66,9 +69,13 @@ def backend_class(name: str) -> type[AgentBackend]:
     return cls
 
 
-def backend_for(name: str | None, config: AgentsConfig) -> AgentBackend:
+def backend_for(
+    name: str | None, config: AgentsConfig, providers: Mapping[str, ProviderConfig] | None = None
+) -> AgentBackend:
     """A new backend instance for ``name`` (``None`` = ``config.default_backend``)."""
-    return backend_class(name or config.default_backend)(config)
+    backend = backend_class(name or config.default_backend)(config)
+    backend.providers = providers or {}
+    return backend
 
 
 __all__ = ["BACKENDS", "AgentBackend", "backend_class", "backend_for"]

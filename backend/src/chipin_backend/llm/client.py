@@ -15,6 +15,7 @@ from chipin_backend.config import LlmConfig
 from chipin_backend.llm.endpoints import BASE_URL
 from chipin_backend.llm.keys import is_key_exhausted, openrouter_api_key
 from chipin_backend.llm.presets import resolve_model
+from chipin_backend.llm.providers import Provider
 from chipin_backend.llm.retry import retry_paid_call
 
 Message = dict[str, Any]  # {"role": "system" | "user" | "assistant", "content": ...}
@@ -50,6 +51,7 @@ class ChatResult:
     cost_usd: float = 0.0  # from usage.cost; 0.0 when the provider gives none
     finish_reason: str | None = None
     raw: dict[str, Any] = field(default_factory=dict)
+    provider: str = "openrouter"  # the provider that served the call
 
 
 @dataclass(frozen=True)
@@ -72,8 +74,11 @@ class OpenRouterClient:
     never logged.
     """
 
-    def __init__(self, config: LlmConfig, *, api_key: str | None = None) -> None:
+    def __init__(
+        self, config: LlmConfig, *, api_key: str | None = None, endpoint: Provider | None = None
+    ) -> None:
         self.config = config
+        self.endpoint = endpoint  # None = OpenRouter as configured in ``llm``
         self._api_key = api_key
         self._http: httpx.AsyncClient | None = None
 
@@ -92,9 +97,14 @@ class OpenRouterClient:
     def _client(self) -> httpx.AsyncClient:
         """The pooled HTTP client, created on first use (the key is read then)."""
         if self._http is None:
-            key = self._api_key or openrouter_api_key()
+            if self.endpoint is not None:
+                key = self._api_key or self.endpoint.api_key()
+                base_url = self.endpoint.base_url
+            else:
+                key = self._api_key or openrouter_api_key()
+                base_url = self.config.base_url or BASE_URL
             self._http = httpx.AsyncClient(
-                base_url=(self.config.base_url or BASE_URL).rstrip("/") + "/",
+                base_url=base_url.rstrip("/") + "/",
                 headers={"Authorization": f"Bearer {key}"},
                 timeout=self.config.timeout_s,
             )
@@ -133,7 +143,10 @@ class OpenRouterClient:
         (default ``config.default_model``); ``response_format`` is passed
         through for JSON-schema output; ``provider`` is OpenRouter's routing
         preference (``order``, ``allow_fallbacks``)."""
-        model_id = resolve_model(model or self.config.default_model, self.config.presets)
+        if self.endpoint is not None and self.endpoint.name != "openrouter":
+            model_id = self.endpoint.model_for(model)
+        else:
+            model_id = resolve_model(model or self.config.default_model, self.config.presets)
         payload: dict[str, Any] = {"model": model_id, "messages": messages, "max_tokens": max_tokens}
         if temperature is not None:
             payload["temperature"] = temperature
@@ -144,7 +157,7 @@ class OpenRouterClient:
         if provider is not None:
             payload["provider"] = provider
         data = await self._request("POST", "chat/completions", json=payload)
-        return _chat_result(data, model_id)
+        return _chat_result(data, model_id, self.endpoint.name if self.endpoint else "openrouter")
 
     async def list_models(self) -> list[ModelInfo]:
         """The live catalogue from ``/models``."""
@@ -157,7 +170,7 @@ class OpenRouterClient:
         return dict(data.get("data", data))
 
 
-def _chat_result(data: dict[str, Any], requested_model: str) -> ChatResult:
+def _chat_result(data: dict[str, Any], requested_model: str, provider: str = "openrouter") -> ChatResult:
     """A :class:`ChatResult` from a chat/completions body; an error body raises."""
     choices = data.get("choices") or []
     if not choices:
@@ -169,6 +182,7 @@ def _chat_result(data: dict[str, Any], requested_model: str) -> ChatResult:
     usage = data.get("usage") or {}
     return ChatResult(
         model=data.get("model") or requested_model,
+        provider=provider,
         text=message.get("content") or "",
         input_tokens=int(usage.get("prompt_tokens") or 0),
         output_tokens=int(usage.get("completion_tokens") or 0),

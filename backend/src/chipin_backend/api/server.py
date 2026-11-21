@@ -40,6 +40,7 @@ from chipin_backend.api.config import ApiConfig
 from chipin_backend.api.manager import ApiAgent, ApiRunner, RequestError, RunManager
 from chipin_backend.api.transcribe import CONTEXT_HEADER, add_transcribe_route, transcribe_ready
 from chipin_backend.config import BackendConfig
+from chipin_backend.llm.providers import provider_status
 
 API_VERSION = 1
 HOST = "127.0.0.1"
@@ -116,6 +117,7 @@ async def health(request: web.Request) -> web.Response:
             "version": API_VERSION,
             "defaults": {"agent": manager.agent, "runner": manager.runner},
             "transcribe": transcribe_ready(request.app),
+            "providers": provider_status(manager.config.providers),
         }
     )
 

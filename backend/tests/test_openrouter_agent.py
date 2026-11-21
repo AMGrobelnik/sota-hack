@@ -147,7 +147,9 @@ async def test_faked_run_never_writes_the_key(
 
     from chipin_backend.agents.openrouter_agent import OpenRouterAgentBackend
 
-    def scripted_llm(self: Any, model: str, key: str, *, usage_id: str, fallback: Any = None) -> Any:
+    def scripted_llm(
+        self: Any, model: str, key: str, provider: Any, *, usage_id: str, fallback: Any = None
+    ) -> Any:
         finish = MessageToolCall(
             id="call_1", name="finish", arguments=json.dumps({"message": "all done"}), origin="completion"
         )

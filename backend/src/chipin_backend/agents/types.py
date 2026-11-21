@@ -83,6 +83,7 @@ class AgentSpec:
     prompts: list[str]
     backend: Literal["claude_cli", "openrouter", "stub"] | None = None
     model: str | None = None
+    provider: str | None = None  # openrouter backend only; None = openrouter
     effort: Effort | None = None
     system_prompt: str | None = None
     allowed_tools: list[str] | None = None  # None = backend default tool set

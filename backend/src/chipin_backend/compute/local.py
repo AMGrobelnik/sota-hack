@@ -36,7 +36,7 @@ class LocalRunner(Runner):
         del tier  # no machine to size here
         workdir = spec.workdir or run.workspace
         workdir.mkdir(parents=True, exist_ok=True)
-        backend = backend_for(spec.backend, self.config.agents)
+        backend = backend_for(spec.backend, self.config.agents, self.config.providers)
         sink = run.event_sink()
         started = time.monotonic()
         self._backend = backend
