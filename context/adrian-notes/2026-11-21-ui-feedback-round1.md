@@ -25,3 +25,19 @@ Paraphrased from the team chat and from Adrian. Round 1: five landing variants a
 - Three views: Overview, Chat, Visual.
 - Keep views that are useful for this specific domain (medical sensing chips).
 - Asked for: five more variants.
+
+## Dashboards, round 2 walk-through (Sat 21 Nov, about 18:25)
+
+Paraphrased from a teammate's spoken walk-through of the round-2 dashboards.
+
+- Show which datasets are being loaded and from where, and which papers the scientists use; a clinician wants to know the source of the data.
+- Fine-tuning needs a better animation: many candidate models narrowing to the best one, with the gates.
+- Show a visual concept of the device: a mannequin wearing a prototype, and the chip.
+- The Visual view looked amateur: make it 3D and animated; say explicitly what Sensor 1 and Sensor 2 are; show what is fine-tuned or let the user choose to fine-tune.
+- Signal should read continuously; the sensors that are reading should light up.
+- Trade-off: make the candidate chip obvious.
+- Text colour blends into the background on every tab: more contrast.
+- "On the device" looked vague: make it look like a real chip.
+- Start page: keep the Lite, Pro, Max, Ultra choice and the GPU choice; the use-case choice was not understood.
+- After the prompt the product should ask questions: own dataset, yes or no; if no, look for a public dataset and use it; if none, ask permission to simulate one, state the assumptions and why, and let the clinician confirm or correct them.
+- Asked for: five more dashboard variants using this.
