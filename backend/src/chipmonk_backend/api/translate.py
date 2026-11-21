@@ -10,6 +10,7 @@ the progress tailer turns what they write into ``stage``, ``metric`` and
 
 from __future__ import annotations
 
+import re
 import threading
 from pathlib import Path
 from typing import Any
@@ -25,9 +26,15 @@ SUMMARY_MAX = 120
 DETAIL_MAX = 300
 
 
+#: Terminal escape sequences (colours, cursor moves, titles) and other control characters.
+_TERMINAL_NOISE = re.compile(
+    r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?|\x1b.|[\x00-\x08\x0e-\x1f\x7f]"
+)
+
+
 def clip(text: str, limit: int) -> str:
-    """``text`` on one line, cut to ``limit`` characters with an ellipsis."""
-    flat = " ".join(str(text).split())
+    """``text`` on one line without terminal escapes, cut to ``limit`` characters with an ellipsis."""
+    flat = " ".join(_TERMINAL_NOISE.sub("", str(text)).split())
     return flat if len(flat) <= limit else flat[: limit - 1].rstrip() + "…"
 
 
@@ -91,6 +98,8 @@ class Translator:
         self._hidden: set[str] = set()
         self.error_emitted = False
         self.cost: dict[str, Any] | None = None
+        #: The agent's latest message: the run's closing summary.
+        self.last_text: str | None = None
 
     def emit(self, event: AgentEvent) -> None:
         """Record ``event`` and translate it; errors are logged, never raised."""
@@ -107,6 +116,7 @@ class Translator:
         if data.get("subagent") and kind == "text":
             return  # a delegated helper's chatter; its tool calls still show
         if kind == "text" and str(data.get("text", "")).strip():
+            self.last_text = str(data["text"]).strip()
             self.log.append("message", role="agent", author=AUTHOR, text=data["text"])
         elif kind == "tool_call":
             self._tool_call(data)
@@ -145,6 +155,9 @@ class Translator:
             return
         tool, summary = self._calls.pop(call_id, ("tool", "Tool finished"))
         output = str(data.get("output", "")).strip()
+        if self.workdir is not None:  # show workspace paths relative, as the summaries do
+            for folder in {str(self.workdir.resolve()), str(self.workdir)}:
+                output = output.replace(f"{folder}/", "").replace(folder, ".")
         self.log.append(
             "tool",
             call_id=call_id,

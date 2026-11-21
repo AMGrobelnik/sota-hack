@@ -403,6 +403,16 @@ async def test_translation_of_agent_events(tmp_path: Path) -> None:
     assert log.since(5)[0] == {**log.since(5)[0], "usd": 0.12, "tokens_in": 100, "tokens_out": 20}
     assert tr.error_emitted
     assert len((tmp_path / "raw.jsonl").read_text().splitlines()) == 9
+    ev("tool_call", tool="Bash", input={"command": "cat log"}, call_id="b2")
+    ev(
+        "tool_result",
+        call_id="b2",
+        output=f"\x1b[38;5;174mClaude\x1b[39m at {tmp_path}/spec.md\x07",
+        is_error=False,
+    )
+    ev("text", text="Done: three designs.")
+    assert log.since(8)[0]["detail"] == "Claude at spec.md"
+    assert tr.last_text == "Done: three designs."
 
 
 def test_tool_summaries(tmp_path: Path) -> None:

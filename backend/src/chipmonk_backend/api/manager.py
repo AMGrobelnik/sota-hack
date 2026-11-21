@@ -244,7 +244,8 @@ class RunManager:
             item.inner = asyncio.create_task(item.runner.run(spec, item.run))
             result = await item.inner
             status = "failed" if result.failed else "succeeded"
-            summary = clip(result.error or result.final_text, 600) or None
+            # The agent's last message, not final_text: claude_cli joins every turn's text there.
+            summary = clip(result.error or translator.last_text or result.final_text, 600) or None
             if result.failed and not translator.error_emitted:
                 item.log.append("error", message=result.error or "the agent failed")
         except asyncio.CancelledError:
