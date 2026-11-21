@@ -226,6 +226,20 @@ def test_instructions_carry_the_lab_paragraph_only_when_the_lab_is_on(tmp_path: 
     assert "./progress stage compile started" in paragraph
 
 
+def test_verify_stage_means_the_chip_against_its_model() -> None:
+    """The base stage list and the lab paragraph agree on what verify is.
+
+    A real run marked verify skipped after the lab's bit-exact and proof calls
+    passed, because the stage list defined verify as patient recordings only.
+    """
+    text = standing_instructions({"PATH": "/bin"})
+    stage = text.split("\n6. ", 1)[1].split("\n7. ", 1)[0]
+    assert stage.startswith("verify:")
+    assert "bit for bit" in stage
+    assert "even with no recordings" in " ".join(stage.split())
+    assert "the chip against your model" in chiplab_instructions()
+
+
 def test_both_run_paths_get_the_same_instructions(
     tmp_path: Path, config: BackendConfig, monkeypatch: pytest.MonkeyPatch
 ) -> None:

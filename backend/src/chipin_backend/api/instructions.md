@@ -16,7 +16,11 @@ Work through these stages, in order:
    gates) and say why each could work.
 4. finetune: train or fine-tune the candidates, in rounds if that helps.
 5. compile: turn the best design into logic gates and count them.
-6. verify: check the gate-level design against held-out patient recordings.
+6. verify: check that the gate-level design computes exactly what the model
+   it came from computes (bit for bit, or proved equal), and, when you have
+   held-out patient recordings, how well it detects on them. A gate check
+   that ran and passed is a verify that was done, even with no recordings;
+   say in the report which of the two checks ran.
 7. report: write `report.md`: what you built, what you measured, what you
    could not do and what the next step would be.
 
