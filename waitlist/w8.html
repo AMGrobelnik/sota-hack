@@ -323,6 +323,7 @@ import { EffectComposer } from '../vendor/addons/postprocessing/EffectComposer.j
 import { RenderPass } from '../vendor/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../vendor/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from '../vendor/addons/postprocessing/ShaderPass.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -333,6 +334,7 @@ function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 
 const STILL = document.documentElement.classList.contains('still');
 const PHONE = () => innerWidth < 761;
 const COL = { casing: '#ff9f45', board: '#33e0a0', chip: '#ff5fa6', die: '#55c6ff', gates: '#ffd04f' };
+const PATCH = { x0: 0.575, x1: 0.83, z0: -0.072, z1: 0.072, y0: 0.83 };   // the gate-level patch on the die, in mm
 
 /* ---------- rail and section tracking ---------- */
 const story = $('#top');
@@ -386,8 +388,9 @@ const GROUPS = [[], [], [], [], []];
 const PULSE = [];
 const SOLIDS = [];   // each cap set is one solid group: stencil passes, then one cap
 function capU(o) {
+  // uCapCol is the colour of the material in section; uTint is the chapter colour, used only faintly.
   const u = {
-    uCapCol: { value: new THREE.Color(o.col) }, uGlow: { value: 0 },
+    uCapCol: { value: new THREE.Color(o.base || o.col) }, uTint: { value: new THREE.Color(o.col) }, uGlow: { value: 0 },
     uKind: { value: o.kind || 0 }, uPat: { value: o.pat || 1 },
     uLay: { value: new THREE.Vector4(0, 1, 0, 0) },
     uPulse: { value: 0 }, uPDir: { value: new THREE.Vector3(1, 0, 0) }, uPPitch: { value: 1 },
@@ -405,12 +408,12 @@ const CUT_VERT = `#include <project_vertex>
   vCutWorld = (modelMatrix * cutW).xyz;`;
 const CUT_FRAG_DECL = `varying vec3 vCutWorld;
 uniform vec4 uPlane; uniform float uTime; uniform float uRimW; uniform float uCutOn;
-uniform vec3 uCapCol; uniform float uGlow; uniform float uPulse; uniform vec3 uPDir; uniform float uPPitch;
+uniform vec3 uCapCol; uniform vec3 uTint; uniform float uGlow; uniform float uPulse; uniform vec3 uPDir; uniform float uPPitch;
 float cutHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }`;
 const CUT_FRAG = `#include <opaque_fragment>
   float cd = dot(uPlane.xyz, vCutWorld) + uPlane.w;
   float rim = (1.0 - smoothstep(0.0, uRimW, cd)) * uCutOn;
-  gl_FragColor.rgb += uCapCol * rim * (0.4 + 2.4 * uGlow);
+  gl_FragColor.rgb += uTint * rim * (0.05 + 0.35 * uGlow);
   if (uPulse > 0.001) {
     float al = dot(vCutWorld, uPDir);
     float pr = dot(vCutWorld, vec3(1.0) - uPDir);
@@ -418,7 +421,7 @@ const CUT_FRAG = `#include <opaque_fragment>
     float h = cutHash(vec2(tr, 3.7));
     float ph = fract(al / (uPPitch * 16.0) - uTime * (0.3 + 0.5 * h) + h * 7.0);
     float pulse = smoothstep(0.84, 1.0, ph) * step(0.42, h);
-    gl_FragColor.rgb += vec3(1.0, 0.85, 0.5) * pulse * uPulse * 1.4;
+    gl_FragColor.rgb += vec3(1.0, 0.78, 0.5) * pulse * uPulse * 0.45;
   }`;
 function cutMat(params, cap) {
   const m = new THREE.MeshPhysicalMaterial(params);
@@ -437,38 +440,64 @@ function cutMat(params, cap) {
 // The cap: a quad on the cutting plane, drawn only where the stencil count says "inside a solid".
 const CAP_VERT = 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }';
 const CAP_FRAG = `varying vec3 vW;
-uniform float uTime; uniform vec3 uCapCol; uniform float uGlow; uniform float uKind; uniform float uPat; uniform vec4 uLay;
+uniform float uTime; uniform vec3 uCapCol; uniform vec3 uTint; uniform float uGlow; uniform float uKind; uniform float uPat; uniform vec4 uLay;
 float cutHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(cutHash(i), cutHash(i + vec2(1, 0)), f.x), mix(cutHash(i + vec2(0, 1)), cutHash(i + vec2(1, 1)), f.x), f.y); }
+// fade a pattern out once its cells shrink below a couple of pixels
+float detail(vec2 p) { return 1.0 - smoothstep(0.25, 0.6, length(fwidth(p))); }
 void main() {
   vec3 P = vW;
   vec2 uv = vec2(P.z, P.y) / uPat;
   vec3 col = uCapCol;
-  float pat = 1.0;
-  if (uKind < 0.5) {
-    float h = abs(fract(uv.x + uv.y) - 0.5);
-    pat = 0.66 + 0.34 * smoothstep(0.17, 0.22, h);
-  } else if (uKind < 1.5) {
+  if (uKind < 0.5) {            // moulded plastic: fine grain
+    vec2 s = uv * 6.0;
+    col *= 1.0 + (vnoise(s) - 0.5) * 0.12 * detail(s);
+  } else if (uKind < 1.5) {     // FR-4 laminate: glass weave, copper planes, solder mask skins
     float t = (P.y - uLay.x) / (uLay.y - uLay.x);
+    vec2 w = vec2(uv.x * 3.0, t * 8.0);
+    float weave = 0.5 + 0.5 * sin(w.x * 6.2832) * sin(w.y * 6.2832);
+    col = mix(uCapCol, uCapCol * (0.8 + 0.4 * weave), detail(w));
     float cu = 0.0;
-    for (int i = 0; i < 4; i++) { float c = float(i) / 3.0; cu = max(cu, 1.0 - smoothstep(0.035, 0.06, abs(t - c))); }
-    float weave = 0.5 + 0.5 * sin(uv.x * 6.2832) * sin(t * 6.2832 * 5.0);
-    col = mix(uCapCol * (0.55 + 0.3 * weave), vec3(1.0, 0.62, 0.32) * 1.2, cu);
-  } else if (uKind < 2.5) {
-    vec2 g = floor(uv); vec2 f = fract(uv);
+    for (int i = 0; i < 4; i++) { float c = 0.04 + 0.92 * float(i) / 3.0; cu = max(cu, 1.0 - step(0.022, abs(t - c))); }
+    col = mix(col, vec3(0.62, 0.33, 0.17), cu);
+    col = mix(col, vec3(0.03, 0.16, 0.08), step(t, 0.012) + step(0.988, t));
+  } else if (uKind < 2.5) {     // epoxy mould compound: black with silica filler
+    vec2 g = floor(uv), f = fract(uv);
     float r = cutHash(g);
     vec2 o = vec2(cutHash(g + 7.1), cutHash(g + 3.3)) * 0.5 + 0.25;
     float d = length(f - o);
-    float s = 1.0 - smoothstep(0.1 + 0.22 * r, 0.14 + 0.22 * r, d);
-    pat = 0.45 + 0.75 * s;
-  } else if (uKind < 3.5) {
-    pat = 0.88 + 0.12 * sin(uv.x * 2.0 + uv.y * 3.0);
-  } else if (uKind < 4.5) {
-    pat = 0.84 + 0.16 * sin(uv.x * 37.0 + uv.y * 3.0);
-  } else {
-    pat = 0.72 + 0.28 * step(0.5, fract(uv.x));
+    float s = 1.0 - smoothstep(0.08 + 0.26 * r, 0.11 + 0.26 * r, d);
+    float k = detail(uv);
+    col = mix(uCapCol * (1.0 + 0.5 * s), uCapCol * 1.18, 1.0 - k) + vec3(0.012) * s * k;
+  } else if (uKind < 3.5) {     // silicon, with the interconnect stack in fine layers at the top
+    float depth = uLay.x - P.y;
+    float band = uLay.y;
+    col = uCapCol * (0.92 + 0.08 * vnoise(vec2(P.z, P.y) * 40.0));
+    float inPatch = step(uLay.z, P.z) * step(P.z, uLay.w);
+    if (depth < band && depth > 0.0 && inPatch < 0.5) {
+      float L = depth / band * 10.0, li = floor(L), lf = fract(L);
+      float pitch = 0.0005 * pow(1.45, 9.0 - li);
+      float zz = P.z / pitch, cell = floor(zz), fz = fract(zz);
+      float line = step(0.3, cutHash(vec2(cell, li))) * step(0.22, fz) * step(fz, 0.72) * step(0.2, lf) * step(lf, 0.82);
+      if (mod(li, 2.0) > 0.5) line = step(0.2, lf) * step(lf, 0.82) * step(0.12, fract(cell * 0.137 + cutHash(vec2(floor(cell / 9.0), li))));
+      vec3 diel = vec3(0.05, 0.06, 0.075), cu = vec3(0.55, 0.32, 0.18);
+      vec3 stack = mix(diel, cu, line);
+      if (li < 1.0) stack = mix(vec3(0.18, 0.2, 0.22), vec3(0.42, 0.44, 0.46), step(0.5, lf));  // passivation and top aluminium
+      float k = detail(vec2(zz, L));
+      col = mix(mix(diel, cu, 0.35), stack, k);
+    }
+    if (inPatch > 0.5 && depth > 0.0) col *= 1.0 + 0.22 * (1.0 - smoothstep(0.0012, 0.002, depth)) * (0.8 + 0.2 * vnoise(vec2(P.z, P.y) * 4000.0));   // doped wells
+    if (depth > 0.0 && depth < 0.0004) col *= 0.6;   // shallow trench isolation
+  } else if (uKind < 4.5) {     // metal: plain, a faint grain
+    vec2 s = uv * 3.0;
+    col *= 1.0 + (vnoise(s) - 0.5) * 0.1 * detail(s);
+  } else {                      // wound capacitor element
+    float k = detail(uv);
+    col *= mix(0.86, 0.72 + 0.28 * step(0.5, fract(uv.x)), k);
   }
-  float sweep = 0.5 + 0.5 * sin(uTime * 2.4 - (uv.x + uv.y) * 0.35);
-  gl_FragColor = vec4(col * pat * (0.32 + uGlow * (1.7 + 0.7 * sweep)), 1.0);
+  col += uTint * uGlow * 0.015;
+  gl_FragColor = vec4(col * 0.9, 1.0);
 }`;
 const CAP_GEO = new THREE.PlaneGeometry(1, 1);
 const STENCIL_BACK = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, depthTest: false, side: THREE.BackSide, clippingPlanes: CLIP, stencilWrite: true, stencilFunc: THREE.AlwaysStencilFunc, stencilFail: THREE.IncrementWrapStencilOp, stencilZFail: THREE.IncrementWrapStencilOp, stencilZPass: THREE.IncrementWrapStencilOp });
@@ -598,7 +627,7 @@ function buildCutaway(renderer) {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMappingExposure = 0.95;
   const maxAniso = renderer.capabilities.getMaxAnisotropy();
 
   const scene = new THREE.Scene();
@@ -630,7 +659,7 @@ function buildCutaway(renderer) {
   const dev = new THREE.Group(); scene.add(dev);
   const add = (m, cast = true) => { m.castShadow = cast; m.receiveShadow = true; dev.add(m); return m; };
 
-  const shellU = capU({ col: COL.casing, kind: 0, level: 0, pat: 4, group: 0 });
+  const shellU = capU({ col: COL.casing, base: '#c4c8c5', kind: 0, level: 0, pat: 4, group: 0 });
   const plastic = cutMat({ color: 0xd6dad7, roughness: 0.44, clearcoat: 0.3, clearcoatRoughness: 0.45, bumpMap: grain, bumpScale: 0.35 }, shellU);
   const shell = add(new THREE.Mesh(new RoundedBoxGeometry(300, 220, 120, 8, 12), plastic));
   shell.position.copy(DC);
@@ -638,10 +667,10 @@ function buildCutaway(renderer) {
   inner.position.copy(DC);
   inner.userData.cap = shellU; inner.userData.inverted = true;
 
-  const casingU2 = capU({ col: COL.casing, kind: 0, level: 1, pat: 4, group: 0 });
+  const casingU2 = capU({ col: COL.casing, base: '#25292e', kind: 0, level: 1, pat: 4, group: 0 });
   const graphite = cutMat({ color: 0x23272c, roughness: 0.55, clearcoat: 0.12, clearcoatRoughness: 0.55 }, casingU2);
   const rubber = cutMat({ color: 0x3a3f45, roughness: 0.82 }, casingU2);
-  const alu = cutMat({ color: 0xb9bdc2, metalness: 1, roughness: 0.48 }, capU({ col: '#c8d0d8', kind: 4, level: 1, pat: 0.4, group: 0 }));
+  const alu = cutMat({ color: 0xb9bdc2, metalness: 1, roughness: 0.48 }, capU({ col: '#c8d0d8', base: '#a9aeb3', kind: 4, level: 1, pat: 0.4, group: 0 }));
   alu.envMapIntensity = 0.4;
 
   // seam between the front and back shell
@@ -705,7 +734,7 @@ function buildCutaway(renderer) {
     });
     const sprof = [[0, 0], [3.4, 0], [3.6, 0.5], [3.3, 1.5], [2.4, 2.1], [0, 2.25]].map(p => new THREE.Vector2(p[0], p[1]));
     const sg2 = new THREE.LatheGeometry(sprof, 40); sg2.rotateZ(-Math.PI / 2);
-    const steel = cutMat({ color: 0xb8bcc2, metalness: 1, roughness: 0.25 }, capU({ col: '#c8d0d8', kind: 4, level: 2, pat: 0.3, group: 0 }));
+    const steel = cutMat({ color: 0xb8bcc2, metalness: 1, roughness: 0.25 }, capU({ col: '#c8d0d8', base: '#a9aeb3', kind: 4, level: 2, pat: 0.3, group: 0 }));
     const sp = [[10, -46], [10, 46], [176, -46], [176, 46]];
     add(inst(sg2, steel, sp.flat(), 2, (l, o) => { _p.set(80, l[o], l[o + 1]); _q.identity(); _s.set(1, 1, 1); _m4.compose(_p, _q, _s); }));
     const rec = []; sp.forEach(([y, z]) => { rec.push(82.1, y, z, 0.5, 3.6, 0.7); rec.push(82.1, y, z, 0.5, 0.7, 3.6); });
@@ -723,12 +752,12 @@ function buildCutaway(renderer) {
   }
 
   /* interior: display module, board and parts */
-  const dispBack = add(new THREE.Mesh(new RoundedBoxGeometry(200, 150, 6, 2, 1), cutMat({ color: 0xaeb3b8, metalness: 0.9, roughness: 0.45 }, capU({ col: '#c8d0d8', kind: 4, level: 1, pat: 0.5, group: 1 }))));
+  const dispBack = add(new THREE.Mesh(new RoundedBoxGeometry(200, 150, 6, 2, 1), cutMat({ color: 0xaeb3b8, metalness: 0.9, roughness: 0.45 }, capU({ col: '#c8d0d8', base: '#9a9fa4', kind: 4, level: 1, pat: 0.5, group: 1 }))));
   dispBack.position.set(-110, 113, 52.5);
   const BW = 275, BD = 96, BX = -67.5;
   const pcbCan = canvas(2048, 716), pg = pcbCan.getContext('2d');
   const toPx = (x, z) => [(x - (BX - BW / 2)) / BW * 2048, (z + BD / 2) / BD * 716];
-  const pcbU = capU({ col: COL.board, kind: 1, level: 1, pat: 0.4, group: 1 }); pcbU.uLay.value.set(-1.6, 0, 0, 0);
+  const pcbU = capU({ col: COL.board, base: '#9a9068', kind: 1, level: 1, pat: 0.4, group: 1 }); pcbU.uLay.value.set(-1.6, 0, 0, 0);
   const pcbTex = new THREE.CanvasTexture(pcbCan); pcbTex.colorSpace = THREE.SRGBColorSpace; pcbTex.anisotropy = maxAniso;
   const pcbTop = cutMat({ map: pcbTex, roughness: 0.42, clearcoat: 0.7, clearcoatRoughness: 0.25 }, pcbU);
   const pcbSide = cutMat({ color: 0x1e5a3c, roughness: 0.6 }, pcbU);
@@ -737,7 +766,7 @@ function buildCutaway(renderer) {
   const standM = clipStd({ color: 0x9aa0a6, roughness: 0.6 });
   [[-198, -40], [-198, 40], [62, -40], [62, 40]].forEach(([x, z]) => { const s = add(new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.6, 17.4, 24), standM)); s.position.set(x, -10.3, z); });
 
-  const partU = capU({ col: '#c9d3dc', kind: 4, level: 2, pat: 0.08, group: 1 });
+  const partU = capU({ col: '#c9d3dc', base: '#80868c', kind: 4, level: 2, pat: 0.08, group: 1 });
   const ceramic = cutMat({ color: 0xb79a6e, roughness: 0.55 }, partU);
   const tin = cutMat({ color: 0xd4d6d2, metalness: 1, roughness: 0.28 }, partU);
   const resBody = cutMat({ color: 0x15171a, roughness: 0.5 }, partU);
@@ -769,7 +798,7 @@ function buildCutaway(renderer) {
   add(boxInst(ceramic, capsL)); add(boxInst(tin, capEnds)); add(boxInst(resBody, ress)); add(boxInst(tin, resEnds));
   // electrolytic capacitors, inductor, crystal, connector, battery
   {
-    const elU = capU({ col: '#c9d3dc', kind: 5, level: 2, pat: 0.35, group: 1 });
+    const elU = capU({ col: '#c9d3dc', base: '#8e9499', kind: 5, level: 2, pat: 0.35, group: 1 });
     const sleeve = cutMat({ color: 0x1f2c4a, roughness: 0.35, clearcoat: 0.6 }, elU);
     const top = cutMat({ color: 0xc7cbd0, metalness: 1, roughness: 0.35 }, elU);
     [[-60, 30], [-73, 30], [30, 34], [31, -31]].forEach(([x, z]) => {
@@ -791,10 +820,10 @@ function buildCutaway(renderer) {
   }
   // secondary chip
   const leadG = leadGeo();
-  const moldU = capU({ col: COL.chip, kind: 2, level: 2, pat: 0.06, group: 2 });
+  const moldU = capU({ col: COL.chip, base: '#161719', kind: 2, level: 2, pat: 0.035, group: 2 });
   const moldMat = cutMat({ color: 0x1a1b1e, roughness: 0.66, bumpMap: grain, bumpScale: 0.25 }, moldU);
-  const cuU = capU({ col: '#ffb46b', kind: 4, level: 3, pat: 0.03, group: 2 });
-  const leadMat = cutMat({ color: 0xd8d9d5, metalness: 1, roughness: 0.26 }, cuU);
+  const cuU = capU({ col: '#ffb46b', base: '#c4825a', kind: 4, level: 3, pat: 0.03, group: 2 });
+  const leadMat = cutMat({ color: 0xcfd0cc, metalness: 1, roughness: 0.4 }, cuU);
   {
     const so = add(new THREE.Mesh(new RoundedBoxGeometry(5, 1.5, 4, 2, 0.12), cutMat({ color: 0x1a1b1e, roughness: 0.66 }, partU))); so.position.set(-28, 0.85, -20);
     const L = []; for (let i = 0; i < 4; i++) for (const s of [-1, 1]) L.push(-28 - 1.905 + i * 1.27, -20 + s * 2, s);
@@ -803,21 +832,18 @@ function buildCutaway(renderer) {
   }
 
   /* the main chip: QFP package, lead frame, die and bond wires */
+  let patchG = null;
   const chip = new THREE.Group(); dev.add(chip);
   const upperG = new THREE.Group(); chip.add(upperG);
   {
-    const lower = new THREE.Mesh(new RoundedBoxGeometry(10, 0.73, 10, 2, 0.1), moldMat); lower.position.y = 0.465; lower.castShadow = lower.receiveShadow = true; chip.add(lower);
-    const upper = new THREE.Mesh(new RoundedBoxGeometry(10, 0.67, 10, 2, 0.1), moldMat); upper.position.y = 1.165; upper.castShadow = false; upper.receiveShadow = true; upperG.add(upper);
+    // the mould splits at the lead frame, so lifting the lid opens a cavity around the die
+    const lower = new THREE.Mesh(new RoundedBoxGeometry(10, 0.5, 10, 2, 0.1), moldMat); lower.position.y = 0.35; lower.castShadow = lower.receiveShadow = true; chip.add(lower);
+    const upper = new THREE.Mesh(new RoundedBoxGeometry(10, 0.9, 10, 2, 0.1), moldMat); upper.position.y = 1.05; upper.castShadow = false; upper.receiveShadow = true; upperG.add(upper);
     const dimple = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.02, 32), cutMat({ color: 0x0c0c0d, roughness: 0.25 }, moldU)); dimple.position.set(-3.8, 1.502, -3.8); upperG.add(dimple);
-    const mk = canvas(512, 512), mg = mk.getContext('2d');
-    mg.fillStyle = 'rgba(150,152,156,0.85)'; mg.font = '600 64px "Avenir Next", "Segoe UI", sans-serif'; mg.textAlign = 'center';
-    mg.fillText('26 47A', 256, 236); mg.font = '500 52px "Avenir Next", "Segoe UI", sans-serif'; mg.fillText('0731', 256, 320);
-    const mt = new THREE.CanvasTexture(mk); mt.colorSpace = THREE.SRGBColorSpace; mt.anisotropy = maxAniso;
-    const marking = new THREE.Mesh(new THREE.PlaneGeometry(7, 7), clipStd({ map: mt, transparent: true, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -2 }));
-    marking.rotation.x = -Math.PI / 2; marking.position.y = 1.501; upperG.add(marking);
 
     const paddle = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.2, 5.2), leadMat); paddle.position.y = 0.45; chip.add(paddle);
-    const attach = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.03, 4.2), cutMat({ color: 0xbfc3c8, metalness: 0.6, roughness: 0.5 }, cuU)); attach.position.y = 0.565; chip.add(attach);
+    const attachU = capU({ col: '#c9d3dc', base: '#8d9094', kind: 4, level: 3, pat: 0.02, group: 2 });
+    const attach = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.03, 4.2), cutMat({ color: 0xbfc3c8, metalness: 0.6, roughness: 0.5 }, attachU)); attach.position.y = 0.565; chip.add(attach);
     // external and internal leads
     const ext = [], intl = [];
     for (let side = 0; side < 4; side++) for (let j = 0; j < 16; j++) { ext.push(side, -3.75 + j * 0.5); }
@@ -827,13 +853,14 @@ function buildCutaway(renderer) {
     const ci = inst(new THREE.BoxGeometry(1, 1, 1), leadMat, ext, 2, (l, o) => { const a = rotY(l[o]); const t = l[o + 1]; const r = 4.42; _p.set(r * Math.cos(a) + t * Math.sin(a), 0.56, -r * Math.sin(a) + t * Math.cos(a)); _q.setFromEuler(_e.set(0, a, 0)); _s.set(1.16, 0.12, 0.22); _m4.compose(_p, _q, _s); });
     chip.add(ci);
     // die: silicon with a drawn layout on top
-    const dieU = capU({ col: COL.die, kind: 3, level: 3, pat: 0.05, group: 3 });
+    const dieU = capU({ col: COL.die, base: '#3a4048', kind: 3, level: 4, pat: 0.05, group: 3 });
+    dieU.uLay.value.set(0.83, 0.012, PATCH.z0, PATCH.z1);   // die top, stack depth, and the gate patch that brings its own stack
     const dieTex = new THREE.CanvasTexture(drawDie()); dieTex.colorSpace = THREE.SRGBColorSpace; dieTex.anisotropy = maxAniso;
     const dieTop = cutMat({ map: dieTex, metalness: 0.3, roughness: 0.32, iridescence: 0.8, iridescenceIOR: 1.7, iridescenceThicknessMinimum: 250, iridescenceThicknessMaximum: 650 }, dieU);
     const dieSide = cutMat({ color: 0x5d6670, metalness: 0.4, roughness: 0.4 }, dieU);
     const die = new THREE.Mesh(new THREE.BoxGeometry(4, 0.25, 4), [dieSide, dieSide, dieTop, dieSide, dieSide, dieSide]); die.position.y = 0.705; die.castShadow = die.receiveShadow = true; chip.add(die);
     // bond wires with ball and stitch bonds
-    const goldU = capU({ col: '#ffd27a', kind: 4, level: 4, pat: 0.01, group: 3 });
+    const goldU = capU({ col: '#ffd27a', base: '#d9a441', kind: 4, level: 5, pat: 0.01, group: 3 });
     const gold = cutMat({ color: 0xffc35a, metalness: 1, roughness: 0.18 }, goldU);
     const tubes = [], balls = [];
     const A = new THREE.Vector3(), B = new THREE.Vector3(), C1 = new THREE.Vector3(), C2 = new THREE.Vector3();
@@ -847,7 +874,7 @@ function buildCutaway(renderer) {
     }
     const wires = new THREE.Mesh(mergeGeos(tubes), gold); wires.castShadow = true; chip.add(wires);
     chip.add(inst(new THREE.SphereGeometry(1, 14, 10), gold, balls, 6, (l, o) => { _p.set(l[o], l[o + 1], l[o + 2]); _s.set(l[o + 3], l[o + 4], l[o + 5]); _q.identity(); _m4.compose(_p, _q, _s); }));
-    buildPatch(chip);
+    patchG = buildPatch(chip);
     pads.push(0, 0, 0, 0);
   }
   drawBoard();
@@ -957,57 +984,129 @@ function buildCutaway(renderer) {
     pcbTex.needsUpdate = true;
   }
 
+  // Gate level, as under a microscope: rows of standard cells between alternating power rails,
+  // polysilicon gates at a fixed pitch over diffusion, contacts, then six thin metal layers,
+  // each routed one way. The upper layers stop short of the cut in steps, so every layer shows.
   function buildPatch(parent) {
-    const Rr = rng(7), X0 = 0.55, X1 = 0.95, Z0 = -0.09, Z1 = 0.09, Y0 = 0.83;
-    const L = { diff: [], poly: [], cont: [], m1: [], v1: [], m2: [], v2: [], m3: [], v3: [], m4: [], m5: [] };
-    const P = (a, cx, cy, cz, sx, sy, sz) => a.push(cx, cy, cz, sx, sy, sz);
-    const rowH = 0.008, rows = Math.round((Z1 - Z0) / rowH);
+    const Rr = rng(7), um = 0.001;
+    const { x0: X0, x1: X1, z0: Z0, z1: Z1, y0: Y0 } = PATCH;
+    const XC = 0.8;                        // the cut during the die and gate chapters
+    const RH = 3.6 * um, PP = 0.6 * um;    // row height, gate pitch
+    // layer bottoms and thicknesses (in um above the silicon); wires are far wider than tall
+    const Y = { diff: [0, 0.03], poly: [0.03, 0.09], cont: [0.03, 0.3], m1: [0.33, 0.1], v1: [0.43, 0.17], m2: [0.6, 0.11], v2: [0.71, 0.2], m3: [0.91, 0.12], v3: [1.03, 0.24], m4: [1.27, 0.16], v4: [1.43, 0.34], m5: [1.77, 0.24], v5: [2.01, 0.45], m6: [2.46, 0.4] };
+    const yc = k => Y0 + (Y[k][0] + Y[k][1] / 2) * um, yh = k => Y[k][1] * um;
+    // terraces: how far short of the cut each upper layer ends
+    const LIM = { m1: X1, m2: XC - 0.007, m3: XC - 0.016, m4: XC - 0.027, m5: XC - 0.04, m6: XC - 0.055 };
+    const L = { diff: [], poly: [], cont: [], m1: [], v1: [], m2: [], v2: [], m3: [], v3: [], m4: [], v4: [], m5: [], v5: [], m6: [] };
+    const P = (k, cx, cz, sx, sz) => L[k].push(cx, yc(k), cz, sx, yh(k), sz);
+    const rows = Math.floor((X1 - X0) / RH);
     for (let r = 0; r < rows; r++) {
-      const z0 = Z0 + r * rowH;
-      let x = X0;
-      while (x < X1 - 0.004) {
-        const tracks = 2 + Math.floor(Rr() * 4), w = tracks * 0.002;
-        P(L.diff, x + w / 2, Y0 + 0.0002, z0 + 0.0022, w - 0.0007, 0.0004, 0.0019);
-        P(L.diff, x + w / 2, Y0 + 0.0002, z0 + 0.0058, w - 0.0007, 0.0004, 0.0021);
-        for (let t = 1; t < tracks; t++) {
-          const px = x + t * 0.002;
-          P(L.poly, px, Y0 + 0.0009, z0 + rowH / 2, 0.0005, 0.0008, rowH * 0.8);
-          if (Rr() < 0.7) P(L.cont, px - 0.001, Y0 + 0.0017, z0 + 0.0022, 0.0005, 0.0012, 0.0005);
-          if (Rr() < 0.7) P(L.cont, px - 0.001, Y0 + 0.0017, z0 + 0.0058, 0.0005, 0.0012, 0.0005);
+      const xa = X0 + r * RH;
+      const nB = [xa + 0.13 * RH, xa + 0.42 * RH], pB = [xa + 0.58 * RH, xa + 0.87 * RH];
+      let z = Z0 + Rr() * PP;
+      while (z < Z1 - PP) {
+        const n = Rr() < 0.12 ? 0 : 1 + Math.floor(Rr() * Rr() * 6);   // gates in this cell; 0 is a filler
+        const w = (n + 1) * PP;
+        if (n > 0) {
+          for (const b of [nB, pB]) P('diff', (b[0] + b[1]) / 2, z + w / 2, b[1] - b[0], w - 0.25 * um);
+          for (let t = 0; t < n; t++) {
+            const pz = z + (t + 1) * PP;
+            if (Rr() < 0.25) { P('poly', xa + 0.27 * RH, pz, 0.38 * RH, 0.18 * um); P('poly', xa + 0.73 * RH, pz, 0.38 * RH, 0.18 * um); }
+            else P('poly', xa + 0.5 * RH, pz, 0.8 * RH, 0.18 * um);
+            if (Rr() < 0.45) P('cont', xa + 0.5 * RH, pz, 0.14 * um, 0.14 * um);
+          }
+          for (let t = 0; t <= n; t++) {
+            const sz = z + (t + 0.5) * PP;
+            for (const b of [nB, pB]) if (Rr() < 0.7) P('cont', b[0] + (b[1] - b[0]) * (0.3 + 0.4 * Rr()), sz, 0.14 * um, 0.14 * um);
+          }
+          // local metal 1 inside the cell, along the row
+          const segs = 1 + Math.floor(Rr() * 3);
+          for (let s = 0; s < segs; s++) {
+            const tr = 2 + Math.floor(Rr() * 5), len = PP * (0.6 + Rr() * n), z0 = z + Rr() * (w - len);
+            if (z0 + len < Z1) P('m1', xa + tr * RH / 8, z0 + len / 2, 0.18 * um, len);
+          }
         }
-        const segs = 1 + Math.floor(Rr() * 2);
-        for (let s = 0; s < segs; s++) { const len = w * (0.4 + Rr() * 0.5); P(L.m1, x + w / 2, Y0 + 0.0028, z0 + 0.0032 + s * 0.0016, len, 0.001, 0.0006); }
-        x += w;
+        z += w;
       }
     }
-    for (let r = 0; r <= rows; r++) P(L.m1, (X0 + X1) / 2, Y0 + 0.0028, Z0 + r * rowH, X1 - X0, 0.001, 0.0012);
-    for (let x = X0 + 0.001; x < X1; x += 0.0016) {
-      let z = Z0; while (z < Z1) { const len = 0.006 + Rr() * 0.034, e = Math.min(z + len, Z1); if (Rr() < 0.6) { P(L.m2, x, Y0 + 0.0049, (z + e) / 2, 0.0007, 0.0012, e - z); P(L.v1, x, Y0 + 0.0038, z + 0.0005, 0.0006, 0.0011, 0.0006); P(L.v1, x, Y0 + 0.0038, e - 0.0005, 0.0006, 0.0011, 0.0006); } z = e + 0.002 + Rr() * 0.01; }
+    // power rails on metal 1 at every row boundary, wider than the signal wires
+    for (let r = 0; r <= rows; r++) P('m1', X0 + r * RH, (Z0 + Z1) / 2, 0.5 * um, Z1 - Z0);
+    // a routed layer: tracks at a pitch, wires of random length, a via at each end
+    function route(k, via, along, pitch, width, minL, maxL, fill) {
+      const lim = LIM[k];
+      const across0 = along === 'x' ? Z0 : X0, across1 = along === 'x' ? Z1 : Math.min(X1, lim);
+      const run0 = along === 'x' ? X0 : Z0, run1 = along === 'x' ? Math.min(X1, lim) : Z1;
+      for (let c = across0 + pitch / 2; c < across1; c += pitch) {
+        let a = run0 + Rr() * maxL * 0.5;
+        while (a < run1) {
+          const len = minL + Rr() * Rr() * (maxL - minL), e = Math.min(a + len, run1);
+          if (Rr() < fill && e - a > minL * 0.4) {
+            if (along === 'x') P(k, (a + e) / 2, c, e - a, width); else P(k, c, (a + e) / 2, width, e - a);
+            if (via) for (const v of [a + width, e - width]) if (Rr() < 0.85) { if (along === 'x') P(via, v, c, width * 0.8, width * 0.8); else P(via, c, v, width * 0.8, width * 0.8); }
+          }
+          a = e + minL * (0.3 + Rr());
+        }
+      }
     }
-    for (let z = Z0 + 0.001; z < Z1; z += 0.002) {
-      let x = X0; while (x < X1) { const len = 0.01 + Rr() * 0.05, e = Math.min(x + len, X1); if (Rr() < 0.65) { P(L.m3, (x + e) / 2, Y0 + 0.0074, z, e - x, 0.0014, 0.0009); P(L.v2, x + 0.0006, Y0 + 0.0061, z, 0.0007, 0.0012, 0.0007); P(L.v2, e - 0.0006, Y0 + 0.0061, z, 0.0007, 0.0012, 0.0007); } x = e + 0.003 + Rr() * 0.012; }
+    route('m2', 'v1', 'x', 0.5 * um, 0.2 * um, 3 * um, 30 * um, 0.55);
+    route('m3', 'v2', 'z', 0.6 * um, 0.22 * um, 4 * um, 40 * um, 0.55);
+    route('m4', 'v3', 'x', 1.0 * um, 0.42 * um, 8 * um, 70 * um, 0.6);
+    route('m5', 'v4', 'z', 2.0 * um, 0.9 * um, 15 * um, 120 * um, 0.65);
+    // top aluminium straps, few and wide
+    for (let z = Z0 + 3 * um; z < Z1; z += 12 * um) {
+      P('m6', (X0 + LIM.m6) / 2, z, LIM.m6 - X0, 4 * um);
+      for (let x = X0 + 4 * um; x < LIM.m6; x += 6 * um) if (Rr() < 0.5) P('v5', x, z, 0.7 * um, 0.7 * um);
     }
-    for (let x = X0 + 0.002; x < X1; x += 0.004) {
-      let z = Z0; while (z < Z1) { const len = 0.03 + Rr() * 0.12, e = Math.min(z + len, Z1); if (Rr() < 0.7) { P(L.m4, x, Y0 + 0.0104, (z + e) / 2, 0.0016, 0.002, e - z); P(L.v3, x, Y0 + 0.0088, z + 0.001, 0.0011, 0.0013, 0.0011); } z = e + 0.004 + Rr() * 0.01; }
+
+    // canvas-made normal and roughness maps: fine grain, polishing streaks along the wire
+    function grainMaps(size, seed, streak) {
+      const Rg = rng(seed), h = new Float32Array(size * size), t = new Float32Array(size * size);
+      for (let i = 0; i < h.length; i++) h[i] = Rg();
+      for (let pass = 0; pass < 2; pass++) for (let y = 0; y < size; y++) {   // smear along x
+        let acc = 0; for (let x = -streak; x < streak; x++) acc += h[y * size + ((x + size) % size)];
+        for (let x = 0; x < size; x++) { t[y * size + x] = acc / (2 * streak); acc += h[y * size + (x + streak) % size] - h[y * size + (x - streak + size) % size]; }
+        h.set(t);
+      }
+      const nc = canvas(size, size), rc = canvas(size, size), ni = nc.getContext('2d').createImageData(size, size), ri = rc.getContext('2d').createImageData(size, size);
+      let lo = 1, hi = 0; for (const v of h) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+      for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+        const at = (xx, yy) => (h[((yy + size) % size) * size + ((xx + size) % size)] - lo) / (hi - lo);
+        const dx = at(x + 1, y) - at(x - 1, y), dy = at(x, y + 1) - at(x, y - 1);
+        const nx = -dx * 2, ny = -dy * 2, l = Math.hypot(nx, ny, 1), i = (y * size + x) * 4;
+        ni.data[i] = (nx / l * 0.5 + 0.5) * 255; ni.data[i + 1] = (ny / l * 0.5 + 0.5) * 255; ni.data[i + 2] = (1 / l * 0.5 + 0.5) * 255; ni.data[i + 3] = 255;
+        ri.data[i] = ri.data[i + 1] = ri.data[i + 2] = 150 + at(x, y) * 90; ri.data[i + 3] = 255;
+      }
+      nc.getContext('2d').putImageData(ni, 0, 0); rc.getContext('2d').putImageData(ri, 0, 0);
+      const mk = c => { const tx = new THREE.CanvasTexture(c); tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.anisotropy = maxAniso; return tx; };
+      return { normalMap: mk(nc), roughnessMap: mk(rc) };
     }
-    for (let z = Z0 + 0.006; z < Z1; z += 0.012) P(L.m5, (X0 + X1) / 2, Y0 + 0.0146, z, X1 - X0, 0.003, 0.004);
-    const gU = o => capU(Object.assign({ level: 5, group: 4, kind: 4, pat: 0.0004 }, o));
-    const cuX = gU({ col: COL.gates }), cuZ = gU({ col: COL.gates });
-    cuX.uPDir.value.set(1, 0, 0); cuX.uPPitch.value = 0.002; cuZ.uPDir.value.set(0, 0, 1); cuZ.uPPitch.value = 0.0016;
-    const cuParams = { color: 0xb0643a, metalness: 1, roughness: 0.32 };
+    const wireMaps = grainMaps(128, 41, 10), floorMaps = grainMaps(256, 43, 2);
+    floorMaps.normalMap.repeat.set(30, 30); floorMaps.roughnessMap.repeat.set(30, 30);
+
+    const gU = o => capU(Object.assign({ level: 6, group: 4, kind: 4, pat: 0.0004 }, o));
+    const cuX = gU({ col: COL.gates, base: '#b8784e' }), cuZ = gU({ col: COL.gates, base: '#b8784e' });
+    cuX.uPDir.value.set(1, 0, 0); cuX.uPPitch.value = 0.0005; cuZ.uPDir.value.set(0, 0, 1); cuZ.uPPitch.value = 0.0006;
+    const cuParams = { color: 0xa8714f, metalness: 1, roughness: 0.5, ...wireMaps, normalScale: new THREE.Vector2(0.35, 0.35), iridescence: 0.18, iridescenceIOR: 1.5, iridescenceThicknessMinimum: 200, iridescenceThicknessMaximum: 420 };
     const mX = cutMat(cuParams, cuX), mZ = cutMat(cuParams, cuZ);
-    const viaU = gU({ col: '#d9dee5', level: 6 }), via = cutMat({ color: 0xa7adb5, metalness: 1, roughness: 0.35 }, viaU);
-    const polyM = cutMat({ color: 0x8a3c2a, metalness: 0.2, roughness: 0.45 }, gU({ col: '#ff7a5a' }));
-    const diffM = cutMat({ color: 0x5b7f6c, metalness: 0.1, roughness: 0.5 }, gU({ col: '#7fe0b0' }));
-    const add2 = (m) => { parent.add(m); return m; };
-    add2(boxInst(diffM, L.diff)); add2(boxInst(polyM, L.poly)); add2(boxInst(via, L.cont));
-    add2(boxInst(mX, L.m1)); add2(boxInst(via, L.v1)); add2(boxInst(mZ, L.m2)); add2(boxInst(via, L.v2));
-    add2(boxInst(mX, L.m3)); add2(boxInst(via, L.v3)); add2(boxInst(mZ, L.m4)); add2(boxInst(mX, L.m5));
-    const oxU = capU({ col: '#3b5fa8', kind: 0, level: 4, pat: 0.0012, group: 4 });
-    const ox = new THREE.Mesh(new THREE.BoxGeometry(X1 - X0, 0.0162, Z1 - Z0), cutMat({ color: 0x000000 }, oxU));
-    ox.material.colorWrite = false; ox.material.depthWrite = false; ox.castShadow = false;
-    ox.position.set((X0 + X1) / 2, Y0 + 0.0081, (Z0 + Z1) / 2); parent.add(ox);
+    const alU = gU({ col: COL.gates, base: '#a9aeb3' });
+    const alM = cutMat({ color: 0xbfc3c7, metalness: 1, roughness: 0.6, ...wireMaps, normalScale: new THREE.Vector2(0.5, 0.5) }, alU);
+    const viaU = gU({ col: '#d9dee5', base: '#8f949a', level: 7 });
+    const via = cutMat({ color: 0x9da2a8, metalness: 1, roughness: 0.4 }, viaU);
+    const polyM = cutMat({ color: 0x8c8a78, metalness: 0.25, roughness: 0.45, iridescence: 0.35, iridescenceIOR: 1.6, iridescenceThicknessMinimum: 250, iridescenceThicknessMaximum: 500 }, gU({ col: COL.gates, base: '#6e6b5c' }));
+    const diffM = clipStd({ color: 0x46505a, metalness: 0.45, roughness: 0.5, ...floorMaps, normalScale: new THREE.Vector2(0.4, 0.4) });
+    // the silicon floor under the cells: dark, with the faint colours of a thin oxide film
+    const floorM = clipStd({ color: 0x242a31, metalness: 0.3, roughness: 0.6, ...floorMaps, normalScale: new THREE.Vector2(0.5, 0.5), iridescence: 0.6, iridescenceIOR: 1.45, iridescenceThicknessMinimum: 300, iridescenceThicknessMaximum: 650 });
+    const G = new THREE.Group(); parent.add(G);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(X1 - X0, Z1 - Z0), floorM);
+    floor.rotation.x = -Math.PI / 2; floor.position.set((X0 + X1) / 2, Y0 + 0.000004, (Z0 + Z1) / 2); floor.receiveShadow = true; G.add(floor);
+    const put = (mat, list, cast) => { const m = boxInst(mat, list); m.castShadow = cast; G.add(m); return m; };
+    put(diffM, L.diff, false); put(polyM, L.poly, false); put(via, L.cont, false);
+    put(mZ, L.m1, true); put(via, L.v1, false); put(mX, L.m2, true); put(via, L.v2, false);
+    put(mZ, L.m3, true); put(via, L.v3, false); put(mX, L.m4, true); put(via, L.v4, false);
+    put(mZ, L.m5, true); put(via, L.v5, false); put(alM, L.m6, true);
     PULSE.push(cuX, cuZ);
+    G.userData.count = Object.values(L).reduce((a, l) => a + l.length / 6, 0);
+    return G;
   }
 
   /* the moving cutting sheet */
@@ -1037,7 +1136,24 @@ function buildCutaway(renderer) {
   const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: phone ? 2 : 4, stencilBuffer: true });
   const composer = new EffectComposer(renderer, rt);
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.34, 0.4, 1.7);
+  // a little depth of field at gate scale: the view is an oblique plane, so blur grows with distance from the focus row
+  const DOF = {
+    uniforms: { tDiffuse: { value: null }, uRes: { value: new THREE.Vector2(1, 1) }, uDir: { value: new THREE.Vector2(1, 0) }, uFocus: { value: 0.5 }, uAmt: { value: 0 } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 uRes; uniform vec2 uDir; uniform float uFocus; uniform float uAmt; varying vec2 vUv;
+      void main(){
+        float r = uAmt * smoothstep(0.05, 0.55, abs(vUv.y - uFocus));
+        vec2 o1 = uDir * r * 1.3846 / uRes, o2 = uDir * r * 3.2308 / uRes;
+        vec4 s = texture2D(tDiffuse, vUv) * 0.2270;
+        s += (texture2D(tDiffuse, vUv + o1) + texture2D(tDiffuse, vUv - o1)) * 0.3162;
+        s += (texture2D(tDiffuse, vUv + o2) + texture2D(tDiffuse, vUv - o2)) * 0.0703;
+        gl_FragColor = s;
+      }`,
+  };
+  const dofH = new ShaderPass(DOF), dofV = new ShaderPass(DOF);
+  dofV.uniforms.uDir.value.set(0, 1);
+  composer.addPass(dofH); composer.addPass(dofV);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.22, 0.4, 1.9);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
 
@@ -1047,10 +1163,10 @@ function buildCutaway(renderer) {
     { t: [-40, 82, 0], d: 650, az: 0.98, el: 0.36, X: 42 },
     { t: [-4, 2, 3], d: 118, az: 1.1, el: 0.6, X: 14 },
     { t: [0.3, 0.75, 0.3], d: 24, az: 0.98, el: 0.62, X: 0.8 },
-    { t: [0.55, 0.8, -0.1], d: 5.4, az: 1.28, el: 0.6, X: 0.8 },
-    { t: [0.775, 0.84, 0.0], d: 0.15, az: 1.38, el: 0.5, X: 0.8 },
-  ].map(k => ({ ...k, t: new THREE.Vector3(...k.t) }));
-  const ANCH = [null, [42, 196.4, 18], [14, -0.8, -24], [0.8, 1.25, 3.2], [0.8, 0.72, -1.2], [0.8, 0.8425, 0.012]].map(a => a && new THREE.Vector3(...a));
+    { t: [0.1, 0.8, 0.0], d: 15, az: 1.28, el: 0.85, X: 0.8, ox: 0.2 },
+    { t: [0.787, 0.831, 0.0], d: 0.06, az: 1.36, el: 0.52, X: 0.8 },
+  ].map(k => ({ ox: 0.15, ...k, t: new THREE.Vector3(...k.t) }));
+  const ANCH = [null, [42, 196.4, 18], [14, -0.8, -24], [0.8, 1.25, 3.2], [0.8, 0.72, -1.2], [0.7985, 0.8304, 0.003]].map(a => a && new THREE.Vector3(...a));
   const TAGS = [null, ['Casing', 'Shell and frame', COL.casing], ['Board', 'Sensors and power', COL.board], ['Chip', 'Moulded package, lead frame, wires', COL.chip], ['Die', 'Silicon, about 4 mm across', COL.die], ['Logic gates', 'inputs', COL.gates]];
 
   // DOM labels
@@ -1072,6 +1188,7 @@ function buildCutaway(renderer) {
     renderer.setSize(W, H, false);
     composer.setPixelRatio(renderer.getPixelRatio());
     composer.setSize(W, H);
+    for (const p of [dofH, dofV]) p.uniforms.uRes.value.set(W * renderer.getPixelRatio(), H * renderer.getPixelRatio());
     camera.aspect = W / H;
     tagEls.forEach(t => { if (t) { t.w = t.el.offsetWidth; t.h = t.el.offsetHeight; } });
     dirty = true;
@@ -1117,11 +1234,11 @@ function buildCutaway(renderer) {
     const X = lerp(A.X, B.X, w);
     let dm = d;
     const aspect = W / H;
-    if (aspect < 1) dm *= clamp(1.05 / aspect, 1, 2.1);
+    if (aspect < 1) { const sg = sstep(4.4, 5, k); dm *= clamp(1.05 / aspect, 1, 2.1) * (1 - 0.3 * sg); el += 0.32 * sg; }   // tall screens: look down onto the cells, not at the cut
     camPos.set(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az)).multiplyScalar(dm).add(tgt);
     camera.position.copy(camPos); camera.lookAt(tgt);
     camera.near = dm * 0.04; camera.far = dm * 4000;
-    if (aspect >= 1) camera.setViewOffset(W, H, -W * 0.15, 0, W, H); else camera.setViewOffset(W, H, 0, H * 0.13, W, H);
+    if (aspect >= 1) camera.setViewOffset(W, H, -W * lerp(A.ox, B.ox, f), 0, W, H); else camera.setViewOffset(W, H, 0, H * 0.13, W, H);
     camera.updateProjectionMatrix(); camera.updateMatrixWorld();
     // cut
     clipPlane.constant = X; CUT.uPlane.value.set(-1, 0, 0, X);
@@ -1129,6 +1246,10 @@ function buildCutaway(renderer) {
     for (let g = 0; g < 5; g++) { glows[g] = clamp(1 - Math.abs(k - (g + 1)) * 1.7, 0, 1); for (const u of GROUPS[g]) u.uGlow.value = glows[g]; }
     for (const u of PULSE) u.uPulse.value = sstep(4.3, 5, k);
     upperG.position.y = sstep(3.25, 3.95, k) * 9;
+    patchG.visible = k > 3.5;
+    const dof = sstep(4.4, 4.95, k) * 2.4;
+    dofH.enabled = dofV.enabled = dof > 0.01;
+    if (dof > 0.01) { tmp.copy(tgt).project(camera); for (const p of [dofH, dofV]) { p.uniforms.uAmt.value = dof; p.uniforms.uFocus.value = tmp.y * 0.5 + 0.5; } }
     // sheet
     sheet.position.set(X + d * 0.002, tgt.y, tgt.z); sheet.scale.setScalar(Math.min(d * 0.85, 300));
     for (const c of caps) { c.position.set(X, tgt.y, tgt.z); c.scale.setScalar(d * 8); }
@@ -1157,7 +1278,7 @@ function buildCutaway(renderer) {
       t.ring.setAttribute('cx', sx.toFixed(1)); t.ring.setAttribute('cy', sy.toFixed(1)); t.ring.setAttribute('r', (8 + 4 * Math.sin(time * 3)).toFixed(1));
       t.line.setAttribute('d', `M${sx.toFixed(1)} ${sy.toFixed(1)} L${(lx + 14).toFixed(1)} ${(ly + t.h).toFixed(1)}`);
     }
-    if (k > 4.6 && time - lastBits > 0.14) { lastBits = time; tagEls[5].small.textContent = bitLine(); }
+    if (k > 4.6 && time - lastBits > 0.14) { lastBits = time; tagEls[5].small.textContent = bitLine(); tagEls[5].w = tagEls[5].el.offsetWidth; }
     setRail(k);
   }
   let lastBits = -1, bitR = rng(99);
