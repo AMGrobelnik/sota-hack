@@ -18,6 +18,7 @@ Everything collected for the hackathon, one line per file.
 - `transcripts/2026-11-21-1452-reuse-code-github.md`: spoken team talk about reusing prior code, saying what is new today and starting a GitHub repo, 21 Nov 2026, 14:52.
 - `transcripts/2026-11-21-1445-medical-devices-chip-weights.md`: spoken team talk about medical devices, ultrasound machines and embedding weights into a chip, 21 Nov 2026, 14:45.
 - `transcripts/2026-11-21-1448-chip-design-space-environment.md`: spoken team talk about building the chip for other people, the design space and an environment with AI scientists, 21 Nov 2026, 14:48.
+- `transcripts/2026-11-21-1531-one-job-chip-and-eeg-use-case.md`: spoken team talk questioning a chip that only detects AF, saying AF is one possible use case, and proposing EEG as a better one, 21 Nov 2026, 15:31.
 
 ## adrian-notes/ (research notes, 20 to 21 Nov 2026)
 
