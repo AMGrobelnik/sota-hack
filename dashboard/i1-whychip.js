@@ -298,5 +298,5 @@
       return "";
     }
   }
-  window.ChipInWhyChip = { html: html, kindOf: kindOf, chansOf: chansOf, power: power, cost: cost, gatesOf: gatesOf, verOK: verOK }; // the parts are reused by ../i1-hoverstrip.js
+  window.ChipInWhyChip = { html: html };
 })();

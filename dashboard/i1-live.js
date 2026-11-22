@@ -504,7 +504,6 @@
     cv.addEventListener("pointermove", function (e) { var p = hit(e), id = p ? p.d.id : null; if (id !== V.hover) { V.hover = id; V.chartSig = ""; drawChart(); } showTip(p); cv.style.cursor = p ? "pointer" : "default"; });
     cv.addEventListener("pointerleave", function () { V.hover = null; tip.style.display = "none"; V.chartSig = ""; drawChart(); });
     cv.addEventListener("click", function (e) { var p = hit(e); if (p) select(p.d.id); });
-    cv.addEventListener("click", function (e) { try { showTip(hit(e)); } catch (x) { console.error(x); } }); // HOVER HOOK: a tap on a phone shows the same details
     cv.addEventListener("keydown", function (e) {
       var M = modelOf(V.id), list = M.designs.filter(sizeOf).sort(function (a, b) { return sizeOf(a).g - sizeOf(b).g; });
       if (!list.length) return;
@@ -520,7 +519,6 @@
       var M = modelOf(V.id), d = p.d, s = sizeOf(d);
       tip.innerHTML = "<b>" + esc(d.id) + (d.label ? ", " + esc(clip(d.label, 40)) : "") + "</b>" + (s.m ? fmt(s.g) + " gates, measured" : "about " + fmt(s.g) + " gates, estimated") + "<br>" +
         (M.T.length ? M.T.map(function (t) { return esc(metaOf(t.metric).n) + ": " + fmtV(t.metric, val(d, t.metric), M.spec); }).join("<br>") + "<br>" + (passAll(M.T, d) ? "Passes every target" : "Fails a target") : "");
-      try { if (window.ChipInHoverStrip) tip.innerHTML += window.ChipInHoverStrip.more(d, M.T, M.spec); } catch (x) { console.error(x); } // HOVER HOOK: basis, specificity, compiled and verified (../i1-hoverstrip.js)
       tip.style.display = "block";
       var Wd = cv.clientWidth, tw = tip.offsetWidth, th = tip.offsetHeight;
       tip.style.left = clamp(p.x + 12, 4, Wd - tw - 4) + "px"; tip.style.top = Math.max(4, p.y - th - 10) + "px";
