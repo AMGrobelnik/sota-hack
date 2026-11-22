@@ -48,8 +48,9 @@
   var fmt = function (n) { return Math.round(n).toLocaleString("en-GB"); };
   var clamp = function (x, a, b) { return Math.max(a, Math.min(b, x)); };
   var cap = function (s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; };
-  // a live run's size as the page names it: Pro · 15 agents (the agents the backend took)
-  var runSize = function (M) { return cap(M.r.preset) + (M.r.width ? " · " + M.r.width + " agents" : ""); };
+  // a live run's size as the page names it: Pro · 15 agents (subagents per run, set by the preset)
+  var SIZE_AGENTS = { lite: 5, pro: 15, max: 30 };
+  var runSize = function (M) { var n = SIZE_AGENTS[String(M.r.preset).toLowerCase()]; return cap(M.r.preset) + (n ? " · " + n + " agents" : ""); };
   var clip = function (s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
   var clock = function (s) { s = Math.max(0, Math.floor(s)); var h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = String(s % 60).padStart(2, "0"); return h ? h + ":" + String(m).padStart(2, "0") + ":" + x : m + ":" + x; };
   var tsMs = function (ts) { var t = Date.parse(ts || ""); return isNaN(t) ? null : t; };
@@ -344,8 +345,8 @@
     // a backend that lists run_agents takes a run's own agent and model; an older one only a model for its own agent
     if (!srv || srv === mod.agent || Array.isArray(D.run_agents)) { body.agent = mod.agent; body.model = mod.id; }
     if (s.preset) body.preset = String(s.preset).toLowerCase();
-    // the run size's agents per stage (Lite 5, Pro 15, Max 30); a server that allows fewer gets its most (post below)
-    if (body.preset) body.fanout = s.width > 0 ? { width: s.width } : true;
+    // the preset alone sets the run's subagents (lite 5, pro 15, max 30 in total); a width would override it
+    if (body.preset) body.fanout = true;
     var fu = window.ChipInQuestions && window.ChipInQuestions.payload(s); // QUESTIONS HOOK: the follow-up answers (../i1-questions.js)
     if (fu) body.follow_up = fu;
     var notes = [];
@@ -365,20 +366,10 @@
       lines: [{ p: "Sending your spec to the backend", w: "Brief, answers and model", t: "Spec sent" }, { p: "Waiting for the backend to accept the run", w: "It checks the spec and creates the run", t: "Run accepted" }, { p: "Opening the run view", w: "The search's own steps show there" }]
     }) : null;
     if (stg) stg.tick(1);
-    // an older server caps the agents per stage ("fanout.width must be a whole number from 1 to 20"):
-    // send its cap once instead of failing the start
-    var post = function (retry) {
-      return fetch(C.base + "/api/runs", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json", "X-ChipIn-Token": C.token || "" }, body: JSON.stringify(body) })
-        .then(function (res) { return res.json().catch(function () { return {}; }).then(function (j) {
-          var most = !res.ok && retry && res.status === 400 && body.fanout && body.fanout.width && /fanout\.width must be a whole number from 1 to (\d+)/.exec(j.error || "");
-          if (most && +most[1] < body.fanout.width) { body.fanout.width = +most[1]; notes.push("This server allows at most " + most[1] + " agents, so the run uses " + most[1] + "."); return post(false); }
-          if (!res.ok) { var er = new Error(j.error || "the backend answered HTTP " + res.status); er.status = res.status; throw er; }
-          return j;
-        }); });
-    };
-    post(true)
+    fetch(C.base + "/api/runs", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json", "X-ChipIn-Token": C.token || "" }, body: JSON.stringify(body) })
+      .then(function (res) { return res.json().catch(function () { return {}; }).then(function (j) { if (!res.ok) { var er = new Error(j.error || "the backend answered HTTP " + res.status); er.status = res.status; throw er; } return j; }); })
       .then(function (j) {
-        RUNS.unshift({ id: j.id, base: C.base, title: s.device ? clip(cap(s.device), 60) : clip(s.brief, 60), brief: s.brief, spec: spec, preset: body.preset || null, width: body.fanout && body.fanout.width || null, agent: srv === "stub" ? "stub" : mod.agent, model: srv === "stub" ? null : mod.id, notes: notes, created: new Date().toISOString(), status: "running" });
+        RUNS.unshift({ id: j.id, base: C.base, title: s.device ? clip(cap(s.device), 60) : clip(s.brief, 60), brief: s.brief, spec: spec, preset: body.preset || null, agent: srv === "stub" ? "stub" : mod.agent, model: srv === "stub" ? null : mod.id, notes: notes, created: new Date().toISOString(), status: "running" });
         saveRuns(); bump();
         if (stg) stg.tick(2);
         if (typeof done === "function") done();
