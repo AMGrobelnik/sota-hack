@@ -15,7 +15,7 @@
       map-to-process tiles per process; estimate-cost routes.
   - origin/main: backend/README.md
       Fan-out: spec and report are the orchestrator's own; five batch stages; batch size
-      Lite 5, Pro 15, Max 50 subagents per run (dashboard i1); effort low, high, xhigh. Levels of summaries (item, group, agent,
+      Lite 5, Pro 15, Max 50 subagents a run may start, effort low, high, xhigh, 10 min per subagent (PR 40, feat/subagent-time-limit: api.yaml 26-28, 48-51, 69-72). Levels of summaries (item, group, agent,
       batch, stage, run), fallback chain, cost per agent and per run, talking to the agent,
       Chippy, playback, training Python; compile-stream listed with compile.
   - origin/main: backend/src/chipin_backend/api/helper_facts.md
@@ -71,7 +71,7 @@
       chiplab <tool> --json; no outside settings loaded; ./subagent start, wait, merge, list;
       wait returns after at most 100 s; merge refused while a subagent of the stage runs;
       subagent folder workspace/agents/<id>/, subagent-result.md, no subagents of its own;
-      subagent wall clock 10, 20, 25 min (Lite, Pro, Max), then timed out; starts beyond the
+      subagent wall clock 10 min for every size (PR 40), then timed out; starts beyond the
       run's maximum refused; a subagent failure is not a run error and does not block the
       merge; subagents stopped first when a run ends or is stopped; every event to the log and
       events.jsonl, followed live by the dashboard.
@@ -208,7 +208,7 @@ window.COPY = {
     sizeLabel: 'Run size: a preset',
     presetHead: ['Preset', 'Effort', 'Subagents per run'],
     presets: [['Lite', 'low', '5'], ['Pro', 'high', '15'], ['Max', 'xhigh', '50']],
-    sizeNote: 'With fan-out on, the run starts this many subagents across its five batch stages. A larger run tries more and costs more.',
+    sizeNote: 'With fan-out on, the run starts up to this many subagents across its five batch stages. A larger run tries more and costs more.',
     link: 'Sets up the agents'
   },
 
@@ -217,7 +217,7 @@ window.COPY = {
     orchSub: 'Runs the seven stages in order. In five of them it starts a batch of subagents, waits for all, and merges the best on the lab’s numbers.',
     stageWord: 'Stage {i} of 7',
     fanWord: 'Subagents in parallel',
-    batchLine: 'One batch of subagents, one strategy each: 5 in Lite, 15 in Pro, 50 in Max per run.',
+    batchLine: 'One batch of subagents, one strategy each: up to 5 in Lite, 15 in Pro, 50 in Max per run.',
     soloLine: 'No subagents here. The orchestrator does this stage itself.',
     skillsWord: 'Skills',
     outWord: 'Returns',
@@ -290,7 +290,7 @@ window.COPY = {
              ['./subagent merge', 'Refused while a subagent of the stage still runs'],
              ['./subagent list', 'Lists the subagents']],
       orch: 'Orchestrator: one strategy per subagent',
-      boxes: ['Strategy 1', 'Strategy 2', 'Strategy 3', 'Strategy 4', '50 per run in Max'],
+      boxes: ['Strategy 1', 'Strategy 2', 'Strategy 3', 'Strategy 4', 'Max: up to 50 per run'],
       subWord: 'Subagent',
       merge: 'Merge: waits for all, keeps the best on the lab’s numbers',
       after: 'The merge is recorded; the next stage starts.',
@@ -298,7 +298,7 @@ window.COPY = {
     },
     limits: {
       title: 'Limits, and what happens at each',
-      rows: [['Each subagent', '10, 20 or 25 min', 'Lite, Pro, Max', 'It ends as timed out. Its failure is not a run error and does not block the merge.'],
+      rows: [['Each subagent', '10 min', 'Lite, Pro, Max', 'It ends as timed out. Its failure is not a run error and does not block the merge.'],
              ['Each wait', '100 s at most', '', 'The wait returns and says what is still running.'],
              ['Subagent starts', 'Capped per run', '', 'A start past the cap is refused, and the helper says why.'],
              ['Each run', '4 h', '', 'Past it, the run fails. Subagents still queued or running are stopped first.'],
@@ -316,31 +316,31 @@ window.COPY = {
     { name: 'Reference', lead: 'A full-precision model with no chip limits. It sets the accuracy to beat and never goes on a chip.',
       does: 'Trains full-precision models on the same data, when the server has a Python that can train.',
       fanLabel: 'one model family per subagent.',
-      fan: ['Model family A', 'Model family B', 'Model family C', '50 per run in Max'],
+      fan: ['Model family A', 'Model family B', 'Model family C', 'Max: up to 50 per run'],
       out: 'The reference scores per patient.',
       keeps: 'The best reference, as the score the small designs are compared with.' },
     { name: 'Propose', lead: 'Many small designs, each with a size estimate before any training. The lab’s gate estimator ranks them.',
       does: 'Proposes candidate designs and ranks them by estimated gates, labelled as estimates.',
       fanLabel: 'one design family per subagent.',
-      fan: ['Feature sets', 'Sensor budgets', 'Network shapes', '50 per run in Max'],
+      fan: ['Feature sets', 'Sensor budgets', 'Network shapes', 'Max: up to 50 per run'],
       out: 'A pool of candidate designs with estimated sizes.',
       keeps: 'The candidates worth training, smallest first.' },
     { name: 'Fine-tune', lead: 'The agent trains the models itself when the server has a Python that can train. Otherwise this stage is skipped.',
       does: 'Trains the candidates and scores their detections per event, on unseen patients, with the lab’s referee.',
       fanLabel: 'one training strategy per subagent.',
-      fan: ['Family A', 'Family B', 'Bit widths', '50 per run in Max'],
+      fan: ['Family A', 'Family B', 'Bit widths', 'Max: up to 50 per run'],
       out: 'Trained integer models, scored per patient and per event.',
       keeps: 'The smallest models that clear the bar on validation.' },
     { name: 'Compile', lead: 'A trained model becomes a fixed circuit. Several heads can share one chip, joined by a vote or by score fusion.',
       does: 'Turns each design into gates with the weights wired in, wraps it for streaming input, then gives gates, depth, area and tiles per process.',
       fanLabel: 'compile options per subagent.',
-      fan: ['Plain compile', 'Shift-add optimiser', 'Heads fused on one chip', '50 per run in Max'],
+      fan: ['Plain compile', 'Shift-add optimiser', 'Heads fused on one chip', 'Max: up to 50 per run'],
       out: 'A netlist per design, with gate count, logic depth and area.',
       keeps: 'The smallest netlist for each design.' },
     { name: 'Verify', lead: 'A design goes forward only if its gates match the model bit for bit, and the proof holds.',
       does: 'Checks the gates bit for bit, proves them equal, and tests the streaming chip, with its alarm smoothing or channel-serial input.',
       fanLabel: 'one set of checks per subagent.',
-      fan: ['Bit-exact and proof', 'Streaming wrapper', 'Events scored on the chip', '50 per run in Max'],
+      fan: ['Bit-exact and proof', 'Streaming wrapper', 'Events scored on the chip', 'Max: up to 50 per run'],
       out: 'Zero mismatches, or the design is dropped. A verification level, and the chip’s own detections scored.',
       keeps: 'Only designs with zero mismatches, ranked by size and score.' },
     { name: 'Report', lead: 'Only the chosen chip is laid out and costed. Power, area and cost are marked as estimates.',
