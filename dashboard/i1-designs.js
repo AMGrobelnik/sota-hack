@@ -432,10 +432,10 @@
       const c = d.cfg || {}, sz = A.size(d), isCh = d.id === A.chosenId, isBest = d.id === A.bestId;
       const it = { id: d.id, ins: c.L, layers: [c.H, 1], bits: c.bits, lev: c.weights === "binary" ? 2 : c.weights === "ternary" ? 3 : null, size: { g: sz.g, k: sz.m ? "m" : "e" }, facts: [] };
       it.label = `L${c.L}, ${c.bits}-bit, H${c.H}, ${c.weights}, ${FEAT[c.feature] || c.feature}`;
-      if (isCh && ph >= 3) { it.grp = "chosen"; it.c = "s-chosen"; it.chosen = true; it.pill = ph >= 5 ? "Chosen, built, checked" : ph >= 4 ? "Chosen, built" : "Chosen"; }
+      if (isCh && ph >= 3) { it.grp = "chosen"; it.c = "s-chosen"; it.chosen = true; it.pill = ph >= 5 ? "Chosen, compiled, checked" : ph >= 4 ? "Chosen, compiled" : "Chosen"; }
       else if (isBest && ph >= 2) { it.grp = "slow"; it.c = "s-drop"; it.why = "synthesis too slow"; }
       else if (ph >= 3 && !d.under) { it.grp = "cap"; it.c = "s-drop"; it.why = "over size cap"; }
-      else if (ph >= 3) { it.grp = "under"; it.c = "s-score"; it.why = "under cap, not built"; }
+      else if (ph >= 3) { it.grp = "under"; it.c = "s-score"; it.why = "under cap, not compiled"; }
       else { it.grp = "scored"; it.c = "s-score"; it.stText = "trained and scored"; }
       it.facts.push(["Shape", `${c.L} inputs, ${c.H} hidden, 1 output`]);
       it.facts.push(["Weights", c.weights === "ternary" ? "ternary (−1, 0, +1)" : c.weights === "binary" ? "binary (±1)" : esc(c.weights)]);
@@ -458,7 +458,7 @@
     return {
       // the chosen design once named, else the one the newest step is about, else the newest arrival
       items, S, defId: A.chosenId && items.some(x => x.id === A.chosenId && x.chosen) ? A.chosenId : ph >= 2 && A.bestId && items.some(x => x.id === A.bestId) ? A.bestId : ctx.designs.length ? ctx.designs[ctx.designs.length - 1].id : null,
-      groups: [{ k: "chosen", t: ph >= 4 ? "Chosen and built" : "Chosen", c: "s-chosen" }, { k: "under", t: "Under the size cap, not built", c: "s-score" }, { k: "scored", t: "Trained, validation scored", c: "s-score" }, { k: "slow", t: "Dropped: synthesis too slow", c: "s-drop" }, { k: "cap", t: "Dropped: over the size cap", c: "s-drop" }],
+      groups: [{ k: "chosen", t: ph >= 4 ? "Chosen and compiled" : "Chosen", c: "s-chosen" }, { k: "under", t: "Under the size cap, not compiled", c: "s-score" }, { k: "scored", t: "Trained, validation scored", c: "s-score" }, { k: "slow", t: "Dropped: synthesis too slow", c: "s-drop" }, { k: "cap", t: "Dropped: over the size cap", c: "s-drop" }],
       count: `${fmt(ctx.designs.length)} of ${pl(ctx.total, "candidate")}`, mark: '<span class="mk mea">measured</span>',
       legend: LEGEND(S, { est: true }), empty: "The candidates appear as the search is replayed."
     };

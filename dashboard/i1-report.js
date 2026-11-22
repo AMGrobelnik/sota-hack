@@ -109,7 +109,7 @@
     }
     // simulated or measured, and what is estimated
     var what;
-    if (run.case === "af") what = F ? "Measured: the built chip's gate count, test scores and bit-exact check. Candidate scores are measured on validation recordings; their sizes are " + est("estimated", "area") + "." : "Measured: one built circuit, its gate count, test scores and bit-exact check.";
+    if (run.case === "af") what = F ? "Measured: the compiled design's gate count, test scores and bit-exact check. Candidate scores are measured on validation recordings; their sizes are " + est("estimated", "area") + "." : "Measured: one compiled circuit, its gate count, test scores and bit-exact check.";
     else if (file) what = "Measured: every design's gate count and scores on held-out " + esc(c.whoP) + ".";
     else what = "Simulated: every design and every score.";
     out.what = what + " Cost and battery are " + est("estimated", "cost") + " from editable assumptions.";
@@ -164,7 +164,7 @@
   function verdictOf(run, v, P, d) {
     var af = run.case === "af", st = P.targetState(run, d), miss = st.filter(function (s) { return s.ok === false; });
     var pass = af ? st.length > 0 && st.every(function (s) { return s.ok === true; }) : !!v.ev.chosen;
-    var lab = af ? "Chip built and tested" : pass ? "Recommended chip" : "Best design, no size clears your targets";
+    var lab = af ? "Chip compiled and tested" : pass ? "Recommended chip" : "Best design, no size clears your targets";
     var pill = pass ? '<span class="pf ok">Passes all your targets</span>' : miss.length ? '<span class="pf no">Fails ' + esc(andList(miss.map(function (s) { return (P.MET[s.t.metric].short || P.MET[s.t.metric].name).toLowerCase() + " (" + P.fmtVal(s.t.metric, s.v) + ", target " + P.fmtTarget(s.t).replace(/^at (least|most) /, "") + ")"; }))) + "</span>" : '<span class="pf na">Not measured</span>';
     return { lab: lab, pill: pill, pass: pass };
   }
@@ -232,7 +232,7 @@
     css();
     var f = focusOf(run, v, P);
     if (!d || !f || d === f || d.id === f.id || !final(run, v, P)) return "";
-    return '<button type="button" class="qbtn rp-cmp" data-rp-cmp>Compare with ' + (run.case === "af" ? "the built design" : v.ev.chosen ? "chosen" : "best") + "</button>";
+    return '<button type="button" class="qbtn rp-cmp" data-rp-cmp>Compare with ' + (run.case === "af" ? "the compiled design" : v.ev.chosen ? "chosen" : "best") + "</button>";
   }
   function compare() {
     if (!get) return;
@@ -243,7 +243,7 @@
     var cols = [a, b];
     var size = function (d) { if (!af) return { g: d.gates, m: true }; /* the design's own gate count */ var s = P.afSize(v, d); return { g: s.g, m: s.m }; };
     var sz = cols.map(size);
-    var head = "<thead><tr><th></th>" + cols.map(function (d, i) { return "<th>" + esc(d.id) + (i === 1 ? ' <span class="pf ok">' + (af ? "Built" : v.ev.chosen ? "Chosen" : "Best") + "</span>" : "") + "</th>"; }).join("") + "</tr></thead>";
+    var head = "<thead><tr><th></th>" + cols.map(function (d, i) { return "<th>" + esc(d.id) + (i === 1 ? ' <span class="pf ok">' + (af ? "Compiled" : v.ev.chosen ? "Chosen" : "Best") + "</span>" : "") + "</th>"; }).join("") + "</tr></thead>";
     var rows = [];
     var add = function (k, f) { rows.push("<tr><td>" + k + "</td>" + cols.map(function (d, i) { return "<td>" + f(d, i) + "</td>"; }).join("") + "</tr>"); };
     add("Chip size", function (d, i) { return sz[i].m ? "<b>" + P.fmt(sz[i].g) + "</b> gates" : '<span class="est" title="' + esc(af ? P.sizeTip() : M().describeEstimate("area")) + '">about ' + P.about(sz[i].g) + "</span> gates"; });
@@ -268,9 +268,9 @@
       add("Unit cost " + MK("no", "estimated"), function (d, i) { return est(money(costOf(ctx, d, sz[i].g)), "cost"); });
       add("Battery " + MK("no", "estimated"), function (d, i) { return batteryWords(ctx.caseKind, d, sz[i].g).txt; });
     }
-    var note = af ? "Both columns are validation scores from the search, so they compare; the built chip's test scores are in the summary card." : "";
+    var note = af ? "Both columns are validation scores from the search, so they compare; the compiled design's test scores are in the summary card." : "";
     var mk = af ? MK("mea", "measured") : srcMk(b);
-    var bg = g.openModal("<h3>Compare two designs " + mk + "</h3><p style=\"margin:0\">The design you selected, beside the " + (af ? "one that was built" : v.ev.chosen ? "chosen chip" : "best design") + ".</p>" +
+    var bg = g.openModal("<h3>Compare two designs " + mk + "</h3><p style=\"margin:0\">The design you selected, beside the " + (af ? "one that was compiled" : v.ev.chosen ? "chosen chip" : "best design") + ".</p>" +
       '<table class="rp-c">' + head + "<tbody>" + rows.join("") + "</tbody></table>" + (note ? '<p class="rp-n">' + note + "</p>" : ""));
     bg.querySelector(".modal").classList.add("rp-m", "w");
   }

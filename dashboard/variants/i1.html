@@ -748,18 +748,18 @@ select.gfin{padding:0 10px}
 <script src="../i1-playback.js?v=fb3a"></script>
 <!-- CHIPPY HOOK: the helper panel (corner button, side panel, example prompts, page actions) lives in ../i1-chippy.js -->
 <script src="../i1-chippy.js?v=fb3a"></script>
-<script src="../i1-designs.js?v=dn1"></script><!-- DESIGNS HOOK: the designs a run tried, in the Chip view (window.ChipInDesigns) -->
+<script src="../i1-designs.js?v=dn1c"></script><!-- DESIGNS HOOK: the designs a run tried, in the Chip view (window.ChipInDesigns) -->
 <script src="../i1-questions.js?v=oi1"></script>
 <script src="../i1-search.js"></script><!-- SEARCH HOOK: the five search steps between Run and the run view, replayed on examples (window.ChipInSearch) --><!-- QUESTIONS HOOK: follow-up questions from a connected backend, one extra step before the spec card (window.ChipInQuestions) -->
-<script src="../i1-summary.js?v=fb2b"></script><!-- SUMMARY HOOK: the result page's summary card, trade-off sentence and the chart's default view (window.ChipInSummary) -->
-<script src="../i1-whysize.js?v=fb3w"></script><!-- WHY SIZE HOOK: the Why this size panel under the chart: cost along the curve, battery, what changes, to check (window.ChipInWhySize) -->
+<script src="../i1-summary.js?v=fb2bc"></script><!-- SUMMARY HOOK: the result page's summary card, trade-off sentence and the chart's default view (window.ChipInSummary) -->
+<script src="../i1-whysize.js?v=fb3wc"></script><!-- WHY SIZE HOOK: the Why this size panel under the chart: cost along the curve, battery, what changes, to check (window.ChipInWhySize) -->
 <script src="../i1-regulation.js?v=oran4"></script><!-- REGULATION HOOK: the Regulation panel beside Why this size (window.ChipInRegulation) -->
-<script src="../i1-report.js?v=fb2b"></script><!-- REPORT HOOK: Assumptions and limits link, one-page design report, compare two designs (window.ChipInReport) -->
-<script src="../i1-sizecost.js?v=fb3w"></script><!-- SIZE COST HOOK: unit cost against chip size, stepped, at the top of Why this size (window.ChipInSizeCost) -->
+<script src="../i1-report.js?v=fb2bc"></script><!-- REPORT HOOK: Assumptions and limits link, one-page design report, compare two designs (window.ChipInReport) -->
+<script src="../i1-sizecost.js?v=fb3wc"></script><!-- SIZE COST HOOK: unit cost against chip size, stepped, at the top of Why this size (window.ChipInSizeCost) -->
 <script src="../i1-colour.js"></script><!-- COLOUR HOOK: pass, fail, estimated and chosen colours in one place -->
 <script src="../i1-stage.js"></script><!-- STAGE HOOK: the loading stage every forward step of a new design passes through (window.ChipInStage) -->
 <script src="../i1-intake.js?v=oi1"></script><!-- INTAKE HOOK: the stage between steps and the scripted questions with no backend, #/new/ask (window.ChipInIntake) -->
-<script src="../i1-sources.js?v=1"></script><!-- SOURCES HOOK: the Sources tab as one list of evidence links (window.ChipInSources) -->
+<script src="../i1-sources.js?v=1c"></script><!-- SOURCES HOOK: the Sources tab as one list of evidence links (window.ChipInSources) -->
 <script type="module">
 "use strict";
 /* =====================================================================
@@ -2678,12 +2678,12 @@ function headAF(run, v) {
   let h1, k1 = `Device: ${notGiven(run.device)}. Signal: ${notGiven(run.signal)}. Detects: ${notGiven(run.detect)}.`;
   if (fin) {
     const st = targetState(run, AF_DESIGN), no = st.filter(x => x.ok === false).map(x => MET[x.t.metric].name.toLowerCase()), yes = st.filter(x => x.ok === true).map(x => MET[x.t.metric].name.toLowerCase());
-    h1 = !run.targets.length ? `The circuit that was built has ${g} gates. Set a target to judge it.` : no.length ? `The ${g}-gate circuit that was built misses your ${andList(no)} target${yes.length ? ` and clears ${andList(yes)}` : ""}.` : `The ${g}-gate circuit that was built clears every target you set.`;
+    h1 = !run.targets.length ? `The circuit that was compiled has ${g} gates. Set a target to judge it.` : no.length ? `The ${g}-gate circuit that was compiled misses your ${andList(no)} target${yes.length ? ` and clears ${andList(yes)}` : ""}.` : `The ${g}-gate circuit that was compiled clears every target you set.`;
     if (no.length) k1 = tp(`Full-precision model: ${fmtVal("sensitivity", AF_BASE.sensitivity_pooled)} / ${fmtVal("specificity", AF_BASE.specificity)}${baseClears(run) ? ", clears your bar" : ""}. The gap is the model, not the hardware.`, `It matched its own model on every test window, so the gap is in the model, not the hardware. The full-precision model reached ${baseWords()}${baseClears(run) ? ", which clears your bar: a better-trained model, not a bigger chip, is the next step" : ""}.`);
     else if (run.targets.length) k1 = `Judged on ${fmt(AF_DESIGN.counts.patients)} test recordings, ${afScopeWord(MEASURED.af.testScope)}.`;
   } else if (!v.vis.length) h1 = `Replaying the search. Its ${fmt(N)} real candidate designs arrive next.`;
   else if (v.vis.length < N) h1 = `${fmt(v.vis.length)} of ${fmt(N)} real candidate designs, scored on validation recordings.`;
-  else h1 = `${fmt(N)} real candidate designs. Replaying how one was chosen and built.`;
+  else h1 = `${fmt(N)} real candidate designs. Replaying how one was chosen and compiled.`;
   const chips = run.targets.map((t, i) => { const s = fin ? targetState(run, AF_DESIGN)[i] : null; return `<button class="tgt${t.metric === run.primary ? " pri" : ""}" data-t="${i}" aria-haspopup="dialog" aria-expanded="false" title="Change this target">${esc(MET[t.metric].name)} ${fmtTarget(t)} ${s ? pfHTML(s.ok) : ""}</button>`; }).join("");
   return `<div class="tx"><p class="k0"><span>${esc(CASES.af.title)}</span>${runMark(run)}</p>
     <h1>${h1}</h1><p class="k1">${k1}</p>
@@ -2698,7 +2698,7 @@ function tilesAF(run, v) {
     return `<div class="tile${show ? "" : " empty"}"><div class="tl">${esc(MET[t.metric].name)}, ${tw}, test</div><div class="tv">${show ? val : "–"}</div><div class="ts">Target ${fmtTarget(t)} ${show ? pfHTML(meets(t, m.v)) : ""}</div></div>`;
   });
   const b = v.ph >= 4, c = v.ph >= 5 && vf;
-  out.push(`<div class="tile${b ? "" : " empty"}"><div class="tl">Chip size, the circuit built</div><div class="tv">${b ? fmt(AF_DESIGN.gates) + "<small>gates</small>" : "–"}</div><div class="ts">${b ? `logic depth ${AF_DESIGN.depth}` : "after synthesis"}</div></div>`);
+  out.push(`<div class="tile${b ? "" : " empty"}"><div class="tl">Chip size, the circuit compiled</div><div class="tv">${b ? fmt(AF_DESIGN.gates) + "<small>gates</small>" : "–"}</div><div class="ts">${b ? `logic depth ${AF_DESIGN.depth}` : "after synthesis"}</div></div>`);
   out.push(`<div class="tile${c ? "" : " empty"}"><div class="tl">Circuit against its model</div><div class="tv">${c ? `${fmt(vf.identical ?? vf.vectors - vf.mismatches)}<small>of ${fmt(vf.vectors)}</small>` : "–"}</div><div class="ts">${c ? "test windows identical, bit for bit" : "after the check"}</div></div>`);
   return out.join("") + `<span class="mk mea" style="position:absolute;right:12px;top:-9px">measured</span>`;
 }
@@ -2717,7 +2717,7 @@ function inspAF(run, v) {
   if (d.metrics.f1_record != null) rows.push([`F1, per recording, ${esc(d.basis)}`, d.metrics.f1_record.toFixed(3)]);
   if (isCh && v.ph >= 5 && AF_DESIGN.verified) rows.push(["Circuit against its model", `${fmt(AF_DESIGN.verified.identical ?? AF_DESIGN.verified.vectors - AF_DESIGN.verified.mismatches)} of ${fmt(AF_DESIGN.verified.vectors)} test windows identical`]);
   if (isCh && afFinal(v)) for (const k of keys) { const t = run.targets.find(x => x.metric === k), x = metricOf(run, AF_DESIGN, k).v; rows.push([`${MET[k].name}, ${tw}, test`, `${fmtVal(k, x)}${t ? pfHTML(meets(t, x)) : ""}`]); }
-  const title = isCh && v.ph >= 4 ? "The design that was built" : isCh && v.ph >= 3 ? "Best under the size cap" : d.best && v.ph >= 2 ? "Best overall, too large" : "Candidate";
+  const title = isCh && v.ph >= 4 ? "The design that was compiled" : isCh && v.ph >= 3 ? "Best under the size cap" : d.best && v.ph >= 2 ? "Best overall, too large" : "Candidate";
   return `<h2>${title} <span class="mk mea">measured</span></h2><p class="is">${esc(cfgWords(d))} <code class="cid" title="Technical id">${esc(d.id)}</code></p>${rows.map(([a, b]) => `<div class="irow"><span>${a}</span><b>${b}</b></div>`).join("")}
     <div class="ilinks"><a class="qbtn" href="#/run/${run.id}/chip">${I("chip", "s13")}The chip</a>${window.ChipInReport?.cmpBtn(run, v, d, rpP()) || "" /* REPORT HOOK: compare */}</div>`;
 }
@@ -2759,7 +2759,7 @@ function nopassAF(run, v) {
   const others = v.all.filter(d => d.under && d !== F.chosenD && passesAll(run, d)).sort((a, b) => afSize(v, a).g - afSize(v, b).g);
   if (!others.length) return "";
   const s = others[0], n = others.length;
-  return `<p class="anote">${tp(`${n === 1 ? "1 other" : `${fmt(n)} others`} under the cap ${n === 1 ? "passes" : "pass"} on validation, not built or tested.`, `${n === 1 ? "One other candidate" : `${fmt(n)} other candidates`} under the size cap ${n === 1 ? "passes" : "pass"} your targets on validation; none of them was built or tested.`)} Smallest: <button class="lnk3" data-sel="${esc(s.id)}">${esc(s.id)}</button>, ${estSpan(`about ${fmt(afSize(v, s).g)} gates`, sizeTip())}.</p>`;
+  return `<p class="anote">${tp(`${n === 1 ? "1 other" : `${fmt(n)} others`} under the cap ${n === 1 ? "passes" : "pass"} on validation, not compiled or tested.`, `${n === 1 ? "One other candidate" : `${fmt(n)} other candidates`} under the size cap ${n === 1 ? "passes" : "pass"} your targets on validation; none of them was compiled or tested.`)} Smallest: <button class="lnk3" data-sel="${esc(s.id)}">${esc(s.id)}</button>, ${estSpan(`about ${fmt(afSize(v, s).g)} gates`, sizeTip())}.</p>`;
 }
 function tipAF(run, v, d) {
   const sz = afSize(v, d);
@@ -2865,13 +2865,13 @@ function drawChartAF(run, v) {
   const along = (yy, right) => tw => right ? [[x1 - 4 - tw, yy - 7], [x0 + 8, yy - 7], [x1 - 4 - tw, yy + 16], [x0 + 8, yy + 16], [(x0 + x1 - tw) / 2, yy - 7], [(x0 + x1 - tw) / 2, yy + 16]] : [[x0 + 8, yy - 7], [x1 - 4 - tw, yy - 7], [x0 + 8, yy + 16], [x1 - 4 - tw, yy + 16], [(x0 + x1 - tw) / 2, yy - 7], [(x0 + x1 - tw) / 2, yy + 16]];
   if (capBox) placed.push(capBox);
   [bp, cp].filter(Boolean).forEach(p => placed.push({ l: p.x - 10, r: p.x + 10, t: p.y - 10, b: p.y + 10 })); // keep labels off the ringed marks
-  if (cp) place(ph >= 5 ? (narrow ? `Built: ${fmt(AF_DESIGN.gates)} gates, checked` : `Built: ${fmt(AF_DESIGN.gates)} gates, measured and checked`) : ph >= 4 ? `Built: ${fmt(AF_DESIGN.gates)} gates, measured` : "Best under the size cap", font(700, 12), "#141a2e", near(cp), cp);
+  if (cp) place(ph >= 5 ? (narrow ? `Compiled: ${fmt(AF_DESIGN.gates)} gates, checked` : `Compiled: ${fmt(AF_DESIGN.gates)} gates, measured and checked`) : ph >= 4 ? `Compiled: ${fmt(AF_DESIGN.gates)} gates, measured` : "Best under the size cap", font(700, 12), "#141a2e", near(cp), cp);
   if (bp) place(narrow ? "Best overall: too large" : "Best overall: too large, synthesis did not finish", font(700, 12), "#9f2a20", near(bp), bp);
   if (tgt) place(`Your bar: ${fmtTarget(tgt)}`, font(700, 12), "#141a2e", along(Y(tgt.value), true));
   const sd = run.ui.sel && v.vis.find(d => d.id === run.ui.sel); if (sd && sd !== C) { const p = pos(sd); if (p) ringAt(p, 7, "#2b55d0", 2.2); }
   const hd = CH.hover && v.vis.find(d => d.id === CH.hover); if (hd) { const p = pos(hd); if (p) ringAt(p, 6, "#141a2e", 1.2); }
   if (!v.vis.length) { g.fillStyle = "#4a5062"; g.font = font(500, 13); g.textAlign = "center"; g.fillText("The search's candidates appear here as the replay plays.", (x0 + x1) / 2, (y0 + y1) / 2); }
-  cv.setAttribute("aria-label", `Chart: ${v.vis.length} of ${v.all.length} real candidate designs, estimated chip size against ${M.name.toLowerCase()} on validation. ${ph >= 4 ? `The built design: ${fmt(AF_DESIGN.gates)} gates, measured.` : ""} Use the arrow keys to select designs.`);
+  cv.setAttribute("aria-label", `Chart: ${v.vis.length} of ${v.all.length} real candidate designs, estimated chip size against ${M.name.toLowerCase()} on validation. ${ph >= 4 ? `The compiled design: ${fmt(AF_DESIGN.gates)} gates, measured.` : ""} Use the arrow keys to select designs.`);
 }
 
 /* ---------------- 10. TABS ---------------- */
@@ -2908,7 +2908,7 @@ function chipCard(run, v, d) {
   const isCh = v.ev.chosen && v.ev.chosen.id === d.id;
   if (afFile(run)) {
     const built = d === MEASURED.af.chosenD && v.ph >= 4, sz = afSize(v, d), vf = AF_DESIGN.verified;
-    return `<div class="k">${built ? "The circuit that was built" : "A candidate, not built"}</div><div class="big">${sz.m ? `${fmt(sz.g)} gates` : estSpan(`about ${fmt(sz.g)} gates`, sizeTip())}</div><span>${built ? `Logic depth ${AF_DESIGN.depth}.${v.ph >= 5 && vf ? ` ${fmt(vf.identical ?? vf.vectors - vf.mismatches)} of ${fmt(vf.vectors)} test windows identical to its model.` : ""}` : esc(cfgText(d)) + "."}</span>`;
+    return `<div class="k">${built ? "The circuit that was compiled" : "A candidate, not compiled"}</div><div class="big">${sz.m ? `${fmt(sz.g)} gates` : estSpan(`about ${fmt(sz.g)} gates`, sizeTip())}</div><span>${built ? `Logic depth ${AF_DESIGN.depth}.${v.ph >= 5 && vf ? ` ${fmt(vf.identical ?? vf.vectors - vf.mismatches)} of ${fmt(vf.vectors)} test windows identical to its model.` : ""}` : esc(cfgText(d)) + "."}</span>`;
   }
   return `<div class="k">${isCh ? "The chosen chip" : run.case === "af" ? "The measured circuit" : "Selected design"}</div><div class="big">${fmt(d.gates)} gates</div><span>Logic depth ${d.depth}. ${d.verified ? `${fmt(d.verified.vectors)} ${run.case === "af" ? "test windows" : "test vectors"}, ${d.verified.mismatches} mismatches against its model.` : ""}</span>`;
 }

@@ -125,7 +125,7 @@
     var st = P.targetState(run, d), miss = st.filter(function (s) { return s.ok === false; }), pass = af ? st.every(function (s) { return s.ok === true; }) : !!v.ev.chosen; // AF: the built circuit's own test figures, never the replay's choice
     var cells = [];
     // 1. the chip
-    var lab = af ? "Chip built and tested" : pass ? "Recommended chip" : "Best design";
+    var lab = af ? "Chip compiled and tested" : pass ? "Recommended chip" : "Best design";
     cells.push(cell(lab, P.fmt(d.gates) + " <small>gates</small>", "chip"));
     // 2. pass or fail, naming the miss
     var verdict;
@@ -153,9 +153,9 @@
   }
   // the first clause of the reason: what kind of choice this design is
   function reasonLead(run, v, P, d, pass) {
-    if (run.case === "af") return "the one circuit built and checked bit for bit.";
+    if (run.case === "af") return "the one circuit compiled and checked bit for bit.";
     if (pass) return "the smallest design that clears all your targets.";
-    return "no size clears your bar on this data, so this is the best that could be built.";
+    return "no size clears your bar on this data, so this is the best that could be compiled.";
   }
   function cell(label, val, cls) { return '<div class="sm-c' + (cls ? " " + cls : "") + '"><span class="sm-l">' + label + '</span><span class="sm-v">' + val + "</span></div>"; }
   function shortName(P, k) { return (P.MET[k].short || P.MET[k].name).toLowerCase(); }
@@ -201,7 +201,7 @@
       var w = P.afScopeWord(F.scope);
       var lower = B.metrics.sensitivity_pooled < C.metrics.sensitivity_pooled;
       var big = '<span class="est" title="' + e(P.sizeTip()) + '">about ' + P.about(B.est) + " gates</span>";
-      return "Going bigger is " + (lower ? "not the fix" : "untested") + ": the best candidate by validation F1, " + big + ", was too large to build" +
+      return "Going bigger is " + (lower ? "not the fix" : "untested") + ": the best candidate by validation F1, " + big + ", was too large to compile" +
         (lower ? " and caught fewer AF windows (" + P.fmtVal("sensitivity", B.metrics.sensitivity_pooled) + " against " + P.fmtVal("sensitivity", C.metrics.sensitivity_pooled) + ", validation, " + e(w) + ")." : ".");
     }
     var costWords = function (a, b) {

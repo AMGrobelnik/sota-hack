@@ -111,7 +111,7 @@
     });
     // the first noted design (the best on validation, sized by estimate) gets a short label above the line
     var nb = pts.slice(1).find(function (p) { return p.note && p.estSize && p.d && p.d.gm === null; });
-    if (nb) s += '<text x="' + x(nb.gates).toFixed(1) + '" y="' + (y(nb.model.unit_cost) - 10).toFixed(1) + '" text-anchor="middle" class="nl">' + esc("about " + P.about(nb.gates) + ", not built") + "</text>";
+    if (nb) s += '<text x="' + x(nb.gates).toFixed(1) + '" y="' + (y(nb.model.unit_cost) - 10).toFixed(1) + '" text-anchor="middle" class="nl">' + esc("about " + P.about(nb.gates) + ", not compiled") + "</text>";
     var p0 = pts[0], cx = x(p0.gates), cy = y(p0.model.unit_cost);
     s += '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="5" class="me"><title>' + esc(P.fmt(p0.gates) + " gates, " + who + ": " + money(p0.model.unit_cost) + " per unit (estimated)") + "</title></circle>";
     s += '<text x="' + cx.toFixed(1) + '" y="' + (cy + 18).toFixed(1) + '" text-anchor="middle" class="ml">' + esc(P.fmt(p0.gates) + " " + who) + "</text>";
@@ -136,7 +136,7 @@
 
     // a column's classes: the chosen one, the sizes past the run, and the middle run sizes a phone leaves out
     var cc = function (i) { return (i === 0 ? " me" : "") + (all[i].far ? " far" : "") + (i > 0 && i < pts.length - 1 ? " mid" : ""); };
-    var np = n - Math.max(0, pts.length - 2), who = af ? "built" : v.ev.chosen ? "chosen" : "best";
+    var np = n - Math.max(0, pts.length - 2), who = af ? "compiled" : v.ev.chosen ? "chosen" : "best";
     var g = '<div class="scx-rl">Chip size</div>';
     all.forEach(function (p, i) {
       var sz = p.estSize ? "about " + P.about(p.gates) : P.fmt(p.gates);

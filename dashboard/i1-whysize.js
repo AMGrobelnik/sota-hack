@@ -94,7 +94,7 @@
   function biggerOf(run, v, P, d) {
     if (run.case === "af") {
       var F = P.MEASURED.af, out = [];
-      if (F && F.bestD && F.bestD.gates > d.gates) out.push({ d: F.bestD, note: "best on validation, too large to build", estSize: true });
+      if (F && F.bestD && F.bestD.gates > d.gates) out.push({ d: F.bestD, note: "best on validation, too large to compile", estSize: true });
       var big = (v.vis || []).filter(function (x) { return x.gates > d.gates; }).reduce(function (a, x) { return !a || x.gates > a.gates ? x : a; }, null);
       if (big && (!out.length || big.gates > out[0].d.gates * 1.05)) out.push({ d: big, note: "largest candidate", estSize: true });
       return out;
@@ -120,7 +120,7 @@
     var fld = showM ? P.metricOf(rr, d, key).f : null;
     var mName = showM ? (P.MET[key].short || P.MET[key].name) + (fld && /_worst$/.test(fld) ? ", worst " + P.caseOf(run).who : fld ? ", " + P.caseOf(run).whoP + " pooled" : "") : "";
     var head = "<tr><th>Gates</th>" + (showM ? '<th class="m">' + esc(mName) + " " + srcMark(d) + "</th>" : "") + "<th>Unit cost</th><th>Change</th></tr>";
-    var body = '<tr class="me"><td>' + P.fmt(d.gates) + " <small>" + (af ? "built" : v.ev.chosen ? "chosen" : "best") + "</small></td>" + (showM ? "<td>" + mv(d) + "</td>" : "") + "<td>" + est(money(me.model.unit_cost), "cost") + "</td><td></td></tr>";
+    var body = '<tr class="me"><td>' + P.fmt(d.gates) + " <small>" + (af ? "compiled" : v.ev.chosen ? "chosen" : "best") + "</small></td>" + (showM ? "<td>" + mv(d) + "</td>" : "") + "<td>" + est(money(me.model.unit_cost), "cost") + "</td><td></td></tr>";
     var maxD = 0, allPad = me.model.pad_limited;
     rows.forEach(function (r) {
       var c = costOf(ctx, r.d), dc = c.model.unit_cost - me.model.unit_cost;
@@ -167,13 +167,13 @@
     var cost = r ? (Math.abs(r.unit_cost_delta) < 0.005 ? "costs the same" : "costs about " + money(r.unit_cost_delta) + (r.unit_cost_delta > 0 ? " more" : " less")) : "";
     var bat = r ? (r.battery_class[0] !== r.battery_class[1] ? "moves the battery to " + SHORT[r.battery_class[1]] : Math.abs(r.life_days[1] / r.life_days[0] - 1) < 0.01 ? "barely changes the battery" : "changes battery life from " + life(r.life_days[0]) + " to " + life(r.life_days[1])) : "";
     var bigger = r ? "a bigger chip " + est(cost, "cost") + " and " + est(bat, "battery_life") + "." : "";
-    if (run.case === "af") return "The one chip built and tested" + (bigger ? "; " + bigger : ".");
+    if (run.case === "af") return "The one chip compiled and tested" + (bigger ? "; " + bigger : ".");
     if (!v.ev.chosen) return "No size clears your targets on this data, so this is the best design, " + P.fmt(d.gates) + " gates" + (bigger ? "; " + bigger : ".");
     return "The smallest chip that clears all your targets" + (bigger ? "; " + bigger : ".");
   }
   /* ------------------------------------------------- why not the bigger design, and the rule */
   // the run's file flags its best-on-validation design; it is named here only when the data shows it is larger,
-  // sized by estimate, never synthesised, while the chosen chip was built and checked bit for bit
+  // sized by estimate, never synthesised, while the chosen chip was compiled and checked bit for bit
   function whyNot(run, P, d) {
     var F = run.case === "af" && P.MEASURED && P.MEASURED.af, B = F && F.bestD, ver = F && F.chosen && F.chosen.verified;
     if (!B || B === F.chosenD || !(B.gates > d.gates) || B.gm != null) return "";
@@ -182,7 +182,7 @@
     (F.path || []).forEach(function (p) { var m = /(\d+)-minute limit/.exec(p.text || ""); if (m && !lim) lim = m[1]; });
     var synth = B.synth === "not finished" ? "synthesis did not finish" + (lim ? " in the " + lim + "-minute limit" : "") + ", so it was never compiled or checked." : "it was never compiled or checked.";
     var big = '<span class="est" title="' + esc(P.sizeTip ? P.sizeTip() : M().describeEstimate("area")) + '">' + P.about(B.gates) + "</span>";
-    return "<p><b>Why not the " + big + "-gate design?</b> " + P.fmt(d.gates) + " is the best design that was actually built and verified. " +
+    return "<p><b>Why not the " + big + "-gate design?</b> " + P.fmt(d.gates) + " is the best design that was actually compiled and verified. " +
       "The " + big + "-gate design is the best on validation, but its size is an estimate: " + synth + "</p>";
   }
   function better(P, key, a, b) { return P.MET[key] && P.MET[key].up === false ? a < b - 1e-9 : a > b + 1e-9; }

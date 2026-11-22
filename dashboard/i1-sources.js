@@ -107,7 +107,7 @@
       base.links.forEach(function (l) { var k = doiOf(l.url); if (k && REF[k] && once(k)) G.papers.push(paperItem(k, "The published AF chip this run's design is compared against for accuracy and size.")); });
     }
     if (F && (F.notes || []).some(function (n) { return /\bYosys\b/.test(n); }))
-      G.tools.push(plainItem("Yosys Open SYnthesis Suite", "https://yosyshq.net/yosys/", "Synthesised the AF circuit that was built; its cell count and longest path are the measured gate count and logic depth."));
+      G.tools.push(plainItem("Yosys Open SYnthesis Suite", "https://yosyshq.net/yosys/", "Synthesised the AF circuit that was compiled; its cell count and longest path are the measured gate count and logic depth."));
     // battery figures: the parts and cells behind the Overview's battery panel, and its sourced notes
     var M = window.ChipInModels, ctx = o.ctx;
     if (M && ctx && ctx.caseKind) {
