@@ -302,7 +302,7 @@ def _spec_from_record(manager: RunManager, item: ApiRun) -> AgentSpec:
         model=item.record.get("model"),
         provider=item.record.get("provider"),
         effort=manager.api.presets.get(preset) if preset else None,
-        system_prompt=manager.instructions if agent == "claude" else None,
+        system_prompt=manager.instructions,
         timeout_s=manager.api.run_timeout_s,
         env={STEP_ENV: str(manager.api.stub_step_s)} if agent == "stub" else {},
     )
