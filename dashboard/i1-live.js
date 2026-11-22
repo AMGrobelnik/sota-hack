@@ -1185,7 +1185,7 @@
       var on = (cur && cur.id === r.id) || (recId && decodeURIComponent(recId) === r.id);
       return '<a class="rrow lv-rrow' + (on ? " on" : "") + '" href="' + (ended(r.status) ? recHref(r.id, cur && cur.view) : "#/live/" + encodeURIComponent(r.id) + "/" + (cur ? cur.view : "overview")) + '" title="' + esc(r.title + " (run " + r.id + ", " + r.status + ")") + '"><span class="g">' + g + '</span><span class="t">' + esc(r.title || r.id) + "</span></a>";
     }).join("");
-    return '<a class="lv-conn hc" href="#/configure" data-s="' + s + '"' + (kt ? ' data-k="' + C.kind + '"' : "") + ' title="' + esc(kt ? kt + (host ? " (" + host + ")" : "") : C.msg || (C.base ? C.base : "Set up a backend under Configure")) + '"><i></i><span>' + esc(txt) + "</span></a>" + rows;
+    return '<a class="lv-conn hc" href="#/configure" data-s="' + s + '"' + (kt ? ' data-k="' + C.kind + '"' : "") + ' title="' + esc(kt ? kt + (host ? " (" + host + ")" : "") : C.msg || (host ? host : "Set up a backend under Configure")) + '"><i></i><span>' + esc(txt) + "</span></a>" + rows;
   }
   function sig() { var cur = parse(); return C.state + C.kind + "|" + (cur ? cur.id + cur.view : "") + "|" + shownRuns().map(function (r) { return r.id + r.status + r.title; }).join(","); }
 
