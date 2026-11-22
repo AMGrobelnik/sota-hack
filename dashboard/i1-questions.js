@@ -69,6 +69,12 @@
   }
   function bodyHTML(s) {
     if (ready(s)) return s.fq.questions.map(function (q) { return qHTML(s, q); }).join("");
+    // STAGE HOOK: the wait as the shared loading stage's list; the request is real, so it ticks when the answer comes
+    if (window.ChipInStage) return '<section class="gfq">' + window.ChipInStage.inline([
+      { t: "Brief and answers sent to the backend" },
+      { p: "Writing questions for this brief", w: "The model reads what the five steps leave open" },
+      { p: "Checking them against your answers" }
+    ], 1) + '<button type="button" class="btn s fq-skip" data-fq="skip" style="margin-top:14px">Skip</button></section>';
     return '<section class="gfq"><p class="gw fq-wait" role="status"><span class="fq-dot" aria-hidden="true"></span>Writing a few questions for this brief.</p><button type="button" class="btn s fq-skip" data-fq="skip">Skip</button></section>';
   }
 

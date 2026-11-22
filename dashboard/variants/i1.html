@@ -755,6 +755,8 @@ select.gfin{padding:0 10px}
 <script src="../i1-report.js"></script><!-- REPORT HOOK: Assumptions and limits link, one-page design report, compare two designs (window.ChipInReport) -->
 <script src="../i1-sizecost.js"></script><!-- SIZE COST HOOK: unit cost against chip size, stepped, at the top of Why this size (window.ChipInSizeCost) -->
 <script src="../i1-colour.js"></script><!-- COLOUR HOOK: pass, fail, estimated and chosen colours in one place -->
+<script src="../i1-stage.js"></script><!-- STAGE HOOK: the loading stage every forward step of a new design passes through (window.ChipInStage) -->
+<script src="../i1-intake.js"></script><!-- INTAKE HOOK: the stage between steps and the scripted questions with no backend, #/new/ask (window.ChipInIntake) -->
 <script type="module">
 "use strict";
 /* =====================================================================
@@ -1720,8 +1722,12 @@ function renderStart() {
 function toSpec() {
   const t = startState.text.trim(); if (!t) { $("#prompt")?.focus(); return; }
   SPEC = newSpec(t);
+  if (window.ChipInIntake) { flowSave(); ChipInIntake.begin(SPEC, intakeCtx()); return; } /* INTAKE HOOK: the stage, then questions or step 1 */
   flowGo(1);
 }
+// what the intake module reads and calls (../i1-intake.js)
+const intakeCtx = () => ({ go: flowGo, save: flowSave, back: () => { if (SPEC) startState.text = SPEC.brief; flowSave(); go("#/"); }, parse: applyParse, parseBrief, parseGroup, parsePlace, budgets: flowBudgets, places: PLACES, groups: GROUPS, tasks: TASKS, met: MET, dsf: DSF, fit: fitNotes, measured: hasMeasured, cases: CASES, sigOf });
+const flowNext = (i, to) => window.ChipInIntake ? ChipInIntake.next(SPEC, i, to, intakeCtx()) : flowGo(to);
 // the model popover, in the composer-pill pattern: the four models by name, a check on the current one;
 // with a backend connected, a model whose agent it cannot run is shown disabled with the reason
 const liveDefaults = () => liveOn() ? window.ChipInLive.defaults : null;
@@ -1884,7 +1890,7 @@ function tRowHTML(s, t, i, p) {
     <select class="gfin" data-tf="op" aria-label="Target ${i + 1}, comparison"><option value=">="${t.op === ">=" ? " selected" : ""}>at least</option><option value="<="${t.op === "<=" ? " selected" : ""}>at most</option></select>
     <span class="gtv"><input class="gfin${val === "" ? " ask" : ""}" data-tf="value" inputmode="decimal" aria-label="Target ${i + 1}, value${frac ? " in percent" : ", false alarms " + faWord(p)}" value="${val}" placeholder="value"><span class="u">${frac ? "%" : faWord(p)}</span></span>
     <button type="button" class="gx" data-a="rm" aria-label="Remove target ${i + 1}">${I("x", "s14")}</button>
-    ${t.src === "brief" ? '<span class="gtag">From your brief</span>' : ""}${out ? '<span class="gtag warn">Not in the measured results yet, so the run leaves it out</span>' : ""}</div>`;
+    ${t.src === "brief" ? '<span class="gtag">From your brief</span>' : t.src === "answer" ? '<span class="gtag">From your answers</span>' : ""}${out ? '<span class="gtag warn">Not in the measured results yet, so the run leaves it out</span>' : ""}</div>`;
 }
 function step4(s) {
   const b = flowBudgets(s), k = s.cons, j = Math.max(0, b.findIndex(x => x.ch === k.channels)), sim = !hasMeasured(s);
@@ -1935,7 +1941,7 @@ function cardHTML(s) {
     : `<div class="gsr"><span class="k">${r.k}</span><div class="v">${esc(r.v)}</div>${r.go ? `<button type="button" class="gchg" data-go="${r.go}" aria-label="Change ${r.k.toLowerCase()}">Change</button>` : '<span class="gfx">Fixed</span>'}</div>`).join("");
   const noM = window.ChipInModels.unavailableReason(window.ChipInModels.runModel(s.agent && s.agent.model), liveDefaults());
   const af = s.case === "af" && !liveOn() ? `<p class="gfr">${MEASURED.af ? tp("AF patch case: Run replays its real search.", "This brief is the AF patch case: Run replays its real search with your targets.") : tp("AF patch case: Run opens its measured run.", "This brief is the AF patch case: Run opens its measured run with your targets.")}</p>` : "";
-  return `<p class="gfl">Check it, change anything, then run.</p><div class="gsc">${rows}${window.ChipInQuestions?.cardRows(s, flowSave) || "" /* QUESTIONS HOOK: the answers, editable */}</div>
+  return `<p class="gfl">Check it, change anything, then run.</p><div class="gsc">${rows}${window.ChipInQuestions?.cardRows(s, flowSave) || "" /* QUESTIONS HOOK: the answers, editable */}${window.ChipInIntake?.cardRows(s) || "" /* INTAKE HOOK: the scripted answers */}</div>
     <div class="gsq">${sizeUsable(s) ? `<div class="gsqi"><span id="gRs">Run size</span><div class="gseg" role="radiogroup" aria-labelledby="gRs">${PRESETS.map(x => `<button type="button" role="radio" aria-checked="${x.n === s.preset}" data-c="preset" data-v="${x.n}">${x.n}</button>`).join("")}</div>
       <span class="gfx" aria-live="polite">${SUBAGENTS[s.preset]} subagents per stage</span></div>` : ""}
       <div class="gsqi"><span>Model</span>${agentPill(s.agent)}${noM ? `<span class="gfx">${esc(noM)}; pick another</span>` : ""}</div></div>${af}`;
@@ -1960,6 +1966,7 @@ function renderSpec() {
   faUse(s);
   $("#demo").textContent = "";
   if (route.step === "more" && window.ChipInQuestions?.render(s, { prog: progHTML, go: flowGo, save: flowSave })) return; /* QUESTIONS HOOK: the extra step */
+  if (route.step === "ask" && window.ChipInIntake?.render(s, intakeCtx())) return; /* INTAKE HOOK: the scripted questions */
   $("#main").innerHTML = `<div class="gf" id="gf"><div class="gfc">${progHTML(i)}<header class="gfh"><p class="gfn">${i < 5 ? `Step ${i + 1} of ${window.ChipInQuestions?.after(s) ? 6 : 5}` : "Before you run"}</p><h1 tabindex="-1" id="gfH">${i < 5 ? STEPS[i].h : "Your spec"}</h1></header><div id="gfBody">${bodyHTML(s, i)}</div>${footHTML(i)}</div></div>`;
   const root = $("#gf");
   // the spec card's name fields wrap: a one-line textarea that grows with its text
@@ -1971,7 +1978,7 @@ function renderSpec() {
   root.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.matches && e.target.matches("textarea[data-sf]")) e.preventDefault(); });
   root.addEventListener("click", e => {
     const g = e.target.closest("[data-go]");
-    if (g) { const v = g.dataset.go; if (v === "prev") { if (i === 0) { startState.text = s.brief; flowSave(); go("#/"); } else flowGo(i === 5 && window.ChipInQuestions?.has(s) ? "more" : i); } else if (v === "next") flowGo(i === 4 ? (window.ChipInQuestions?.after(s) || "spec") : i + 2); else flowGo(v); return; } /* QUESTIONS HOOK: Next and Back pass the extra step */
+    if (g) { const v = g.dataset.go; if (v === "prev") { if (i === 0) { startState.text = s.brief; flowSave(); go("#/"); } else flowGo(i === 5 && window.ChipInQuestions?.has(s) ? "more" : i); } else if (v === "next") flowNext(i, i === 4 ? (window.ChipInQuestions?.after(s) || "spec") : i + 2); else flowGo(v); return; } /* QUESTIONS HOOK: Next and Back pass the extra step; INTAKE HOOK: Next passes the stage */
     const c = e.target.closest("[data-c]");
     if (c) { pickAnswer(s, c.dataset.c, c.dataset.v); redraw(); return; }
     const tk = e.target.closest("[data-task]");

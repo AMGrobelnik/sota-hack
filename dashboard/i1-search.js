@@ -92,6 +92,15 @@
   function play(run, spec, ctx) {
     var main = document.getElementById("main");
     if (!main) { ctx.to(); return; }
+    // the shared loading stage (../i1-stage.js), the same screen every step of a new design passes through
+    if (window.ChipInStage) {
+      window.ChipInStage.play({
+        kicker: "Replay of the search steps", mark: ctx.sim ? "sim" : "mea", title: "Finding data for your device", lines: steps(run, spec, ctx),
+        stepMs: STEP_MS, skip: "Skip to the run",
+        onEnd: function (open) { if (ctx.fresh) { run.clock = { base: 0, anchor: Date.now(), playing: true }; if (ctx.save) ctx.save(); } if (open) ctx.to(); }
+      });
+      return;
+    }
     if (!document.getElementById("sx-css")) { var st = document.createElement("style"); st.id = "sx-css"; st.textContent = CSS; document.head.appendChild(st); }
     var S = steps(run, spec, ctx), hash = location.hash, timers = [], over = false;
     var badge = ctx.sim ? '<span class="mk sim">simulated</span>' : '<span class="mk mea">measured</span>';

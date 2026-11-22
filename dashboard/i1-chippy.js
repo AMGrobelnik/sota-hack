@@ -714,7 +714,7 @@
       if (!ok) return { bad: "The start page did not open, so no spec was started." };
       var ta = $("#prompt"); ta.value = String(brief || ""); ta.dispatchEvent(new Event("input", { bubbles: true }));
       $("#go").click();
-      return until(function () { return /^#\/new\/1/.test(location.hash); }, 3000).then(function (on) { return on ? null : { bad: "The guided flow did not open." }; });
+      return until(function () { return /^#\/new\/(?:1|ask)/.test(location.hash); }, 12000) /* the loading stage plays first (../i1-intake.js) */.then(function (on) { return on ? null : { bad: "The guided flow did not open." }; });
     });
   }
   var FIND = {

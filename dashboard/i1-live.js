@@ -327,15 +327,23 @@
       return true;
     }
     if (btn) { btn.disabled = true; btn.dataset.lvTxt = btn.innerHTML; btn.textContent = "Starting the run…"; }
+    // STAGE HOOK (../i1-stage.js): the shared loading stage, ticked by the real request, not by timers
+    var stg = window.ChipInStage ? window.ChipInStage.play({
+      live: true, kicker: "Live", title: "Starting your run", skip: "Hide",
+      lines: [{ p: "Sending your spec to the backend", w: "Brief, answers and model", t: "Spec sent" }, { p: "Waiting for the backend to accept the run", w: "It checks the spec and creates the run", t: "Run accepted" }, { p: "Opening the run view", w: "The search's own steps show there" }]
+    }) : null;
+    if (stg) stg.tick(1);
     fetch(C.base + "/api/runs", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json", "X-ChipIn-Token": C.token || "" }, body: JSON.stringify(body) })
       .then(function (res) { return res.json().catch(function () { return {}; }).then(function (j) { if (!res.ok) throw new Error(j.error || "the backend answered HTTP " + res.status); return j; }); })
       .then(function (j) {
         RUNS.unshift({ id: j.id, base: C.base, title: s.device ? clip(cap(s.device), 60) : clip(s.brief, 60), brief: s.brief, spec: spec, preset: body.preset || null, agent: srv === "stub" ? "stub" : mod.agent, model: srv === "stub" ? null : mod.id, notes: notes, created: new Date().toISOString(), status: "running" });
         saveRuns(); bump();
+        if (stg) stg.tick(2);
         if (typeof done === "function") done();
         location.hash = "#/live/" + encodeURIComponent(j.id) + "/overview";
       })
       .catch(function (e) {
+        if (stg) stg.close();
         if (btn && btn.isConnected) { btn.disabled = false; btn.innerHTML = btn.dataset.lvTxt || "Run"; }
         var g = $(".gfa");
         if (g) { var p = $(".lv-runerr", g) || g.appendChild(document.createElement("p")); p.className = "lv-runerr"; p.textContent = "The run did not start: " + (e && e.message ? e.message : "the backend did not answer") + "."; }
