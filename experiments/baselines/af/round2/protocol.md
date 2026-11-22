@@ -173,6 +173,11 @@ after the chip design is frozen, and reported whatever it gives.
   AF when more than half of the intervals are `(AFIB`, `(AFL` and all
   others non-AF; segments touching unlabelled intervals not scored.
   This is the segment rule of both papers (l = 128, PercThresh 50 %).
+  Clarification, 22 Nov 2026 (added after the results; the protocol's
+  meaning is unchanged): the code treats atrial flutter as non-AF.
+  Counting it as AF gives 200-series sensitivity 94/96 and
+  specificity 286/375, the same conclusion, as found by the
+  independent recomputation.
 - No ectopic filter, so the like-for-like published rows are Dash's
   "with ectopy" rows; Andersson's PrecSeg row includes their ectopic
   preprocessing and is shown next to ours as the headline baseline.

@@ -470,25 +470,43 @@ Code, protocol and models are in `round2/`; every number below is in
   4912/5071 = 96.86 % (published 95.8 %). Neither subject-bootstrap
   interval excludes the published value, and the sensitivity point
   estimate is a hair below it, so the rule does not give BEATS.
+  MATCHES is weak evidence here: the subject-bootstrap intervals are
+  about 8 points wide, so they contain the published figures but
+  could not separate a detector several points better or worse.
+- The candidate family and the 0.96 operating target were written
+  after round one had looked at the same database. Nested selection
+  guards the choices inside the family, not the family itself, so
+  the accuracy verdict above is a match for a design family picked
+  with the AF database in view.
 - All six configurations (N = 128, 64, 32 on 23 and 25 records) give
   MATCHES.
-- Size: the clocked circuit computes the chosen design in 830.7 sky130
-  gate-equivalents including its 55 flip-flops (925.8 gf180, 864.5
-  IHP), against 24,038 NAND2-equivalents for the published chip's
-  65 nm synthesis: about 29 times fewer gate-equivalents, with the
-  caveats below. Round one's design in the same clocked form is
+- Size: the published count of 24,038 NAND2-equivalents covers a
+  different and larger function (an ectopic-beat filter with a
+  divider, TPR, RMSSD with a shared multiplier, Shannon entropy with
+  a log2 unit, a FIFO and a 1664-bit RAM) in a different cell library
+  at 65 nm, while ours has two lag counters and no window memory; it
+  is not the same detection function made smaller. With that
+  stated, the clocked circuit has 830.7 sky130 gate-equivalents at
+  synthesis including its 55 flip-flops (925.8 gf180, 864.5 IHP),
+  about 29 times fewer than 24,038. At layout level the sky130 cell
+  area of 5405 um2 is about 1440 gate-equivalents, a ratio of about
+  16.7 (24,038 / 1440). The size figure is at matched accuracy on the
+  AF database only (next bullet). More caveats below. Round one's design in the same clocked form is
   771.3 sky130 GE (47 flip-flops), against 38,441 for round one's
   parallel form.
-- Untouched test (MIT-BIH Arrhythmia, run once): sensitivity ties the
-  published chip, specificity is below it. 200-series: Se 86/87
+- Untouched test (MIT-BIH Arrhythmia, run once; this rests on a
+  guard in the script that refuses a second run plus file and push
+  timestamps, not on an external witness): sensitivity ties the
+  published chip, specificity is below it on both series. 200-series: Se 86/87
   (98.9 %, published 98.8 %), Sp 287/384 (74.7 %, published 79.0 %);
   100-series: Sp 343/359 (95.5 %, published 97.0 %). Our detector has
   no ectopic-beat filter. Dash's detector without its filter ("with
   ectopy") got Sp 69.4 % on the 200-series and 96.2 % on the
   100-series in beats (ours in beats: 74.3 % and 95.5 %).
-- Honest claim: a tie on accuracy on the AF database, a tie on
-  sensitivity and a loss on specificity on the untouched database, and
-  a large win on size for the detector logic that is compared.
+- Honest claim: a match on accuracy on the AF database (weak
+  evidence, see above), a tie on sensitivity and a loss on
+  specificity on the untouched database, and a smaller circuit for a
+  smaller function, at matched accuracy on the AF database only.
 
 ## Order of commits
 
@@ -699,9 +717,18 @@ For both clocked designs:
 3. Wrapper, the lab's `prove_sequential` with the core as a black
    box: proved (eqy, depth 8; 4.7 s and 20.2 s). This is the
    compositional proof: (2) covers the core for every input, (3)
-   covers the registers and enables with the core uninterpreted;
-   together they show that the synthesised clocked netlist equals the
-   clocked RTL.
+   covers the registers and enables with the core uninterpreted.
+   These two proofs do not show that the costed 300-cell flattened
+   gate netlist equals the clocked RTL: the lab's sequential proof
+   synthesises its own netlist with the core as a black box, and the
+   flattened whole-design proof fails (item 4). What holds: the core
+   is proved against the lab's golden model of the design
+   description at depth-bounded equivalence; the wrapper is proved
+   with the core as a black box; the costed gate netlist and the RTL
+   match an independent integer model on every real interval of the
+   AF and Arrhythmia databases in simulation (1,221,534 and 109,446
+   intervals, 0 mismatches). Equivalence for all input sequences is
+   not proved.
 4. Flattened whole design, the same eqy: not proved. All output and
    register partitions proved except 7 partitions on the core's
    internal `p_next` bits ("partitions not equivalent"; 50 of 57 and
@@ -733,7 +760,10 @@ equivalence is shown on every real segment of the three databases
 
 ### Size against the published chip
 
-- Ratio: 24,038 / 830.7 = 28.9 (sky130), 26.0 (gf180), 27.8 (IHP).
+- Ratio, for a different and larger published function in a different
+  library at 65 nm (caveats below, and in the verdict): 24,038 /
+  830.7 = 28.9 (sky130), 26.0 (gf180), 27.8 (IHP) at synthesis; at
+  layout, 24,038 / 1440 = 16.7.
   For round one's design in clocked form: 31.2, 28.5, 31.2. Round
   one's own parallel chip (38,441 GE) shrinks 49.8-fold.
 - Silicon: our layout's cell area 5405 um2 in a 130 nm process
