@@ -193,6 +193,7 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 | `GET /api/runs/{id}/events`    | the stream, `from=<seq>`     |
 | `POST /api/runs/{id}/messages` | `text` to the agent          |
 | `POST /api/runs/{id}/stop`     | stop the run                 |
+| `GET /api/runs/{id}/evidence`  | run evidence, once finished  |
 | `GET /api/runs/{id}/files`     | `path`, `size` per file      |
 | `GET /api/runs/{id}/file`      | `?path=`: one file as text   |
 | `POST /api/transcribe`         | one spoken phrase to text    |
@@ -206,6 +207,7 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 | `artifact`                     | a file, such as the report   |
 | `cost`                         | agent cost and tokens        |
 | `error`                        | what went wrong              |
+| `evidence`                     | the three evidence summaries |
 | `run.finished`                 | status, summary, `bullets`   |
 
 Stages, in order: `spec`, `reference`, `propose`, `finetune`, `compile`,
@@ -330,6 +332,79 @@ reference and finetune stages are skipped. Name a Python that can train
   off: the environment and instructions are as before, and the agent
   skips reference and finetune with its reason.
 
+## Run evidence
+
+Three measurements computed only from a finished run's own folder, with
+no network and no model calls (`evidence.py`):
+
+```bash
+chipin-backend evidence <run id or run folder> [--json]
+```
+
+The command prints the markdown (or JSON) and writes `evidence.json` and
+`evidence.md` into the run folder. `GET /api/runs/{id}/evidence` returns
+the same dict for a finished run (409 while it runs). At the end of every
+dashboard run the backend computes it once and emits one `evidence` event
+with the three summaries, just before `run.finished`; a failure there is
+logged and never fails the run.
+
+- **Number check.** Every number in `workspace/report.md` lands in one
+  of three classes, never added together: *no source*, *value found,
+  unit or meaning unclear* (for a human to check) and *source found*
+  (a machine-produced source in this run holds this value in this unit);
+  plus *excluded* (dates, times, numbering, versions, file names, ids,
+  code blocks, numbers quoted from the prompt). The output lists the no
+  source numbers first, then the unclear ones, then the source found
+  ones with the named source (a path or an event sequence number). JSON
+  keys: `no_source`, `value_found_unclear`, `source_found`, `excluded`,
+  and a `limits` string. What the check establishes, word for word:
+
+  > A "no source" number means nothing the tools measured in this run has this value: treat it as unsupported until shown otherwise. "Source found" means a machine-produced source in this run holds this value in this unit. It does not establish which design or stage the sentence gives the value to, which of several quantities sharing that unit it means, nor relations between numbers, nor negations, nor the direction of a margin. The check reads only the run folder.
+
+  Sources are `metric` events, the stored weight count of each model
+  file, and the numeric fields of files the chip lab wrote. The value
+  must round to the digits shown. When both the number and the source
+  carry a unit, they must agree after both are converted to the base
+  unit (20 ms is not 20 ns; a rate in words is in hertz, so 1 per minute
+  is not 1 Hz; minutes, hours and days, and the noun seconds after a
+  number, are time units with their scale, so 1.35 seconds is not
+  1.35 ns); when only one carries a unit, the unit is unclear.
+  Spelled-out units (microwatts, nanoseconds, picojoules), both micro
+  signs, and "k" or "thousand" after a number are read as scales. A
+  negative source (a timing slack) matches only a negative number or a
+  sentence of shortfall ("misses by", "short by", "negative slack",
+  "late"); a sentence of a margin met ("to spare", "positive slack")
+  does not match, and one with neither is unclear. A width in bits about
+  weights matches only a weight width, not a port width. The unit or
+  noun next to the number must match the source through a small synonym
+  table (gates/cells, ns/slack/period, uW/power, um2/area, levels/depth,
+  parameters/params, ...), or, with no such noun, the number's words
+  must share a whole non-generic word with the source key's last
+  segment. A percent matches only a percentage or a 0-to-1 ratio. A noun
+  that agrees with no source leaves the number with no source.
+  Structural fields (line counts, sizes, tool durations, seeds, indices)
+  count only when the claim names them. Metric events can also come from
+  the agent's own `./progress metric` calls, and lab answers echo the
+  agent's inputs.
+- **Weight bytes per decision.** For one chip, named in the output with
+  the reason it was picked (the one the report names most; otherwise the
+  first laid-out design with weights): the bytes of weights software must
+  read for one decision, by one rule for every design (each stored array
+  in the smallest machine integer type, float32 for decimals; and,
+  separately, packed at the fewest bits), the stored value count and the
+  declared parameter count where they differ, and the memory cells and
+  flip-flops in the chip's netlist (`net.json`, else `gates.v`). No memory
+  cells means 0 weight bytes fetched: the weights are constants in the
+  logic. A memory is reported with its bits, never 0. It claims nothing
+  about energy or speed.
+- **Stage timings.** Wall time per stage from the `stage` events, each
+  stage's share, counts of what it processed, and for the largest stage
+  both bounds: if every other stage cost nothing, the run is at most
+  1/share faster; if this stage cost nothing, at most 1/(1-share) faster.
+  No per-second rates: stage time includes the agent's thinking. It also
+  reports per-tool-call wall times and the longest call, for one run on
+  one machine.
+
 ## Layout
 
 ```text
@@ -342,7 +417,8 @@ backend/
     log.py                   loguru: stderr plus logs/backend.log
     runs.py                  run folders: run.json, events.jsonl, workspace/
     orchestrate.py           run_agent(spec, config): one run end to end
-    cli.py                   chipin-backend run / ask / serve / config
+    cli.py                   chipin-backend run / ask / serve / evidence
+    evidence.py              run evidence: number check, weights, timings
     chiplab.py               the optional chip lab: agent PATH and settings
     training.py              the optional training Python for the agent
     api/                     the local API server for the dashboards
