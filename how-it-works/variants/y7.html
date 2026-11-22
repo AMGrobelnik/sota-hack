@@ -1,0 +1,1387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ChipIn: how it works</title>
+<meta name="theme-color" content="#0f1a2a">
+<link rel="icon" type="image/svg+xml" href="../../assets/brand/favicon.svg">
+<script>
+/* =====================================================================
+   ALL VISIBLE COPY ON THIS PAGE LIVES IN THIS ONE OBJECT.
+   Change wording here only. {n} is filled with the number of tools
+   listed under tools.groups, so the count always matches the list.
+
+   Where the facts come from (repo branches):
+   - stages, batches, presets (lite 3, pro 10, ultra 20, minutes per
+     subagent), summaries and their levels, the $0.05 summary cap, the
+     135-character rule, messages to the agent (4,000 characters, live
+     or follow-up, stop), Chippy (read tools, actions, proposals, limits),
+     training Python: backend/README.md on main.
+   - Chippy's example prompts: backend/src/chipin_backend/api/helper_ui.py
+     on main.
+   - the 44 chip-lab tools: chiplab/AGENT.md on ant/chip-lab.
+   - 2,330 gates, 3,880 of 3,880 windows, 256 trained in one batch, 119
+     under the cap: dashboard/data/af-candidates.json on gh-pages.
+   - the recorded run (events, counts, summary lines, strategies, the two
+     messages and replies, 1,897 s, 45 gates, 100,000 vectors, level 2,
+     held-out 0.714 and 6.67 per hour): dashboard/data/runs/
+     20261122-050322-2c7896.json on gh-pages. Counts per summary level are
+     distinct summary ids in that file.
+   ===================================================================== */
+window.COPY = {
+  brand: 'ChipIn',
+  pageTitle: 'ChipIn: how it works',
+  pageLabel: 'How it works',
+  description: 'How ChipIn works: the agents that design the chip, and the layer above them where you watch the run, read its summaries and talk to it.',
+  nav: { home: 'Home', dashboard: 'Open the dashboard', dashHref: '../../dashboard/variants/i1.html' },
+  rail: { label: 'Stops', overview: 'Whole map', stop: '{n}. {title}' },
+  mapLabel: 'System map of ChipIn in two layers: below, the agents and the seven stages; above, the event stream, its levels of summary, the message box and the helper. The view moves through it as you scroll.',
+  footer: 'Built at the SoTA Scientific Parallelism Hackathon, London, November 2026.',
+  layers: { up: 'What you see and say', down: 'What the agents do' },
+
+  intro: {
+    title: 'How ChipIn designs a chip',
+    lines: ['ChipIn designs the small chip inside a medical sensing device. You describe the device; agents propose, train, compile and check small models, and return the smallest chip that clears your targets.',
+            'The map has two layers.'],
+    legend: [['up', 'Above: what you see and say while it runs'], ['down', 'Below: what the agents do']],
+    hint: 'Scroll, or press Page Down, Space or the Down arrow.'
+  },
+
+  steps: [
+    { key: 'intake', title: 'From a rough idea to a spec',
+      lines: ['You write a rough idea in a sentence or two.',
+              'Five fixed steps follow: the device, who and where, targets, constraints and data. Every question has a default.',
+              'It ends on a spec card you can edit. The chosen chip is judged against its targets.'] },
+    { key: 'run', title: 'Run size and models',
+      lines: ['One preset sets how hard the agents think and how many subagents each stage starts: 3 on Lite, 10 on Pro, 20 on Ultra.',
+              'By default a large hosted model runs the orchestrator and a smaller one runs the subagents. Small open models can be chosen instead.'] },
+    { key: 'pipe', title: 'The pipeline at a glance',
+      lines: ['Seven stages in order. The orchestrator does spec and report itself.',
+              'At each of the five stages between, it writes down one strategy per subagent, starts the whole batch, waits for all of them and merges the best on the lab’s numbers.'] },
+    { key: 'st0' }, { key: 'st1' }, { key: 'st2' }, { key: 'st3' }, { key: 'st4' }, { key: 'st5' }, { key: 'st6' },
+    { key: 'agent', title: 'What an agent is',
+      lines: ['The orchestrator and every subagent are the same four layers.',
+              'Agents do not write chip code from scratch. They call tools, and every number comes from a tool’s answer, not from the model’s text.'] },
+    { key: 'tools', title: 'The chip lab: {n} tools',
+      lines: ['One command-line program in six groups. Every answer is JSON and gives each number’s basis.',
+              'Each stage panel names the tools that stage calls.'] },
+    { key: 'stream', kicker: 'Upper layer: what you see', title: 'One event stream',
+      lines: ['Every agent reports as it works: stages, numbers, files, each candidate design, each subagent started and merged.',
+              'The backend writes it all into one stream, saved with the run. The dashboard draws from it.',
+              'One recorded run made 1,765 events in about 32 minutes.'] },
+    { key: 'sumLow', kicker: 'Levels of summary, 1 of 2', title: 'A line for everything',
+      lines: ['1,765 events are too many to read. Each tool call, metric or message becomes one item line. A run of one agent’s items becomes a group line. Each subagent gets a line when it finishes.',
+              'Most item lines keep their own words. Only a message longer than 135 characters goes to a model.'] },
+    { key: 'sumUp', kicker: 'Levels of summary, 2 of 2', title: 'Lines for the lines',
+      lines: ['Each batch, each stage and the whole run get a line built from the lines below. The run also gets three bullets.',
+              'A smaller, cheaper model writes them, through a fallback chain. A summary never blocks a run.',
+              'On the dashboard you read one line per level and open any line down to its message or tool call.'] },
+    { key: 'talk', kicker: 'Upper layer: what you say', title: 'Talking to the agent',
+      lines: ['During a run you can message the orchestrator: steer it, ask it something, or stop the run. Your message takes priority over its plan.',
+              'After the run, a message continues the same conversation in the same stream. Nothing is forked: one run, one conversation.'] },
+    { key: 'chippy', kicker: 'Upper layer: what you say', title: 'Chippy, the helper',
+      lines: ['Chippy answers questions about ChipIn and your runs, and moves the dashboard to the answer.',
+              'It reads with read-only tools. It can offer a button to start a run, message the agent or stop a run; nothing happens until you press it.',
+              'It is not the agent that designs chips.'] },
+    { key: 'checks', title: 'What is checked',
+      lines: ['Every chip is checked bit for bit against its model and proved equivalent, with a verification level per design.',
+              'That shows the gates equal the model. It says nothing about clinical performance.',
+              'Patients are split so none is in two sets. Designs are judged on the worst unseen patient.'] },
+    { key: 'meas', title: 'Measured so far',
+      lines: ['Only these three figures are stated as measured, each with its scope.'] },
+    { key: 'limits', title: 'Limits', lines: [] }
+  ],
+
+  intake: {
+    ideaLabel: 'Your rough idea',
+    idea: 'A bedside monitor that warns when a heart rhythm turns irregular, on a small battery.',
+    flowLabel: 'Five steps. Every question has a default.',
+    head: ['Step', 'Question', 'Default'],
+    steps: [
+      { name: 'The device', q: 'What is the device, and what must it detect?', d: 'Read from your idea' },
+      { name: 'Who and where', q: 'Who wears it, where is it used, and who responds to an alert?', d: 'Sets the false-alarm unit: per hour or per day' },
+      { name: 'Targets', q: 'Which metric, and what threshold?', d: 'Set by the task type, below' },
+      { name: 'Constraints', q: 'How many electrodes or sensors? What battery life? Disposable or reusable?', d: 'The platform searches the channels; battery suggested from your idea' },
+      { name: 'Data', q: 'Your recordings, an open dataset, or simulated data?', d: 'An open dataset, checked for fit; simulated data is labelled' }
+    ],
+    taskNote: 'Targets by task type. Monitoring: sensitivity, and false alarms per hour or day. Screening: sensitivity and specificity. Grading: agreement with experts.',
+    specLabel: 'Your spec',
+    specFields: ['Device', 'Detects', 'Who and where', 'Targets', 'False-alarm unit', 'Channel limit', 'Battery target', 'Data', 'Patient split'],
+    specNote: 'Every field can be edited. The spec goes to the agents, and the chosen chip is judged against its targets.'
+  },
+
+  run: {
+    presetLabel: 'Run size: one preset',
+    presets: [
+      { name: 'Lite', effort: 'low', batch: '3', each: '10' },
+      { name: 'Pro', effort: 'high', batch: '10', each: '20' },
+      { name: 'Ultra', effort: 'max', batch: '20', each: '30' }
+    ],
+    effortWord: 'Thinking effort: {e}',
+    batchWord: '{b} subagents per batch',
+    eachWord: 'Up to {m} min each',
+    modelLabel: 'Models',
+    models: [
+      { name: 'Automatic', text: 'A large hosted model runs the orchestrator, a smaller one the subagents, both in a hosted coding-agent harness.' },
+      { name: 'Your choice', text: 'Name the models yourself, or put the subagents on small open models through a model aggregator, in an open agent harness.' }
+    ]
+  },
+
+  pipe: {
+    orchTitle: 'Orchestrator',
+    orchSub: 'one strategy per subagent, start the batch, wait, merge the best',
+    stageWord: 'Stage {i} of 7',
+    batchLabel: 'One batch of subagents, each with a different strategy',
+    aloneLabel: 'No batch: the orchestrator does this stage itself',
+    sizes: 'Batch size: 3 on Lite, 10 on Pro, 20 on Ultra',
+    aloneSizes: 'The same on every preset',
+    recLabel: 'Strategies in one recorded Lite run',
+    toolsWord: 'Tools',
+    outWord: 'Comes back',
+    mergeWord: 'The orchestrator merges and carries forward',
+    carryWord: 'The orchestrator carries forward'
+  },
+
+  stages: [
+    { name: 'Spec', alone: true,
+      lead: 'Done by the orchestrator alone. Everything later depends on it.',
+      does: 'Turns your answers into the run’s spec: device, signal, targets, false-alarm unit, constraints and data, with the patient split locked before any training.',
+      fan: [],
+      tools: ['define-task', 'load-data', 'plugins'],
+      out: 'The spec, and the data in labelled windows, split by patient.',
+      merge: 'The spec goes to every later stage. The chosen chip is judged against its targets.' },
+    { name: 'Reference',
+      lead: 'The accuracy to beat. It is never put on a chip.',
+      does: 'Trains full-precision models on the same data. It separates “the data allows no more” from “shrinking costs this much”.',
+      fan: ['A tree ensemble', 'A small 1-D CNN on raw windows', 'Logistic regression and a tiny MLP on integer features'],
+      tools: ['load-data', 'train-batch', 'evaluate-clinical'],
+      out: 'Reference scores per patient, from each strategy.',
+      merge: 'Keeps the best reference as the score every small design is compared with.' },
+    { name: 'Propose',
+      lead: 'Many small designs from different families, each sized before any training.',
+      does: 'Proposes small designs that could fit in logic gates, and estimates the size of each before any training.',
+      fan: ['Threshold logic on one or two integer features', 'A tiny integer linear model', 'A tiny integer MLP'],
+      tools: ['propose-designs', 'estimate-batch'],
+      out: 'Candidate designs with estimated sizes.',
+      merge: 'Pools every subagent’s candidates, ranks them by size, and keeps those worth training.' },
+    { name: 'Finetune',
+      lead: 'The agents train the candidates themselves, many at once, and score them on patients they have not seen.',
+      does: 'Trains the kept candidates as one batch and scores them on unseen patients. The agents train the models themselves when the run has a training Python; without one, this stage is skipped with the reason.',
+      fan: ['Shrink the linear design to 4- and 5-bit features', 'Threshold family, leave-one-patient-out', 'Retrain the linear weights'],
+      tools: ['train-batch', 'score-events', 'evaluate-clinical', 'leaderboard'],
+      out: 'Trained integer models, with scores on unseen patients.',
+      merge: 'Keeps the models that clear the targets on the worst unseen patient, smallest first.' },
+    { name: 'Compile',
+      lead: 'A trained model becomes a fixed circuit, with the weights wired in.',
+      does: 'Turns each kept design into logic gates with the weights wired in as constants, so the chip has no weight memory to read.',
+      fan: ['The lead linear design', 'The runner-up linear design', 'Two threshold designs'],
+      tools: ['ingest-model', 'ingest-batch', 'compile-ir', 'synthesize', 'synthesize-batch', 'count-luts', 'map-to-process'],
+      out: 'Gate count, logic depth and a netlist per design.',
+      merge: 'Keeps the smallest netlist for each design.' },
+    { name: 'Verify',
+      lead: 'A design goes on only if its gates match the model bit for bit and the proof holds.',
+      does: 'Runs the gates on test vectors against the model bit for bit, then proves formally that they always agree. No subagent verifies a design it built.',
+      fan: ['Bit-exact simulation on all test vectors', 'Formal equivalence proof, then simulation', 'Streaming RTL test and lint'],
+      tools: ['simulate', 'simulate-batch', 'prove-equivalence', 'prove-sequential', 'rtl-simulate', 'verification-level'],
+      out: 'Mismatches (zero, or the design is dropped) and a verification level per design.',
+      merge: 'Keeps only designs with zero mismatches, ranked by size and score.' },
+    { name: 'Report', alone: true,
+      lead: 'Done by the orchestrator alone. Only the chosen chip is laid out.',
+      does: 'Lays out the chosen chip in an open 130 nm process, estimates timing, power and area, and writes the report with the chip’s figures and files.',
+      fan: [],
+      tools: ['layout', 'timing-power', 'estimate-cost', 'compare-hw-baseline', 'gate-activity', 'chip-report', 'bitstream', 'tt-package'],
+      out: 'The smallest chip that clears the targets, its figures (estimates marked as estimates) and its files.',
+      merge: 'Names the chosen chip and calls chip-report on it. The chip figures you see come from that call.' }
+  ],
+
+  agent: {
+    label: 'Every agent, the orchestrator and each subagent, is four layers',
+    layers: [
+      { name: 'Model', text: 'A large hosted model for the orchestrator and a smaller one for subagents, or small open models through a model aggregator.' },
+      { name: 'Harness', text: 'The agent loop around the model: a hosted coding-agent harness, or an open agent harness for the aggregator’s models.' },
+      { name: 'Prompts', text: 'Standing instructions (the seven stages, report every step, never invent a measurement), its role, your spec and the brief for the stage.' },
+      { name: 'Skills', text: 'The chip lab, installed as an agent skill in the run and in every subagent’s folder, plus ./progress to report and ./subagent to start, wait for and merge a batch.' }
+    ],
+    rule: 'Agents do not write chip code from scratch. They call tools, and every number comes from a tool’s answer, not from the model’s text.'
+  },
+
+  tools: {
+    callLabel: 'Call shape',
+    call: 'chiplab <tool> --json \'{…}\'',
+    any: 'any stage',
+    none: 'as needed',
+    groups: [
+      { name: 'Model to gates', tools: [
+        ['ingest-model', 'Trained model to chip design', ['compile']],
+        ['compile-ir', 'Compile a chipir/1 document', ['compile']],
+        ['compile-verilog', 'Verilog, weights wired in', []],
+        ['compile-stream', 'Wrap for streaming input', []],
+        ['compose-chip', 'One chip from several heads', []],
+        ['submit-verilog', 'Check hand-written Verilog', []],
+        ['synthesize', 'Gate count, depth, netlist', ['compile']],
+        ['count-luts', 'FPGA lookup-table count', ['compile']],
+        ['map-to-process', 'Standard-cell area', ['compile']] ] },
+      { name: 'Checking the chip is the model', tools: [
+        ['simulate', 'Level 1: bit for bit', ['verify']],
+        ['rtl-simulate', 'Level 3: streaming RTL, lint', ['verify']],
+        ['prove-equivalence', 'Level 2: formal proof', ['verify']],
+        ['prove-sequential', 'Level 2, clocked wrapper', ['verify']],
+        ['verification-level', 'Level, with its evidence', ['verify']] ] },
+      { name: 'Data and training', tools: [
+        ['define-task', 'Task, locked patient split', ['spec']],
+        ['load-data', 'Recordings to labelled windows', ['spec', 'reference']],
+        ['propose-designs', 'A batch of candidate designs', ['propose']],
+        ['train-batch', 'Train all candidates on a GPU', ['reference', 'finetune']],
+        ['score-events', 'Event-level scores per patient', ['finetune']],
+        ['evaluate-clinical', 'The chip’s decisions, per patient', ['reference', 'finetune']],
+        ['leaderboard', 'Gates, depth, bit-exact, scores', ['finetune']],
+        ['events', 'Stage and result events', ['any']],
+        ['plugins', 'Datasets, front-ends, families', ['spec']] ] },
+      { name: 'Physical chip', tools: [
+        ['layout', 'Place and route: area, timing', ['report']],
+        ['timing-power', 'Timing and power after layout', ['report']],
+        ['bitstream', 'Bitstream for a small FPGA board', ['report']],
+        ['tt-package', 'Project for a shared tape-out shuttle', ['report']],
+        ['tt-readiness', 'Shuttle checks, never submits', []],
+        ['tt-export', 'Shuttle project as a repository', []] ] },
+      { name: 'Cost and comparison', tools: [
+        ['estimate-cost', 'Manufacturing routes and cost', ['report']],
+        ['compare-hw-baseline', 'Against published hardware', ['report']],
+        ['gate-activity', 'Toggle rates per net', ['report']],
+        ['chip-report', 'One-page report, every basis', ['report']] ] },
+      { name: 'Batches and jobs', tools: [
+        ['synthesize-batch', 'Synthesise many at once', ['compile']],
+        ['ingest-batch', 'Ingest many models at once', ['compile']],
+        ['simulate-batch', 'Bit-exact check, many at once', ['verify']],
+        ['estimate-batch', 'Fast gate estimates, to rank', ['propose']],
+        ['submit-job', 'Any tool as a queued job', ['any']],
+        ['submit-batch', 'Many jobs of one tool', ['any']],
+        ['job-status', 'Queued, running, done, failed', ['any']],
+        ['job-result', 'A finished job’s answer', ['any']],
+        ['cancel-job', 'Cancel a queued job', ['any']],
+        ['list-jobs', 'Recent jobs, load per lane', ['any']],
+        ['cache-stats', 'Cache hits, misses, size', ['any']] ] }
+    ]
+  },
+
+  stream: {
+    title: 'One event stream',
+    sub: 'From the orchestrator and every subagent, in order. Saved with the run as events.jsonl; the dashboard draws from it.',
+    eventsLabel: 'Event types in the recorded run',
+    events: ['run.started', 'stage', 'status', 'message', 'tool', 'metric', 'design', 'artifact', 'cost', 'chosen', 'evidence', 'subagent.started', 'subagent.finished', 'stage.merged', 'summary', 'run.finished'],
+    rise: 'Every stage reports into the stream'
+  },
+
+  sums: {
+    title: 'Levels of summary',
+    sub: 'One line per level. Any line opens down to the lines it was built from, and finally to the event.',
+    writerTitle: 'Who writes the lines',
+    writer: ['A smaller, cheaper hosted model, through a fallback chain: when one provider fails, the next is tried.',
+             'Short lines keep their own words. At most $0.05 of model spend per run. A summary never blocks or fails a run.'],
+    byWord: { model: 'smaller model', own: 'own words', stream: 'the event' },
+    countWord: '{c} in the run',
+    levels: [
+      { name: 'Run', count: '1', by: 'model',
+        text: 'The 45‑gate linear chip (depth 11, 310 transistors, 17 LUT6) met all gate limits and became the lead design, achieving validation sensitivity 1.0 and held‑out 0.714, but synthetic sensitivity 0.714 with 6.67 false alarms per hour; the run ended successfully.',
+        note: 'Plus three bullets for the run. The last: RUN ENDED (done); final 45‑gate linear design verified, report created, misses held‑out targets.' },
+      { name: 'Stage', count: '7', by: 'model',
+        text: 'The 45‑gate chip (depth 11, 310 transistors, 17 LUT6) met all limits and became the lead design; the runner‑up used 62 gates (depth 13, 432 transistors, 21 LUT6). All three compile subagents finished.' },
+      { name: 'Batch', count: '5', by: 'model',
+        text: 'The 45‑gate chip 43882a209754 (depth 11, 310 transistors, 17 LUT6) met all limits and cleared validation, becoming the lead design; the runner‑up 58bd0737e0e3 used 62 gates (depth 13, 432 transistors, 21 LUT6). All three subagents finished compiling and logged their results.' },
+      { name: 'Subagent', count: '15', by: 'model',
+        text: 'Chip 43882a209754 was built with 45 gates, depth 11, 310 transistors and 17 LUT6; a later 64‑gate variant used 444 transistors, area 424.1568 µm² and 113 GE, but the plain 45‑gate version performed better and all limits were met.' },
+      { name: 'Group', count: '86', by: 'model',
+        text: 'Designed chip 43882a209754, saved design files, measured 45 gates, depth 11, 310 transistors and 17 LUT6' },
+      { name: 'Item', count: '595', by: 'own',
+        text: 'Measured gates = 45 gates for 43882a209754',
+        note: '578 of the 595 item lines kept their own words.' },
+      { name: 'Event', count: '1,765', by: 'stream',
+        text: '{"seq": 1143, "type": "metric", "key": "gates", "value": 45, "unit": "gates", "chip": "43882a209754", "agent": "a10"}',
+        note: 'The 1,765 events include the summary lines themselves.' }
+    ],
+    note: 'Every example is from the compile stage of one recorded Lite run, and each line is built from the one below it.'
+  },
+
+  talk: {
+    duringLabel: 'Recorded run, during the reference stage',
+    during: [
+      { k: 'message', who: 'You', t: 'Quick request: in your next message, state how many patients the synthetic data has, and keep every design under 500 gates.' },
+      { k: 'status', t: 'Your message reached the agent' },
+      { k: 'status', t: 'ChipIn is waiting on the CNN and compact reference models (synthetic data, 14 patients)' }
+    ],
+    afterLabel: 'After the run ended: a follow-up',
+    after: [
+      { k: 'message', who: 'You', t: 'How many seizures did the chosen chip miss on the held-out patients, and which patient were they from?' },
+      { k: 'status', t: 'ChipIn is continuing the conversation' },
+      { k: 'message', who: 'ChipIn', t: 'The chosen chip (43882a209754) missed 2 of the 7 held-out seizures, both from patient p13. p13 has 2 seizures and the chip caught neither.' }
+    ],
+    boxLabel: 'The message box on a run',
+    boxHint: 'Message the agent',
+    send: 'Send',
+    stop: 'Stop',
+    notes: ['Goes to the orchestrator only, up to 4,000 characters.',
+            'Delivered live while it works, or as a follow-up once the run has ended.',
+            'Stop ends the run. It is recorded as stopped.',
+            'No fork: one run, one conversation.'],
+    toOrch: 'your message, to the orchestrator'
+  },
+
+  chippy: {
+    title: 'Chippy',
+    sub: 'the dashboard’s helper',
+    what: 'Answers questions about ChipIn and your runs, from the run data and the product’s own explanations, and moves the page to the answer.',
+    promptsLabel: 'Example prompts it offers, by view',
+    prompts: ['What is it doing now?', 'Any designs yet?', 'Why this chip?', 'Smallest design?', 'What was skipped?', 'Measured or estimated?'],
+    offerLabel: 'Buttons it can offer',
+    offers: ['Start a run', 'Message the agent', 'Stop the run'],
+    offerNote: 'Never run by the server. The page sends the request only when you press the button.',
+    toolsLabel: 'Read-only tools ({k})',
+    tools: ['list_runs', 'get_run', 'get_spec', 'get_stages', 'get_designs', 'get_design', 'get_chosen', 'get_metrics', 'get_summaries', 'get_report', 'list_files', 'read_file', 'search_messages', 'compare_runs', 'product_facts'],
+    movesLabel: 'Moves the page',
+    moves: 'Go to a view, open a run, switch tab, select a design, set the playback clock, open a file, start a new spec, highlight an element.',
+    limits: 'Up to 8 tool round trips per answer, at most $0.05 per conversation. Every number carries its basis: measured, estimate, or measured on simulated data.',
+    reads: 'reads runs and summaries'
+  },
+
+  checks: {
+    levelsTitle: 'The chip is the model',
+    levels: [
+      { n: '1', name: 'Bit-exact simulation', tool: 'simulate' },
+      { n: '2', name: 'Formal equivalence proof', tool: 'prove-equivalence' },
+      { n: '3', name: 'Streaming RTL test and lint', tool: 'rtl-simulate' },
+      { n: '4', name: 'Gate-level test after layout', tool: 'tt-package' },
+      { n: '5', name: 'Real hardware: never set automatically', tool: '' }
+    ],
+    levelNote: 'Each design carries its level and the evidence behind it. Any mismatch drops the design. None of this is clinical validation.',
+    marksTitle: 'How numbers are marked',
+    marks: [
+      { k: 'Measured', t: 'Shown plain.' },
+      { k: 'Estimate', t: 'Marked, with its assumption: power, area and cost come from layout tools in one open process.' },
+      { k: 'Simulated', t: 'Results on synthetic data are labelled as such.' }
+    ],
+    splitTitle: 'Patients',
+    splitSets: ['Training', 'Validation', 'Test'],
+    splitNote: 'Split by patient and locked before training: no patient is in two sets.',
+    worst: 'Each design is judged on its worst unseen patient.'
+  },
+
+  measured: {
+    head: ['Figure', 'Scope'],
+    rows: [
+      { fig: '2,330 gates. Outputs identical to the model on 3,880 of 3,880 test windows.',
+        scope: 'One atrial-fibrillation feasibility circuit.' },
+      { fig: '256 candidate models trained together in one GPU batch; 119 came in under the size cap.',
+        scope: 'The same feasibility run, one seed.' },
+      { fig: 'One recorded run with subagent batches: 15 subagents in five batches of three, 139 tool calls, 1,765 events, 31 min 37 s. The chosen chip: 45 gates, 0 mismatches on 100,000 vectors, formally proved (level 2).',
+        scope: 'Synthetic data. On held-out patients the chip missed both targets: sensitivity 0.714 against 0.8, and 6.67 false alarms an hour against at most 1.' }
+    ],
+    note: 'Nothing else on this page is stated as measured.',
+    sources: 'Sources on this site: dashboard/data/af-candidates.json and dashboard/data/runs/20261122-050322-2c7896.json.'
+  },
+
+  limits: {
+    items: ['ChipIn is a feasibility tool, not clinical evidence. The device maker keeps clinical validation and regulatory responsibility.',
+            'Power, area and cost are estimates from one open process.',
+            'The recorded run used synthetic data, and its chip missed both targets on held-out patients.',
+            'Without a training Python, the reference and fine-tune stages are skipped, with the reason.',
+            'Summary lines are short and machine-written. Each one opens down to the events it came from.']
+  }
+};
+/* ======================= END OF VISIBLE COPY ======================= */
+</script>
+<style>
+:root {
+  --night: #0f1a2a;
+  --deep: #16263c;
+  --signal: #5be49b;
+  --amber: #ffb86b;
+  --dusk: #c9a3c4;
+  --mute: #9aabc0;
+  --rule: rgba(214, 228, 242, .15);
+  --f: "Avenir Next", "Avenir", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --col: clamp(330px, 29vw, 420px);
+  --rail: 56px;
+  --bar: 56px;
+}
+* { box-sizing: border-box; }
+html { background: var(--night); -webkit-text-size-adjust: 100%; }
+body { margin: 0; color: #e8eef5; font: 400 17px/1.5 var(--f); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; border-radius: 6px; }
+
+/* top bar */
+.top { position: fixed; top: 0; left: 0; right: 0; height: var(--bar); z-index: 30; display: flex; align-items: center; gap: 18px; padding: 0 clamp(16px, 2.4vw, 32px); background: var(--night); border-bottom: 1px solid var(--rule); }
+.brand { font-weight: 650; font-size: 18px; letter-spacing: -.01em; text-decoration: none; color: #fff; }
+.pg { font-size: 15px; color: var(--mute); }
+.top nav { margin-left: auto; display: flex; align-items: center; gap: clamp(12px, 2vw, 22px); }
+.top nav a { font-size: 15px; font-weight: 600; text-decoration: none; color: #dbe5ef; white-space: nowrap; }
+.top nav a:hover { color: #fff; text-decoration: underline; text-underline-offset: 4px; }
+.btn { display: inline-flex; align-items: center; background: var(--signal); color: #062418 !important; font-weight: 650; border-radius: 10px; padding: 8px 15px; text-decoration: none !important; }
+.btn:hover { background: #86f2b9; }
+
+/* text column */
+main { padding-top: var(--bar); }
+.step { position: relative; }
+.step h1, .step h2 { margin: 0 0 18px; color: #fff; font-weight: 650; letter-spacing: -.03em; line-height: 1.06; text-wrap: balance; }
+.step h1 { font-size: clamp(34px, 3vw, 42px); }
+.step h2 { font-size: clamp(30px, 2.7vw, 38px); }
+.step p { margin: 0 0 12px; color: #c4d1df; font-size: 17.5px; line-height: 1.48; max-width: 36ch; }
+.step .kick { font-size: 16px; color: var(--dusk); font-weight: 600; margin-bottom: 10px; }
+.step .kick.g { color: var(--signal); }
+.step .hint { color: var(--mute); font-size: 15px; margin-top: 18px; }
+.legend { list-style: none; margin: 4px 0 8px; padding: 0; }
+.legend li { display: flex; align-items: center; gap: 12px; margin: 8px 0; font-size: 17px; color: #dfe8f1; }
+.legend i { flex: none; width: 18px; height: 18px; border-radius: 5px; border: 2px solid; }
+.legend i.up { border-color: var(--dusk); background: rgba(201, 163, 196, .18); }
+.legend i.down { border-color: var(--signal); background: rgba(91, 228, 155, .16); }
+ul.lim { list-style: none; margin: 0 0 22px; padding: 0; }
+ul.lim li { color: #dfe8f1; font-size: 17px; line-height: 1.42; padding: 9px 0; border-top: 1px solid var(--rule); max-width: 38ch; }
+ul.lim li:last-child { border-bottom: 1px solid var(--rule); }
+.acts { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; margin: 8px 0 22px; }
+.acts a:not(.btn) { font-weight: 600; color: #dbe5ef; text-underline-offset: 4px; }
+.acts .btn { padding: 11px 18px; font-size: 16px; }
+footer { font-size: 15px; color: #9aabc0; max-width: 36ch; }
+@media (max-height: 860px) {
+  .cam ul.lim li { font-size: 15.5px; line-height: 1.36; padding: 6px 0; }
+  .cam .step h2 { margin-bottom: 12px; }
+  .cam .acts { margin: 6px 0 14px; }
+}
+
+/* camera mode */
+.cam main { width: var(--col); }
+.cam .step { height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 0 26px 0 clamp(22px, 2.6vw, 40px); scroll-snap-align: start; scroll-snap-stop: always; }
+.cam .step:first-child { margin-top: calc(-1 * var(--bar)); padding-top: var(--bar); }
+html.cam { scroll-snap-type: y mandatory; }
+.cam .fig { display: none; }
+.cam .detail { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+#viewport { position: fixed; left: var(--col); right: var(--rail); top: var(--bar); bottom: 0; border-left: 1px solid var(--rule); border-right: 1px solid var(--rule); background: var(--night); overflow: hidden; }
+#cam { display: block; width: 100%; height: 100%; }
+#pins { position: absolute; inset: 0; pointer-events: none; }
+.pin { position: absolute; left: 0; top: 0; width: 25px; height: 25px; margin: -12.5px 0 0 -12.5px; border-radius: 50%; background: var(--night); border: 2px solid var(--signal); color: #fff; display: grid; place-items: center; font: 700 14px/1 var(--f); font-variant-numeric: tabular-nums; }
+.pin.u { border-color: var(--dusk); }
+
+/* right rail: one dot per stop */
+#rail { position: fixed; right: 0; top: var(--bar); bottom: 0; width: var(--rail); z-index: 25; display: flex; align-items: center; justify-content: center; }
+#rail ol { list-style: none; margin: 0; padding: 0; height: min(780px, calc(100vh - var(--bar) - 40px)); display: flex; flex-direction: column; justify-content: space-between; align-items: center; }
+#rail li { position: relative; width: 26px; height: 26px; flex: none; }
+#rail a { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 50%; border: 1.5px solid rgba(214, 228, 242, .45); color: #c4d1df; font: 650 13px/1 var(--f); font-variant-numeric: tabular-nums; text-decoration: none; }
+#rail a.u { border-color: rgba(201, 163, 196, .7); }
+#rail a.ov::before { content: ""; width: 8px; height: 8px; border-radius: 2px; border: 1.5px solid currentColor; }
+#rail a:hover { border-color: #fff; color: #fff; }
+#rail a[aria-current="step"] { background: var(--signal); border-color: var(--signal); color: #062418; }
+#rail a.u[aria-current="step"] { background: var(--dusk); border-color: var(--dusk); color: #2a1428; }
+#rail a[aria-current="step"].ov::before { border-color: #062418; }
+#rail .tip { position: absolute; right: 36px; top: 50%; transform: translateY(-50%); white-space: nowrap; background: #1a2d47; color: #fff; border: 1px solid rgba(214, 228, 242, .3); border-radius: 8px; padding: 6px 10px; font: 600 15px/1.2 var(--f); opacity: 0; pointer-events: none; transition: opacity .15s ease; }
+#rail a:hover + .tip, #rail a:focus-visible + .tip { opacity: 1; }
+.flow #rail, .flow #pins { display: none; }
+.flow #viewport { left: 0; right: auto; width: 1px; height: 1px; opacity: 0; pointer-events: none; border: 0; }
+
+/* flow mode: small screens and reduced motion */
+.flow .step { padding: clamp(32px, 6vh, 56px) clamp(18px, 4vw, 48px); border-bottom: 1px solid var(--rule); }
+.flow .step p, .flow .step h1, .flow .step h2 { max-width: 40rem; }
+.flow .fig { margin: 22px 0 0; border: 1px solid var(--rule); border-radius: 12px; background: #0d1726; overflow: hidden; }
+.flow .fig svg { display: block; width: 100%; height: auto; max-height: calc(100vh - 140px); }
+.flow .detail { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (min-width: 1000px) {
+  .flow .step { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); grid-template-rows: repeat(11, auto) 1fr; column-gap: 40px; align-items: start; }
+  .flow .step > .fig { grid-column: 2; grid-row: 1 / span 12; margin: 0; }
+  .flow .step > :not(.fig) { grid-column: 1; }
+}
+@media (max-width: 999px) {
+  .flow .detail { position: static; width: auto; height: auto; overflow: visible; clip: auto; white-space: normal; margin-top: 18px; }
+}
+@media (max-width: 560px) {
+  .pg { display: none; }
+  .top { gap: 10px; }
+  .top nav a { font-size: 14px; }
+  .top .btn { padding: 7px 12px; }
+  .step h1 { font-size: 34px; }
+  .step h2 { font-size: 29px; }
+}
+.detail { font-size: 16px; color: #c4d1df; max-width: 44rem; }
+.detail h3 { font-size: 17px; color: #fff; margin: 18px 0 6px; font-weight: 650; }
+.detail dl { margin: 0; }
+.detail dt { color: var(--mute); font-size: 15px; margin-top: 10px; }
+.detail dd { margin: 2px 0 0; }
+.detail ol, .detail ul { margin: 0; padding-left: 20px; }
+.detail li { margin: 5px 0; }
+.detail p { font-size: 16px; }
+.detail code { font-family: var(--mono); font-size: 14.5px; color: #bfe9d2; overflow-wrap: anywhere; }
+
+/* the map */
+.mapsvg { font-family: var(--f); text-rendering: geometricPrecision; }
+.mapsvg * { vector-effect: non-scaling-stroke; }
+.rg { opacity: var(--lit, 1); transition: opacity .35s ease; }
+.ovl { opacity: var(--ov, 0); }
+.c1 { fill: #fff; } .c2 { fill: #c9d5e2; } .c3 { fill: #9fb0c4; } .cg { fill: var(--signal); } .ca { fill: var(--amber); } .cd { fill: var(--dusk); } .ck { fill: #bfe9d2; }
+.mono { font-family: var(--mono); }
+.frame { fill: #122136; stroke: rgba(214, 228, 242, .22); stroke-width: 1.2; }
+.bx { fill: #172a42; stroke: rgba(214, 228, 242, .22); stroke-width: 1; }
+.bx2 { fill: #0f1c2e; stroke: rgba(214, 228, 242, .16); stroke-width: 1; }
+.bxg { fill: rgba(91, 228, 155, .08); stroke: rgba(91, 228, 155, .5); stroke-width: 1; }
+.bxa { fill: rgba(255, 184, 107, .08); stroke: rgba(255, 184, 107, .55); stroke-width: 1; }
+.bxd { fill: rgba(201, 163, 196, .1); stroke: rgba(201, 163, 196, .6); stroke-width: 1; }
+.bxu { fill: #1d2238; stroke: rgba(201, 163, 196, .75); stroke-width: 1.6; }
+.hd { fill: #1b2f4a; stroke: rgba(214, 228, 242, .3); stroke-width: 1.2; }
+.rule { stroke: rgba(214, 228, 242, .14); stroke-width: 1; fill: none; }
+.ln { fill: none; stroke: rgba(214, 228, 242, .42); stroke-width: 1.4; }
+.lng { fill: none; stroke: rgba(91, 228, 155, .6); stroke-width: 1.4; }
+.lnu { fill: none; stroke: rgba(201, 163, 196, .8); stroke-width: 1.6; stroke-dasharray: 7 6; }
+.lnu2 { fill: none; stroke: rgba(201, 163, 196, .85); stroke-width: 3; }
+.lna { fill: none; stroke: rgba(255, 184, 107, .75); stroke-width: 1.6; }
+.lnd { fill: none; stroke: rgba(214, 228, 242, .32); stroke-width: 1.3; stroke-dasharray: 5 5; }
+.lnov { fill: none; stroke: rgba(214, 228, 242, .35); stroke-width: 1.4; stroke-dasharray: 10 8; }
+.ah { fill: rgba(214, 228, 242, .62); }
+.ahg { fill: var(--signal); }
+.ahu { fill: var(--dusk); }
+.aha { fill: var(--amber); }
+.dotg { fill: var(--signal); }
+.ring { fill: none; stroke: var(--signal); stroke-width: 2; }
+.numc { fill: rgba(91, 228, 155, .18); stroke: rgba(91, 228, 155, .6); stroke-width: 1; }
+.chip rect { fill: #0f1a2a; stroke: rgba(91, 228, 155, .42); stroke-width: 1; }
+.pill rect { fill: #172a42; stroke: rgba(214, 228, 242, .3); stroke-width: 1; }
+.bar1 { fill: rgba(214, 228, 242, .35); } .bar0 { fill: var(--amber); }
+.sq0 { fill: rgba(214, 228, 242, .55); } .sq1 { fill: var(--dusk); } .sq2 { fill: var(--amber); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="../../" data-c="brand"></a>
+  <span class="pg" data-c="pageLabel"></span>
+  <nav aria-label="Main">
+    <a href="../../" data-c="home"></a>
+    <a class="btn" href="../../dashboard/variants/i1.html" data-c="dashboard"></a>
+  </nav>
+</header>
+<div id="viewport"><svg id="cam" class="mapsvg" role="img" xmlns="http://www.w3.org/2000/svg"></svg><div id="pins" aria-hidden="true"></div></div>
+<main id="steps"></main>
+<nav id="rail"><ol></ol></nav>
+<script>
+(function () {
+  'use strict';
+  var C = window.COPY;
+  var NS = 'http://www.w3.org/2000/svg';
+  var root = document.documentElement;
+  var SANS = '"Avenir Next", "Avenir", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif';
+  var MONO = 'ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace';
+
+  // ---------- counts and simple fills ----------
+  var TOOLN = 0;
+  C.tools.groups.forEach(function (g) { TOOLN += g.tools.length; });
+  function fill(s) { return String(s).replace(/\{n\}/g, String(TOOLN)); }
+  document.title = C.pageTitle;
+  var md = document.createElement('meta'); md.name = 'description'; md.content = C.description; document.head.appendChild(md);
+  document.querySelector('[data-c="brand"]').textContent = C.brand;
+  document.querySelector('[data-c="pageLabel"]').textContent = C.pageLabel;
+  document.querySelector('[data-c="home"]').textContent = C.nav.home;
+  var dbtn = document.querySelector('[data-c="dashboard"]'); dbtn.textContent = C.nav.dashboard; dbtn.href = C.nav.dashHref;
+
+  // ---------- svg helpers ----------
+  var mctx = document.createElement('canvas').getContext('2d');
+  function mw(s, size, wt, mono) { mctx.font = (wt || 400) + ' ' + size + 'px ' + (mono ? MONO : SANS); return mctx.measureText(s).width; }
+  function wrap(s, size, wt, mono, max) {
+    var words = String(s).split(' '), out = [], cur = '';
+    words.forEach(function (w) {
+      var t = cur ? cur + ' ' + w : w;
+      if (!cur || mw(t, size, wt, mono) <= max * 0.95) cur = t; else { out.push(cur); cur = w; }
+    });
+    if (cur) out.push(cur);
+    return out;
+  }
+  function E(tag, a, p) {
+    var n = document.createElementNS(NS, tag);
+    if (a) for (var k in a) n.setAttribute(k, a[k]);
+    if (p) p.appendChild(n);
+    return n;
+  }
+  // text block anchored at its top; returns its height
+  function T(p, x, top, s, o) {
+    o = o || {};
+    var size = o.size || 18, wt = o.weight || 400, lh = o.lh || Math.round(size * 1.38);
+    var lines = o.w ? wrap(s, size, wt, o.mono, o.w) : [String(s)];
+    var t = E('text', { x: x, y: top + size * 0.8, 'font-size': size, 'font-weight': wt, 'class': (o.cls || 'c2') + (o.mono ? ' mono' : '') }, p);
+    if (o.anchor) t.setAttribute('text-anchor', o.anchor);
+    lines.forEach(function (ln, i) { var ts = E('tspan', { x: x, dy: i ? lh : 0 }, t); ts.textContent = ln; });
+    return (lines.length - 1) * lh + size;
+  }
+  function NL(s, size, wt, mono, w) { return wrap(s, size, wt, mono, w).length; }
+  function TH(s, size, wt, mono, w, lh) { return (NL(s, size, wt, mono, w) - 1) * (lh || Math.round(size * 1.38)) + size; }
+  function R(p, x, y, w, h, cls, rx) { return E('rect', { x: x, y: y, width: w, height: h, rx: rx == null ? 10 : rx, 'class': cls || 'bx' }, p); }
+  function P(p, d, cls) { return E('path', { d: d, 'class': cls || 'ln' }, p); }
+  function head(p, x, y, dir, cls, s) { // arrow head whose tip is at x,y
+    s = s || 9; var d;
+    if (dir === 'down') d = 'M' + x + ' ' + y + 'l' + (-s * .6) + ' ' + (-s) + 'h' + (s * 1.2) + 'z';
+    else if (dir === 'up') d = 'M' + x + ' ' + y + 'l' + (-s * .6) + ' ' + s + 'h' + (s * 1.2) + 'z';
+    else if (dir === 'right') d = 'M' + x + ' ' + y + 'l' + (-s) + ' ' + (-s * .6) + 'v' + (s * 1.2) + 'z';
+    else d = 'M' + x + ' ' + y + 'l' + s + ' ' + (-s * .6) + 'v' + (s * 1.2) + 'z';
+    E('path', { d: d, 'class': cls || 'ah' }, p);
+  }
+  function down(p, x, y, len) { P(p, 'M' + x + ' ' + y + 'V' + (y + len - 8)); head(p, x, y + len, 'down'); }
+  // a row of boxed labels that wraps; returns its height
+  function pills(p, x, y, names, maxW, o) {
+    o = o || {}; var size = o.size || 16, wt = o.weight || 500, h = Math.round(size * 2), gap = 8, cx = x, cy = y;
+    names.forEach(function (n) {
+      var w = mw(n, size, wt, o.mono) + 22;
+      if (cx > x && cx + w > x + maxW) { cx = x; cy += h + gap; }
+      if (p) {
+        var g = E('g', { 'class': o.boxCls ? '' : (o.mono ? 'chip' : 'pill') }, p);
+        R(g, cx, cy, w, h, o.boxCls || '', 7);
+        T(g, cx + 11, cy + (h - size) / 2 - 1, n, { size: size, weight: wt, mono: o.mono, cls: o.cls || (o.mono ? 'ck' : 'c1') });
+      }
+      cx += w + gap;
+    });
+    return cy + h - y;
+  }
+
+  var cam = document.getElementById('cam');
+  cam.setAttribute('aria-label', C.mapLabel);
+  var map = E('g', { id: 'map' }, cam);
+  var ovG = E('g', { 'class': 'ovl' }, map);
+  var REG = {}, GROUPS = {}, PINS = [];
+  function G(key) { var g = E('g', { 'class': 'rg', 'data-r': key }, map); GROUPS[key] = g; return g; }
+  var links = G('links');
+  var PAD = 36;
+
+  // ---------- geometry of the lower layer ----------
+  var PI = C.pipe, ST = C.stages;
+  var PX = 1200, PW = 760, PG = 60, OW = 7 * PW + 6 * PG, orchY = 0, orchH = 180, Y0 = 300, HD = 150, IX = 32, IW = PW - 2 * IX;
+  var LEFTY = 240;
+
+  // ---------- 1 intake ----------
+  var I = C.intake;
+  (function () {
+    var g = G('intake'), X = 0, Y = LEFTY, W = 1000, x = X + PAD, iw = W - 2 * PAD, y = Y + PAD;
+    var fr = R(g, X, Y, W, 10, 'frame', 18);
+    y += T(g, x, y, I.ideaLabel, { size: 17, cls: 'c3' }) + 10;
+    var n = NL(I.idea, 21, 500, false, iw - 48), bh = (n - 1) * 29 + 21 + 36;
+    R(g, x, y, iw, bh, 'bx', 12); T(g, x + 24, y + 18, I.idea, { size: 21, weight: 500, w: iw - 48, lh: 29, cls: 'c1' });
+    y += bh; down(g, x + 60, y, 26); y += 36;
+    y += T(g, x, y, I.flowLabel, { size: 17, cls: 'c3' }) + 12;
+    var cS = x + 46, cQ = x + 226, cD = x + 606, wS = 170, wQ = 360, wD = x + iw - cD;
+    T(g, cS, y, I.head[0], { size: 16, cls: 'c3' }); T(g, cQ, y, I.head[1], { size: 16, cls: 'c3' }); T(g, cD, y, I.head[2], { size: 16, cls: 'c3' });
+    y += 28; P(g, 'M' + x + ' ' + y + 'H' + (x + iw), 'rule');
+    I.steps.forEach(function (s, i) {
+      var k = Math.max(NL(s.name, 19, 650, false, wS), NL(s.q, 19, 400, false, wQ), NL(s.d, 18, 400, false, wD));
+      var rh = (k - 1) * 25 + 19 + 22;
+      E('circle', { cx: x + 14, cy: y + 21, r: 14, 'class': 'numc' }, g);
+      T(g, x + 14, y + 13, String(i + 1), { size: 16, weight: 700, cls: 'c1', anchor: 'middle' });
+      T(g, cS, y + 11, s.name, { size: 19, weight: 650, w: wS, lh: 25, cls: 'c1' });
+      T(g, cQ, y + 11, s.q, { size: 19, w: wQ, lh: 25, cls: 'c2' });
+      T(g, cD, y + 12, s.d, { size: 18, w: wD, lh: 25, cls: 'ck' });
+      y += rh; P(g, 'M' + x + ' ' + y + 'H' + (x + iw), 'rule');
+    });
+    y += 14;
+    y += T(g, x, y, I.taskNote, { size: 18, w: iw, lh: 25, cls: 'c3' }) + 6;
+    down(g, x + 60, y, 26); y += 36;
+    var ph = pills(null, 0, 0, I.specFields, iw - 48, { size: 17, weight: 600 });
+    var nn = NL(I.specNote, 18, 400, false, iw - 48), ch = 20 + 26 + 14 + ph + 16 + (nn - 1) * 25 + 18 + 22;
+    R(g, x, y, iw, ch, 'bxg', 12);
+    T(g, x + 24, y + 20, I.specLabel, { size: 23, weight: 650, cls: 'c1' });
+    pills(g, x + 24, y + 60, I.specFields, iw - 48, { size: 17, weight: 600 });
+    T(g, x + 24, y + 60 + ph + 16, I.specNote, { size: 18, w: iw - 48, lh: 25, cls: 'c2' });
+    REG.specOut = { x: X + W, y: y + ch / 2 };
+    y += ch + PAD;
+    fr.setAttribute('height', y - Y);
+    REG.intake = { x: X, y: Y, w: W, h: y - Y };
+    PINS.push({ n: 1, x: X, y: Y });
+  })();
+
+  // ---------- 2 run size and models ----------
+  var RU = C.run;
+  (function () {
+    var g = G('run'), X = 0, Y = REG.intake.y + REG.intake.h + 90, W = 1000, x = X + PAD, iw = W - 2 * PAD, y = Y + PAD;
+    var fr = R(g, X, Y, W, 10, 'frame', 18);
+    y += T(g, x, y, RU.presetLabel, { size: 17, cls: 'c3' }) + 12;
+    var bw = (iw - 2 * 14) / 3, tw = bw - 36, ne = 0, nb = 0, nm = 0;
+    RU.presets.forEach(function (p) {
+      ne = Math.max(ne, NL(RU.effortWord.replace('{e}', p.effort), 18, 400, false, tw));
+      nb = Math.max(nb, NL(RU.batchWord.replace('{b}', p.batch), 18, 650, false, tw));
+      nm = Math.max(nm, NL(RU.eachWord.replace('{m}', p.each), 17, 400, false, tw));
+    });
+    var bh = 18 + 30 + 16 + (ne - 1) * 24 + 18 + 12 + (nb - 1) * 24 + 18 + 12 + (nm - 1) * 23 + 17 + 22;
+    RU.presets.forEach(function (p, i) {
+      var bx = x + i * (bw + 14), ey = y + 18 + 30 + 16;
+      R(g, bx, y, bw, bh, 'bx', 12);
+      T(g, bx + 18, y + 18, p.name, { size: 30, weight: 650, cls: 'c1' });
+      T(g, bx + 18, ey, RU.effortWord.replace('{e}', p.effort), { size: 18, w: tw, lh: 24, cls: 'c2' });
+      ey += (ne - 1) * 24 + 18 + 12;
+      T(g, bx + 18, ey, RU.batchWord.replace('{b}', p.batch), { size: 18, weight: 650, w: tw, lh: 24, cls: 'cg' });
+      ey += (nb - 1) * 24 + 18 + 12;
+      T(g, bx + 18, ey, RU.eachWord.replace('{m}', p.each), { size: 17, w: tw, lh: 23, cls: 'c3' });
+    });
+    y += bh + 30;
+    y += T(g, x, y, RU.modelLabel, { size: 17, cls: 'c3' }) + 12;
+    var mwid = (iw - 14) / 2, mt = mwid - 36, nt = 0;
+    RU.models.forEach(function (m) { nt = Math.max(nt, NL(m.text, 18, 400, false, mt)); });
+    var mh = 18 + 22 + 12 + (nt - 1) * 25 + 18 + 22;
+    RU.models.forEach(function (m, i) {
+      var bx = x + i * (mwid + 14);
+      R(g, bx, y, mwid, mh, 'bx', 12);
+      T(g, bx + 18, y + 18, m.name, { size: 22, weight: 650, cls: 'c1' });
+      T(g, bx + 18, y + 52, m.text, { size: 18, w: mt, lh: 25, cls: 'c2' });
+    });
+    y += mh + PAD;
+    fr.setAttribute('height', y - Y);
+    REG.run = { x: X, y: Y, w: W, h: y - Y };
+    REG.runOut = { x: X + W, y: Y + (y - Y) / 2 };
+    PINS.push({ n: 2, x: X, y: Y });
+  })();
+
+  // ---------- stage panel slots (same template for all seven) ----------
+  var FANGAP = 12;
+  var slot = { does: 0, fan: 0, tools: 0, out: 0, merge: 0 };
+  ST.forEach(function (s) {
+    slot.does = Math.max(slot.does, NL(s.does, 19, 400, false, IW));
+    if (s.fan.length) { var bw = (IW - (s.fan.length - 1) * FANGAP) / s.fan.length; s.fan.forEach(function (f) { slot.fan = Math.max(slot.fan, NL(f, 17, 500, false, bw - 20)); }); }
+    slot.tools = Math.max(slot.tools, pills(null, 0, 0, s.tools, IW, { mono: true }));
+    slot.out = Math.max(slot.out, NL(s.out, 18, 500, false, IW));
+    slot.merge = Math.max(slot.merge, NL(s.merge, 18, 400, false, IW - 16));
+  });
+  var L = {};
+  L.does = Y0 + HD + 26;
+  L.lab = L.does + (slot.does - 1) * 27 + 19 + 24;
+  L.bat = L.lab + 30;
+  L.cap = L.bat + 32;
+  L.hub = L.cap + 34;
+  L.fan = L.hub + 34;
+  L.fanH = (slot.fan - 1) * 23 + 17 + 28;
+  L.tl = L.fan + L.fanH + 26;
+  L.tc = L.tl + 28;
+  L.ol = L.tc + slot.tools + 24;
+  L.o = L.ol + 28;
+  L.ml = L.o + (slot.out - 1) * 25 + 18 + 32;
+  L.m = L.ml + 28;
+  var PH = L.m + (slot.merge - 1) * 25 + 18 + 32 - Y0;
+  var PBOT = Y0 + PH;
+  function px(i) { return PX + i * (PW + PG); }
+
+  // ---------- 13 the event stream (drawn before the orchestrator, so the rising lines pass behind it) ----------
+  var SR = C.stream, BUSY = -250, TW = 1000, TX = PX + OW / 2 - TW / 2;
+  (function () {
+    var g = G('stream'), iw = TW - 2 * PAD;
+    var subH = TH(SR.sub, 19, 400, false, iw, 26);
+    var pH = pills(null, 0, 0, SR.events, iw, { mono: true, size: 15 });
+    var h = PAD + 32 + 14 + subH + 20 + 17 + 12 + pH + PAD, by = Math.round(BUSY - h / 2);
+    var sxs = []; for (var i = 0; i < 7; i++) sxs.push(px(i) + PW - 110);
+    P(g, 'M' + sxs[0] + ' ' + BUSY + 'H' + sxs[6], 'lnu');
+    sxs.forEach(function (sx) {
+      var inBox = sx > TX && sx < TX + TW, end = inBox ? by + h : BUSY;
+      P(g, 'M' + sx + ' ' + (Y0 - 2) + 'V' + (end + 12), 'lnu'); head(g, sx, end + 2, 'up', 'ahu', 12);
+    });
+    T(g, sxs[0] + 16, -150, SR.rise, { size: 22, weight: 600, cls: 'cd' });
+    R(g, TX, by, TW, h, 'bxu', 16);
+    var x = TX + PAD, y = by + PAD;
+    y += T(g, x, y, SR.title, { size: 32, weight: 650, cls: 'c1' }) + 14;
+    y += T(g, x, y, SR.sub, { size: 19, w: iw, lh: 26, cls: 'c2' }) + 20;
+    y += T(g, x, y, SR.eventsLabel, { size: 17, cls: 'c3' }) + 12;
+    pills(g, x, y, SR.events, iw, { mono: true, size: 15 });
+    REG.stream = { x: TX, y: by, w: TW, h: h };
+    PINS.push({ n: 13, x: TX, y: by, u: true });
+  })();
+
+  // ---------- 14 and 15 levels of summary: a ladder rising from the stream ----------
+  var SU = C.sums;
+  (function () {
+    var g = G('tower'), gi = E('g', {}, g), x = TX + PAD, iw = TW - 2 * PAD, y = PAD;
+    var fr = R(gi, TX, 0, TW, 10, 'frame', 18);
+    y += T(gi, x, y, SU.title, { size: 36, weight: 650, cls: 'c1' }) + 14;
+    y += T(gi, x, y, SU.sub, { size: 19, w: iw, lh: 27, cls: 'c2' }) + 22;
+    var wy = y, wh = 20 + 19 + 12;
+    SU.writer.forEach(function (s) { wh += TH(s, 18, 400, false, iw - 44, 25) + 8; }); wh += 14;
+    R(gi, x, wy, iw, wh, 'bxd', 12);
+    var yy = wy + 20; yy += T(gi, x + 22, yy, SU.writerTitle, { size: 19, weight: 650, cls: 'cd' }) + 12;
+    SU.writer.forEach(function (s) { yy += T(gi, x + 22, yy, s, { size: 18, w: iw - 44, lh: 25, cls: 'c2' }) + 8; });
+    y = wy + wh + 26;
+    var rows = [];
+    SU.levels.forEach(function (lv) {
+      var tw = iw - 44, mono = lv.by === 'stream', es = mono ? 17 : 20, el = mono ? 25 : 28;
+      var eh = TH(lv.text, es, 400, mono, tw, el);
+      var nh = lv.note ? TH(lv.note, 17, 400, false, tw, 23) + 12 : 0;
+      var rh = 66 + eh + nh + 22;
+      R(gi, x, y, iw, rh, lv.by === 'model' ? 'bx' : 'bx2', 12);
+      T(gi, x + 22, y + 18, lv.name, { size: 26, weight: 650, cls: 'c1' });
+      T(gi, x + 22 + mw(lv.name, 26, 650) + 16, y + 25, SU.countWord.replace('{c}', lv.count), { size: 18, cls: 'c3' });
+      var bt = SU.byWord[lv.by], bw = mw(bt, 16, 650) + 26;
+      var bc = lv.by === 'model' ? ['bxd', 'cd'] : lv.by === 'own' ? ['bxg', 'cg'] : ['bx', 'c3'];
+      R(gi, x + iw - 22 - bw, y + 17, bw, 30, bc[0], 15);
+      T(gi, x + iw - 22 - bw / 2, y + 24, bt, { size: 16, weight: 650, cls: bc[1], anchor: 'middle' });
+      T(gi, x + 22, y + 66, lv.text, { size: es, w: tw, lh: el, mono: mono, cls: mono ? 'ck' : 'c1' });
+      if (lv.note) T(gi, x + 22, y + 66 + eh + 12, lv.note, { size: 17, w: tw, lh: 23, cls: 'c3' });
+      rows.push({ top: y, bot: y + rh });
+      y += rh + 30;
+    });
+    for (var k = 0; k < rows.length - 1; k++) {
+      var ax = x + 60;
+      P(gi, 'M' + ax + ' ' + (rows[k + 1].top - 2) + 'V' + (rows[k].bot + 10), 'lnu2'); head(gi, ax, rows[k].bot + 1, 'up', 'ahu', 11);
+    }
+    y += 18 - 30;
+    y += T(gi, x, y, SU.note, { size: 17, w: iw, lh: 23, cls: 'c3' }) + PAD;
+    fr.setAttribute('height', y);
+    var H = y, off = Math.round(REG.stream.y - 120 - H);
+    gi.setAttribute('transform', 'translate(0 ' + off + ')');
+    REG.tower = { x: TX, y: off, w: TW, h: H };
+    REG.towerUp = { x: TX, y: off, w: TW, h: rows[2].bot + 24 };
+    REG.towerLow = { x: TX, y: off + rows[3].top - 24, w: TW, h: H - rows[3].top + 24 };
+    var evTop = off + rows[rows.length - 1].top;
+    REG.streamView = { x: TX - 20, y: evTop - 24, w: TW + 40, h: (Y0 + HD) - (evTop - 24) + 24 };
+    P(g, 'M' + (TX + TW / 2) + ' ' + (REG.stream.y - 2) + 'V' + (off + H + 14), 'lnu2'); head(g, TX + TW / 2, off + H + 2, 'up', 'ahu', 14);
+    PINS.push({ n: 14, x: TX, y: off + rows[3].top, u: true });
+    PINS.push({ n: 15, x: TX, y: off, u: true });
+  })();
+
+  // ---------- 3 to 10 the orchestrator and the seven stages ----------
+  (function () {
+    var g = G('orch');
+    R(g, PX, orchY, OW, orchH, 'hd', 18);
+    T(g, PX + 40, orchY + 36, PI.orchTitle, { size: 100, weight: 650, cls: 'c1' });
+    T(g, PX + 40 + mw(PI.orchTitle, 100, 650) + 60, orchY + 76, PI.orchSub, { size: 44, cls: 'c2' });
+    ST.forEach(function (s, i) {
+      var x = px(i), cx = x + PW / 2;
+      P(g, 'M' + cx + ' ' + (orchY + orchH) + 'V' + (Y0 - 10)); head(g, cx, Y0 - 1, 'down', 'ah', 12);
+      if (i < 6) { P(g, 'M' + (x + PW + 4) + ' ' + (Y0 + HD / 2) + 'H' + (x + PW + PG - 14)); head(g, x + PW + PG - 3, Y0 + HD / 2, 'right', 'ah', 12); }
+    });
+    REG.orch = { x: PX, y: orchY, w: OW, h: PBOT - orchY };
+    PINS.push({ n: 3, x: PX, y: orchY });
+  })();
+  ST.forEach(function (s, i) {
+    var g = G('p' + i), x = px(i), ix = x + IX, cx = x + PW / 2;
+    R(g, x, Y0, PW, PH, 'frame', 18);
+    R(g, x, Y0, PW, HD, 'hd', 18);
+    T(g, x + 32, Y0 + 26, s.name, { size: 96, weight: 650, cls: 'c1' });
+    var gx = x + PW - 100, gy = Y0 + 42;
+    if (s.alone) { E('circle', { cx: gx, cy: gy + 30, r: 16, 'class': 'ring' }, g); E('circle', { cx: gx, cy: gy + 30, r: 7, 'class': 'dotg' }, g); }
+    else {
+      E('circle', { cx: gx, cy: gy, r: 7, 'class': 'dotg' }, g);
+      for (var j = 0; j < 3; j++) { var fx = gx - 40 + 40 * j; P(g, 'M' + gx + ' ' + gy + 'L' + fx + ' ' + (gy + 56), 'lng'); E('circle', { cx: fx, cy: gy + 60, r: 7, 'class': 'dotg' }, g); }
+    }
+    T(g, ix, L.does, s.does, { size: 19, w: IW, lh: 27, cls: 'c1' });
+    T(g, ix, L.lab, s.alone ? PI.aloneLabel : PI.batchLabel, { size: 18, weight: 600, cls: s.alone ? 'c3' : 'cg' });
+    T(g, ix, L.bat, s.alone ? PI.aloneSizes : PI.sizes, { size: 18, cls: 'c2' });
+    if (s.alone) {
+      var ow = 300, ox = cx - ow / 2;
+      P(g, 'M' + cx + ' ' + (L.hub - 10) + 'V' + L.fan, 'lng');
+      R(g, ox, L.fan, ow, L.fanH, 'bx', 10);
+      T(g, cx, L.fan + (L.fanH - 18) / 2, PI.orchTitle, { size: 19, weight: 650, cls: 'c1', anchor: 'middle' });
+    } else {
+      T(g, ix, L.cap, PI.recLabel, { size: 16, cls: 'c3' });
+      var n = s.fan.length, bw = (IW - (n - 1) * FANGAP) / n;
+      s.fan.forEach(function (f, q) {
+        var bx = ix + q * (bw + FANGAP), bcx = bx + bw / 2;
+        P(g, 'M' + cx + ' ' + L.hub + 'C' + cx + ' ' + (L.hub + 20) + ' ' + bcx + ' ' + (L.fan - 20) + ' ' + bcx + ' ' + L.fan, 'lng');
+        R(g, bx, L.fan, bw, L.fanH, 'bxg', 9);
+        T(g, bx + 10, L.fan + 14, f, { size: 17, weight: 500, w: bw - 20, lh: 23, cls: 'c1' });
+      });
+      E('circle', { cx: cx, cy: L.hub, r: 6, 'class': 'dotg' }, g);
+    }
+    T(g, ix, L.tl, PI.toolsWord, { size: 17, cls: 'c3' });
+    pills(g, ix, L.tc, s.tools, IW, { mono: true });
+    T(g, ix, L.ol, PI.outWord, { size: 17, cls: 'c3' });
+    T(g, ix, L.o, s.out, { size: 18, weight: 500, w: IW, lh: 25, cls: 'c1' });
+    P(g, 'M' + ix + ' ' + (L.ml - 16) + 'H' + (ix + IW), 'rule');
+    T(g, ix, L.ml, s.alone ? PI.carryWord : PI.mergeWord, { size: 17, cls: 'cg' });
+    E('rect', { x: ix, y: L.m, width: 4, height: (NL(s.merge, 18, 400, false, IW - 16) - 1) * 25 + 20, rx: 2, 'class': 'dotg' }, g);
+    T(g, ix + 16, L.m, s.merge, { size: 18, w: IW - 16, lh: 25, cls: 'c2' });
+    REG['p' + i] = { x: x, y: Y0, w: PW, h: PH };
+    PINS.push({ n: 4 + i, x: x, y: Y0 });
+  });
+
+  // ---------- 16 talking to the agent ----------
+  var TK = C.talk;
+  (function () {
+    var g = G('talk'), gi = E('g', {}, g), X = 0, W = 1000, x = X + PAD, iw = W - 2 * PAD, y = PAD;
+    var fr = R(gi, X, 0, W, 10, 'frame', 18);
+    var LW = 580, RX2 = x + LW + 40, RW2 = iw - LW - 40;
+    function block(label, rows) {
+      y += T(gi, x, y, label, { size: 17, weight: 600, cls: 'c3' }) + 14;
+      rows.forEach(function (r) {
+        var isMsg = r.k === 'message', you = r.who === 'You', tw = LW - 150;
+        var th = isMsg ? TH(r.t, 18, 400, false, tw, 25) : TH(r.t, 17, 400, false, LW - 130, 23);
+        var h = isMsg ? 42 + th + 18 + 10 : th + 20;
+        E('circle', { cx: x + 10, cy: y + 18, r: 6, 'class': isMsg ? (you ? 'ca' : 'dotg') : 'ah' }, gi);
+        T(gi, x + 26, y + 9, r.k, { size: 15, mono: true, cls: 'c3' });
+        if (isMsg) {
+          R(gi, x + 120, y, LW - 120, h - 10, you ? 'bxa' : 'bxg', 12);
+          T(gi, x + 140, y + 13, r.who, { size: 17, weight: 650, cls: you ? 'ca' : 'cg' });
+          T(gi, x + 140, y + 42, r.t, { size: 18, w: tw, lh: 25, cls: 'c1' });
+        } else T(gi, x + 120, y + 8, r.t, { size: 17, w: LW - 130, lh: 23, cls: 'c2' });
+        y += h;
+      });
+      y += 18;
+    }
+    block(TK.duringLabel, TK.during);
+    P(gi, 'M' + x + ' ' + (y - 8) + 'H' + (x + LW), 'rule'); y += 12;
+    block(TK.afterLabel, TK.after);
+    var ry = PAD;
+    ry += T(gi, RX2, ry, TK.boxLabel, { size: 17, weight: 600, cls: 'c3' }) + 14;
+    R(gi, RX2, ry, RW2, 58, 'bx', 10); T(gi, RX2 + 18, ry + 19, TK.boxHint, { size: 19, cls: 'c3' });
+    var boxMid = ry + 29; ry += 58 + 12;
+    var bw2 = (RW2 - 12) / 2;
+    R(gi, RX2, ry, bw2, 48, 'bxg', 10); T(gi, RX2 + bw2 / 2, ry + 14, TK.send, { size: 19, weight: 650, cls: 'cg', anchor: 'middle' });
+    R(gi, RX2 + bw2 + 12, ry, bw2, 48, 'bxa', 10); T(gi, RX2 + bw2 * 1.5 + 12, ry + 14, TK.stop, { size: 19, weight: 650, cls: 'ca', anchor: 'middle' });
+    ry += 48 + 34;
+    TK.notes.forEach(function (s) {
+      P(gi, 'M' + RX2 + ' ' + (ry - 14) + 'H' + (RX2 + RW2), 'rule');
+      ry += T(gi, RX2, ry, s, { size: 18, w: RW2, lh: 25, cls: 'c1' }) + 28;
+    });
+    var H = Math.max(y - 18, ry - 28) + PAD, off = -460 - H;
+    fr.setAttribute('height', H);
+    gi.setAttribute('transform', 'translate(0 ' + off + ')');
+    REG.talk = { x: X, y: off, w: W, h: H };
+    REG.talkOut = { x: X + W, y: off + boxMid };
+    PINS.push({ n: 16, x: X, y: off, u: true });
+  })();
+
+  // ---------- 17 Chippy ----------
+  var CH = C.chippy;
+  (function () {
+    var g = G('chippy'), gi = E('g', {}, g), X = TX + TW + 380, W = 1000, x = X + PAD, iw = W - 2 * PAD, y = PAD;
+    var fr = R(gi, X, 0, W, 10, 'frame', 18);
+    var LW = 450, RX2 = x + LW + 40, RW2 = iw - LW - 40;
+    R(gi, x, y + 2, 52, 40, 'bxg', 12);
+    E('path', { d: 'M' + (x + 12) + ' ' + (y + 41) + 'l-2 13l15 -13z', 'class': 'dotg' }, gi);
+    for (var q = 0; q < 3; q++) E('circle', { cx: x + 15 + q * 11, cy: y + 22, r: 3.4, 'class': 'dotg' }, gi);
+    T(gi, x + 70, y, CH.title, { size: 36, weight: 650, cls: 'c1' });
+    T(gi, x + 70 + mw(CH.title, 36, 650) + 14, y + 14, CH.sub, { size: 19, cls: 'c3' });
+    y += 36 + 26;
+    y += T(gi, x, y, CH.what, { size: 19, w: LW, lh: 27, cls: 'c1' }) + 26;
+    y += T(gi, x, y, CH.promptsLabel, { size: 17, weight: 600, cls: 'c3' }) + 12;
+    y += pills(gi, x, y, CH.prompts, LW, { size: 17 }) + 26;
+    y += T(gi, x, y, CH.offerLabel, { size: 17, weight: 600, cls: 'c3' }) + 12;
+    y += pills(gi, x, y, CH.offers, LW, { size: 17, boxCls: 'bxa', cls: 'ca' }) + 12;
+    y += T(gi, x, y, CH.offerNote, { size: 17, w: LW, lh: 23, cls: 'c2' });
+    var ry = PAD;
+    ry += T(gi, RX2, ry, CH.toolsLabel.replace('{k}', CH.tools.length), { size: 17, weight: 600, cls: 'c3' }) + 12;
+    ry += pills(gi, RX2, ry, CH.tools, RW2, { mono: true, size: 15 }) + 26;
+    ry += T(gi, RX2, ry, CH.movesLabel, { size: 17, weight: 600, cls: 'c3' }) + 10;
+    ry += T(gi, RX2, ry, CH.moves, { size: 18, w: RW2, lh: 25, cls: 'c1' }) + 30;
+    P(gi, 'M' + RX2 + ' ' + (ry - 15) + 'H' + (RX2 + RW2), 'rule');
+    ry += T(gi, RX2, ry, CH.limits, { size: 17, w: RW2, lh: 23, cls: 'c3' });
+    var H = Math.max(y, ry) + PAD, off = -460 - H;
+    fr.setAttribute('height', H);
+    gi.setAttribute('transform', 'translate(0 ' + off + ')');
+    REG.chippy = { x: X, y: off, w: W, h: H };
+    PINS.push({ n: 17, x: X, y: off, u: true });
+  })();
+
+  // ---------- row of regions below ----------
+  var ROWY = Math.max(REG.run.y + REG.run.h, PBOT + 220) + 150, RW = 1000, RGAP = (PX + OW - 4 * RW) / 3;
+  function rx(i) { return i * (RW + RGAP); }
+
+  // 11 what an agent is
+  var AG = C.agent;
+  (function () {
+    var g = G('agent'), X = rx(0), Y = ROWY, x = X + PAD, iw = RW - 2 * PAD, y = Y + PAD;
+    var fr = R(g, X, Y, RW, 10, 'frame', 18);
+    y += T(g, x, y, AG.label, { size: 17, w: iw, cls: 'c3' }) + 16;
+    AG.layers.forEach(function (l, i) {
+      var tw = iw - 230, h = TH(l.text, 19, 400, false, tw, 27) + 40;
+      R(g, x, y, iw, h, i % 2 ? 'bx2' : 'bx', 12);
+      T(g, x + 24, y + 19, l.name, { size: 24, weight: 650, cls: 'c1' });
+      T(g, x + 206, y + 21, l.text, { size: 19, w: tw, lh: 27, cls: 'c2' });
+      y += h + 8;
+    });
+    y += 18;
+    var rh = TH(AG.rule, 21, 600, false, iw - 48, 29) + 40;
+    R(g, x, y, iw, rh, 'bxg', 12);
+    T(g, x + 24, y + 20, AG.rule, { size: 21, weight: 600, w: iw - 48, lh: 29, cls: 'c1' });
+    y += rh + PAD;
+    fr.setAttribute('height', y - Y);
+    REG.agent = { x: X, y: Y, w: RW, h: y - Y };
+    PINS.push({ n: 11, x: X, y: Y });
+  })();
+
+  // 12 the chip lab
+  var TO = C.tools;
+  (function () {
+    var g = G('tools'), X = rx(1), Y = ROWY, P2 = 28, x = X + P2, iw = RW - 2 * P2, y = Y + P2;
+    var fr = R(g, X, Y, RW, 10, 'frame', 18);
+    var lw = T(g, x, y, TO.callLabel, { size: 17, cls: 'c3' });
+    T(g, x + mw(TO.callLabel, 17, 400) + 14, y, TO.call, { size: 17, mono: true, cls: 'ck' });
+    y += lw + 18;
+    var CG = 24, CWD = (iw - 2 * CG) / 3, cols = [[0, 1], [2, 3], [4, 5]], bottom = y;
+    cols.forEach(function (gi, c) {
+      var cxx = x + c * (CWD + CG), cy = y;
+      gi.forEach(function (k) {
+        var grp = TO.groups[k];
+        var nh = TH(grp.name + ' (' + grp.tools.length + ')', 17, 650, false, CWD - 20, 22);
+        R(g, cxx, cy, CWD, nh + 16, 'bx', 7);
+        T(g, cxx + 10, cy + 8, grp.name + ' (' + grp.tools.length + ')', { size: 17, weight: 650, w: CWD - 20, lh: 22, cls: 'c1' });
+        cy += nh + 24;
+        grp.tools.forEach(function (t) {
+          var tag = !t[2].length ? TO.none : t[2][0] === 'any' ? TO.any : t[2].join(', ');
+          var tc = !t[2].length || t[2][0] === 'any' ? 'c3' : 'cg';
+          var nmw = mw(t[0], 16, 500, true), tgw = mw(tag, 16, 400);
+          T(g, cxx + 2, cy, t[0], { size: 16, weight: 500, mono: true, cls: 'ck' });
+          var dy = cy + 21;
+          if (nmw + tgw + 14 <= CWD) T(g, cxx + CWD, cy, tag, { size: 16, cls: tc, anchor: 'end' });
+          else { T(g, cxx + 2, dy, tag, { size: 16, cls: tc }); dy += 21; }
+          dy += T(g, cxx + 2, dy, t[1], { size: 16, w: CWD - 4, lh: 20, cls: 'c2' });
+          cy = dy + 8;
+          P(g, 'M' + cxx + ' ' + (cy - 2) + 'H' + (cxx + CWD), 'rule');
+        });
+        cy += 14;
+      });
+      bottom = Math.max(bottom, cy);
+    });
+    var hh = bottom - 14 + P2 - Y;
+    fr.setAttribute('height', hh);
+    REG.tools = { x: X, y: Y, w: RW, h: hh };
+    PINS.push({ n: 12, x: X, y: Y });
+  })();
+
+  // 18 what is checked
+  var CK = C.checks;
+  (function () {
+    var g = G('checks'), X = rx(2), Y = ROWY, x = X + PAD, iw = RW - 2 * PAD, y = Y + PAD;
+    var fr = R(g, X, Y, RW, 10, 'frame', 18);
+    var CW2 = (iw - 40) / 2, x2 = x + CW2 + 40;
+    y += T(g, x, y, CK.levelsTitle, { size: 23, weight: 650, cls: 'c1' }) + 14;
+    CK.levels.forEach(function (lv) {
+      var tw = CW2 - 60, nl = NL(lv.name, 18, 600, false, tw), h = (nl - 1) * 24 + 18 + (lv.tool ? 26 : 0) + 22;
+      R(g, x, y, CW2, h, 'bx2', 10);
+      E('circle', { cx: x + 24, cy: y + 22, r: 14, 'class': 'numc' }, g);
+      T(g, x + 24, y + 14, lv.n, { size: 16, weight: 700, cls: 'c1', anchor: 'middle' });
+      T(g, x + 50, y + 11, lv.name, { size: 18, weight: 600, w: tw, lh: 24, cls: 'c1' });
+      if (lv.tool) T(g, x + 50, y + 11 + nl * 24 + 2, lv.tool, { size: 16, mono: true, cls: 'ck' });
+      y += h + 6;
+    });
+    y += 10;
+    y += T(g, x, y, CK.levelNote, { size: 18, w: CW2, lh: 25, cls: 'c2' });
+    var leftEnd = y;
+    var ry = Y + PAD;
+    ry += T(g, x2, ry, CK.marksTitle, { size: 23, weight: 650, cls: 'c1' }) + 14;
+    CK.marks.forEach(function (m) {
+      var cls = m.k === 'Estimate' ? 'ca' : m.k === 'Simulated' ? 'cd' : 'c1';
+      T(g, x2, ry, m.k, { size: 18, weight: 650, cls: cls });
+      ry += 26;
+      ry += T(g, x2, ry, m.t, { size: 18, w: CW2, lh: 25, cls: 'c2' }) + 16;
+    });
+    ry += 14;
+    ry += T(g, x2, ry, CK.splitTitle, { size: 23, weight: 650, cls: 'c1' }) + 16;
+    var sets = [10, 3, 3], sq = 16, sg = 5, sx = x2;
+    sets.forEach(function (cnt, si) {
+      var w = cnt * (sq + sg) - sg;
+      for (var q = 0; q < cnt; q++) R(g, sx + q * (sq + sg), ry, sq, sq, 'sq' + si, 4);
+      T(g, sx, ry + sq + 10, CK.splitSets[si], { size: 16, cls: 'c3' });
+      sx += Math.max(w, mw(CK.splitSets[si], 16, 400)) + 22;
+    });
+    ry += sq + 10 + 16 + 18;
+    ry += T(g, x2, ry, CK.splitNote, { size: 18, w: CW2, lh: 25, cls: 'c2' }) + 18;
+    var hts = [0.82, 0.9, 0.62, 0.86, 0.77, 0.94], bh0 = 56;
+    hts.forEach(function (hv, q) { var h = bh0 * hv; R(g, x2 + q * 26, ry + bh0 - h, 18, h, hv === 0.62 ? 'bar0' : 'bar1', 3); });
+    ry += bh0 + 12;
+    ry += T(g, x2, ry, CK.worst, { size: 18, w: CW2, lh: 25, cls: 'ca' });
+    y = Math.max(leftEnd, ry) + PAD;
+    fr.setAttribute('height', y - Y);
+    REG.checks = { x: X, y: Y, w: RW, h: y - Y };
+    PINS.push({ n: 18, x: X, y: Y });
+  })();
+
+  // 19 measured so far
+  var ME = C.measured;
+  (function () {
+    var g = G('meas'), X = rx(3), Y = ROWY, x = X + PAD, iw = RW - 2 * PAD, y = Y + PAD;
+    var fr = R(g, X, Y, RW, 10, 'frame', 18);
+    var FW = 520, SW = iw - FW - 36;
+    T(g, x, y, ME.head[0], { size: 17, cls: 'c3' }); T(g, x + FW + 36, y, ME.head[1], { size: 17, cls: 'c3' });
+    y += 28; P(g, 'M' + x + ' ' + y + 'H' + (x + iw), 'rule');
+    ME.rows.forEach(function (r) {
+      var h = Math.max(TH(r.fig, 21, 600, false, FW, 29), TH(r.scope, 18, 400, false, SW, 25)) + 36;
+      T(g, x, y + 18, r.fig, { size: 21, weight: 600, w: FW, lh: 29, cls: 'c1' });
+      T(g, x + FW + 36, y + 19, r.scope, { size: 18, w: SW, lh: 25, cls: 'c2' });
+      y += h; P(g, 'M' + x + ' ' + y + 'H' + (x + iw), 'rule');
+    });
+    y += 18;
+    y += T(g, x, y, ME.note, { size: 18, cls: 'c1' }) + 12;
+    y += T(g, x, y, ME.sources, { size: 17, w: iw, lh: 23, cls: 'c3' }) + PAD;
+    fr.setAttribute('height', y - Y);
+    REG.meas = { x: X, y: Y, w: RW, h: y - Y };
+    PINS.push({ n: 19, x: X, y: Y });
+  })();
+
+  // 20 limits: the view pulls back to the whole map again
+
+  // pins sit on the top-right corner of their region, clear of its heading
+  PINS.forEach(function (p) {
+    if (p.n === 3) { p.x += 900; p.y -= 46; }
+    else if (p.n >= 4 && p.n <= 10) { p.x += Math.round(PW * 0.74); p.y -= 60; }
+    else p.x += 1000;
+  });
+
+  // ---------- links between parts ----------
+  (function () {
+    var g = links, so = REG.specOut, ro = REG.runOut, sy = Y0 + HD / 2;
+    P(g, 'M' + so.x + ' ' + so.y + 'H' + (PX - 120) + 'V' + sy + 'H' + (PX - 12), 'lng'); head(g, PX - 1, sy, 'right', 'ahg', 12);
+    P(g, 'M' + ro.x + ' ' + ro.y + 'H' + (PX - 70) + 'V' + (orchY + orchH / 2) + 'H' + (PX - 12)); head(g, PX - 1, orchY + orchH / 2, 'right', 'ah', 12);
+    // the message box talks to the orchestrator only
+    var to = REG.talkOut, mx = PX + 200;
+    P(g, 'M' + (to.x + 2) + ' ' + to.y + 'H' + mx + 'V' + (orchY - 12), 'lna'); head(g, mx, orchY - 1, 'down', 'aha', 13);
+    T(g, to.x + 22, to.y - 34, TK.toOrch, { size: 19, weight: 600, cls: 'ca' });
+    // Chippy reads the runs and their summaries
+    var ty = REG.chippy.y + 120, tx0 = TX + TW, tx1 = REG.chippy.x;
+    P(g, 'M' + (tx0 + 2) + ' ' + ty + 'H' + (tx1 - 12), 'lnu'); head(g, tx1 - 1, ty, 'right', 'ahu', 12);
+    T(g, (tx0 + tx1) / 2, ty - 34, CH.reads, { size: 19, weight: 600, cls: 'cd', anchor: 'middle' });
+    // every skill call goes to the chip lab
+    var busY = PBOT + 110, tcx = REG.tools.x + REG.tools.w / 2;
+    for (var i = 0; i < 7; i++) P(g, 'M' + (px(i) + PW / 2) + ' ' + (PBOT + 2) + 'V' + busY, 'lnd');
+    P(g, 'M' + Math.min(tcx, px(0) + PW / 2) + ' ' + busY + 'H' + (px(6) + PW / 2), 'lnd');
+    P(g, 'M' + tcx + ' ' + busY + 'V' + (ROWY - 12), 'lnd'); head(g, tcx, ROWY - 1, 'down', 'ah', 12);
+  })();
+
+  // ---------- the two layers, named on the whole-map view only ----------
+  (function () {
+    var dy = -95, s = 120;
+    while (s > 60 && Math.max(mw(C.layers.up, s, 650), mw(C.layers.down, s, 650)) > 1120) s -= 4;
+    P(ovG, 'M-100 ' + dy + 'H' + (PX + OW + 100), 'lnov');
+    T(ovG, 0, dy - 30 - s, C.layers.up, { size: s, weight: 650, cls: 'cd' });
+    T(ovG, 0, dy + 26, C.layers.down, { size: s, weight: 650, cls: 'cg' });
+  })();
+
+  // ---------- whole map ----------
+  var minX = 0, minY = 0, maxX = 0, maxY = 0;
+  Object.keys(REG).forEach(function (k) { var r = REG[k]; if (r.h) { minX = Math.min(minX, r.x); minY = Math.min(minY, r.y); maxX = Math.max(maxX, r.x + r.w); maxY = Math.max(maxY, r.y + r.h); } });
+  maxX = Math.max(maxX, PX + OW);
+  REG.all = { x: minX - 140, y: minY - 140, w: maxX - minX + 280, h: maxY - minY + 280 };
+
+  // ---------- stops ----------
+  var RECT = { intake: 'intake', run: 'run', pipe: 'orch', agent: 'agent', tools: 'tools', stream: 'streamView', sumLow: 'towerLow', sumUp: 'towerUp', talk: 'talk', chippy: 'chippy', checks: 'checks', meas: 'meas', limits: 'all' };
+  var FOC = { pipe: ['orch', 'p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6'], stream: ['stream', 'tower'], sumLow: ['tower'], sumUp: ['tower'] };
+  var UPPER = { stream: 1, sumLow: 1, sumUp: 1, talk: 1, chippy: 1 };
+  var STEPS = [{ key: 'intro', title: C.intro.title, focus: [], rect: REG.all, n: 0, whole: true }];
+  C.steps.forEach(function (s, i) {
+    var o = { key: s.key, n: i + 1 };
+    var m = /^st(\d)$/.exec(s.key);
+    if (m) {
+      var si = +m[1], sd = ST[si];
+      o.stage = si; o.kicker = PI.stageWord.replace('{i}', si + 1); o.title = sd.name; o.lines = [sd.lead];
+      o.focus = ['p' + si]; o.rect = REG['p' + si];
+    } else {
+      o.title = fill(s.title); o.lines = s.lines.map(fill); o.kicker = s.kicker;
+      o.focus = FOC[s.key] || [s.key]; o.rect = REG[RECT[s.key]];
+    }
+    o.upper = !!UPPER[s.key];
+    if (o.rect === REG.all) { o.whole = true; o.focus = []; }
+    STEPS.push(o);
+  });
+  var N = STEPS.length;
+
+  // ---------- text sections, their figures and plain-text equivalents ----------
+  var main = document.getElementById('steps');
+  function H(tag, cls, text, parent) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; if (parent) parent.appendChild(n); return n; }
+  function dl(parent, pairs) { var d = H('dl', '', null, parent); pairs.forEach(function (p) { H('dt', '', p[0], d); var dd = H('dd', '', null, d); if (p[1] instanceof Node) dd.appendChild(p[1]); else dd.textContent = p[1]; }); return d; }
+  function codes(list) { var s = document.createElement('span'); list.forEach(function (n, i) { if (i) s.appendChild(document.createTextNode(', ')); H('code', '', n, s); }); return s; }
+  function ul(parent, items) { var u = H('ul', '', null, parent); items.forEach(function (t) { H('li', '', t, u); }); return u; }
+  function chat(rows) { return rows.map(function (r) { return (r.who ? r.who : r.k) + ': ' + r.t; }); }
+  function detail(st, box) {
+    var k = st.key;
+    if (k === 'intake') {
+      H('h3', '', I.ideaLabel, box); H('p', '', I.idea, box);
+      H('h3', '', I.flowLabel, box);
+      var ol = H('ol', '', null, box); I.steps.forEach(function (s) { H('li', '', s.name + '. ' + s.q + ' ' + I.head[2] + ': ' + s.d + '.', ol); });
+      H('p', '', I.taskNote, box);
+      H('h3', '', I.specLabel, box); H('p', '', I.specFields.join(', ') + '. ' + I.specNote, box);
+    } else if (k === 'run') {
+      H('h3', '', RU.presetLabel, box);
+      ul(box, RU.presets.map(function (p) { return p.name + '. ' + RU.effortWord.replace('{e}', p.effort) + '. ' + RU.batchWord.replace('{b}', p.batch) + '. ' + RU.eachWord.replace('{m}', p.each) + '.'; }));
+      H('h3', '', RU.modelLabel, box); ul(box, RU.models.map(function (m) { return m.name + '. ' + m.text; }));
+    } else if (k === 'pipe') {
+      var o2 = H('ol', '', null, box); ST.forEach(function (s) { H('li', '', s.name + '. ' + (s.alone ? PI.aloneLabel : PI.batchLabel) + '.', o2); });
+      H('p', '', PI.sizes + '.', box);
+    } else if (st.stage != null) {
+      var s = ST[st.stage];
+      dl(box, [[PI.stageWord.replace('{i}', st.stage + 1), s.does],
+               [s.alone ? PI.aloneLabel : PI.batchLabel, s.alone ? PI.aloneSizes + '.' : PI.sizes + '. ' + PI.recLabel + ': ' + s.fan.join('; ') + '.'],
+               [PI.toolsWord, codes(s.tools)], [PI.outWord, s.out], [s.alone ? PI.carryWord : PI.mergeWord, s.merge]]);
+    } else if (k === 'agent') {
+      H('p', '', AG.label, box); dl(box, AG.layers.map(function (l) { return [l.name, l.text]; })); H('p', '', AG.rule, box);
+    } else if (k === 'tools') {
+      H('p', '', TO.callLabel + ': ', box).appendChild(codes([TO.call]));
+      TO.groups.forEach(function (g) {
+        H('h3', '', g.name + ' (' + g.tools.length + ')', box);
+        var u = H('ul', '', null, box);
+        g.tools.forEach(function (t) {
+          var li = H('li', '', null, u); H('code', '', t[0], li);
+          li.appendChild(document.createTextNode(': ' + t[1] + ' (' + (!t[2].length ? TO.none : t[2][0] === 'any' ? TO.any : t[2].join(', ')) + ')'));
+        });
+      });
+    } else if (k === 'stream') {
+      H('p', '', SR.sub, box); H('h3', '', SR.eventsLabel, box); H('p', '', null, box).appendChild(codes(SR.events));
+    } else if (k === 'sumLow' || k === 'sumUp') {
+      var lv = k === 'sumUp' ? SU.levels.slice(0, 3) : SU.levels.slice(3);
+      if (k === 'sumUp') { H('h3', '', SU.writerTitle, box); ul(box, SU.writer); }
+      lv.forEach(function (l) { H('h3', '', l.name + ' (' + SU.countWord.replace('{c}', l.count) + ', ' + SU.byWord[l.by] + ')', box); H('p', '', l.text, box); if (l.note) H('p', '', l.note, box); });
+      H('p', '', SU.note, box);
+    } else if (k === 'talk') {
+      H('h3', '', TK.duringLabel, box); ul(box, chat(TK.during));
+      H('h3', '', TK.afterLabel, box); ul(box, chat(TK.after));
+      H('h3', '', TK.boxLabel, box); ul(box, TK.notes);
+    } else if (k === 'chippy') {
+      H('p', '', CH.what, box);
+      H('h3', '', CH.promptsLabel, box); ul(box, CH.prompts);
+      H('h3', '', CH.offerLabel, box); H('p', '', CH.offers.join(', ') + '. ' + CH.offerNote, box);
+      H('h3', '', CH.toolsLabel.replace('{k}', CH.tools.length), box); H('p', '', null, box).appendChild(codes(CH.tools));
+      H('h3', '', CH.movesLabel, box); H('p', '', CH.moves, box); H('p', '', CH.limits, box);
+    } else if (k === 'checks') {
+      H('h3', '', CK.levelsTitle, box); var o3 = H('ol', '', null, box); CK.levels.forEach(function (l) { H('li', '', l.name + (l.tool ? ' (' + l.tool + ')' : ''), o3); });
+      H('p', '', CK.levelNote, box);
+      H('h3', '', CK.marksTitle, box); dl(box, CK.marks.map(function (m) { return [m.k, m.t]; }));
+      H('h3', '', CK.splitTitle, box); H('p', '', CK.splitNote + ' ' + CK.worst, box);
+    } else if (k === 'meas') {
+      dl(box, ME.rows.map(function (r) { return [r.fig, ME.head[1] + ': ' + r.scope]; })); H('p', '', ME.note, box); H('p', '', ME.sources, box);
+    }
+  }
+  var sections = STEPS.map(function (st, i) {
+    var sec = H('section', 'step', null, main);
+    sec.id = 'step-' + st.key;
+    if (st.kicker) H('p', 'kick' + (st.upper ? '' : ' g'), st.kicker, sec);
+    var h = H(i === 0 ? 'h1' : 'h2', '', st.title, sec); h.id = 'h-' + st.key; sec.setAttribute('aria-labelledby', h.id);
+    if (i === 0) {
+      C.intro.lines.forEach(function (l) { H('p', '', l, sec); });
+      var lg = H('ul', 'legend', null, sec);
+      C.intro.legend.forEach(function (it) { var li = H('li', '', null, lg); H('i', it[0], null, li).setAttribute('aria-hidden', 'true'); H('span', '', it[1], li); });
+      H('p', 'hint', C.intro.hint, sec);
+    } else if (st.key === 'limits') {
+      ul(sec, C.limits.items).className = 'lim';
+    } else {
+      st.lines.forEach(function (l) { H('p', '', l, sec); });
+    }
+    if (st.key === 'limits') {
+      var a = H('div', 'acts', null, sec);
+      var b1 = H('a', 'btn', C.nav.dashboard, a); b1.href = C.nav.dashHref;
+      var b2 = H('a', '', C.nav.home, a); b2.href = '../../';
+      H('footer', '', C.footer, sec);
+    }
+    // the same map, cropped to this stop (shown in the stacked flow)
+    var fig = H('figure', 'fig', null, sec);
+    var r = st.rect, pad = 16;
+    var fs = E('svg', { viewBox: (r.x - pad) + ' ' + (r.y - pad) + ' ' + (r.w + 2 * pad) + ' ' + (r.h + 2 * pad), 'class': 'mapsvg', role: 'img', 'aria-label': st.title }, fig);
+    var use = E('use', { href: '#map' }, fs);
+    if (st.whole) use.setAttribute('style', '--ov:1');
+    var dbox = H('div', 'detail', null, sec);
+    detail(st, dbox);
+    return sec;
+  });
+
+  // ---------- pins on the whole-map view (numbers only, matching the rail) ----------
+  var pinBox = document.getElementById('pins');
+  PINS.forEach(function (p) { p.el = H('span', 'pin' + (p.u ? ' u' : ''), String(p.n), pinBox); });
+
+  // ---------- right rail ----------
+  var railOl = document.querySelector('#rail ol'), railLinks = [];
+  document.getElementById('rail').setAttribute('aria-label', C.rail.label);
+  STEPS.forEach(function (st, i) {
+    var li = H('li', '', null, railOl), a = H('a', i === 0 ? 'ov' : (st.upper ? 'u' : ''), i === 0 ? '' : String(i), li);
+    var label = i === 0 ? C.rail.overview : C.rail.stop.replace('{n}', i).replace('{title}', st.title);
+    a.href = '#step-' + st.key; a.setAttribute('data-go', i); a.setAttribute('aria-label', label);
+    H('span', 'tip', label, li).setAttribute('aria-hidden', 'true');
+    railLinks.push(a);
+  });
+
+  // ---------- camera ----------
+  var vp = document.getElementById('viewport');
+  var A = 1.2, FIT = [], raf = 0, cur = -1, isCam = null;
+  function fit(r, a) {
+    var z0 = Math.min(vp.clientWidth / r.w, vp.clientHeight / r.h) || 1;
+    var pad = 16 / z0, x = r.x - pad, y = r.y - pad, w = r.w + 2 * pad, h = r.h + 2 * pad;
+    if (w / h < a) { var nw = h * a; x -= (nw - w) / 2; w = nw; } else { var nh = w / a; y -= (nh - h) / 2; h = nh; }
+    return { cx: x + w / 2, cy: y + h / 2, w: w };
+  }
+  function measureVp() {
+    var w = vp.clientWidth || 1, h = vp.clientHeight || 1; A = w / h;
+    FIT = STEPS.map(function (s) { return fit(s.rect, A); });
+  }
+  function unit() { return sections.length > 1 ? (sections[1].offsetTop - sections[0].offsetTop) : innerHeight; }
+  function setCurrent(i) {
+    if (i === cur) return; cur = i;
+    railLinks.forEach(function (a, k) { if (k === i) a.setAttribute('aria-current', 'step'); else a.removeAttribute('aria-current'); });
+  }
+  var KEYS = Object.keys(GROUPS);
+  function frame() {
+    raf = 0; if (!isCam) return;
+    var u = unit(), f = Math.max(0, Math.min(N - 1, scrollY / u));
+    var i = Math.min(Math.floor(f), N - 2), t = f - i; t = t * t * (3 - 2 * t);
+    var a = FIT[i], b = FIT[i + 1];
+    var w = Math.exp(Math.log(a.w) + (Math.log(b.w) - Math.log(a.w)) * t);
+    var cx = a.cx + (b.cx - a.cx) * t, cy = a.cy + (b.cy - a.cy) * t, h = w / A;
+    var vx = cx - w / 2, vy = cy - h / 2;
+    cam.setAttribute('viewBox', vx.toFixed(2) + ' ' + vy.toFixed(2) + ' ' + w.toFixed(2) + ' ' + h.toFixed(2));
+    var z = vp.clientWidth / w;
+    var wt = {}, sa = STEPS[i], sb = STEPS[i + 1];
+    KEYS.forEach(function (k) { wt[k] = 0; });
+    sa.focus.forEach(function (k) { wt[k] += 1 - t; });
+    sb.focus.forEach(function (k) { wt[k] += t; });
+    var ovw = (sa.whole ? 1 - t : 0) + (sb.whole ? t : 0);
+    var linkw = Math.max(ovw, wt.orch, wt.talk, wt.chippy);
+    KEYS.forEach(function (k) {
+      var lit = k === 'links' ? linkw : Math.max(Math.min(1, wt[k]), ovw);
+      GROUPS[k].style.setProperty('--lit', (0.26 + 0.74 * Math.min(1, lit)).toFixed(3));
+    });
+    cam.style.setProperty('--ov', ovw.toFixed(3));
+    pinBox.style.opacity = ovw.toFixed(3);
+    pinBox.style.visibility = ovw > 0.01 ? 'visible' : 'hidden';
+    if (ovw > 0.01) PINS.forEach(function (p) { p.el.style.transform = 'translate(' + ((p.x - vx) * z).toFixed(1) + 'px,' + ((p.y - vy) * z).toFixed(1) + 'px)'; });
+    setCurrent(Math.round(f));
+  }
+  function req() { if (!raf) raf = requestAnimationFrame(frame); }
+  function go(n) { window.scrollTo({ top: n * unit(), behavior: 'smooth' }); }
+  addEventListener('scroll', req, { passive: true });
+  addEventListener('resize', function () { applyMode(); });
+  addEventListener('keydown', function (e) {
+    if (!isCam || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+    var k = e.key, d = 0;
+    if (k === 'PageDown' || k === 'ArrowDown' || (k === ' ' && !e.shiftKey)) d = 1;
+    else if (k === 'PageUp' || k === 'ArrowUp' || (k === ' ' && e.shiftKey)) d = -1;
+    else if (k === 'Home') d = -N; else if (k === 'End') d = N; else return;
+    var ae = document.activeElement;
+    if (k === ' ' && ae && (ae.tagName === 'A' || ae.tagName === 'BUTTON')) return;
+    e.preventDefault();
+    var here = Math.round(scrollY / unit());
+    go(Math.max(0, Math.min(N - 1, here + d)));
+  });
+  // one wheel or trackpad gesture moves one stop; momentum after it is absorbed
+  var lock = 0, lastW = 0, acc = 0;
+  addEventListener('wheel', function (e) {
+    if (!isCam || e.ctrlKey) return;
+    e.preventDefault();
+    var now = performance.now(), gap = now - lastW; lastW = now;
+    var dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * innerHeight : e.deltaY;
+    if (now < lock) { lock = Math.max(lock, now + 160); return; }
+    if (gap > 220) acc = 0;
+    acc += dy;
+    if (Math.abs(acc) >= 24) {
+      var here = Math.round(scrollY / unit());
+      go(Math.max(0, Math.min(N - 1, here + (acc > 0 ? 1 : -1))));
+      acc = 0; lock = now + 650;
+    }
+  }, { passive: false });
+  // the rail jumps to a stop
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('[data-go]');
+    if (!a || !isCam) return;
+    e.preventDefault(); go(+a.getAttribute('data-go'));
+  });
+
+  var mqCam = matchMedia('(min-width: 960px) and (min-height: 620px)');
+  var mqRm = matchMedia('(prefers-reduced-motion: reduce)');
+  function applyMode() {
+    var want = mqCam.matches && !mqRm.matches;
+    if (want !== isCam) {
+      isCam = want;
+      root.classList.toggle('cam', want); root.classList.toggle('flow', !want);
+      cam.setAttribute('aria-hidden', want ? 'false' : 'true');
+      if (!want) { KEYS.forEach(function (k) { GROUPS[k].style.removeProperty('--lit'); }); cam.style.setProperty('--ov', '0'); }
+      cur = -1;
+    }
+    if (isCam) { measureVp(); req(); }
+  }
+  mqCam.addEventListener('change', applyMode);
+  mqRm.addEventListener('change', applyMode);
+  applyMode();
+})();
+</script>
+<script src="../variant-nav.js"></script>
+</body>
+</html>
