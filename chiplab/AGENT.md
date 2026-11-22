@@ -269,7 +269,7 @@ chiplab simulate --json '{"design_id": "765fa47586bd", "inputs": "random", "n": 
 
 Fair event-level referee (timescoring 0.0.7): your detections vs reference labels per recording. Returns per-recording tp/fp/refTrue/numSamples, per-patient sums, SzCORE per-patient averages and pooled figures, false alarms per hour and per 24 h, sensitivity at fixed FA/h (0.1, 0.36, 1) from a threshold sweep over scores, worst case, 1 s ROC AUC, patient bootstrap 95% CIs and provenance. profile=szcore (tolerance 30/60 s, merge <90 s, split >300 s; SzCORE-comparable) or neonatal (any overlap, no merge, no split).
 
-- Python: `lab.score_events(recordings: list | None = None, path: str | None = None, profile: str = szcore, params: dict | None = None, nan_policy: str = omit, score_threshold: float = 0.5, fa_targets: list | None = None, thresholds: dict | None = None, n_thresholds: int = 200, n_bootstrap: int = 2000, seed: int = 0, progress_metrics: bool = False) -> dict`
+- Python: `lab.score_events(recordings: list | None = None, path: str | None = None, profile: str = szcore, params: dict | None = None, nan_policy: str = omit, score_threshold: float = 0.5, fa_targets: list | None = None, thresholds: dict | None = None, n_thresholds: int = 200, n_bootstrap: int = 2000, seed: int = 0, progress_metrics: bool = False, design_id: str | None = None) -> dict`
 - Lane: cpu; cached: False
   - `recordings`: list — [{patient_id, recording_id, fs, labels (0/1 per sample), decisions (0/1) and/or scores (float), timestamps (s, optional: gaps split the recording)}] (or give path)
   - `path`: str — JSON file with that list (or {recordings: [...]})
@@ -283,6 +283,7 @@ Fair event-level referee (timescoring 0.0.7): your detections vs reference label
   - `n_bootstrap`: int — patient-level bootstrap resamples (2000)
   - `seed`: int — bootstrap seed (0)
   - `progress_metrics`: bool — send event_sensitivity, fa_per_hour, worst_patient_sensitivity, auc to ./progress (false)
+  - `design_id`: str (optional) — the chip these recordings came from; its ./progress metrics then carry that chip, as chip-report's do (output unchanged)
 
 <details><summary>JSON schema</summary>
 
@@ -337,6 +338,10 @@ Fair event-level referee (timescoring 0.0.7): your detections vs reference label
   "progress_metrics": {
    "type": "boolean",
    "default": false
+  },
+  "design_id": {
+   "type": "string",
+   "default": null
   },
   "run_id": {
    "type": "string"

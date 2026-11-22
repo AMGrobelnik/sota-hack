@@ -260,6 +260,32 @@ def test_tool_and_progress(tmp_path, monkeypatch):
     assert tools.TOOLS["score_events"]["fn"]()["status"] == "error"
 
 
+def test_design_id_ties_metrics_to_a_chip(tmp_path, monkeypatch):
+    from chiplab import tools
+    from chiplab.progress import CHIP_FLAG_ENV, EVENT_KEYS
+    log = tmp_path / "calls.txt"
+    helper = tmp_path / "progress"
+    helper.write_text(f"#!/bin/sh\n# ChipIn progress helper\necho \"$@\" >> {log}\n")
+    helper.chmod(helper.stat().st_mode | stat.S_IXUSR)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(CHIP_FLAG_ENV, "1")
+    fn = tools.TOOLS["score_events"]["fn"]
+    kw = dict(recordings=_scored(3), n_bootstrap=50, n_thresholds=20, progress_metrics=True, force=True)
+
+    def run(**extra):
+        log.unlink(missing_ok=True)
+        res = fn(**kw, **extra)
+        lines = [ln.split() for ln in log.read_text().splitlines() if ln.startswith("metric")]
+        return {k: v for k, v in res.items() if k not in ("cost", "cached")}, lines
+    plain, plain_lines = run()
+    tied, tied_lines = run(design_id="abc123def456")
+    assert plain == tied                                            # the answer itself does not change
+    assert plain_lines and all("--chip" not in ln for ln in plain_lines)
+    scored = [ln for ln in tied_lines if ln[1] in EVENT_KEYS]       # run counters (candidates) never carry a chip
+    assert {ln[1] for ln in scored} == set(EVENT_KEYS)
+    assert all(ln[-2:] == ["--chip", "abc123def456"] for ln in scored)
+
+
 def test_engine_load_batch_weights_only(tmp_path):
     """A real intnn training state round-trips through torch.load(weights_only=True) in load_batch."""
     torch = pytest.importorskip("torch")

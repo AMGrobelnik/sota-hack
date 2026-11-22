@@ -521,11 +521,15 @@ def evaluate_clinical(design_id: str, split: str = "val") -> dict:
                        "lower it for many long recordings with noisy scores (200)",
        "n_bootstrap": "int — patient-level bootstrap resamples (2000)", "seed": "int — bootstrap seed (0)",
        "progress_metrics": "bool — send event_sensitivity, fa_per_hour, worst_patient_sensitivity, auc to ./progress "
-                           "(false)"}, lane="cpu")
+                           "(false)",
+       "design_id": "str (optional) — the chip these recordings came from; its ./progress metrics then carry that "
+                    "chip, as chip-report's do (output unchanged)"}, lane="cpu")
 def score_events(recordings: list | None = None, path: str | None = None, profile: str = "szcore",
                  params: dict | None = None, nan_policy: str = "omit", score_threshold: float = 0.5,
                  fa_targets: list | None = None, thresholds: dict | None = None, n_thresholds: int = 200,
-                 n_bootstrap: int = 2000, seed: int = 0, progress_metrics: bool = False) -> dict:
+                 n_bootstrap: int = 2000, seed: int = 0, progress_metrics: bool = False,
+                 design_id: str | None = None) -> dict:
+    # design_id is read by chiplab.progress.after (from the call's arguments) to tie the metrics to that chip
     from chiplab.referee.events import score
     if (recordings is None) == (path is None):
         raise ValueError("give exactly one of recordings or path")
