@@ -5,10 +5,12 @@
  *    worked out for the screen that follows and what was found, from the spec itself. On the public
  *    site the lines are a paced replay, marked as one; with a backend connected they tick as the work
  *    is done and the backend's own follow-up questions step (../i1-questions.js) is used as before.
- * 2. The chat (#/new/ask) is the whole intake: device, who and where, targets, constraints (channels,
- *    battery, cost), then data with the dataset search inside the chat, one question at a time, each
- *    with quick picks, free text and a skip. A topic the brief already answers is never asked. With a
- *    backend connected its own follow-up questions (../i1-questions.js) come last, in the same chat.
+ * 2. The chat (#/new/ask) is the whole intake, at most five turns: who and where, sensitivity (always,
+ *    prefilled from the brief), the second target (specificity or false alarms), battery and cost in one
+ *    turn, then data with the dataset search inside the chat; each with quick picks, free text and a
+ *    skip. Reuse, alert latency, noise and the worse error are assumed and shown on the spec card. With
+ *    a backend connected at most two of its own questions (../i1-questions.js) come last, never one the
+ *    turns or the assumed rows cover.
  *    Then the "Your spec" card; the five step screens are only its edit view. Answers go into the
  *    spec's own fields; battery in words, cost and unread answers ride in the brief (briefNotes).
  *
@@ -21,45 +23,65 @@
  *   tasks, met, dsf, fit, measured, cases, sigOf } */
 (function () {
   "use strict";
-  var MAX_Q = 9;
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
   var cap = function (t) { t = String(t || "").trim(); return t ? t.charAt(0).toUpperCase() + t.slice(1) : t; };
   var link = function (url, text) { return url ? '<a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(text) + "</a>" : esc(text); };
   var conn = function () { var l = window.ChipInLive && window.ChipInLive.i1, c = l && l.connection ? l.connection() : null; return c ? c.state : "off"; };
-  var NUMW = { single: 1, one: 1, two: 2, three: 3, four: 4, six: 6, eight: 8 };
 
-  /* ---------- the scripted questions ---------- */
-  function setTarget(s, ctx, metric, value) {
+  /* ---------- the scripted questions: at most five turns ----------
+   * a. who wears it and where; b. the sensitivity target (always, prefilled from the brief);
+   * c. the second target, specificity or false alarms (prefilled from the brief); d. battery and cost in
+   * one turn; e. the data. Single-use or reusable, alert latency, signal noise and which error matters
+   * more are not asked: the spec card shows them under "Assumed (edit if wrong)". */
+  var FA_DAY = 1 / 24, FA_WEEK = 1 / 168, FA_MONTH = 1 / 720;
+  function setTarget(s, ctx, metric, value, src) {
     var t = s.targets.filter(function (x) { return x.metric === metric; })[0];
     if (!t) { t = { metric: metric, op: ctx.met[metric].op }; s.targets.push(t); }
-    t.value = value; t.op = ctx.met[metric].op; t.src = "answer";
+    t.value = value; t.op = ctx.met[metric].op; t.src = src || "answer";
     s.touched.targets = true;
     if (!s.primary) s.primary = s.targets[0].metric;
   }
   var screening = function (s) { return s.task === "screening"; };
+  var fromBrief = function (s, metric) { return (s.parsed.targets || []).filter(function (t) { return t.metric === metric && t.value != null; })[0] || null; };
+  var pctS = function (v) { return +(v * 100).toFixed(2) + "%"; };
+  // a typed share: "92%", "92 percent", "0.92"
+  function readFrac(t) {
+    var m = String(t || "").match(/(\d+(?:\.\d+)?)\s*(?:%|percent)/i), v = m ? +m[1] / 100 : null;
+    if (v == null && (m = String(t || "").match(/\b(0?\.\d+)\b/))) v = +m[1];
+    if (v == null && (m = String(t || "").match(/\b(\d{2}(?:\.\d+)?)\b/))) v = +m[1] / 100;
+    return v > 0 && v <= 1 ? Math.round(v * 1e4) / 1e4 : null;
+  }
+  // a typed false-alarm rate, per hour: "1 a week", "2 per day", "one a month"
+  function readFa(t) {
+    var m = String(t || "").toLowerCase().match(/(\d+(?:\.\d+)?|one|an?)\s*(?:false\s*alarms?\s*)?(?:an?|per|each|every)?\s*(hour|day|night|week|month)/);
+    if (!m) return null;
+    var n = /^\d/.test(m[1]) ? +m[1] : 1;
+    return n > 0 ? Math.round(n / ({ hour: 1, day: 24, night: 12, week: 168, month: 720 })[m[2]] * 1e6) / 1e6 : null;
+  }
+  // the form of the second target: what the user picked, else what the brief or the defaults hold
+  function secondOf(s) {
+    if (s.second) return s.second;
+    var has = function (k) { return s.targets.some(function (t) { return t.metric === k && t.value != null; }); };
+    if (fromBrief(s, "specificity")) return "specificity";
+    if (fromBrief(s, "false_alarms_per_hour")) return "false_alarms_per_hour";
+    return has("specificity") && (screening(s) || !has("false_alarms_per_hour")) ? "specificity" : has("false_alarms_per_hour") ? "false_alarms_per_hour" : null;
+  }
+  // the second target set in one form: a default target of the other form goes, one from the brief stays
+  function setSecond(s, ctx, metric, value, src) {
+    var other = metric === "specificity" ? "false_alarms_per_hour" : "specificity";
+    s.targets = s.targets.filter(function (t) { return t.metric !== other || t.src === "brief"; });
+    setTarget(s, ctx, metric, value, src);
+    s.second = metric;
+    if (!s.task || (metric === "false_alarms_per_hour" && s.task === "screening" && !fromBrief(s, "specificity"))) { s.task = "continuous"; s.touched.task = true; }
+    if (s.primary !== "sensitivity" && s.targets.some(function (t) { return t.metric === "sensitivity"; })) s.primary = "sensitivity";
+  }
+  function faWords(s, ctx, v) { var p = ctx.places[s.place] || ctx.places.ward, x = +(v * p.h).toFixed(3); return x + " false alarm" + (x === 1 ? "" : "s") + (p.per === "hour" ? " an hour" : " a " + p.per); }
   var Q = [
     {
-      id: "detect", open: function (s) { return !s.parsed.detect && !s.touched.detect; },
-      q: function () { return "What must it detect?"; }, why: "The chip is trained and judged on exactly this.",
-      opts: function (s, ctx) { var g = ctx.sigOf(s); return (g === "ecg" ? ["Atrial fibrillation", "Arrhythmia", "Bradycardia"] : g === "eeg" ? ["Seizures", "Brain-injury grade"] : ["Falls", "Apnoea", "Seizures"]).map(function (x) { return [x, x]; }); },
-      apply: function (s, ctx, v, text) {
-        var t = (v || text || "").trim(); if (!t) return false;
-        s.detect = cap(t); s.touched.detect = true;
-        if (!s.parsed.task && !s.touched.task) { s.task = ctx.parseBrief(t).task || "continuous"; s.touched.task = true; }
-        ctx.parse(s); return true;
-      }
-    },
-    {
-      id: "sensor", open: function (s) { return !(s.parsed.sigs || []).length && !s.touched.signal; },
-      q: function () { return "Which sensor does it use?"; }, why: "It decides which recordings can train the chip.",
-      opts: function () { return [["ECG (heart)", "ECG"], ["EEG (brain)", "EEG"], ["PPG (optical pulse)", "PPG"], ["Accelerometer", "Accelerometer"]]; },
-      apply: function (s, ctx, v, text) { var t = (v || text || "").trim(); if (!t) return false; s.signal = t; s.touched.signal = true; ctx.parse(s); return true; }
-    },
-    {
-      id: "wear", open: function (s, ctx) { return !ctx.parseGroup(s.brief); },
+      id: "wear", open: function (s, ctx) { return !(ctx.parseGroup(s.brief) && ctx.parsePlace(s.brief)); },
       q: function () { return "Who wears it, and where?"; }, why: "It sets which recordings fit and how false alarms are counted.",
-      opts: function () { return [["Adults, worn day and night", "adults|self"], ["Adults on a hospital ward", "adults|ward"], ["Children, at home overnight", "children|home"], ["Newborns in hospital", "newborns|ward"]]; },
+      opts: function () { return [["Adults, worn day and night", "adults|self"], ["Adults in hospital", "adults|ward"], ["Children at home", "children|home"], ["Newborns in hospital", "newborns|ward"]]; },
       apply: function (s, ctx, v, text) {
         var g = v ? v.split("|")[0] : ctx.parseGroup(text || ""), p = v ? v.split("|")[1] : ctx.parsePlace(text || "");
         if (!g && !p) return false;
@@ -69,80 +91,129 @@
       }
     },
     {
-      id: "fa", open: function (s) { return s.task !== "grading" && !s.parsed.targets.some(function (t) { return t.metric === "false_alarms_per_hour" || t.metric === "specificity"; }); },
-      q: function (s) { return screening(s) ? "How often may it flag a healthy recording?" : "How often may it raise a false alarm?"; },
-      why: "Each false alarm costs trust; fewer needs a bigger chip.",
-      opts: function (s) { return screening(s) ? [["1 in 10 recordings", "0.9"], ["1 in 20", "0.95"], ["1 in 50", "0.98"]] : [["At most 1 an hour", "1"], ["At most 1 a day", String(1 / 24)], ["At most 1 a week", String(1 / 168)]]; },
+      id: "sens", open: function () { return true; },
+      q: function (s) { var b = fromBrief(s, "sensitivity"); return b ? "You said " + pctS(b.value) + " sensitivity: keep it?" : "What sensitivity must it reach?"; },
+      why: "The share of real events it must catch. Higher needs a bigger chip.",
+      ph: "Or type another, for example 92%",
+      opts: function (s) {
+        var b = fromBrief(s, "sensitivity"), L = [["80%", "0.8"], ["90%", "0.9"], ["95%", "0.95"]];
+        return b ? [["Keep " + pctS(b.value), "keep"]].concat(L.filter(function (o) { return +o[1] !== b.value; })) : L;
+      },
       apply: function (s, ctx, v, text) {
-        var t = String(text || "").toLowerCase(), m;
-        if (screening(s)) {
-          var spec = v ? +v : (m = t.match(/1\s*in\s*(\d+)/)) ? 1 - 1 / +m[1] : (m = t.match(/(\d+(?:\.\d+)?)\s*%/)) ? +m[1] / 100 : null;
-          if (!(spec > 0 && spec < 1)) return false;
-          setTarget(s, ctx, "specificity", Math.round(spec * 1e4) / 1e4); return true;
-        }
-        var per = v ? +v : null;
-        if (per == null && (m = t.match(/(\d+(?:\.\d+)?|one|an?)\s*(?:false\s*alarms?\s*)?(?:an?|per|each|every)?\s*(hour|day|night|week)/))) {
-          var n = /^\d/.test(m[1]) ? +m[1] : 1; per = n / ({ hour: 1, day: 24, night: 12, week: 168 })[m[2]];
-        }
-        if (!(per > 0)) return false;
-        if (!s.task) { s.task = "continuous"; s.touched.task = true; ctx.parse(s); }
-        setTarget(s, ctx, "false_alarms_per_hour", Math.round(per * 1e6) / 1e6); return true;
+        var b = fromBrief(s, "sensitivity");
+        if (v === "keep" && b) { setTarget(s, ctx, "sensitivity", b.value, "brief"); s.primary = "sensitivity"; return true; }
+        var x = v ? +v : readFrac(text); if (!(x > 0 && x <= 1)) return false;
+        setTarget(s, ctx, "sensitivity", x); s.primary = "sensitivity"; return true;
+      },
+      // a skip keeps what the brief said, else the default
+      skip: function (s, ctx) { var b = fromBrief(s, "sensitivity"); if (b) setTarget(s, ctx, "sensitivity", b.value, "brief"); }
+    },
+    {
+      id: "second", open: function () { return true; },
+      q: function (s, ctx) {
+        var sp = fromBrief(s, "specificity"), fa = fromBrief(s, "false_alarms_per_hour");
+        if (sp) return "You said " + pctS(sp.value) + " specificity: keep it?";
+        if (fa) return "You said at most " + faWords(s, ctx, fa.value) + ": keep it?";
+        return screening(s) ? "What specificity must it reach, or how many false alarms may it raise?" : "How many false alarms may it raise, or what specificity must it reach?";
+      },
+      why: "The second bar: how often it may flag someone who is fine. Pick the form you think in.",
+      ph: "Or type it: 85% specificity, 1 false alarm a week",
+      opts: function (s) {
+        var sp = fromBrief(s, "specificity"), fa = fromBrief(s, "false_alarms_per_hour");
+        var F = [["About 1 false alarm a day", "fa|" + FA_DAY], ["About 1 a week", "fa|" + FA_WEEK], ["About 1 a month", "fa|" + FA_MONTH]];
+        var P = [["Specificity 90%", "sp|0.9"], ["Specificity 95%", "sp|0.95"]];
+        if (sp) return [["Keep " + pctS(sp.value) + " specificity", "keep"]].concat(F);
+        if (fa) return [["Keep it", "keep"]].concat(P);
+        return screening(s) ? P.concat(F) : F.concat(P);
+      },
+      apply: function (s, ctx, v, text) {
+        var sp = fromBrief(s, "specificity"), fa = fromBrief(s, "false_alarms_per_hour");
+        if (v === "keep") { if (sp) setSecond(s, ctx, "specificity", sp.value, "brief"); else if (fa) setSecond(s, ctx, "false_alarms_per_hour", fa.value, "brief"); return !!(sp || fa); }
+        if (v) { var k = v.split("|"); setSecond(s, ctx, k[0] === "sp" ? "specificity" : "false_alarms_per_hour", +k[1]); return true; }
+        var t = String(text || ""), r = readFa(t);
+        if (r != null && !/specific|%|\b1\s*in\s*\d/i.test(t)) { setSecond(s, ctx, "false_alarms_per_hour", r); return true; }
+        var m = t.match(/1\s*in\s*(\d+)/i), x = m ? 1 - 1 / +m[1] : readFrac(t);
+        if (!(x > 0 && x < 1)) return false;
+        setSecond(s, ctx, "specificity", Math.round(x * 1e4) / 1e4); return true;
+      },
+      skip: function (s, ctx) {
+        var sp = fromBrief(s, "specificity"), fa = fromBrief(s, "false_alarms_per_hour");
+        if (sp) setSecond(s, ctx, "specificity", sp.value, "brief"); else if (fa) setSecond(s, ctx, "false_alarms_per_hour", fa.value, "brief");
       }
     },
     {
-      id: "chans", open: function (s, ctx) { var g = ctx.sigOf(s); return !ctx.cases[s.case] && !s.parsed.chans && (g === "ecg" || g === "eeg"); },
-      q: function (s, ctx) { return ctx.sigOf(s) === "ecg" ? "How many ECG leads can it have?" : "How many electrodes can it have?"; }, why: "Fewer means a smaller, cheaper device; the chart compares them.",
-      opts: function (s, ctx) { return ctx.budgets(s).map(function (b) { return [b.label, String(b.ch)]; }).concat([["Find the best for me", "best"]]); },
+      id: "limits", open: function (s) { return !s.parsed.bat || !s.cons.cost; },
+      q: function (s) { return s.parsed.bat ? "How much may the chip cost?" : "How long must one battery last, and how much may the chip cost?"; },
+      why: "A longer life needs a bigger battery or a leaner chip; cheaper means a smaller chip.",
+      ph: "Or type it: as long as possible, max 7 days, 220 mAh, cheapest possible",
+      groups: function (s) {
+        var G = [];
+        if (!s.parsed.bat) G.push({ key: "bat", label: "Battery", opts: [["24 hours", "24|hours"], ["3 days", "3|days"], ["7 days", "7|days"], ["As long as possible", "longest"]] });
+        G.push({ key: "cost", label: "Cost", opts: [["Cheapest possible", "Cheapest possible"], ["Cost is not a concern", "Cost is not a concern"]] });
+        return G;
+      },
+      // picks: { bat, cost }; typed words are split into a battery part and a cost part, each kept as typed
       apply: function (s, ctx, v, text) {
-        var t = String(v || text || "").toLowerCase(), b = ctx.budgets(s), m = t.match(/\b(\d+|single|one|two|three|four|six|eight)\b/);
-        if (/best|any|not sure|don.?t know|you (?:pick|choose)/.test(t)) { s.cons.findBest = true; s.touched.cons = true; return true; }
-        var n = m ? NUMW[m[1]] || parseInt(m[1], 10) : null, hit = b.filter(function (x) { return x.ch === n; })[0];
-        if (!hit) return false;
-        s.cons.findBest = false; s.cons.channels = hit.ch; s.touched.cons = true; return true;
-      }
-    },
-    {
-      id: "battery", open: function (s) { return !s.parsed.bat; },
-      q: function () { return "How long must one battery last?"; }, why: "A longer life needs a bigger battery or a leaner chip.",
-      ph: "Or type it: as long as possible, max 7 days, 220 mAh",
-      opts: function () { return [["24 hours", "24|hours"], ["3 days", "3|days"], ["7 days", "7|days"], ["14 days", "14|days"], ["As long as possible", "longest"]]; },
-      // a pick sets the hours; typed words are kept as typed (shown on the card, sent in the brief), and a
-      // time in them ("max 7 days") also sets the hours
-      apply: function (s, ctx, v, text) {
-        var n, u, m;
-        if (v === "longest") { s.cons.batText = "As long as possible"; s.touched.cons = true; return true; }
-        if (v) { n = +v.split("|")[0]; u = v.split("|")[1]; s.cons.batText = ""; }
-        else {
-          var t = String(text || "").trim(); if (!t) return false;
-          s.cons.batText = t;
-          if ((m = t.toLowerCase().match(/(\d+(?:\.\d+)?)\s*-?\s*(hours?|hrs?|h\b|days?|weeks?)/))) { n = +m[1]; u = /^[dw]/.test(m[2]) ? "days" : "hours"; if (/^w/.test(m[2])) n *= 7; }
+        var k = s.cons, got = false;
+        var bat = function (n, u, words) { if (words != null) k.batText = words; if (n > 0) { k.batN = n; k.batU = u; } got = true; };
+        if (v && typeof v === "object") {
+          if (v.bat === "longest") bat(0, "", "As long as possible"); else if (v.bat) bat(+v.bat.split("|")[0], v.bat.split("|")[1], "");
+          if (v.cost) { k.cost = v.cost; got = true; }
+        } else {
+          String(text || "").split(/[,;]|\band\b/i).map(function (x) { return x.trim(); }).filter(Boolean).forEach(function (part) {
+            var low = part.toLowerCase(), m;
+            if (/cheap|low cost|lowest cost|not a concern|no (?:limit|concern)|any cost|price|[$£€]\s*\d|cost/.test(low)) { k.cost = /cheap|low/.test(low) ? "Cheapest possible" : /not a concern|no (?:limit|concern)|any cost/.test(low) ? "Cost is not a concern" : cap(part); got = true; return; }
+            if ((m = low.match(/(\d+(?:\.\d+)?)\s*-?\s*(hours?|hrs?|h\b|days?|weeks?)/))) { var n = +m[1], u = /^[dw]/.test(m[2]) ? "days" : "hours"; if (/^w/.test(m[2])) n *= 7; bat(n, u, part); return; }
+            if (/long|mah|battery|charge/.test(low)) bat(0, "", cap(part));
+          });
         }
-        if (n > 0) { s.cons.batN = n; s.cons.batU = u; }
-        s.touched.cons = true; return true;
+        if (got) s.touched.cons = true;
+        return got;
       }
-    },
-    {
-      id: "cost", open: function (s) { return !s.cons.cost; },
-      q: function () { return "How much may the chip cost?"; }, why: "Cheaper means a smaller chip, if it still clears your bar.",
-      opts: function () { return [["Cheapest possible", "Cheapest possible"], ["Cost is not a concern", "Cost is not a concern"]]; },
-      apply: function (s, ctx, v, text) { var t = String(v || text || "").trim(); if (!t) return false; s.cons.cost = t; s.touched.cons = true; return true; }
     },
     {
       id: "data", open: function () { return true; },
       q: function () { return "What should it be designed on?"; }, why: "The chip is trained on part of it and judged on patients it never saw.",
-      opts: function () { return [["Find public data", "public"], ["My own recordings", "own"], ["Simulated data", "sim"]]; },
+      opts: function () { return [["My own recordings", "own"], ["Find a public dataset", "public"], ["Synthetic data", "sim"]]; },
       apply: function (s, ctx, v, text) {
-        var t = String(v || text || "").toLowerCase(), d = /own|my|our/.test(t) ? "own" : /public|open|find|search/.test(t) ? "public" : /sim|synth/.test(t) ? "sim" : "";
+        var t = String(v || text || "").toLowerCase(), d = /own|my|our/.test(t) ? "own" : /public|open|find|search|dataset/.test(t) ? "public" : /sim|synth/.test(t) ? "sim" : "";
         if (!d) return false;
         s.data = d; s.touched.data = true; return true;
       }
     }
   ];
   var byId = function (id) { return Q.filter(function (q) { return q.id === id; })[0]; };
-  // the questions still to ask: open topics not yet answered, at most five in all
+  // the questions still to ask: open topics not yet answered
   function pending(s, ctx) {
-    var a = (s.sq && s.sq.ans) || {}, done = Object.keys(a).length;
-    return Q.filter(function (q) { return !a[q.id] && q.open(s, ctx); }).slice(0, Math.max(0, MAX_Q - done));
+    var a = (s.sq && s.sq.ans) || {};
+    return Q.filter(function (q) { return !a[q.id] && q.open(s, ctx); });
+  }
+
+  /* ---------- assumed, not asked: shown on the spec card, each editable in place ---------- */
+  var ASM = {
+    latency: { k: "Alert latency", re: /latenc|how (?:fast|quickly|soon)|alert after|delay|time to (?:alert|detect)|within \d+\s*(?:s\b|sec)/i },
+    noise: { k: "Signal noise", opts: ["Low", "Medium", "High"], re: /noise|movement|motion|artefact|artifact|activity level/i },
+    worse: { k: "Worse error", opts: ["A missed event", "A false alarm", "Both equally"], re: /mistake|missed (?:event|detection)|matters? (?:more|most)|\bworse\b|cost of a miss/i }
+  };
+  var REUSE_RE = /reusab|disposab|single[- ]use/i;
+  // the topics the five turns cover: a backend question about any of them is not asked
+  var FIXED_RE = /sensitiv|specific|false alarm|battery|\bcost|price|cheap|data ?set|public data|own recordings|synthetic|simulat|who (?:wears|uses|is it for)|patient group|age group|\bage\b|newborn|children|hospital|at home|\bward\b/i;
+  function asmDefault(s, key) {
+    if (key === "latency") return "Within 30 s of onset";
+    if (key === "noise") return s.place === "ward" ? "Low" : "Medium";
+    // derived from the two targets: the one held higher names the error that matters more
+    var sens = s.targets.filter(function (t) { return t.metric === "sensitivity"; })[0], sec = secondOf(s);
+    var o = s.targets.filter(function (t) { return t.metric === sec; })[0];
+    if (!sens || sens.value == null) return "Both equally";
+    if (sec === "specificity" && o && o.value != null) return sens.value > o.value ? "A missed event" : sens.value < o.value ? "A false alarm" : "Both equally";
+    return sens.value >= 0.9 ? "A missed event" : "Both equally";
+  }
+  function asmVal(s, key) { var a = s && s.asm; return a && a[key] ? a[key] : asmDefault(s, key); }
+  function asmWhy(s, key) {
+    if (s.asm && s.asm[key]) return "As you set it";
+    if (key === "latency") return "Default for this kind of device";
+    if (key === "noise") return s.place === "ward" ? "From where it is worn: a hospital bed" : "From where it is worn: daily activity";
+    return "From your two targets";
   }
 
   /* ---------- the stage before each screen ---------- */
@@ -203,7 +274,7 @@
       return [
         { p: "Listing channel budgets", w: "Electrodes or sensors to compare", t: b.length + " budget" + (b.length === 1 ? "" : "s"), d: join(b.map(function (x) { return x.label; })) },
         { p: "Reading battery life", w: "How long between changes", t: "At least " + s.cons.batN + " " + s.cons.batU, d: s.touched.cons ? "As you set it" : "Default for this kind of device" },
-        { p: "Checking disposable or reusable", w: "It sets which batteries fit", t: s.cons.reusable ? "Reusable" : "Disposable", d: s.cons.reusable ? "Charged and cleaned between patients" : "One patient, then replaced" }
+        { p: "Checking disposable or reusable", w: "It sets which batteries fit", t: s.cons.reusable === true ? "Reusable" : s.cons.reusable === false ? "Single-use" : "Reuse not set", d: s.cons.reusable === true ? "Charged and cleaned between patients" : s.cons.reusable === false ? "One patient, then replaced" : "Set it on the spec card if it matters", warn: s.cons.reusable == null }
       ];
     }
     if (kind === "5") {
@@ -273,7 +344,9 @@
     ".iq .you p.sk{background:var(--i150);color:var(--i600);font-style:italic}" +
     ".iq-dots{display:inline-flex;gap:4px;padding:6px 0}.iq-dots i{width:6px;height:6px;border-radius:50%;background:var(--blue7);opacity:.3;animation:iqd 1.2s infinite}" +
     ".iq-dots i:nth-child(2){animation-delay:.2s}.iq-dots i:nth-child(3){animation-delay:.4s}@keyframes iqd{0%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}" +
-    ".iq-err{font-size:12.5px;color:var(--falsea-t);margin:8px 0 0}";
+    ".iq-err{font-size:12.5px;color:var(--falsea-t);margin:8px 0 0}" +
+    ".iq-gl{font-size:12px;font-weight:600;color:var(--i600);margin:12px 0 -6px}.iq-opts button[aria-pressed=true]{background:var(--blue7);border-color:var(--blue7);color:#fff}" +
+    ".gsr.ia-h{padding-bottom:0;border-bottom:0}.gsr.ia-h .k{font-weight:600;color:var(--i900)}.ia-in{width:100%;max-width:280px}.ia-ch{margin-top:4px}.ia-ch button{min-height:30px;padding:3px 12px}";
   function css() { if (!document.getElementById("iq-css")) { var st = document.createElement("style"); st.id = "iq-css"; st.textContent = CSS; document.head.appendChild(st); } }
   var botHTML = function (inner) { return '<div class="msg"><span class="mav">' + BOT + '</span><div><div class="who">ChipIn</div>' + inner + "</div></div>"; };
   var youHTML = function (a, skip) { return '<div class="you"><p' + (skip ? ' class="sk"' : "") + ">" + esc(a) + "</p></div>"; };
@@ -283,7 +356,8 @@
   }
   function askHTML(s, ctx, q, err) {
     return botHTML('<div class="mt">' + esc(q.q(s, ctx)) + '</div><p class="iq-why">' + esc(q.why) + "</p>" +
-      '<div class="gch iq-opts" role="group" aria-label="' + esc(q.q(s, ctx)) + '">' + q.opts(s, ctx).map(function (o) { return '<button type="button" data-iq-v="' + esc(o[1]) + '"><span>' + esc(o[0]) + "</span></button>"; }).join("") + "</div>" +
+      (q.groups ? q.groups(s, ctx).map(function (g) { return '<p class="iq-gl">' + esc(g.label) + '</p><div class="gch iq-opts" role="group" data-iq-g="' + esc(g.key) + '" aria-label="' + esc(g.label) + '">' + g.opts.map(function (o) { return '<button type="button" aria-pressed="false" data-iq-gv="' + esc(o[1]) + '"><span>' + esc(o[0]) + "</span></button>"; }).join("") + "</div>"; }).join("")
+        : '<div class="gch iq-opts" role="group" aria-label="' + esc(q.q(s, ctx)) + '">' + q.opts(s, ctx).map(function (o) { return '<button type="button" data-iq-v="' + esc(o[1]) + '"><span>' + esc(o[0]) + "</span></button>"; }).join("") + "</div>") +
       '<form class="iq-in" data-iq-form><input type="text" data-voice aria-label="Your answer" placeholder="' + esc(q.ph || "Or type your own answer") + '" autocomplete="off"><button type="submit" class="send" aria-label="Send">' + SEND + "</button></form>" +
       (err ? '<p class="iq-err" role="alert">' + esc(err) + "</p>" : "") +
       '<button type="button" class="iq-skip" data-iq-skip>Skip this question</button>');
@@ -328,6 +402,7 @@
     function answer(q, v, label, text) {
       if (busy || !q) return;
       var skip = v === "__skip", ok = skip || q.apply(s, ctx, v, text);
+      if (skip && q.skip) q.skip(s, ctx);
       var box = feed.lastElementChild;
       if (!ok && text != null) {
         // not read: keep it as a note on the spec card, and move on
@@ -375,7 +450,7 @@
         FQ.ask(s, ctx.save, function (qs) {
           if (!root.isConnected) return;
           busy = false; wait.remove();
-          var left = (qs || []).filter(function (q) { return !s.sq.ans["fq:" + q.id]; });
+          var left = triage(s, qs || []).filter(function (q) { return !s.sq.ans["fq:" + q.id]; });
           (function next(i) {
             if (i >= left.length) { s.sq.fqDone = true; ctx.save(); finish(); return; }
             askFq(left[i], function () { typing(650, function () { next(i + 1); }); });
@@ -408,6 +483,15 @@
       setTimeout(function () { if (root.isConnected && /#\/new\/ask/.test(location.hash)) toSpec(); }, 900);
     }
     root.addEventListener("click", function (e) {
+      var gv = e.target.closest("[data-iq-gv]");
+      if (gv && !busy) {
+        var grp = gv.closest("[data-iq-g]"), box = gv.closest(".msg");
+        grp.querySelectorAll("[data-iq-gv]").forEach(function (b) { b.setAttribute("aria-pressed", String(b === gv)); });
+        var all = box.querySelectorAll("[data-iq-g]"), pick = {}, lab = [], full = true;
+        [].forEach.call(all, function (g) { var on = g.querySelector('[aria-pressed="true"]'); if (on) { pick[g.dataset.iqG] = on.dataset.iqGv; lab.push(on.textContent.trim()); } else full = false; });
+        if (full) answer(cur(), pick, lab.join(" · "));
+        return;
+      }
       var o = e.target.closest("[data-iq-v]");
       if (o) { answer(cur(), o.dataset.iqV, o.textContent.trim()); return; }
       if (e.target.closest("[data-iq-skip]")) { answer(cur(), "__skip", "Skipped"); return; }
@@ -431,21 +515,94 @@
     return true;
   }
 
-  function cardRows(s) {
-    var a = s && s.sq && s.sq.ans; if (!a || !Object.keys(a).length) return "";
-    // the answers already sit in the rows above; only what could not be read into a field shows here
-    var notes = s.sq.notes || [];
-    if (!notes.length) return "";
-    return '<div class="gsr"><span class="k">Notes</span><div class="v">' + esc(notes.join("; ")) + '<small>Not read into a field; sent with your brief.</small></div><button type="button" class="gchg" data-go="ask" aria-label="See your answers">See chat</button></div>';
+  /* ---------- the backend's own questions: never one the five turns or an assumed row cover, at most two ---------- */
+  var MAX_FQ = 2;
+  function topicOf(q) {
+    var t = String(q.id || "").replace(/_/g, " ") + " " + String(q.question || "");
+    for (var k in ASM) if (ASM[k].re.test(t)) return k;
+    return REUSE_RE.test(t) ? "reuse" : FIXED_RE.test(t) ? "fixed" : "";
   }
+  // marks each question on s.fq: drop (covered: answered from the spec), capped (past two: its default, listed
+  // under Assumed); returns the ones to ask
+  function triage(s, qs) {
+    var drop = {}, capped = {}, keep = [];
+    qs.forEach(function (q) { var k = topicOf(q); if (k) drop[q.id] = k; else if (keep.length < MAX_FQ) keep.push(q); else capped[q.id] = true; });
+    if (s.fq) { s.fq.drop = drop; s.fq.capped = capped; }
+    return keep;
+  }
+  // the answer a covered backend question gets: the assumed row's value, or null to leave it out
+  function coveredAnswer(s, key) {
+    if (ASM[key]) return asmVal(s, key);
+    if (key === "reuse") return s.cons && s.cons.reusable === true ? "Reusable" : s.cons && s.cons.reusable === false ? "Single-use" : null;
+    return null;
+  }
+
+  /* ---------- the spec card ---------- */
+  var S = null, SV = null;
+  var tagOf = function (t) { return t.src === "brief" ? "From your brief" : t.src === "answer" ? "From your answer" : t.src === "you" ? "As you set it" : "Default for the task type"; };
+  // the first two rows: sensitivity, then the second target
+  function topRows(s, ctx) {
+    if (!s || !s.targets) return "";
+    var p = ctx.places[s.place] || ctx.places.ward;
+    return ["sensitivity", secondOf(s)].map(function (m) {
+      var t = m && s.targets.filter(function (x) { return x.metric === m; })[0];
+      if (!t) return "";
+      var k = m === "sensitivity" ? "Sensitivity" : m === "specificity" ? "Specificity" : "False alarms";
+      var v = t.value == null ? "No value set" : (t.op === "<=" ? "At most " : "At least ") + (ctx.met[m].kind === "frac" ? pctS(t.value) : +(t.value * p.h).toFixed(3) + (p.per === "hour" ? " an hour" : " a " + p.per));
+      return '<div class="gsr ia-top"><span class="k">' + k + '</span><div class="v">' + esc(v) + "<small>" + esc(tagOf(t)) + '</small></div><button type="button" class="gchg" data-go="3" aria-label="Change ' + k.toLowerCase() + '">Change</button></div>';
+    }).join("");
+  }
+  // the metrics topRows shows, so the card's Targets row lists only the others
+  function topMetrics(s) { return s && s.targets ? ["sensitivity", secondOf(s)].filter(Boolean) : []; }
+  function chipsIA(key, opts, cur, label) {
+    return '<div class="gch ia-ch" role="radiogroup" aria-label="' + esc(label) + '">' + opts.map(function (o) { return '<button type="button" role="radio" aria-checked="' + (o[0] === cur) + '" ' + (key === "reuse" ? 'data-c="reuse" data-v="' + esc(o[0]) + '"' : 'data-ia-k="' + key + '" data-ia-v="' + esc(o[0]) + '"') + "><span>" + esc(o[1]) + "</span></button>"; }).join("") + "</div>";
+  }
+  function cardRows(s, ctx) {
+    if (!s || !s.cons) return "";
+    S = s; SV = ctx && ctx.save;
+    var row = function (k, body, note) { return '<div class="gsr ia-row"><span class="k">' + esc(k) + '</span><div class="v">' + body + (note ? "<small" + ' data-ia-note="' + esc(k) + '">' + esc(note) + "</small>" : "") + "</div></div>"; };
+    var r = s.cons.reusable, words = /patch|sticker|adhesive|disposable|single[- ]use/i.test(s.brief || "");
+    var html = '<div class="gsr ia-h"><span class="k">Assumed (edit if wrong)</span><div class="v"><small>Not asked: set from your brief and the device type.</small></div></div>';
+    html += row("Single-use or reusable", chipsIA("reuse", [["disposable", "Single-use"], ["reusable", "Reusable"]], r === true ? "reusable" : r === false ? "disposable" : "", "Single-use or reusable"),
+      r == null ? "Not in your brief; pick one if it matters" : r === false && words && !(s.touched && s.touched.reuse) ? "From the device words in your brief" : "As set");
+    html += row(ASM.latency.k, '<div class="gie sm"><input class="gfin ia-in" data-ia="latency" data-voice value="' + esc(asmVal(s, "latency")) + '" aria-label="Alert latency"></div>', asmWhy(s, "latency"));
+    html += row(ASM.noise.k, chipsIA("noise", ASM.noise.opts.map(function (o) { return [o, o]; }), asmVal(s, "noise"), "Signal noise"), asmWhy(s, "noise"));
+    html += row(ASM.worse.k, chipsIA("worse", ASM.worse.opts.map(function (o) { return [o, o]; }), asmVal(s, "worse"), "Which error matters more"), asmWhy(s, "worse"));
+    var FQ = window.ChipInQuestions;
+    if (FQ && FQ.cardRows) html += FQ.cardRows(s, SV, "capped");
+    // the answers already sit in the rows above; only what could not be read into a field shows here
+    var notes = (s.sq && s.sq.notes) || [];
+    if (notes.length) html += '<div class="gsr"><span class="k">Notes</span><div class="v">' + esc(notes.join("; ")) + '<small>Not read into a field; sent with your brief.</small></div><button type="button" class="gchg" data-go="ask" aria-label="See your answers">See chat</button></div>';
+    return html;
+  }
+  // editing an assumed row in place
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-ia-v]");
+    if (!b || !S) return;
+    S.asm = S.asm || {}; S.asm[b.dataset.iaK] = b.dataset.iaV;
+    b.parentNode.querySelectorAll("[data-ia-v]").forEach(function (x) { x.setAttribute("aria-checked", String(x === b)); });
+    var n = b.closest(".v").querySelector("small"); if (n) n.textContent = "As you set it";
+    if (typeof SV === "function") SV();
+  });
+  document.addEventListener("input", function (e) {
+    var el = e.target;
+    if (!el || !el.dataset || !el.dataset.ia || !S) return;
+    S.asm = S.asm || {}; S.asm[el.dataset.ia] = el.value.trim();
+    if (typeof SV === "function") SV();
+  });
   // what the card shows but no field of the run's spec holds: sent as plain lines after the brief
   function briefNotes(s) {
     var k = (s && s.cons) || {}, L = [];
     if (k.batText) L.push("Battery: " + k.batText + ".");
     if (k.cost) L.push("Cost: " + k.cost + ".");
+    if (s && s.targets) {
+      L.push("Alert latency: " + asmVal(s, "latency") + ".");
+      L.push("Signal noise: " + asmVal(s, "noise") + ".");
+      L.push("Worse error: " + asmVal(s, "worse") + ".");
+    }
     ((s && s.sq && s.sq.notes) || []).forEach(function (n) { L.push(n); });
     return L.join("\n");
   }
 
-  window.ChipInIntake = { begin: begin, next: next, render: render, cardRows: cardRows, pending: pending, briefNotes: briefNotes };
+  window.ChipInIntake = { begin: begin, next: next, render: render, cardRows: cardRows, topRows: topRows, topMetrics: topMetrics, pending: pending, briefNotes: briefNotes, triage: triage, coveredAnswer: coveredAnswer };
 })();

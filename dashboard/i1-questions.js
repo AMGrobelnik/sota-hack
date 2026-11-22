@@ -163,17 +163,23 @@
     return true;
   }
 
-  function cardRows(s, saveIt) {
+  // which: "capped" for the ones past the intake's cap (shown under Assumed with their default), else the asked
+  // ones; a question the intake covers already (s.fq.drop, ../i1-intake.js) is not shown
+  var dropped = function (s, q) { return !!(s.fq.drop && s.fq.drop[q.id]); };
+  var capped = function (s, q) { return !!(s.fq.capped && s.fq.capped[q.id]); };
+  function cardRows(s, saveIt, which) {
     if (!has(s)) return "";
     S = s; saveFn = saveIt;
-    return s.fq.questions.map(function (q) {
-      return '<div class="gsr fq-row"><span class="k">A few more</span><div class="v"><small class="fq-q">' + esc(q.question) + '</small><div class="gie sm"><textarea data-fq-card="' + esc(q.id) + '" rows="1" aria-label="' + esc(q.question) + '" data-voice>' + esc(label(answerOf(s, q))) + '</textarea></div></div><button type="button" class="gchg" data-go="' + (window.ChipInIntake ? "ask" : "more") + '" aria-label="Change: ' + esc(q.question) + '">Change</button></div>';
+    return s.fq.questions.filter(function (q) { return !dropped(s, q) && capped(s, q) === (which === "capped"); }).map(function (q) {
+      return '<div class="gsr fq-row"><span class="k">' + (which === "capped" ? "Assumed" : "A few more") + '</span><div class="v"><small class="fq-q">' + esc(q.question) + '</small><div class="gie sm"><textarea data-fq-card="' + esc(q.id) + '" rows="1" aria-label="' + esc(q.question) + '" data-voice>' + esc(label(answerOf(s, q))) + '</textarea></div></div><button type="button" class="gchg" data-go="' + (window.ChipInIntake ? "ask" : "more") + '" aria-label="Change: ' + esc(q.question) + '">Change</button></div>';
     }).join("");
   }
 
   function payload(s) {
     if (!has(s)) return null;
-    var answers = s.fq.questions.map(function (q) { return { id: q.id, question: q.question, answer: String(answerOf(s, q) == null ? "" : answerOf(s, q)).trim() }; }).filter(function (a) { return a.answer; });
+    // a question the intake covers is answered from the spec card's own row, or left out
+    var II = window.ChipInIntake, cov = function (q) { var k = s.fq.drop && s.fq.drop[q.id]; return k ? (II && II.coveredAnswer ? II.coveredAnswer(s, k) : null) : undefined; };
+    var answers = s.fq.questions.map(function (q) { var c = cov(q), v = c === undefined ? answerOf(s, q) : c; return { id: q.id, question: q.question, answer: String(v == null ? "" : v).trim() }; }).filter(function (a) { return a.answer; });
     return answers.length ? { id: s.fq.id, answers: answers } : null;
   }
 

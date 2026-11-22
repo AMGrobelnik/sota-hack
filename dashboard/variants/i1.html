@@ -749,7 +749,7 @@ select.gfin{padding:0 10px}
 <!-- CHIPPY HOOK: the helper panel (corner button, side panel, example prompts, page actions) lives in ../i1-chippy.js -->
 <script src="../i1-chippy.js?v=fx4"></script>
 <script src="../i1-designs.js?v=dn1c"></script><!-- DESIGNS HOOK: the designs a run tried, in the Chip view (window.ChipInDesigns) -->
-<script src="../i1-questions.js?v=oi1"></script>
+<script src="../i1-questions.js?v=ik2"></script>
 <script src="../i1-search.js"></script><!-- SEARCH HOOK: the five search steps between Run and the run view, replayed on examples (window.ChipInSearch) --><!-- QUESTIONS HOOK: follow-up questions from a connected backend, one extra step before the spec card (window.ChipInQuestions) -->
 <script src="../i1-summary.js?v=fb2bc"></script><!-- SUMMARY HOOK: the result page's summary card, trade-off sentence and the chart's default view (window.ChipInSummary) -->
 <script src="../i1-whysize.js?v=fx4"></script><!-- WHY SIZE HOOK: the Why this size panel under the chart: cost along the curve, battery, what changes, to check (window.ChipInWhySize) -->
@@ -758,7 +758,7 @@ select.gfin{padding:0 10px}
 <script src="../i1-sizecost.js?v=fb3wc"></script><!-- SIZE COST HOOK: unit cost against chip size, stepped, at the top of Why this size (window.ChipInSizeCost) -->
 <script src="../i1-colour.js"></script><!-- COLOUR HOOK: pass, fail, estimated and chosen colours in one place -->
 <script src="../i1-stage.js"></script><!-- STAGE HOOK: the loading stage every forward step of a new design passes through (window.ChipInStage) -->
-<script src="../i1-intake.js?v=oi1"></script><!-- INTAKE HOOK: the stage between steps and the scripted questions with no backend, #/new/ask (window.ChipInIntake) -->
+<script src="../i1-intake.js?v=ik2"></script><!-- INTAKE HOOK: the stage between steps and the scripted questions with no backend, #/new/ask (window.ChipInIntake) -->
 <script src="../i1-sources.js?v=1c"></script><!-- SOURCES HOOK: the Sources tab as one list of evidence links (window.ChipInSources) -->
 <script type="module">
 "use strict";
@@ -1815,7 +1815,7 @@ const loneSensor = sigs => !!sigs && sigs.length === 1 && !sigs[0].unit;
 function defaultCons(s) {
   const cf = CASE_FLOW[s.case], b = flowBudgets(s), two = b.find(x => x.ch === 2);
   const bat = s.parsed && s.parsed.bat ? s.parsed.bat : cf ? cf.bat : s.place === "ward" ? [24, "hours"] : [7, "days"];
-  return { findBest: true, channels: (two || b[0]).ch, batN: bat[0], batU: bat[1], reusable: cf ? cf.reusable : !/patch|sticker|adhesive|disposable|single[- ]use/i.test(s.brief) };
+  return { findBest: true, channels: (two || b[0]).ch, batN: bat[0], batU: bat[1], reusable: cf ? cf.reusable : /patch|sticker|adhesive|disposable|single[- ]use/i.test(s.brief) ? false : null }; // single-use from the device words, else unset
 }
 const sigOf = s => { const t = (s.signal + " " + s.brief).toLowerCase(); return /\beeg\b|electroenceph/.test(t) ? "eeg" : /\becg\b|\bekg\b|electrocardio/.test(t) ? "ecg" : ""; };
 function defaultDs(s) { const g = sigOf(s); return g === "eeg" ? (s.task === "grading" ? "cork" : "helsinki") : g === "ecg" ? "cinc17" : ""; }
@@ -1845,7 +1845,7 @@ function specLines(s) {
     { k: "Device", v: `${s.device || "Device not given"}; ${s.signal || "signal not given"}. Detects ${s.detect ? s.detect.charAt(0).toLowerCase() + s.detect.slice(1) : "(not given)"}; ${tk.length ? andList(tk) : "task type not given"}.`, go: 1 },
     { k: "Who and where", v: `${s.group ? GROUPS[s.group].n : "Patient group not given"}; ${p.n.toLowerCase()}, ${p.r}. ${screenOnly(s) ? "One-off screening: judged by specificity, not by false alarms over time." : `False alarms counted per ${p.per}.`}`, go: 2 },
     { k: "Targets", v: tg || "No target set", go: 3 },
-    { k: "Constraints", v: `${ch}; battery ${k.batText ? `“${k.batText}” (as typed; the battery view assumes ${k.batN} ${k.batU})` : `at least ${k.batN} ${k.batU}`}; ${k.reusable ? "reusable" : "disposable"}${k.cost ? `; cost: ${k.cost.charAt(0).toLowerCase() + k.cost.slice(1)}` : ""}.`, go: 4 },
+    { k: "Constraints", v: `${ch}; battery ${k.batText ? `“${k.batText}” (as typed; the battery view assumes ${k.batN} ${k.batU})` : `at least ${k.batN} ${k.batU}`}; ${k.reusable === true ? "reusable" : k.reusable === false ? "single-use" : "reuse not set"}${k.cost ? `; cost: ${k.cost.charAt(0).toLowerCase() + k.cost.slice(1)}` : ""}.`, go: 4 },
     { k: "Data", v: data, go: 5 },
     { k: "Fixed", v: s.case === "af" ? "Recordings split so none is in both training and test; judged per recording, on all test recordings pooled." : `Patients split so none is in both training and test; judged on the ${cfg.judge === "pooled" ? "unseen patients pooled" : "worst unseen patient"}.` }
   ];
@@ -1920,7 +1920,7 @@ function step4(s) {
     + Q("Cost", "Cheaper means a smaller chip, if it still clears your bar.",
       chipsHTML("cost", [["Cheapest possible", "Cheapest possible"], ["Cost is not a concern", "Cost is not a concern"]], k.cost || "", "Cost"))
     + Q("Disposable or reusable", "Sets which batteries fit.",
-      chipsHTML("reuse", [["disposable", "Disposable"], ["reusable", "Reusable"]], k.reusable ? "reusable" : "disposable", "Disposable or reusable"), "Reusable means charging and cleaning between patients; it sets which batteries fit in the battery view.");
+      chipsHTML("reuse", [["disposable", "Disposable"], ["reusable", "Reusable"]], k.reusable === true ? "reusable" : k.reusable === false ? "disposable" : "", "Disposable or reusable"), "Reusable means charging and cleaning between patients; it sets which batteries fit in the battery view.");
 }
 function step5(s) {
   let more = "";
@@ -1951,13 +1951,15 @@ function dsCardHTML(s, k) {
     ${f.warn.map(w => `<p class="gfit">${esc(w)}</p>`).join("")}${f.soft ? `<p class="gdn"${TA(f.soft)}>Not your device: results are an approximation.</p>` : ""}</article>`;
 }
 function cardHTML(s) {
-  const L = specLines(s);
-  const rows = L.map(r => r.k === "Device"
+  const top = window.ChipInIntake?.topRows?.(s, intakeCtx()) || "", shown = top ? ChipInIntake.topMetrics(s) : []; /* INTAKE HOOK: sensitivity and the second target first */
+  const pT = PLACES[s.place] || PLACES.ward, others = s.targets.filter(t => !shown.includes(t.metric)).map(t => `${MET[t.metric].short || MET[t.metric].name} ${fmtTgtIn(t, pT)}`).join("; ");
+  const L = specLines(s).filter(r => !(top && r.k === "Targets" && !others)).map(r => top && r.k === "Targets" ? { ...r, k: "Other targets", v: others } : r);
+  const rows = top + L.map(r => r.k === "Device"
     ? `<div class="gsr"><span class="k">Device</span><div class="v"><div class="gie"><textarea data-sf="device" data-voice rows="1" placeholder="Name the device" aria-label="Device">${esc(s.device)}</textarea></div><div class="gie sm"><textarea data-sf="signal" data-voice rows="1" placeholder="Name the signal or sensors" aria-label="Signal or sensors">${esc(s.signal)}</textarea></div><small>${esc(r.v.split(". ").slice(1).join(". "))}</small></div><button type="button" class="gchg" data-go="1" aria-label="Change the device">Change</button></div>`
     : `<div class="gsr"><span class="k">${r.k}</span><div class="v">${esc(r.v)}</div>${r.go ? `<button type="button" class="gchg" data-go="${r.go}" aria-label="Change ${r.k.toLowerCase()}">Change</button>` : '<span class="gfx">Fixed</span>'}</div>`).join("");
   const noM = window.ChipInModels.unavailableReason(window.ChipInModels.runModel(s.agent && s.agent.model), liveDefaults());
   const af = s.case === "af" && !liveOn() ? `<p class="gfr">${MEASURED.af ? tp("AF patch case: Run replays its real search.", "This brief is the AF patch case: Run replays its real search with your targets.") : tp("AF patch case: Run opens its measured run.", "This brief is the AF patch case: Run opens its measured run with your targets.")}</p>` : "";
-  return `<p class="gfl">Check it, change anything, then run.</p><div class="gsc">${rows}${window.ChipInQuestions?.cardRows(s, flowSave) || "" /* QUESTIONS HOOK: the answers, editable */}${window.ChipInIntake?.cardRows(s) || "" /* INTAKE HOOK: the scripted answers */}</div>
+  return `<p class="gfl">Check it, change anything, then run.</p><div class="gsc">${rows}${window.ChipInQuestions?.cardRows(s, flowSave) || "" /* QUESTIONS HOOK: the answers, editable */}${window.ChipInIntake?.cardRows(s, intakeCtx()) || "" /* INTAKE HOOK: the assumed rows, editable, and unread answers */}</div>
     <div class="gsq">${sizeUsable(s) ? `<div class="gsqi"><span id="gRs">Run size</span><div class="gseg" role="radiogroup" aria-labelledby="gRs">${PRESETS.map(x => `<button type="button" role="radio" aria-checked="${x.n === s.preset}" data-c="preset" data-v="${x.n}">${plab(x.n)}</button>`).join("")}</div>
       <span class="gfx" aria-live="polite">${SUBAGENTS[s.preset]} subagents per stage</span></div>` : ""}
       <div class="gsqi"><span>Model</span>${agentPill(s.agent)}${noM ? `<span class="gfx">${esc(noM)}; pick another</span>` : ""}</div></div>${af}`;
