@@ -502,6 +502,23 @@ async def test_summaries_off_leaves_the_run_as_it_was(config: BackendConfig) -> 
     assert by_id["run"]["final"] and (on_path / SUMMARIES_FILE).is_file()
 
 
+async def test_the_summaries_spend_reaches_the_run_record_and_the_cost_event(
+    config: BackendConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scripted = Scripted(cost=0.001)
+    monkeypatch.setattr("chipin_backend.api.summaries.ModelSummariser", lambda _settings: scripted)
+    events, path = await _stub_run(config, summary=True)
+    assert scripted.calls
+    spent = round(len(scripted.calls) * 0.001, 6)
+    costs = [e for e in events if e["type"] == "cost"]
+    assert costs[-1]["summaries_usd"] == pytest.approx(spent)
+    record = json.loads((path / "run.json").read_text())
+    assert record["summaries_usd"] == pytest.approx(spent)
+    assert record["llm_cost_usd"] == pytest.approx(spent)
+    api_record = json.loads((path / "api.json").read_text())
+    assert api_record["cost"]["summaries_usd"] == pytest.approx(spent)
+
+
 def test_the_cli_replays_a_recorded_run(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     folder = tmp_path / "r"
     folder.mkdir()

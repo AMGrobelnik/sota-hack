@@ -292,7 +292,9 @@ async def test_run_summary_reaches_the_record_and_run_finished(
     assert "Stub run complete" in last["summary"], "the agent's last message stays the summary"
     record = json.loads((config.resolved_runs_dir() / run_id / "run.json").read_text())
     assert record["result"]["summary"]["run"]["text"] == bullets
-    assert record["llm_cost_usd"] == pytest.approx(2e-5)
+    # the end-of-run summary plus the level summaries, which the same mocked model answered
+    assert record["summaries_usd"] > 0
+    assert record["llm_cost_usd"] == pytest.approx(2e-5 + record["summaries_usd"])
 
 
 async def test_runs_listed_newest_first(client: TestClient) -> None:

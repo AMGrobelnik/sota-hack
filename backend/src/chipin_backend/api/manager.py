@@ -427,15 +427,22 @@ class RunManager:
                 if rel.lower() in {"report.md", "report.html"}:
                     self._artifact(tailer, rel, "report")
             cost = translator.cost
+            changed = False
             if item.fanout is not None:
                 if requests is not None:
                     requests.cancel()
-                cost = await self._close_fanout(item, cost)
+                cost, changed = await self._close_fanout(item, cost)
             if item.levels is not None:
                 try:
                     await item.levels.finish(status, timeout=0 if self.closing else None)
                 except Exception:  # summaries never fail a run
                     logger.exception("run {}: closing summaries failed", item.id)
+                if self._add_summary_spend(item, item.levels.writer.spent):
+                    cost = {**(cost or {"usd": 0.0, "tokens_in": 0, "tokens_out": 0})}
+                    cost["summaries_usd"] = round(item.levels.writer.spent, 6)
+                    changed = True
+            if changed and cost is not None:
+                item.log.append("cost", **cost)
             emit_evidence(item.run.path, item.log.append)
             item.log.append("run.finished", status=status, summary=summary, bullets=bullets)
             item.record.update(
@@ -445,20 +452,33 @@ class RunManager:
             logger.info("run {} {}", item.id, status)
 
     @staticmethod
-    async def _close_fanout(item: ApiRun, cost: dict[str, Any] | None) -> dict[str, Any] | None:
+    async def _close_fanout(item: ApiRun, cost: dict[str, Any] | None) -> tuple[dict[str, Any] | None, bool]:
         """Stop the run's subagents and close the merged stages left open; the run's cost with
-        theirs added (one ``cost`` event)."""
+        theirs added, and whether that changed it (the caller sends one ``cost`` event)."""
         assert item.fanout is not None
         await item.fanout.close()
         item.fanout.close_merged()
         if not item.fanout.subagents:
-            return cost
+            return cost, False
         own = cost or {"usd": 0.0, "tokens_in": 0, "tokens_out": 0}
         theirs = item.fanout.cost()
         total = {key: (own.get(key) or 0) + theirs[key] for key in ("usd", "tokens_in", "tokens_out")}
         total["subagents_usd"] = theirs["usd"]
-        item.log.append("cost", **total)
-        return total
+        return total, True
+
+    @staticmethod
+    def _add_summary_spend(item: ApiRun, spent: float) -> bool:
+        """Add the level summaries' OpenRouter spend to ``run.json``'s ``llm_cost_usd``; whether
+        there was any. The record is the one place a run's API spend adds up."""
+        if spent <= 0:
+            return False
+        if item.run.record_path.is_file():
+            try:
+                before = item.run.read_record().llm_cost_usd or 0.0
+                item.run.update_record(llm_cost_usd=round(before + spent, 6), summaries_usd=round(spent, 6))
+            except (OSError, ValueError, TypeError) as exc:
+                logger.error("run {}: summary spend not recorded: {}", item.id, exc)
+        return True
 
     @staticmethod
     def _artifact(tailer: ProgressTailer, rel: str, kind: str) -> None:
