@@ -984,7 +984,7 @@ only for a run that is running.
 `POST /api/helper/suggestions` takes `{"view": ...}` and returns up to four
 `{"id", "label", "prompt"}` example prompts for that view and run state:
 the start page, each guided-flow step and the spec card, Configure, a
-running run, a finished run, a selected design and the Where it fails tab.
+running run, a finished run and a selected design.
 Each names the run or design it is about, so it can be answered from the
 data.
 

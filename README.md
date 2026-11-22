@@ -56,7 +56,8 @@ flowchart LR
 5. **Verification.** The gate netlist is proved equal to the RTL. The match
    with the model is checked by simulation on the inputs given.
 6. **Dashboard.** Every stage, message, tool call, design and cost streams to
-   the dashboard live. Recorded runs play back from their own events. Short
+   the dashboard live. Recorded runs play back from their own events. They
+   are listed in the sidebar under Recents. Short
    summaries at each level (step, group, subagent, batch, stage, run) open
    down to the full text. You can message the agent while it runs. Chippy,
    a separate helper, answers questions about the runs and moves the page.
@@ -89,7 +90,7 @@ flowchart TB
 | spec      | targets, constraints and the data to use         |
 | reference | baseline models to compare against               |
 | propose   | candidate design families                        |
-| fine-tune | trained models, if a Python that can train is set |
+| fine-tune | trained models, if a training Python is set      |
 | compile   | logic gates for each model, from the lab         |
 | verify    | gates checked against the model                  |
 | report    | the chosen chip, its numbers and where it fails  |
@@ -123,7 +124,10 @@ uv sync --extra dev
 uv run chipin-backend run --backend stub --prompt "hello"
 ```
 
-The last command prints the run as JSON, ending with `"failed": false`, and
+Use an absolute path for `PATH_TO_SITE_CHECKOUT`: the commands below run
+from inside `backend/`.
+
+The last command prints the run as JSON, with `"failed": false`, and
 writes the run folder under `backend/runs/`.
 
 Then serve the dashboard from your own machine:
@@ -139,9 +143,11 @@ is 8797). Open the dashboard on the same address with the same token:
 http://127.0.0.1:8831/dashboard/variants/i1.html#token=<token>
 ```
 
-The sidebar reads "Connected to local backend". Type a brief and press Chip
-in, answer the questions (the stub's follow-up questions are canned), then
-press Run on the spec card. A stub run reports all seven stages. Stop the
+The sidebar reads "Connected to local backend". Type a brief that names the
+sensor and at least one target, for example: A wrist band with an
+accelerometer that detects falls; at least 90% sensitivity and at most 1
+false alarm per day. Press Chip in, answer the questions (the stub's
+follow-up questions are canned), then press Run on the spec card. A stub run reports all seven stages. Stop the
 server with Ctrl-C.
 
 The published site cannot reach a server on your machine: browsers block an
@@ -240,7 +246,7 @@ layout signoff, fabrication or approval, so the two are not the same job.
 - **Neonatal EEG is a feasibility result.** Every design misses every event
   in at least one held-out baby. It uses one hospital's recordings and is
   not clinical evidence (D).
-- **The recorded agent runs use synthetic data** (E).
+- **The recorded agent runs use synthetic data** (E, G).
 - **Two other baselines were not reached:** apnea and heartbeat
   classification (`experiments/README.md`).
 - **Digital core only.** The lab does not design the analog front end. It is

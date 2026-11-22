@@ -6,11 +6,11 @@ own code, chip files, `results.json` and a `notes.md` that starts with the
 verdict, then the protocol, the data and every difference from the
 published method.
 
-| Folder             | Task                     | Verdict            |
-| ------------------ | ------------------------ | ------------------ |
-| `baselines/af/`    | AF from heartbeat timing | matches, does less |
-| `baselines/apnea/` | sleep apnea per minute   | not reached        |
-| `baselines/arr/`   | abnormal heartbeats      | not reached        |
+| Folder             | Task                   | Verdict            |
+| ------------------ | ---------------------- | ------------------ |
+| `baselines/af/`    | AF from beat timing    | matches, does less |
+| `baselines/apnea/` | sleep apnea per minute | not reached        |
+| `baselines/arr/`   | abnormal heartbeats    | not reached        |
 
 - **AF** (`baselines/af/notes.md`, "Verdict (round two)"; protocol fixed
   first in `round2/protocol.md`). Accuracy matches the published chip; it
