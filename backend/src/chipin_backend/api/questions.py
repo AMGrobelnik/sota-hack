@@ -185,12 +185,17 @@ and their values (sensitivity, specificity, false alarms), which metric the char
 electrodes or sensors, battery life, disposable or reusable, and where the data comes from. Never
 ask any of these again, and never ask what the brief or the answers already say.
 
+The page already sets these as assumptions the person can change, so never ask them either: how
+fast the chip must alert after the event (alert latency), how much movement or noise the
+recordings carry, and which mistake matters more, a missed event or a false alarm.
+
 Ask only about inputs that change the chip's model or its logic, or how the design is judged.
-Good topics, when the brief leaves them open: how fast the chip must alert after the event; how
-much movement or noise the recordings carry; which mistake matters most, a missed event or a false
-alarm; the sampling rate or signal band; how the population varies (age, skin, sensor placement);
-how long one decision window may be; what the chip does when a sensor drops out. Pick the three
-that matter most for this brief.
+Good topics, when the brief leaves them open: the sampling rate or signal band; how the
+population varies (age, skin, sensor placement); how long one decision window may be; what the
+chip does when a sensor drops out. Pick the three that matter most for this brief.
+
+Any question that asks for a number names its unit (seconds, Hz, hours, per day) in the question,
+in every option and in the default, for example "250 Hz" or "4 seconds", never a bare number.
 
 Never ask about: regulatory class or pathway, certification or approval of any kind, wireless
 links or connectivity, mechanical size or packaging, price or cost, branding, or marketing. They

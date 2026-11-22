@@ -94,7 +94,7 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict
 
 from chipin_backend.api.events import API_EVENTS_FILE, STAGES, EventLog
-from chipin_backend.api.translate import clip
+from chipin_backend.api.translate import clip, line_from_summary
 from chipin_backend.llm.keys import OPENROUTER_KEY_ENV, has_openrouter_key
 from chipin_backend.llm.summarise import Summary, SummarySettings, load_summary_settings, summarise
 from chipin_backend.scrub import scrub_text
@@ -592,7 +592,8 @@ class Levels:
             return
         started = self.calls.pop(key, None)
         name = str(event.get("name") or "tool")
-        own = str(event.get("summary") or name)
+        # its readable line; an event recorded before lines existed has its summary reshaped
+        own = str(event.get("line") or line_from_summary(str(event.get("summary") or "")) or name)
         failed = event.get("state") == "failed"
         covers = [f"e{started}", f"e{seq}"] if started else [f"e{seq}"]
         # A tool row's own line ("Ran python train.py", "Read brief.md") is its step line: no call.

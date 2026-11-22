@@ -653,6 +653,7 @@ async def test_translation_of_agent_events(tmp_path: Path) -> None:
     assert types == ["status", "message", "tool", "tool", "cost", "error"]
     started, failed = log.since(3)[0], log.since(4)[0]
     assert (started["summary"], started["state"]) == ("Ran python train.py", "started")
+    assert started["line"] == failed["line"] == "Ran python train.py (+1 more)"
     assert (failed["state"], failed["detail"], failed["name"]) == ("failed", "Traceback: boom", "Bash")
     assert log.since(5)[0] == {**log.since(5)[0], "usd": 0.12, "tokens_in": 100, "tokens_out": 20}
     assert tr.error_emitted
