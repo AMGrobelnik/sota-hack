@@ -25,13 +25,16 @@ from chipin_backend.api.summaries import (
     Levels,
     LevelSettings,
     RunSummaries,
+    Writer,
     _once,
     attach,
+    cut,
     latest,
     load_level_settings,
     read_jsonl,
     redact,
     replay,
+    unknown_numbers,
 )
 from chipin_backend.config import BackendConfig
 from chipin_backend.llm.summarise import Summary
@@ -64,7 +67,7 @@ class Scripted:
         elif system.startswith("You title"):
             text = json.dumps({k: f"G{len(v)} {v[0][:20]}" for k, v in data.items()})
         else:
-            text = f"U {data['part']} ({data.get('ended', '')}): {len(data['lines'])} lines"
+            text = f"U {data['part']} ({data.get('ended', '')})"
         return Summary(text=text, cost_usd=self.cost, model="scripted/model")
 
 
@@ -535,3 +538,81 @@ def test_a_reply_written_twice_is_kept_once() -> None:
     assert _once("Compiled 87 gates.Compiled 87 gates.") == "Compiled 87 gates."
     assert _once("Compiled 87 gates. Compiled 87 gates.") == "Compiled 87 gates."
     assert _once("Compiled 87 gates, then 14 gates.") == "Compiled 87 gates, then 14 gates."
+
+
+# ---- numbers kept with their lines, clean cuts ----
+
+COVERED = [
+    "Design A: held-out 99/100 and train 300/300.",
+    "Design B compiled to 2864 gates, depth 53; 0 mismatches over 2000 vectors.",
+]
+
+
+def test_a_number_is_unknown_unless_a_covered_line_has_it() -> None:
+    assert unknown_numbers("Design A: held-out 99/100, train 300/300.", COVERED) == []
+    assert unknown_numbers("Design A had 99% held-out (300/300).", COVERED) == ["99%"]
+    assert unknown_numbers("Design B: 28 64 gates.", COVERED) == ["28", "64"]
+    # digit grouping and separators are not a different number
+    assert unknown_numbers("2\u202f864 gates, 2,000 vectors, 99 held-out", COVERED) == []
+    assert unknown_numbers("chip 5de8a1a98e70, v21", COVERED) == []  # ids are not numbers
+
+
+def test_a_long_line_is_cut_at_a_sentence_or_clause_never_inside_a_word() -> None:
+    two = "Verification passed 2000 vectors. Then 0 mismatches were found across all designs."
+    assert cut(two, 60) == "Verification passed 2000 vectors."
+    clauses = "Verification passed 2000 vectors, 0 mismatches against the reference, all checks green"
+    assert cut(clauses, 70) == "Verification passed 2000 vectors, 0 mismatches against the reference…"
+    words = "Verification passed two thousand vectors with zero mismatches against reference"
+    out = cut(words, 50)
+    assert out.endswith("…") and out[:-1] in words and words[len(out) - 1] == " "
+    assert cut("Design B used 1 941 gates and more words after it", 17) == "Design B used…"
+    assert cut("short", 50) == "short"
+
+
+class Upper(Scripted):
+    """Upper-level replies from a script, in order; the lower levels as :class:`Scripted`."""
+
+    def __init__(self, *replies: str) -> None:
+        super().__init__()
+        self.replies = list(replies)
+
+    async def __call__(self, *, system: str, prompt: str, max_tokens: int) -> Summary:
+        if not system.startswith("You write a short summary"):
+            return await super().__call__(system=system, prompt=prompt, max_tokens=max_tokens)
+        self.calls.append((system, prompt))
+        return Summary(text=self.replies.pop(0), cost_usd=self.cost, model="scripted/model")
+
+
+async def _one(summariser: Upper, max_chars: int = 360) -> tuple[str, str, str]:
+    writer = Writer(Levels(settings()), summariser, lambda *_: None)
+    return await writer._one("stage", {"part": "the propose stage"}, COVERED, "own", max_chars)
+
+
+async def test_an_upper_line_with_an_unknown_number_is_asked_again_once() -> None:
+    summariser = Upper("Design A reached 99% held-out (300/300).", "Design A: held-out 99/100.")
+    assert await _one(summariser) == ("Design A: held-out 99/100.", "model", "scripted/model")
+    assert len(summariser.calls) == 2 and "99%" in summariser.calls[1][0]
+
+
+async def test_an_upper_line_wrong_twice_falls_back_to_the_covered_first_clauses() -> None:
+    summariser = Upper("A had 99% held-out.", "B used 28 64 gates.")
+    text, source, model = await _one(summariser)
+    assert (source, model) == ("fallback", "")
+    assert text == "Design A: held-out 99/100 and train 300/300; Design B compiled to 2864 gates"
+    assert unknown_numbers(text, COVERED) == []
+
+
+async def test_an_upper_line_too_long_is_asked_shorter_then_cut_cleanly() -> None:
+    long = "Design B compiled to 2864 gates, depth 53. " + "It ran 2000 vectors with 0 mismatches. " * 3
+    summariser = Upper(long, long)
+    text, source, _ = await _one(summariser, max_chars=100)
+    assert source == "model" and "over the limit" in summariser.calls[1][0]
+    assert text == "Design B compiled to 2864 gates, depth 53. It ran 2000 vectors with 0 mismatches."
+
+
+async def test_the_guard_runs_on_every_upper_level_of_a_fanout_run() -> None:
+    script = fanout_run()
+    summariser = Upper(*["Reached 77% on 12345 windows."] * 40)
+    by_id = check_tree(await run_replay(script, summariser), script.events)
+    upper = [s for s in by_id.values() if s["level"] in ("agent", "batch", "stage", "run")]
+    assert upper and all(s["source"] == "fallback" and "77" not in s["text"] for s in upper)

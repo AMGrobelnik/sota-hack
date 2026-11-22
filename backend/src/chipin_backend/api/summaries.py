@@ -25,8 +25,10 @@ is the id of the summary one level up that will cover it, known when the
 child is written. ``source`` is ``model`` (written by the model), ``verbatim``
 (the thing's own words, short enough already, or a single child's line) or
 ``fallback`` (the model could not be asked or did not answer: the text's own
-first line). A later summary with the same id (``final`` false, then true)
-replaces the earlier one.
+first line; or, above level 1, its line held a number that none of the lines
+it covers has, twice: the covered lines' own first clauses). Lines too long
+end at a whole sentence or clause, never inside a word or number. A later
+summary with the same id (``final`` false, then true) replaces the earlier one.
 
 Groups: a run of items of one agent in one stage. A group closes when the
 stage changes, the agent delegates (``subagent.started``), a user message
@@ -178,6 +180,15 @@ _STYLE_RULE = (
     "Use only facts that are in the data; keep names, numbers and pass or fail as they are. "
     "Plain words, no ids, no full paths, no URLs, no preamble."
 )
+_NUMBER_RULE = (
+    "Numbers: copy each one exactly as its line writes it, digit for digit, and keep it with the "
+    "label its line gives it (if a line says held-out 99/100 and train 300/300, write exactly that, "
+    "never 99% held-out (300/300)). Never move a number to another measure, design or label, never "
+    "join a count from one measure with a percentage of another, never work out a new number, and "
+    "never add spaces, commas or other separators inside a number (2864 stays 2864). Fewer facts "
+    "said right are better than many crammed in: leave a fact out rather than squeeze it. End on a "
+    "whole sentence well inside the length limit."
+)
 ITEM_SYSTEM = f"""\
 You write the entries of a live log of an AI agent at work. The agent designs tiny chips: it
 writes code, trains small models and runs chip tools.
@@ -201,6 +212,8 @@ characters: what the agent was doing in these steps and how it went, with the ke
 there is one. Leave out housekeeping (progress reports, listing folders, reading notes) unless
 that is all there is. {_STYLE_RULE}
 
+{_NUMBER_RULE}
+
 Reply with one JSON object only: {{{{"<key>": "<title>", ...}}}}, one entry per key."""
 
 UPPER_SYSTEM = f"""\
@@ -220,12 +233,108 @@ with the design its line gives it to, never merge two designs into one, and leav
 when its line does not say which design it belongs to. Leave out housekeeping
 (progress reports, listing folders). If "ended"
 says it is still running, say what it is doing now; never call a finished part ongoing.
-{_STYLE_RULE} No lists."""
+{_STYLE_RULE} No lists.
+
+{_NUMBER_RULE}"""
+
+RETRY_NOTE = """
+
+Your last answer broke a rule: {problems}. Write it again from the same data, at most
+{max_chars} characters, copying each number exactly from the lines with its own label."""
 
 
 def _aim(limit: int) -> int:
     """The length asked of the model: under the hard cap, which then rarely has to cut."""
     return limit * 2 // 3
+
+
+_SEP = "[,\u00a0\u2009\u202f ]"
+_DIGITS = rf"\d+(?:{_SEP}\d{{3}})*(?:\.\d+)?"
+#: A number as a reader sees it: ``2864``, ``2 864``, ``95.1 %``, ``99/100``; not inside a word or id.
+_NUMBER = re.compile(rf"(?<![\w.])({_DIGITS})(?:\s?(%)|/({_DIGITS}))?(?!\w)")
+_TYPO_GROUP = re.compile(r"(?<=\d)[\u00a0\u2009\u202f](?=\d{3}(?!\d))")
+
+
+def _numbers(text: str) -> list[tuple[str, tuple[str, ...]]]:
+    """Each number in ``text``, normalised (no separators): ``(token, bare parts)``."""
+    out: list[tuple[str, tuple[str, ...]]] = []
+    for whole, percent, below in _NUMBER.findall(text):
+        top = re.sub(_SEP, "", whole)
+        if below:
+            low = re.sub(_SEP, "", below)
+            out.append((f"{top}/{low}", (top, low)))
+        else:
+            out.append((top + percent, (top,)))
+    return out
+
+
+def unknown_numbers(text: str, sources: Iterable[str]) -> list[str]:
+    """Numbers in ``text`` that none of ``sources`` has (spacing and separators aside).
+
+    A percentage or a fraction must appear as such; a bare number may be any part of one.
+    """
+    tokens: set[str] = set()
+    bare: set[str] = set()
+    for source in sources:
+        for token, parts in _numbers(source):
+            tokens.add(token)
+            bare.update(parts)
+    return [
+        token
+        for token, parts in _numbers(text)
+        if token not in tokens and not (parts == (token,) and token in bare)
+    ]
+
+
+def cut(text: str, limit: int) -> str:
+    """``text`` on one line within ``limit`` characters, never cut inside a word or a number.
+
+    Too long, it ends at its last whole sentence that fits, else at its last clause (with an
+    ellipsis), else at its last whole word that is not part of a grouped number.
+    """
+    flat = " ".join(str(text).split())
+    if len(flat) <= limit:
+        return flat
+    floor = limit // 3
+    ends = [m.end() for m in re.finditer(r"[.!?](?=\s)", flat) if m.end() <= limit]
+    if ends and ends[-1] >= floor:
+        return flat[: ends[-1]]
+    pattern = r"[,;:](?=\s)|\s[-\u2013\u2014](?=\s)"
+    clauses = [m.start() for m in re.finditer(pattern, flat) if m.start() < limit]
+    if clauses and clauses[-1] >= floor:
+        return flat[: clauses[-1]].rstrip() + "…"
+    spaces = [m.start() for m in re.finditer(r" ", flat[:limit])]
+    while spaces and flat[spaces[-1] - 1].isdigit() and flat[spaces[-1] + 1].isdigit():
+        spaces.pop()  # inside "2 864": go back one word
+    if spaces and spaces[-1] >= floor:
+        return flat[: spaces[-1]].rstrip(" ,;:") + "…"
+    return flat[: limit - 1] + "…"
+
+
+def _tidy(text: str) -> str:
+    """A model reply on one line, digit groups joined (``2 864`` with a thin space is ``2864``)."""
+    return _once(" ".join(_TYPO_GROUP.sub("", text).split()))
+
+
+def first_clause(line: str) -> str:
+    """``line`` up to its first sentence or clause end."""
+    flat = " ".join(str(line).split())
+    match = re.search(r"[.;!?](?=\s)|,(?=\s)", flat)
+    return flat[: match.start()].strip() if match else flat.rstrip(".")
+
+
+def clause_fallback(lines: list[str], limit: int) -> str:
+    """The covered lines' own first clauses joined: numbers only as their lines have them."""
+    return cut("; ".join(c for c in (first_clause(ln) for ln in lines) if c), limit)
+
+
+def _problems(text: str, sources: list[str], limit: int) -> str:
+    """Why a model line must be asked again (``""`` when it is fine)."""
+    wrong = unknown_numbers(text, sources)
+    out = [f"the numbers {', '.join(wrong)} are in none of the lines"] if wrong else []
+    if len(text) > limit:
+        out.append(f"it was {len(text)} characters, over the limit of {limit}")
+    return "; ".join(out)
 
 
 def _once(text: str) -> str:
@@ -251,9 +360,9 @@ def _parse_lines(text: str) -> dict[str, str]:
 
 
 def first_line(text: str, limit: int) -> str:
-    """The first non-empty line of ``text``, cut to ``limit`` characters."""
+    """The first non-empty line of ``text``, cut to ``limit`` characters at a word or clause."""
     line = next((ln for ln in str(text).splitlines() if ln.strip()), "")
-    return clip(line, limit)
+    return cut(clip(line, 10 * limit), limit)
 
 
 def _event_time(event: Mapping[str, Any]) -> float:
@@ -748,7 +857,7 @@ class Writer:
         for n, item in enumerate(ask):
             line = lines.get(str(n), "")
             item.line, item.source = (
-                (clip(line, self.s.item_max_chars), "model") if line else (item.own, "fallback")
+                (cut(_tidy(line), self.s.item_max_chars), "model") if line else (item.own, "fallback")
             )
         for item in items:
             if not item.text:
@@ -769,25 +878,40 @@ class Writer:
 
     async def _groups(self, groups: list[Group]) -> None:
         ask = [g for g in groups if len(g.items) > 1]
+        limit = self.s.group_max_chars
         lines: dict[str, str] = {}
+        rejected: set[str] = set()
         model = ""
         if ask:
-            payload = json.dumps({g.id: [i.line for i in g.items] for g in ask}, ensure_ascii=False)
-            system = GROUP_SYSTEM.format(max_chars=_aim(self.s.group_max_chars))
-            reply = await self._call("group", system, payload, 60 * len(ask) + 300)
-            if reply is not None:
-                lines, model = _parse_lines(reply.text), reply.model
+            lines, model = await self._group_call(ask, "")
+            sources = {g.id: [i.line for i in g.items] for g in ask}
+            bad = {
+                g.id: why
+                for g in ask
+                if g.id in lines and (why := _problems(lines[g.id], sources[g.id], limit))
+            }
+            if bad:
+                note = "; ".join(f"for {k}, {why}" for k, why in bad.items())
+                again, model2 = await self._group_call([g for g in ask if g.id in bad], note)
+                for gid in bad:
+                    line = again.get(gid, "")
+                    if line and not unknown_numbers(line, sources[gid]):
+                        lines[gid], model = line, model or model2
+                    elif unknown_numbers(lines[gid], sources[gid]):
+                        rejected.add(gid)  # else only too long: the first answer, cut cleanly
         for group in groups:
             source: Source
             if len(group.items) == 1:
                 only = group.items[0]
                 text, source = only.line, ("fallback" if only.source == "fallback" else "verbatim")
+            elif group.id in rejected:
+                text, source = clause_fallback([i.line for i in group.items], limit), "fallback"
             elif lines.get(group.id):
-                text, source = clip(lines[group.id], self.s.group_max_chars), "model"
+                text, source = cut(lines[group.id], limit), "model"
             else:
                 more = f" (+{len(group.items) - 1} more)"
                 text, source = (
-                    clip(group.items[0].line, self.s.group_max_chars - len(more)) + more,
+                    cut(group.items[0].line, self.s.group_max_chars - len(more)) + more,
                     "fallback",
                 )
             group.line = text
@@ -802,6 +926,18 @@ class Writer:
                 stage=group.stage,
                 model=model if source == "model" else "",
             )
+
+    async def _group_call(self, groups: list[Group], problems: str) -> tuple[dict[str, str], str]:
+        """One group call: ``({group id: line}, model)``; ``problems`` asks again after a bad answer."""
+        payload = json.dumps({g.id: [i.line for i in g.items] for g in groups}, ensure_ascii=False)
+        aim = _aim(self.s.group_max_chars)
+        system = GROUP_SYSTEM.format(max_chars=aim)
+        if problems:
+            system += RETRY_NOTE.format(problems=problems, max_chars=aim)
+        reply = await self._call("group", system, payload, 60 * len(groups) + 300)
+        if reply is None:
+            return {}, ""
+        return {k: _tidy(v) for k, v in _parse_lines(reply.text).items()}, reply.model
 
     # ---- levels 3 and 4 ----
 
@@ -917,17 +1053,34 @@ class Writer:
     async def _one(
         self, level: Level, data: dict[str, Any], lines: list[str], own: str, max_chars: int
     ) -> tuple[str, Source, str]:
-        """One summary from ``lines``: ``(text, source, model)``; the own line when the model is not asked."""
-        if lines:
-            payload = json.dumps({**data, "lines": lines}, ensure_ascii=False)
-            reply = await self._call(
-                level, UPPER_SYSTEM.format(max_chars=_aim(max_chars)), payload, max_chars // 2 + 300
-            )
-            if reply is not None:
-                text = _once(" ".join(reply.text.split()))
-                if text:
-                    return clip(text, max_chars), "model", reply.model
-        return clip(own, max_chars), "fallback", ""
+        """One summary from ``lines``: ``(text, source, model)``.
+
+        A reply with a number found in none of the lines (nor the part's own data), or over
+        ``max_chars``, is asked for once more. A number still unknown after that gives the lines'
+        own first clauses; a reply still too long is cut at a sentence or clause. No reply at
+        all gives ``own``.
+        """
+        if not lines:
+            return cut(own, max_chars), "fallback", ""
+        sources = lines + [str(v) for v in data.values()]
+        payload = json.dumps({**data, "lines": lines}, ensure_ascii=False)
+        system = UPPER_SYSTEM.format(max_chars=_aim(max_chars))
+        tokens = max_chars // 2 + 300
+        reply = await self._call(level, system, payload, tokens)
+        text = _tidy(reply.text) if reply is not None else ""
+        if not text:
+            return cut(own, max_chars), "fallback", ""
+        model = reply.model if reply is not None else ""
+        problems = _problems(text, sources, max_chars)
+        if problems:
+            note = RETRY_NOTE.format(problems=problems, max_chars=_aim(max_chars))
+            again = await self._call(level, system + note, payload, tokens)
+            second = _tidy(again.text) if again is not None else ""
+            if second and not unknown_numbers(second, sources):
+                text, model = second, again.model if again is not None else model
+            elif unknown_numbers(text, sources):
+                return clause_fallback(lines, max_chars), "fallback", ""
+        return cut(text, max_chars), "model", model
 
     # ---- calls and limits ----
 
