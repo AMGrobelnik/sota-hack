@@ -26,10 +26,16 @@ text: [SPEC.md](SPEC.md).
   reading the same input port or its own port (sensor 1, sensor 2, ...). Simple fusion logic between their
   decisions: AND, OR, k-of-n vote.
 - **Smaller chips on request.** `"optimizer": "alkaid"` on `ingest-model` / `compile-ir` builds constant multiplies from
-  alkaid's shared shift-adds. The spike drops from 2,285 to 1,405 gates (−38%) and fits one Tiny Tapeout tile. It's fully
+  alkaid's shared shift-adds. The spike drops from 2,285 to 1,390 gates (−39%) and fits one Tiny Tapeout tile. It's fully
   proven (gates = RTL, RTL = golden model of the IR). The design id gets `-alk`, so both variants coexist.
 - **Streaming hardware.** `compile-stream` wraps the chip so inputs arrive one value per clock with a strobe. That's
   what an 8-pin Tiny Tapeout slot or a small FPGA needs.
+- **Alarm logic and many EEG channels on one chip.** `compile-stream` adds on-chip alarm smoothing (majority, k-of-n,
+  average), a minimum duration and an alarm hold, and `channel_serial` runs one model copy over every channel: at 18
+  channels that is 2,531 gates instead of 45,354 for 18 copies (17.9× smaller), proven to give identical decisions.
+- **Fair seizure scoring.** `score-events` scores detectors by events, split by patient: SzCORE and neonatal
+  profiles, false alarms per hour, sensitivity at fixed false-alarm rates, worst patient and bootstrap intervals,
+  cross-checked against the published `timescoring` library.
 - **Many candidates at once, by several agents.** Async jobs on resource lanes, a cache keyed by design content, a
   fast gate estimator for ranking, and batch tools.
 - **Every output a chip maker or a judge asks for:**
@@ -108,7 +114,10 @@ A negative control is part of the tests: flip one gate and both the simulation a
 
 **Proof sizes.**
 - Gates = RTL takes about a second at a few thousand gates.
-- The golden-model proof (`golden: true`, one whole-design miter) takes about 7 s on the 2.3k-gate spike.
+- The golden-model proof (`golden: true`, one whole-design miter) takes about 7 s on the 2.3k-gate spike. In the
+  scale study it completed within 20 minutes for every design up to 108k gates, including 10k ternary weights with
+  the optimiser.
+- Designs up to 30k weights (up to 1.15 million gates) are bit-exact on 100,000 random inputs.
 - The sequential proof is compositional (core black-boxed and proven separately), so the clocked wrapper proves
   in seconds at any model size: 3 s on the spike, where a whole-design eqy run took over 10 minutes.
 
@@ -165,6 +174,10 @@ No route is medically certified; the device maker remains responsible for clinic
   file. `chiplab doctor` shows the sizes it picked. Start the workers with `chiplab workers`.
 - **Cache.** Results are keyed by design content, tool, arguments and lab version, so two agents submitting the
   same design share one result (`cached: true`).
+- **Measured speedup.** On a 16-core M3 Max, `synthesize-batch` synthesised 34,938 designs per hour against 8,345
+  for the same tool called one design at a time: **4.2×** (median of 3 runs; 3.4× on the quietest run). Same 163
+  designs, order, lab commit, tools and flags, cold caches; cache hits are not counted
+  ([m3/bench/BENCH.md](../m3/bench/BENCH.md)).
 - **Sessions.** Pass `session_id` for per-agent quotas and history. The job table is SQLite and the cache is
   diskcache, so both work locally on a Mac or Linux with no server.
 - **Optional MCP.** `--extra mcp` adds an MCP server (stdio or HTTP) for agents that prefer MCP. The lab never
@@ -182,9 +195,10 @@ Pass `run_id` to any tool and its result becomes JSON-lines events in `runs/even
 
 Field-by-field formats and the file list: [EVENTS.md](EVENTS.md).
 
-## 9. Measured so far (Sat 21 Nov 2026)
+## 9. Measured so far (21–22 Nov 2026)
 
-All measured on one Linux machine: RTX 3090, Yosys 0.71, OSS CAD Suite 2026-11-21, ABC effort `fast`.
+Measured on one Linux machine (RTX 3090, Yosys 0.71, OSS CAD Suite 2026-11-21, ABC effort `fast`) unless the row
+names the M3 Max (Apple M3 Max, 16 cores, LibreLane 3.0.14).
 
 | Chip | Result | How measured |
 |---|---|---|
@@ -194,20 +208,44 @@ All measured on one Linux machine: RTX 3090, Yosys 0.71, OSS CAD Suite 2026-11-2
 | TreeLUT boosted trees | 661 gates (binary, 8 trees, depth 3); 1,537 gates (3 classes), bit-exact against TreeLUT's predict | tests |
 | 3 heads on separate input ports + AND / 2-of-3 / OR fusion | 2,622 gates, depth 53; level 1 4,000/4,000; level 3 300/300 frames (Tiny Tapeout and generic wrappers) | tests |
 | Larger AF candidate (16 inputs × 8-bit, 8 hidden) | 5,075 gates, depth 60, synthesised in 1 s (Yosys's default ABC script timed out after 15 min) | `synthesize` |
-| Spike with `optimizer: alkaid` | 1,405 gates (−38%), depth 52; sky130 10,257 µm² = 2,733 GE, 1 Tiny Tapeout tile; bit-exact 50,000 vectors; golden-model proof 2.2 s; streaming RTL sim and sequential proof pass | `ingest-model` with `optimizer`, then the same tools |
+| Spike with `optimizer: alkaid` | 1,390 gates (−39%), depth 47, ~10,800 transistors (estimate); sky130 10,020 µm² = 2,669 GE, 1,953 cells, 1 Tiny Tapeout tile; bit-exact on 50,000 random vectors; formal proof gates = RTL (and against the golden model on the M3 Max); streaming RTL sim 200/200 frames (level 3) and sequential proof in 2.7 s | `ingest-model` with `optimizer`, then the same tools (re-measured 22 Nov on the current emitter) |
 | 3-head fusion chip with `optimizer: alkaid` | 2,622 → 1,831 gates (−30%), −29% area | Builder measurements |
-| Gate estimator | held-out r² 0.95, median error 14% (shipped fit on 257 designs) | `estimate-batch` |
+| Gate estimator (M3 Max) | held-out r² 0.999, median error 6.2%, fit on 423 synthesised designs across 5 model families (logic-gate networks 1.0%, trees 3.9%, intnn 6.4%, optimised 7.4%) | `estimate-batch`; `scripts/refit_estimator.py` |
 | Population training (optional extra) | 256 candidates as one GPU program, ~2,100–2,500 candidates/min | `train-batch`; one-at-a-time GPU baseline is launch-bound, so no speedup is claimed |
+| Layouts on three processes (M3 Max) | spike, logic-gate network and 3-head fusion chip placed and routed on sky130, GF180 and IHP. Logic-gate network on sky130: 7,442 µm² die, 232 cells, +8.5 ns slack at 20 ns, 0.005 µW leakage, 9.9 pJ per decision. Fusion chip on sky130: 63,319 µm² die, 0.054 µW leakage, 315 pJ per decision | `layout`, `timing-power` (power vectorless); [m3/layouts/RESULTS.md](../m3/layouts/RESULTS.md) |
+| Example gallery (M3 Max) | 10 medical-sensing detectors (heart rate, SpO2, fall, fever trend, breathing pause, EEG burst, sensor fusion): 298–4,224 gates, 1–4 Tiny Tapeout tiles, all bit-exact and verification level 3 | the lab's CLI end to end; [m3/examples/RESULTS.md](../m3/examples/RESULTS.md) |
+| Scale, 1k to 30k weights (M3 Max) | with the optimiser 6.5–8.0 gates per ternary weight and 21–22 per 4-bit weight; 30k ternary weights in 240,751 gates (41% fewer than without it); all 16 designs bit-exact on 100,000 inputs | `synthesize`, `simulate`; [m3/scale/RESULTS.md](../m3/scale/RESULTS.md) |
+| One model over 18 EEG channels | channel-serial: 2,531 gates and 77 flip-flops, against 45,354 gates and 884 flip-flops for 18 copies (17.9× fewer gates); decisions proven identical | `compile-stream` with `area: true`; eqy |
+| Weights folded into on-chip ROM (M3 Max, design study) | constant ROM at 0.15–0.21 GE per stored bit, so a stored weight costs 15–43× less than a wired one; 30k weights estimated at 0.17–0.23 mm² on sky130, inside one Tiny Tapeout design | synthesis plus assumed utilisation; [m3/folded/feasibility.md](../m3/folded/feasibility.md) |
+| Parallel synthesis (M3 Max) | `synthesize-batch` 34,938 designs/hour against 8,345 one at a time: 4.2× (3.4× on the quietest run) | same 163 designs, tools and flags, cold caches; [m3/bench/BENCH.md](../m3/bench/BENCH.md) |
+| End to end on the merged branch (M3 Max) | 8 of 8 tools pass on one design, from compile to event scoring (synthesis, 100,000-input bit-exact check, golden proof, streaming chip with smoothing and channel-serial, 800-frame streaming simulation, chip report), about 21 s in total | [m3/e2e/smoke-chain.md](../m3/e2e/smoke-chain.md) |
+| Test suite | 255 tests pass on GitHub Actions on Linux and macOS | `.github/workflows/chiplab-tests.yaml` |
 
-Layout, timing and power (LibreLane, sky130) and the Tiny Tapeout build are validated with one smoke run on a
-small design; their numbers go in the chip report when run.
+Layout numbers are from LibreLane on the M3 Max; power is vectorless unless an activity trace is given.
+
+### Against published hardware
+
+The lab's registry (`chiplab/hw/baselines.yaml`) holds 19 published chips and devices, each read from its primary
+source, with the task, dataset, protocol and unit needed for a fair comparison.
+
+- **Atrial fibrillation: the accuracy of a fabricated AF chip with 16.7× fewer gate-equivalents.** The team's AF detector
+  (`experiments/baselines/af` on `main`, protocol fixed before any result, leave-one-subject-out) reaches sensitivity
+  94.9% and specificity 96.9% on the MIT-BIH AF database, against 94.9% and 95.8% for Andersson et al.'s 65 nm chip
+  (IEEE TBioCAS 2015). Its chip is about 1,440 gate-equivalents at layout (830.7 at synthesis) against that chip's
+  24,038: the same accuracy from a simpler detection function.
+- **Energy per decision.** The lab's laid-out chips use 10–315 pJ per decision (sky130, vectorless). Microcontrollers
+  running published AF and seizure models measure 51 µJ (GAP9) to 3,532 µJ (Cortex-M4) per inference, more than five
+  orders of magnitude above that, and published seizure chips report 1.5 nJ (SOUL, 28 nm) to 2.03 µJ per
+  classification for their full pipelines (context, see section 10).
+- **Generated and proven automatically.** Each lab chip is generated from the trained model in seconds, and the same
+  tools check it bit-exact against the model and prove the circuit equal to it.
 
 ## 10. Limits and honesty notes
 
 - **Digital core only.** Real sensors need an analog front-end (amplifier, ADC) that the lab doesn't design.
 - **Not medically certified**, and no route here is.
-- **Formal proof:** gates = RTL is fast. The proof against the independent golden model can time out on designs of
-  a few thousand gates; the tool reports which proof it got and the level stays honest.
+- **Formal proof:** gates = RTL is fast. The proof against the independent golden model completed within 20 minutes
+  for every scale-study design up to 108k gates; on larger designs the tool reports which proof it got and the level stays honest.
 - **Published chips are context, not a scoreboard,** unless task, dataset, protocol and unit all match. The
   registry carries these fields and the report says "context only" otherwise.
 - **GF180 and IHP layouts work** (validated on the M3 Max and here). Without `clock_period_ns`, timing uses a 50 ns
