@@ -378,7 +378,7 @@ svg.lead{position:absolute;inset:0;pointer-events:none;overflow:visible}
 .when{font-size:11px;color:var(--i550);margin-left:8px;font-weight:400;font-variant-numeric:tabular-nums}
 .mt{font-size:14px;line-height:1.55;color:var(--i900);margin-top:2px}
 .you{display:flex;justify-content:flex-end;margin:0 0 14px}
-.you p{margin:0;background:#15192b;color:#fff;font-size:14px;line-height:1.5;padding:8px 13px;border-radius:14px 14px 4px 14px;max-width:75%}
+.you p{margin:0;background:#15192b;color:#fff;font-size:14px;line-height:1.5;padding:8px 13px;border-radius:14px 14px 4px 14px;max-width:75%;min-width:0;overflow-wrap:anywhere}
 .comp{flex:none;padding:6px 24px 22px}
 .comp .box{max-width:760px;margin:0 auto;padding:12px 12px 12px 18px;display:flex;align-items:flex-end;gap:10px}
 .comp textarea{padding:8px 0}
@@ -614,8 +614,9 @@ select.gfin{padding:0 10px}
   .gt>select[data-tf=metric]{grid-column:1/-1}
   .gtv .gfin{width:68px}
   .gsr{grid-template-columns:minmax(0,1fr) auto;padding:14px 16px}
-  .gsr .k{grid-column:1/-1}
-  .gsr .v{grid-column:1}
+  .gsr .k{grid-row:1;grid-column:1}
+  .gsr .v{grid-column:1/-1}
+  .gsr>.gchg,.gsr>.gfx{grid-row:1;grid-column:2;justify-self:end}
   .gst output{min-width:110px}
 }
 /* ===== panels and subagent batches (dash6 third pass; section 12 of the script) =====
@@ -986,10 +987,7 @@ function makeRun(o) {
 const caseOf = run => run.case === "custom" ? run.spec : CASES[run.case];
 function budgetsOf(run) {
   if (run.case !== "custom") return CASES[run.case].budgets;
-  const n = run.spec.chans;
-  const unit = run.spec.unit || "channel";
-  const list = n ? (n === 1 ? [1] : n === 2 ? [1, 2] : [1, 2, n]) : [1, 2, 4];
-  return list.map(ch => ({ ch, label: `${ch} ${unit}${ch === 1 ? "" : "s"}` }));
+  return budgetList(run.spec.chans, run.spec.unit, run.spec.sigs);
 }
 
 /* ---------------- 3. SIMULATION MODEL ----------------
@@ -1168,6 +1166,9 @@ function parseBrief(text) {
     out.sigs.push({ name: g.name, n, unit: g.unit }); if (n && !out.chans) { out.chans = n; out.unit = g.unit; }
   }
   out.signal = out.sigs.map(x => x.n ? `${x.name}, ${x.n} ${x.unit}${x.n === 1 ? "" : "s"}` : x.name).join(" + ");
+  // battery life, when the brief gives one next to the word battery ("battery 5 days", "a 2-week battery")
+  const bm = s.match(/batter\w*[^.;,\d]{0,24}(\d+(?:\.\d+)?)\s*-?\s*(hours?|hrs?|days?|weeks?)\b/i) || s.match(/(\d+(?:\.\d+)?)\s*-?\s*(hours?|hrs?|days?|weeks?)\b[^.;,\d]{0,16}batter/i);
+  if (bm && +bm[1] > 0) { const u = bm[2].toLowerCase(); out.bat = /^w/.test(u) ? [+bm[1] * 7, "days"] : /^d/.test(u) ? [+bm[1], "days"] : [+bm[1], "hours"]; }
   // what to detect: known conditions in the order they appear, else the words after a detect verb
   const hits = CONDS.map(([re, n]) => { const m = s.match(re); return m ? { n, i: m.index } : null; }).filter(Boolean).sort((a, b) => a.i - b.i);
   out.conds = [...new Set(hits.map(h => h.n))];
@@ -1219,7 +1220,8 @@ function timeline(run) {
   if (designsOf(run).af) return (run._tl = afTimeline(run));
   if (run.source === "measured" || designsOf(run).measured) return (run._tl = { T: 0, rounds: [], SPEC: 0 });
   for (let r = 1; r <= pr.rounds; r++) {
-    const start = SPEC + (r - 1) * L, prop = start + 1.2, train = prop + L * 0.1, end = start + L, arr0 = train, arr1 = end - 0.3;
+    // round 1 proposes and trains quickly so the first designs land at about 3 s, as on the AF replay
+    const start = SPEC + (r - 1) * L, prop = start + (r === 1 ? 0.3 : 1.2), train = prop + (r === 1 ? 0.5 : L * 0.1), end = start + L, arr0 = train, arr1 = end - 0.3;
     const nb = Math.max(6, Math.floor((arr1 - arr0) / 1.45));
     rounds.push({ r, start, prop, train, end, arr0, arr1, nb });
   }
@@ -1227,7 +1229,7 @@ function timeline(run) {
   const D = designsOf(run);
   // each design's arrival time on the chart: its round's batches, in order
   const per = {}; for (const d of D.designs) (per[d.round] = per[d.round] || []).push(d);
-  for (const ro of rounds) { const list = per[ro.r] || [], bs = Math.ceil(list.length / ro.nb); list.forEach((d, j) => { const k = Math.floor(j / bs); d.batch = k; d.at = ro.arr0 + (ro.arr1 - ro.arr0) * (k + 1) / ro.nb; }); }
+  for (const ro of rounds) { const list = per[ro.r] || [], bs = Math.ceil(list.length / ro.nb); list.forEach((d, j) => { const k = Math.floor(j / bs); d.batch = k; d.at = ro.arr0 + 0.2 + (ro.arr1 - ro.arr0 - 0.2) * k / Math.max(1, ro.nb - 1); }); }
   return (run._tl = { T, rounds, SPEC, REP });
 }
 function elapsed(run) {
@@ -1614,7 +1616,9 @@ function glyph(run) {
 function renderSidebar(force) {
   const sig = route.page + (route.id || "") + "|" + runs.map(r => r.id + r.title + glyph(r)).join(",") + document.body.className + (window.ChipInLive?.i1?.sig() || ""); /* LIVE HOOK */
   if (!force && sig === sbSig) return; sbSig = sig;
-  const rows = runs.map(r => `<a class="rrow${route.id === r.id ? " on" : ""}" href="#/run/${r.id}/${route.page === "run" ? route.view : "overview"}" title="${esc(r.title)}">${glyph(r)}<span class="t">${esc(r.title)}</span></a>`).join("");
+  const row = r => `<a class="rrow${route.id === r.id ? " on" : ""}" href="#/run/${r.id}/${route.page === "run" ? route.view : "overview"}" title="${esc(r.title)}">${glyph(r)}<span class="t">${esc(r.title)}</span></a>`;
+  // the user's runs under Recents, the three demo runs apart under Examples, so a case run from the flow is not listed twice in one list
+  const rows = runs.filter(r => !r.canned).map(row).join(""), xrows = runs.filter(r => r.canned).map(row).join("");
   $("#sb").innerHTML = `
     <div class="sb-head"><span class="logo">${LOGO.mark()}</span><span class="word hc">${APP.short}</span><button class="tog" id="tog" aria-label="Collapse sidebar">${I("panel", "s16")}</button></div>
     <nav class="nav">
@@ -1624,7 +1628,7 @@ function renderSidebar(force) {
       <a href="../../how-it-works/">${I("bulb")}<span class="hc">How it works</span></a>
     </nav>
     <div class="sb-div"></div>
-    <div class="runs"><div class="cap"><span>Recents</span></div>${window.ChipInLive?.i1?.recents() || "" /* LIVE HOOK: backend chip and live runs */}${rows}</div>
+    <div class="runs"><div class="cap"><span>Recents</span></div>${window.ChipInLive?.i1?.recents() || "" /* LIVE HOOK: backend chip and live runs */}${rows}<div class="cap"><span>Examples</span></div>${xrows}</div>
     <div class="acct"><button id="acctBtn"><span class="av">LB</span><span class="hc" style="min-width:0;text-align:left"><span class="nm">Lab workspace</span><br><span class="em">Demo</span></span></button></div>`;
 }
 $("#sb").addEventListener("click", e => {
@@ -1799,12 +1803,21 @@ function defaultTargets(s) {
 const tolFor = (s, k) => k === "false_alarms_per_hour" ? (PLACES[s.place] || PLACES.ward).fa : DEF_TGT[k];
 function flowBudgets(s) {
   if (CASES[s.case]) return CASES[s.case].budgets;
-  const n = s.chans, unit = s.unit || "channel", list = n ? (n === 1 ? [1] : n === 2 ? [1, 2] : [1, 2, n]) : [1, 2, 4];
-  return list.map(ch => ({ ch, label: `${ch} ${unit}${ch === 1 ? "" : "s"}` }));
+  return budgetList(s.chans, s.unit, s.parsed && s.parsed.sigs);
 }
+// channel budgets a brief supports: its stated count; 1, 2 and 4 channels for EEG or ECG with no count; for sensors
+// that have no channels (PPG, a microphone...) one budget per named sensor kind, so a lone sensor gets just one
+function budgetList(n, unit, sigs) {
+  const lab = (ch, u) => ({ ch, label: `${ch} ${u}${ch === 1 ? "" : "s"}` });
+  if (n) return (n === 1 ? [1] : n === 2 ? [1, 2] : [1, 2, n]).map(ch => lab(ch, unit || "channel"));
+  if (sigs && sigs.length && sigs.every(x => !x.unit)) return Array.from({ length: Math.min(sigs.length, 4) }, (_, i) => lab(i + 1, "sensor"));
+  return [1, 2, 4].map(ch => lab(ch, unit || "channel"));
+}
+// a lone sensor kind with no channel count: channel budgets are not modelled for it
+const loneSensor = sigs => !!sigs && sigs.length === 1 && !sigs[0].unit;
 function defaultCons(s) {
   const cf = CASE_FLOW[s.case], b = flowBudgets(s), two = b.find(x => x.ch === 2);
-  const bat = cf ? cf.bat : s.place === "ward" ? [24, "hours"] : [7, "days"];
+  const bat = s.parsed && s.parsed.bat ? s.parsed.bat : cf ? cf.bat : s.place === "ward" ? [24, "hours"] : [7, "days"];
   return { findBest: true, channels: (two || b[0]).ch, batN: bat[0], batU: bat[1], reusable: cf ? cf.reusable : !/patch|sticker|adhesive|disposable|single[- ]use/i.test(s.brief) };
 }
 const sigOf = s => { const t = (s.signal + " " + s.brief).toLowerCase(); return /\beeg\b|electroenceph/.test(t) ? "eeg" : /\becg\b|\bekg\b|electrocardio/.test(t) ? "ecg" : ""; };
@@ -1829,15 +1842,15 @@ function fmtTgtIn(t, p) { if (t.value == null) return "value not set"; return `$
 function specLines(s) {
   const p = PLACES[s.place] || PLACES.ward, b = flowBudgets(s), k = s.cons, tk = [...taskSet(s.task)].map(x => ({ continuous: "continuous event monitoring", screening: "one-off screening", grading: "grading" }[x]));
   const tg = s.targets.map(t => `${MET[t.metric].short || MET[t.metric].name} ${fmtTgtIn(t, p)}${t.metric === s.primary ? " (on the chart)" : ""}`).join("; ");
-  const ch = k.findBest ? (b.length > 1 ? `Best spots found for you, comparing ${andList(b.map(x => x.label.toLowerCase()))}` : `${b[0].label}, the only budget`) : (b.find(x => x.ch === k.channels) || b[0]).label;
+  const ch = k.findBest ? (b.length > 1 ? `Best spots found for you, comparing ${andList(b.map(x => x.label.toLowerCase()))}` : (!CASES[s.case] && !s.chans && loneSensor(s.parsed && s.parsed.sigs) ? `One ${s.parsed.sigs[0].name} sensor; channel budgets not modelled for it` : `${b[0].label}, the only budget`)) : (b.find(x => x.ch === k.channels) || b[0]).label;
   const data = s.data === "own" ? `Own recordings${s.files.length ? `, ${s.files.length} file${s.files.length === 1 ? "" : "s"}` : ", none attached yet"}` : s.data === "public" ? (s.ds ? `Public: ${DSF[s.ds].name}` : "Public: no matching set picked") : "Synthetic data, simulated from a small stated model";
   return [
     { k: "Device", v: `${s.device || "Device not given"}; ${s.signal || "signal not given"}. Detects ${s.detect ? s.detect.charAt(0).toLowerCase() + s.detect.slice(1) : "(not given)"}; ${tk.length ? andList(tk) : "task type not given"}.`, go: 1 },
-    { k: "Who and where", v: `${s.group ? GROUPS[s.group].n : "Patient group not given"}; ${p.n.toLowerCase()}, ${p.r}. False alarms counted per ${p.per}.`, go: 2 },
+    { k: "Who and where", v: `${s.group ? GROUPS[s.group].n : "Patient group not given"}; ${p.n.toLowerCase()}, ${p.r}. ${screenOnly(s) ? "One-off screening: judged by specificity, not by false alarms over time." : `False alarms counted per ${p.per}.`}`, go: 2 },
     { k: "Targets", v: tg || "No target set", go: 3 },
     { k: "Constraints", v: `${ch}; battery at least ${k.batN} ${k.batU}; ${k.reusable ? "reusable" : "disposable"}.`, go: 4 },
     { k: "Data", v: data, go: 5 },
-    { k: "Fixed", v: `Patients split so none is in both training and test; judged on the ${cfg.judge === "pooled" ? "unseen patients pooled" : "worst unseen patient"}.` }
+    { k: "Fixed", v: s.case === "af" ? "Recordings split so none is in both training and test; judged per recording, on all test recordings pooled." : `Patients split so none is in both training and test; judged on the ${cfg.judge === "pooled" ? "unseen patients pooled" : "worst unseen patient"}.` }
   ];
 }
 
@@ -1866,10 +1879,18 @@ function step2(s) {
   const p = PLACES[s.place] || PLACES.ward;
   return Q("Who it is for", "Which recordings fit depends on it; the data step checks the fit.",
     chipsHTML("group", Object.entries(GROUPS).map(([k, g]) => [k, g.n]), s.group, "Patient group", !s.group) + (s.group ? "" : askLine("Not in your brief: pick one.")))
-    + Q("Where it is used, and who responds to an alert", "It sets how false alarms are counted from here on, per hour on a ward or per night or day at home, and a sensible tolerance for step 3.",
+    + (screenOnly(s) ? Q("Where it is used, and who acts on a result", "A one-off screening test gives one answer per recording, so it is judged by specificity (recordings without the condition correctly passed), not by false alarms over time.",
+      chipsHTML("place", Object.entries(PLACES).map(([k, x]) => [k, x.n, capFirst(x.r)]), s.place, "Where it is used and who acts on a result")
+      + `<p class="gfr">The task type's default targets are sensitivity and specificity; false alarms are not counted for screening.</p>`)
+    : Q("Where it is used, and who responds to an alert", "It sets how false alarms are counted from here on, per hour on a ward or per night or day at home, and a sensible tolerance for step 3.",
       chipsHTML("place", Object.entries(PLACES).map(([k, x]) => [k, x.n, capFirst(x.r)]), s.place, "Where it is used and who responds")
-      + `<p class="gfr">False alarms counted per ${p.per}${p.h > 1 ? ` (${p.h} hours)` : ""}; default tolerance at most 1 ${faWord(p)}.</p>`);
+      + `<p class="gfr">False alarms counted per ${p.per}${p.h > 1 ? ` (${p.h} hours)` : ""}; default tolerance at most 1 ${faWord(p)}.</p>`));
 }
+// a screening task with no false-alarm target: judged by specificity, so no false-alarm unit is asked or shown
+const screenOnly = s => taskSet(s.task).has("screening") && !s.targets.some(t => t.metric === "false_alarms_per_hour");
+// Run size applies where Run starts a run with it: any brief when a backend is connected, else only simulated runs
+// (the AF and measured-EEG briefs open their recorded results, which no preset changes)
+const sizeUsable = s => window.ChipInLive?.i1?.state?.().connection === "on" || !hasMeasured(s); // reads the live module's connection state only
 function step3(s) {
   const p = PLACES[s.place] || PLACES.ward;
   const rows = s.targets.map((t, i) => tRowHTML(s, t, i, p)).join("");
@@ -1892,8 +1913,9 @@ function step4(s) {
   const list = andList(b.map(x => x.label.toLowerCase()));
   const spots = sim ? `Compares ${list}. In this demo the search for spots is simulated and marked so.` : b.length > 1 ? `Compares every channel budget the measured data holds: ${list}.` : `The measured data holds one budget: ${list}.`;
   const stepper = `<div class="gst" role="group" aria-label="Electrodes or sensors"><button type="button" data-a="ch-" aria-label="Fewer"${j === 0 ? " disabled" : ""}>${I("minus", "s16")}</button><output aria-live="polite">${esc(b[j].label)}</output><button type="button" data-a="ch+" aria-label="More"${j === b.length - 1 ? " disabled" : ""}>${I("plus", "s16")}</button></div>`;
-  return Q("How many electrodes or sensors", "It sets which channel-budget curves the chart highlights.",
-    chipsHTML("find", [["best", "Find the best spots for me"], ["set", "A set number"]], k.findBest ? "best" : "set", "Electrodes or sensors") + (k.findBest ? `<p class="gfr">${spots}</p>` : `<div class="gfsub">${stepper}<p class="gfr">${sim ? "Simulated: the other budgets stay on the chart, faded." : "The other budgets the data holds stay on the chart, faded."}</p></div>`))
+  const lone = !CASES[s.case] && !s.chans && loneSensor(s.parsed && s.parsed.sigs);
+  return (lone ? Q("How many electrodes or sensors", "It sets which channel-budget curves the chart highlights.", `<p class="gfr">Your brief names one ${esc(s.parsed.sigs[0].name)} sensor. Channel budgets are not modelled for it, so the run uses that one sensor.</p>`) : Q("How many electrodes or sensors", "It sets which channel-budget curves the chart highlights.",
+    chipsHTML("find", [["best", "Find the best spots for me"], ["set", "A set number"]], k.findBest ? "best" : "set", "Electrodes or sensors") + (k.findBest ? `<p class="gfr">${spots}</p>` : `<div class="gfsub">${stepper}<p class="gfr">${sim ? "Simulated: the other budgets stay on the chart, faded." : "The other budgets the data holds stay on the chart, faded."}</p></div>`)))
     + Q("Battery life", "It sets the battery view: how long the device must run between charges or changes.",
       `<div class="gbat"><input class="gfin" id="gfBat" inputmode="decimal" aria-label="Battery life, ${k.batU}" value="${esc(k.batN)}">${chipsHTML("batU", [["hours", "hours"], ["days", "days"]], k.batU, "Battery life unit")}</div>`)
     + Q("Disposable or reusable", "Reusable means charging and cleaning between patients; it sets which batteries fit in the battery view.",
@@ -1928,8 +1950,8 @@ function cardHTML(s) {
     : `<div class="gsr"><span class="k">${r.k}</span><div class="v">${esc(r.v)}</div>${r.go ? `<button type="button" class="gchg" data-go="${r.go}" aria-label="Change ${r.k.toLowerCase()}">Change</button>` : '<span class="gfx">Fixed</span>'}</div>`).join("");
   const af = s.case === "af" ? `<p class="gfr">${MEASURED.af ? "This brief is the AF patch case: Run replays its real search with your targets." : "This brief is the AF patch case: Run opens its measured run with your targets."}</p>` : "";
   return `<p class="gfl">Check it, change anything, then run.</p><div class="gsc">${rows}</div>
-    <div class="gsq"><div class="gsqi"><span id="gRs">Run size</span><div class="gseg" role="radiogroup" aria-labelledby="gRs">${PRESETS.map(x => `<button type="button" role="radio" aria-checked="${x.n === s.preset}" data-c="preset" data-v="${x.n}">${x.n}</button>`).join("")}</div>
-      <span class="gfx" aria-live="polite">${SUBAGENTS[s.preset]} subagents per stage</span></div>
+    <div class="gsq">${sizeUsable(s) ? `<div class="gsqi"><span id="gRs">Run size</span><div class="gseg" role="radiogroup" aria-labelledby="gRs">${PRESETS.map(x => `<button type="button" role="radio" aria-checked="${x.n === s.preset}" data-c="preset" data-v="${x.n}">${x.n}</button>`).join("")}</div>
+      <span class="gfx" aria-live="polite">${SUBAGENTS[s.preset]} subagents per stage</span></div>` : ""}
       <div class="gsqi"><span>Agent and model</span>${agentPill(s.agent)}</div></div>${af}`;
 }
 const bodyHTML = (s, i) => [step1, step2, step3, step4, step5, cardHTML][i](s);
@@ -2032,7 +2054,7 @@ function startFromSpec() {
   targets = targets.filter(t => !dropped.includes(t));
   const primary = targets.some(t => t.metric === s.primary) ? s.primary : targets[0] ? targets[0].metric : (TASKS[s.task] ? TASKS[s.task].def[0] : "sensitivity");
   const k = s.cons, constraints = { channels: k.findBest ? null : k.channels, findBest: k.findBest, batteryHours: k.batN * (k.batU === "days" ? 24 : 1), reusable: k.reusable };
-  const common = { place: s.place, group: s.group, constraints, width: SUBAGENTS[s.preset], specCard: specLines(s).map(r => [r.k, r.v]).concat([["Run size", `${s.preset}, ${SUBAGENTS[s.preset]} subagents per stage`], ["Agent and model", s.agent.backend === "auto" ? "Auto: the Claude agent with Opus and Sonnet" : agentLabel(s.agent)]]) };
+  const common = { place: s.place, group: s.group, constraints, width: SUBAGENTS[s.preset], specCard: specLines(s).map(r => [r.k, r.v]).concat(sizeUsable(s) ? [["Run size", `${s.preset}, ${SUBAGENTS[s.preset]} subagents per stage`]] : [], [["Agent and model", s.agent.backend === "auto" ? "Auto: the Claude agent with Opus and Sonnet" : agentLabel(s.agent)]]) };
   if (dropped.length) toast(`${andList(dropped.map(t => MET[t.metric].name))} is not in the measured results yet, so this run leaves it out.`);
   if (s.case === "af" && MEASURED.af) {
     // the real search replays on the demo clock, judged against the typed targets
@@ -2049,7 +2071,7 @@ function startFromSpec() {
   }
   const c = CASES[s.case];
   const o = { case: s.case, title: s.device ? capFirst(s.device) : (c ? c.title : s.brief.slice(0, 60) + (s.brief.length > 60 ? "…" : "")), device: s.device, signal: s.signal, detect: s.detect, task: s.task, targets, primary, preset: s.preset, agent: { ...s.agent }, data: { mode: s.data || "sim", files: s.files, dataset: s.data === "public" ? s.ds || null : null }, brief: s.brief, ...common };
-  if (s.case === "custom") o.spec = Object.assign({ chans: s.chans, unit: s.unit || "channel" }, s.group ? { who: GROUPS[s.group].who, whoP: GROUPS[s.group].whoP, Who: GROUPS[s.group].Who } : {});
+  if (s.case === "custom") o.spec = Object.assign({ chans: s.chans, unit: s.unit || "channel", sigs: (s.parsed && s.parsed.sigs || []).map(x => ({ name: x.name, unit: x.unit || null })) }, s.group ? { who: GROUPS[s.group].who, whoP: GROUPS[s.group].whoP, Who: GROUPS[s.group].Who } : {});
   const run = makeRun(o);
   runs.unshift(run); saveRuns();
   SPEC = null; flowSave(); startState.text = "";
@@ -2071,7 +2093,8 @@ const runMark = run => isSim(run) ? '<span class="mk sim">simulated</span>' : '<
 const badgeText = run => !run || isSim(run) ? "Simulated run, demo data" : run.case === "af" ? ((MEASURED.af && MEASURED.af.label) || "Measured feasibility run") : "Measured on open data";
 function setBadge(run) {
   const b = $("#demo");
-  b.textContent = badgeText(run); b.className = run && !isSim(run) ? "demo mea" : "demo";
+  // no run on screen (start page, the flow): no data badge (.demo:empty hides it; the live and playback modules set their own)
+  b.textContent = run ? badgeText(run) : ""; b.className = run && !isSim(run) ? "demo mea" : "demo";
 }
 // a run with a demo clock: every simulated run, and the AF run when it has the real candidates to replay
 const plays = run => !isMea(run) || afFile(run);
@@ -2540,6 +2563,7 @@ function useAF(j) {
   if (ch.verified && Number.isFinite(ch.verified.windows)) AF_DESIGN.verified = { vectors: ch.verified.windows, identical: ch.verified.identical, mismatches: ch.verified.windows - ch.verified.identical, level: "every test window, circuit against its model" };
   Object.assign(AF_BASE, { sensitivity_pooled: pick(B, "sensitivity"), specificity: pick(B, "specificity"), sensitivity_window: num(B.sensitivity_window), specificity_window: num(B.specificity_window) });
   const dset = j.dataset || {};
+  if (typeof dset.licence === "string" && dset.licence) { DSF.cinc17.lic = dset.licence; DS.cinc17.licence = dset.licence; } // the file names the licence
   if (Number.isFinite(dset.test_recordings)) Object.assign(AF_DESIGN.counts, { patients: dset.test_recordings, events_total: num(dset.test_positive), negatives_total: Number.isFinite(dset.test_positive) ? dset.test_recordings - dset.test_positive : null });
   const sr = j.search_rate || {};
   if (Number.isFinite(sr.batched_per_min)) AF_SPEED.batched = sr.batched_per_min;
@@ -2585,7 +2609,7 @@ const afScopeWord = s => s === "record" ? "per recording" : "per window";
 const afBaseFor = key => { const B = MEASURED.af.baseline || {}, v = B[`${key}_${MEASURED.af.scope}`]; return Number.isFinite(v) ? v : null; };
 const sameTargets = (a, b) => JSON.stringify(a.map(t => [t.metric, t.op, t.value])) === JSON.stringify(b.map(t => [t.metric, t.op, t.value]));
 const baseClears = run => run.targets.length > 0 && run.targets.every(t => meets(t, t.metric === "sensitivity" ? AF_BASE.sensitivity_pooled : t.metric === "specificity" ? AF_BASE.specificity : null) === true);
-const baseWords = () => `sensitivity ${fmtVal("sensitivity", AF_BASE.sensitivity_pooled)} and specificity ${fmtVal("specificity", AF_BASE.specificity)}`;
+const baseWords = () => `sensitivity ${fmtVal("sensitivity", AF_BASE.sensitivity_pooled)} and specificity ${fmtVal("specificity", AF_BASE.specificity)} ${afScopeWord(MEASURED.af ? MEASURED.af.testScope : "record")} on the test set`;
 // the last step judges against the user's targets: the file's words when the targets are the case's own, else the same figures re-judged
 function afResultText(run) {
   const tw = afScopeWord(MEASURED.af.testScope);
@@ -2717,6 +2741,7 @@ function drawChartAF(run, v) {
   g.textAlign = "right"; g.font = font(500, 11.5); g.fillStyle = "#4a5062";
   g.fillText(narrow ? "Chip size, gates (log scale)" : "Chip size, logic gates (log scale)", x1, H - 8);
   // the size cap (step 3): every design under it sits left of the line; the shaded side holds only designs over it
+  let capBox = null;
   if (ph >= 3 && F.capHL != null) {
     const xc = Math.min(x1, X(Math.max(...F.designs.filter(d => d.under).map(d => afSize(v, d).g))) + 5);
     g.fillStyle = "rgb(20 26 46 / .04)"; g.fillRect(xc, y0, x1 - xc, y1 - y0);
@@ -2724,7 +2749,7 @@ function drawChartAF(run, v) {
     g.font = font(600, 11.5); g.fillStyle = "#3a4052";
     const right = `Over the size cap, H × L > ${F.capHL}`, left = `Size cap: H × L ≤ ${F.capHL}`;
     const ly = narrow ? y1 - 8 : y0 + 12;
-    if (x1 - xc > g.measureText(right).width + 14) { g.textAlign = "left"; g.fillText(right, xc + 7, ly); } else { g.textAlign = "right"; g.fillText(left, xc - 7, ly); }
+    if (x1 - xc > g.measureText(right).width + 14) { g.textAlign = "left"; g.fillText(right, xc + 7, ly); capBox = { l: xc + 3, r: xc + 11 + g.measureText(right).width, t: ly - 13, b: ly + 4 }; } else { g.textAlign = "right"; g.fillText(left, xc - 7, ly); capBox = { l: xc - 11 - g.measureText(left).width, r: xc - 3, t: ly - 13, b: ly + 4 }; }
   }
   // the cloud: over-cap designs (grey from step 3) under the rest; hollow = estimated size, solid = measured
   const r0 = narrow ? 2.7 : 3.4, pts = [], C = F.chosenD;
@@ -2748,37 +2773,41 @@ function drawChartAF(run, v) {
     g.fill(); g.stroke();
   }
   CH.pts = pts;
-  // the user's bar
-  const tgt = run.targets.find(t => t.metric === key);
-  if (tgt) {
-    const yy = Y(tgt.value); g.strokeStyle = "#141a2e"; g.setLineDash([6, 4]); g.lineWidth = 1.5; g.beginPath(); g.moveTo(x0, yy); g.lineTo(x1, yy); g.stroke(); g.setLineDash([]);
-    g.font = font(700, 12); g.textAlign = "right"; const lt = `Your bar: ${fmtTarget(tgt)}`, tw = g.measureText(lt).width;
-    g.fillStyle = "rgb(255 255 255 / .88)"; g.fillRect(x1 - tw - 8, yy - 19, tw + 8, 15); g.fillStyle = "#141a2e"; g.fillText(lt, x1 - 4, yy - 7);
-  }
-  // the full-precision model (test scores), once the result is in: not a chip, so a line
-  const bv = afBaseFor(key);
-  if (bv != null && afFinal(v)) {
-    const yy = Y(bv); g.strokeStyle = "#6b46c1"; g.setLineDash([1.5, 3.5]); g.lineWidth = 1.6; g.beginPath(); g.moveTo(x0, yy); g.lineTo(x1, yy); g.stroke(); g.setLineDash([]);
-    g.fillStyle = "#5b3aa6"; g.textAlign = "left"; g.font = font(600, 11.5); g.fillText(`Full-precision model, test: ${fmtVal(key, bv)}`, x0 + 8, yy - 6);
-  }
-  const callout = (p, txt, col) => {
-    if (!p) return; g.font = font(700, 12); const tw = g.measureText(txt).width;
-    let lx = p.x - 14 - tw, ly = p.y - 16; if (lx < x0 + 4) lx = p.x + 14; lx = Math.max(4, Math.min(lx, W - tw - 6)); if (ly < y0 + 24) ly = p.y + 26;
-    g.strokeStyle = col; g.lineWidth = 1; g.beginPath(); g.moveTo(p.x + (lx < p.x ? -8 : 8), p.y + (ly < p.y ? -6 : 6)); g.lineTo(lx < p.x ? lx + tw + 2 : lx - 2, ly - 4); g.stroke();
-    g.fillStyle = "rgb(255 255 255 / .92)"; g.fillRect(lx - 4, ly - 14, tw + 8, 19); g.fillStyle = col; g.textAlign = "left"; g.fillText(txt, lx, ly);
-  };
+  // lines first (the bar, the full-precision model), then the marks, then every label placed so none covers another
+  const tgt = run.targets.find(t => t.metric === key), bv = afFinal(v) ? afBaseFor(key) : null;
+  if (tgt) { const yy = Y(tgt.value); g.strokeStyle = "#141a2e"; g.setLineDash([6, 4]); g.lineWidth = 1.5; g.beginPath(); g.moveTo(x0, yy); g.lineTo(x1, yy); g.stroke(); g.setLineDash([]); }
+  // the full-precision model once the result is in: not a chip, so a line; its score here is per window, like the cloud
+  if (bv != null) { const yy = Y(bv); g.strokeStyle = "#6b46c1"; g.setLineDash([1.5, 3.5]); g.lineWidth = 1.6; g.beginPath(); g.moveTo(x0, yy); g.lineTo(x1, yy); g.stroke(); g.setLineDash([]); }
   const ringAt = (p, r, col, w) => { g.strokeStyle = col; g.lineWidth = w; g.beginPath(); g.arc(p.x, p.y, r, 0, 7); g.stroke(); };
   const pulseAt = (p, k, col) => { if (pulse !== k || !p) return; const a = since / 1.6; g.globalAlpha = 1 - a; ringAt(p, 10 + a * 18, col, 2); g.globalAlpha = 1; };
-  // step 2: the best overall design, too large to synthesise
+  // step 2: the best overall design, too large to synthesise; steps 3 to 5: the best under the cap, built, checked
   const Bd = F.bestD, bp = Bd && ph >= 2 && v.vis.includes(Bd) ? pos(Bd) : null;
-  if (bp) { ringAt(bp, 7.5, "#c2362b", 1.8); pulseAt(bp, 2, "#c2362b"); callout(bp, narrow ? "Best overall: too large" : "Best overall: too large, synthesis did not finish", "#9f2a20"); }
-  // steps 3 to 5: the best design under the cap, then built (solid, measured size), then checked
+  if (bp) { ringAt(bp, 7.5, "#c2362b", 1.8); pulseAt(bp, 2, "#c2362b"); }
   const cp = C && ph >= 3 && v.vis.includes(C) ? pos(C) : null;
   if (cp) {
     if (ph >= 4) { g.fillStyle = "#141a2e"; g.beginPath(); g.arc(cp.x, cp.y, 5.5, 0, 7); g.fill(); }
     ringAt(cp, 9, "#141a2e", 2); pulseAt(cp, 3, "#141a2e"); pulseAt(cp, 4, "#141a2e"); pulseAt(cp, 5, "#0f7a55");
-    callout(cp, ph >= 5 ? `Built: ${fmt(AF_DESIGN.gates)} gates, measured and checked` : ph >= 4 ? `Built: ${fmt(AF_DESIGN.gates)} gates, measured` : "Best under the size cap", "#141a2e");
   }
+  // label placement: each label tries a few spots and takes the one that overlaps no placed label, stays inside
+  // the plot and covers the fewest dots
+  const placed = [], box = (x, y, tw) => ({ l: x - 4, r: x + tw + 4, t: y - 13, b: y + 5 });
+  const cost = b => (placed.some(q => b.l < q.r && q.l < b.r && b.t < q.b && q.t < b.b) ? 1000 : 0) + (b.l < 2 || b.r > W - 2 || b.t < y0 - 16 || b.b > y1 + 2 ? 500 : 0)
+    + pts.filter(q => q.x > b.l - 3 && q.x < b.r + 3 && q.y > b.t - 3 && q.y < b.b + 3).length;
+  const place = (txt, f, col, cands, at) => {
+    g.font = f; const tw = g.measureText(txt).width;
+    const c = cands(tw).map(([x, y]) => ({ x, y, b: box(x, y, tw) })).reduce((a, o) => cost(o.b) < cost(a.b) ? o : a);
+    placed.push(c.b);
+    if (at) { const cx = clamp(at.x, c.b.l, c.b.r), cy = clamp(at.y, c.b.t, c.b.b); g.strokeStyle = col; g.lineWidth = 1; g.beginPath(); g.moveTo(at.x + Math.sign(cx - at.x) * 7, at.y + Math.sign(cy - at.y) * 7); g.lineTo(cx, cy); g.stroke(); }
+    g.fillStyle = "rgb(255 255 255 / .92)"; g.fillRect(c.b.l, c.b.t, c.b.r - c.b.l, c.b.b - c.b.t); g.fillStyle = col; g.textAlign = "left"; g.fillText(txt, c.x, c.y);
+  };
+  const near = p => tw => [[p.x - 14 - tw, p.y - 16], [p.x + 14, p.y - 16], [p.x - 14 - tw, p.y + 24], [p.x + 14, p.y + 24], [p.x - tw / 2, p.y - 30], [p.x - tw / 2, p.y + 38], [p.x - 14 - tw, p.y - 40], [p.x + 14, p.y + 48]];
+  const along = (yy, right) => tw => right ? [[x1 - 4 - tw, yy - 7], [x0 + 8, yy - 7], [x1 - 4 - tw, yy + 16], [x0 + 8, yy + 16], [(x0 + x1 - tw) / 2, yy - 7], [(x0 + x1 - tw) / 2, yy + 16]] : [[x0 + 8, yy - 7], [x1 - 4 - tw, yy - 7], [x0 + 8, yy + 16], [x1 - 4 - tw, yy + 16], [(x0 + x1 - tw) / 2, yy - 7], [(x0 + x1 - tw) / 2, yy + 16]];
+  if (capBox) placed.push(capBox);
+  [bp, cp].filter(Boolean).forEach(p => placed.push({ l: p.x - 10, r: p.x + 10, t: p.y - 10, b: p.y + 10 })); // keep labels off the ringed marks
+  if (cp) place(ph >= 5 ? (narrow ? `Built: ${fmt(AF_DESIGN.gates)} gates, checked` : `Built: ${fmt(AF_DESIGN.gates)} gates, measured and checked`) : ph >= 4 ? `Built: ${fmt(AF_DESIGN.gates)} gates, measured` : "Best under the size cap", font(700, 12), "#141a2e", near(cp), cp);
+  if (bp) place(narrow ? "Best overall: too large" : "Best overall: too large, synthesis did not finish", font(700, 12), "#9f2a20", near(bp), bp);
+  if (tgt) place(`Your bar: ${fmtTarget(tgt)}`, font(700, 12), "#141a2e", along(Y(tgt.value), true));
+  if (bv != null) place(narrow ? `Full precision, ${afScopeWord(F.scope)}: ${fmtVal(key, bv)}` : `Full-precision model, ${afScopeWord(F.scope)}: ${fmtVal(key, bv)}`, font(600, 11.5), "#5b3aa6", along(Y(bv), false));
   const sd = run.ui.sel && v.vis.find(d => d.id === run.ui.sel); if (sd && sd !== C) { const p = pos(sd); if (p) ringAt(p, 7, "#2b55d0", 2.2); }
   const hd = CH.hover && v.vis.find(d => d.id === CH.hover); if (hd) { const p = pos(hd); if (p) ringAt(p, 6, "#141a2e", 1.2); }
   if (!v.vis.length) { g.fillStyle = "#4a5062"; g.font = font(500, 13); g.textAlign = "center"; g.fillText("The search's candidates appear here as the replay plays.", (x0 + x1) / 2, (y0 + y1) / 2); }
@@ -2916,7 +2945,8 @@ function renderPatients(run, force) {
   const isCh = v.ev.chosen && v.ev.chosen.id === d.id, role = isCh ? (v.done || isMea(run) ? "the chosen chip" : "the best so far") : !v.ev.chosen && v.ev.nearest[0] && v.ev.nearest[0].id === d.id ? (v.ev.best ? "the best design so far by the pooled result; none clears every target" : "the nearest design; none clears every target") : d.role === "baseline" ? "the baseline, not a design of ours" : "picked on the Overview";
   const openId = run.ui.wfOpen && run.ui.wfFor === d.id && pp.some(p => String(p.id) === run.ui.wfOpen) ? run.ui.wfOpen : String((T.worst || T.rows[0]).p.id);
   const open = pp.find(p => String(p.id) === openId);
-  const h1 = T.worst ? `Worst ${esc(c.who)}: ${esc(wfName(run, T.worst.p))}, ${esc(wfPhrase(run, key, T.worst.v))}` : `No ${esc(c.who)} has enough ${esc(c.events)} to judge`;
+  const tie = T.worst ? T.judged.filter(r => Math.abs(r.v - T.worst.v) < 1e-9).length : 0;
+  const h1 = !T.worst ? `No ${esc(c.who)} has enough ${esc(c.events)} to judge` : tie > 1 ? `${tie} ${esc(c.whoP)} tie for worst, each at ${esc(wfPhrase(run, key, T.worst.v))}` : `Worst ${esc(c.who)}: ${esc(wfName(run, T.worst.p))}, ${esc(wfPhrase(run, key, T.worst.v))}`;
   const rule = key !== "sensitivity" ? "" : T.rest.length ? `Judged on ${c.whoP} with at least ${T.minEv} ${T.minEv === 1 ? c.event : c.events}: ${T.judged.length} of ${T.n} qualify${isMea(run) ? ", the rule the results file uses" : ""}. The others are shown below, not counted as failures.` : `All ${T.n} ${isSim(run) ? "simulated " : ""}${c.whoP} have ${c.events} to judge.`;
   const pooled = metricOf({ ...run, judge: "pooled" }, d, key).v;
   const ysel = MET_KEYS.filter(k => pp.some(p => wfVal(k, p) != null));
@@ -3058,7 +3088,7 @@ function chatEvents(run) {
       ev.push({ t: ro.end, k: "check", txt: `Round ${ro.r} checked. ${fmt(e2.pass.size)} of ${fmt(upto.length)} designs so far clear every target. ${e2.chosen ? `Smallest so far: ${fmt(e2.chosen.gates)} gates, ${budgetLabel(run, e2.chosen.channels).toLowerCase()}.` : "None clears every target yet."}` });
     }
     const fe = evaluate(run, v.all);
-    ev.push({ t: v.T, k: "report", txt: fe.chosen ? `Done. The smallest design that clears every target is ${fe.chosen.id}: ${fmt(fe.chosen.gates)} gates, ${budgetLabel(run, fe.chosen.channels).toLowerCase()}. The chart shows what each smaller design gives up.` : "Done. No design in this family clears your bar on this data; the nearest designs are ringed on the chart." });
+    ev.push({ t: v.T, k: "report", txt: fe.chosen ? `Done. The smallest design that clears every target is ${fe.chosen.id}: ${fmt(fe.chosen.gates)} gates, ${budgetLabel(run, fe.chosen.channels).toLowerCase()}. The chart shows what each smaller design gives up.` : fe.best ? "Done. No design in this family clears your bar on this data; the best designs so far by the pooled result are ringed on the chart." : "Done. No design in this family clears your bar on this data; the nearest designs are ringed on the chart." });
   }
   for (const n of run.notes || []) { ev.push({ t: n.t, k: "you", txt: n.text }); ev.push({ t: n.t + 0.001, k: "reply", txt: `Noted with the run. In this ${isSim(run) ? "simulated demo" : "replay"} a note does not change the designs, and no model was called.` }); }
   return ev.filter(e => e.t <= v.t + 1e-6 || !plays(run)).sort((a, b) => a.t - b.t);
@@ -3463,17 +3493,23 @@ function sabRender(run, v) {
    in between, the width rule the chart passes in (base) stays. drawChart and drawChartAF call it.
    barLabelX picks the end of the bar for its label; a MutationObserver keeps the AF decision path's newest
    step in view when the path scrolls inside the chart's height. */
-// The height is kept per run and screen size, so the chart does not jump while a replay changes the headline.
+// The height is kept until the run, the screen or the room around the chart changes (the playback bar arriving,
+// a status line, a longer headline), so the funnel strip is never left half below the fold.
 const FIT = { k: "", h: 0 };
 function chartFitH(W, base) {
   if (innerWidth < 768) return Math.round(clamp(W * 0.95, 300, 400));
   const body = $("#body"), wrap = $("#cwrap"), pan = wrap && wrap.closest(".pan"), fun = $("#fun");
   if (innerWidth <= 1100 || !body || !wrap || !pan) return base;
-  const k = [route.id, W, innerWidth, innerHeight].join("|"); if (FIT.k === k) return FIT.h;
+  // measured on every call: what sits above the chart (headline, status, tiles) and under it (legend, notes, funnel)
+  // does not depend on the chart's own height, so this is stable, and it follows the headline and status as they change
   const bt = body.getBoundingClientRect().top, wb = wrap.getBoundingClientRect().bottom;
-  const top = wrap.getBoundingClientRect().top - bt + body.scrollTop;
-  const run = findRun(route.id), under = pan.getBoundingClientRect().bottom - wb + (fun && fun.offsetParent ? 12 + fun.offsetHeight : run && plays(run) ? 72 : 0) + 4;
-  FIT.k = k; FIT.h = Math.round(clamp(body.clientHeight - top - under, 320, Math.max(320, W * 0.75)));
+  const top = Math.round(wrap.getBoundingClientRect().top - bt + body.scrollTop), panU = Math.round(pan.getBoundingClientRect().bottom - wb);
+  const run = findRun(route.id), funU = fun && fun.offsetParent ? 12 + fun.offsetHeight : run && plays(run) ? 72 : 0;
+  const k = [route.id, W, innerWidth, innerHeight, body.clientHeight, top, panU, funU].join("|"); if (FIT.k === k) return FIT.h;
+  let h = body.clientHeight - top - panU - funU - 4;
+  // too little room for the chart and the funnel: the funnel goes wholly below the fold, never half in view
+  if (h < 320) h = body.clientHeight - top - panU + 16;
+  FIT.k = k; FIT.h = Math.round(clamp(h, 320, Math.max(320, W * 0.75)));
   return FIT.h;
 }
 // where the "Your bar" label sits on the simulated and measured-EEG chart: above the right end (as before), above
