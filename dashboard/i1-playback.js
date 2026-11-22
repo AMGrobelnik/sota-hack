@@ -709,7 +709,7 @@
       return '<a class="tab' + (v[0] === view ? " on" : "") + '" href="#/rec/' + rec.src + "/" + encodeURIComponent(rec.id) + "/" + v[0] + '">' + v[1] + "</a>";
     }).join("") + '</nav><span class="grow" style="flex:1"></span><div class="tright"><span class="mk topbadge"></span></div></div>' +
       '<div class="lv-lost" id="rvLost" role="alert" hidden></div>' +
-      '<div class="body" id="rvBody">' + (view === "overview" ? overviewHTML() : view === "log" ? "" : view === "files" ? '<div class="rv-files"><h2>Files</h2><p>Files the run had written by the time on the bar.</p><div id="rvFiles"></div></div>' : '<div class="vis" id="rvTab"></div>') + "</div>";
+      '<div class="body" id="rvBody">' + (view === "overview" ? overviewHTML() : view === "log" ? "" : view === "files" ? '<div class="rv-files"><h2>Files</h2><p>Files the run had written by the time on the bar.</p><div id="rvFiles"></div></div>' : (view === "chip" ? '<div class="vis dz-vis" id="rvDz"></div>' /* DESIGNS HOOK */ : "") + '<div class="vis" id="rvTab"></div>') + "</div>";
     var ctl = {
       clock: V.clock, marks: rec.marks, gaps: rec.gaps, kind: "recorded",
       refreshTotal: function () { if (rec.running || V.clock.live) { V.clock.total = activeTotal(rec); } },
@@ -840,6 +840,8 @@
       var note = V.rec.line && V.rec.line.note ? '<p class="rv-note" role="note">' + esc(V.rec.line.note) + "</p>" : "";
       el.innerHTML = note + F.chipHTML({ f: M.f, spec: M.spec, T: M.T, id: M.st.chosen || (M.pts.length ? M.pts[M.pts.length - 1].id : null), chosenId: M.st.chosen, running: !M.ended });
     });
+    // DESIGNS HOOK: the designs tried so far, drawn small above the chip's table (../i1-designs.js)
+    if (V.view === "chip" && window.ChipInDesigns) window.ChipInDesigns.paintRun($("#rvDz"), { key: V.rec.key, n: M.n, f: M.f, chosen: M.st.chosen, ended: M.ended, T: M.T, spec: M.spec, files: V.rec.files, arts: M.st.artifacts.map(function (i) { return V.rec.events[i]; }) });
   }
   function paintOverview(M) {
     var rec = V.rec, f = rec.facts || {}, st = M.st, ck = V.clock;

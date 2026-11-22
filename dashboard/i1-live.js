@@ -418,7 +418,7 @@
     var body = $("#body");
     if (r.view === "overview") { body.innerHTML = overviewHTML(); wireOverview(); F.wireSubs($("#lvSubs"), rec.x.subOpen); }
     else if (r.view === "chat") { body.innerHTML = chatHTML(); wireChat(); }
-    else body.innerHTML = '<div class="vis" id="lvTab"></div>';
+    else body.innerHTML = (r.view === "chip" ? '<div class="vis dz-vis" id="lvDz"></div>' /* DESIGNS HOOK */ : "") + '<div class="vis" id="lvTab"></div>';
     if (window.ChipInMessages && (r.view === "overview" || r.view === "chat")) { if (r.view === "overview") $("#lvLog .lv-lh").remove(); window.ChipInMessages.mount(r.view === "chat" ? $("#lvChatFeed") : $("#lvLog .lv-fw"), { runId: r.id, mode: r.view === "chat" ? "page" : "panel", title: r.view === "chat" ? "Messages" : "Agent log", more: r.view === "chat" ? null : "#/live/" + encodeURIComponent(r.id) + "/chat" }); } /* MESSAGES HOOK: messages with levels of summaries, above the message box */
     if (!known) { RUNS.push({ id: r.id, base: C.base, title: r.id, brief: "", status: "running", created: null, server: true }); saveRuns(); }
     update(true);
@@ -1051,6 +1051,8 @@
     var el = $("#lvTab"); if (!el) return;
     if (V.view === "chip") el.innerHTML = chipHTML(M);
     else el.innerHTML = sourcesHTML(M);
+    // DESIGNS HOOK: the designs tried so far, drawn small above the chip's table (../i1-designs.js)
+    if (V.view === "chip" && window.ChipInDesigns) window.ChipInDesigns.paintRun($("#lvDz"), { key: "live:" + M.id, n: M.x.v, f: M.x.f, chosen: M.chosenId, ended: !M.running, T: M.T, spec: M.spec, files: null, arts: M.st.artifacts });
     el.onclick = function (e) { var b = e.target.closest("[data-open]"); if (b) { openFile(b.dataset.open); return; } var s = e.target.closest("[data-pick]"); if (s) { V.sel = s.dataset.pick; keepPrefs(); V.sig.tab = ""; update(true); } };
   }
   function filesBlock(M, pred, title) {

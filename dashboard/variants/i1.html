@@ -735,6 +735,7 @@ select.gfin{padding:0 10px}
 <script src="../i1-playback.js"></script>
 <!-- CHIPPY HOOK: the helper panel (corner button, side panel, example prompts, page actions) lives in ../i1-chippy.js -->
 <script src="../i1-chippy.js"></script>
+<script src="../i1-designs.js"></script><!-- DESIGNS HOOK: the designs a run tried, in the Chip view (window.ChipInDesigns) -->
 <script src="../i1-questions.js"></script>
 <script src="../i1-search.js"></script><!-- SEARCH HOOK: the five search steps between Run and the run view, replayed on examples (window.ChipInSearch) --><!-- QUESTIONS HOOK: follow-up questions from a connected backend, one extra step before the spec card (window.ChipInQuestions) -->
 <script src="../i1-summary.js"></script><!-- SUMMARY HOOK: the result page's summary card, trade-off sentence and the chart's default view (window.ChipInSummary) -->
@@ -2811,6 +2812,7 @@ const tabHead = (run, title, sub) => `<div class="vh"><h2>${title} ${runMark(run
 // CHIP: the selected design on a board, in 3D (three.js loads only here)
 function renderChipTab(run, force) {
   const v = viewAt(run), d = selDesign(run, v), c = caseOf(run);
+  if (!force) designsPaint(run, v); /* DESIGNS HOOK */
   if (!force) { if (E.view && d && E.view.st.gates !== d.gates) { E.view.update(d); const k = $("#chipK"); if (k) k.innerHTML = chipCard(run, v, d); } return; }
   const A = afFile(run) && d, sz = A ? afSize(v, d) : null, dep = A ? (d === MEASURED.af.chosenD && v.ph >= 4 ? AF_DESIGN.depth : d.gm != null ? d.depth : null) : d && d.depth;
   const gtxt = A && !sz.m ? `about ${fmt(sz.g)} gates, estimated` : `${fmt(A ? sz.g : d ? d.gates : 0)} gates`;
@@ -2818,6 +2820,20 @@ function renderChipTab(run, force) {
     <div class="stage s3"><div class="g3" id="g3"></div><div class="ccard cmodel" id="chipK" style="left:14px;top:14px">${chipCard(run, v, d)}</div></div>
     <p class="vf">A drawing: the die's pattern grows with the gate count, but the layout is illustrative, not a place-and-route result. ${run.case === "af" ? "" : `Power on the Overview's battery view is estimated, scaled from other designs, not measured for this one. ${esc(window.ChipInModels ? window.ChipInModels.describeEstimate("chip_power") : "scaled from a layout run of other designs, not measured")}${mFile(run) ? " The results file has no power figure for these designs; layout and timing tools were not run on them." : ""}`}</p></div>`;
   mount3D($("#g3"), "chip-" + (c.kind3d || "electrode"), L => buildChip(L, c.kind3d || "electrode"), view => view.update(d), () => `<svg class="v" viewBox="0 0 200 120"><rect x="60" y="20" width="80" height="80" rx="6" fill="#1a2338"/><text x="100" y="64" fill="#fff" font-size="12" text-anchor="middle">${d ? fmt(d.gates) + " gates" : ""}</text></svg>`);
+  designsPaint(run, v); /* DESIGNS HOOK */
+}
+// DESIGNS HOOK: every design the run tried, drawn small above the chip by ../i1-designs.js (window.ChipInDesigns);
+// selecting one there never changes the chip, which stays on the chosen design
+function designsPaint(run, v) {
+  const st = $("#body .stage.s3"), DZ = window.ChipInDesigns, A = afFile(run), F = MEASURED.af;
+  if (!st || !DZ || (run.case === "af" && !A)) return;
+  DZ.paintExample(st, {
+    key: run.id, sig: run.id + "|" + v.ev.key, kind: A ? "af" : mFile(run) ? "file" : "sim", designs: v.vis, total: v.all.length, ph: v.ph, done: v.done,
+    chosenId: v.ev.chosen ? v.ev.chosen.id : null, nearIds: (v.ev.nearest || []).map(x => x.id), passIds: v.ev.pass, budget: ch => budgetLabel(run, ch),
+    fails: x => targetState(run, x).filter(s => s.ok === false).map(s => tName(s.t.metric).toLowerCase()),
+    rows: x => run.targets.map(t => { const m = metricOf(run, x, t.metric); return [`${MET[t.metric].name}, ${m.f ? scopeText(run, t.metric, m.f) : "not measured"}`, `${fmtVal(t.metric, m.v)} ${pfHTML(meets(t, m.v))}`]; }),
+    af: A ? { chosenId: F.chosenD && F.chosenD.id, bestId: F.bestD && F.bestD.id, size: x => afSize(v, x), sizeTip: sizeTip(), built: AF_DESIGN } : null
+  });
 }
 function chipCard(run, v, d) {
   if (!d) return `<div class="k">No design yet</div>`;
