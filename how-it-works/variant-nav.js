@@ -1,12 +1,12 @@
-/* Previous/next switching inside one set of ten how-it-works variants: w1..w10 (round 1), x1..x10 (round 2) or y1..y10 (round 3), chosen by the letter in the file name. */
+/* Previous/next switching inside one round of how-it-works variants: w1..w10 (round 1), x1..x10 (round 2), y1..y10 (round 3) or t1..t5 (round 4), chosen by the letter in the file name. */
 (function () {
-  var N = 10;
   /* numbers that exist in each set */
-  var BUILT = { w: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], y: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] };
-  var m = location.pathname.match(/\/([wxy])(\d+)(?:\.html)?$/);
+  var BUILT = { w: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], y: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], t: [1, 2, 3, 4, 5] };
+  var m = location.pathname.match(/\/([wxyt])(\d+)(?:\.html)?$/);
   var set = m ? m[1] : '';
   var cur = m ? parseInt(m[2], 10) : 0;
   var list = BUILT[set] || [];
+  var N = list.length;
   var at = list.indexOf(cur);
   if (at < 0) return;
   function file(d) { return set + list[(at + d + list.length) % list.length] + '.html'; }
@@ -57,8 +57,8 @@
     return true;
   }
   function place() {
-    /* round 2 (x): first the empty middle of the top bar, which stays clear of the page, of its right-side progress indicator and of the corner widgets at every stop; then the corners. Round 1 (w): the corners. */
-    var spots = set !== "w" ? [["top", "center"], ["bottom", "left"], ["top", "left"], ["bottom", "right"], ["top", "right"]]
+    /* rounds 2 and 3 (x, y): first the empty middle of the top bar, which stays clear of the page, of its right-side progress indicator and of the corner widgets at every stop; then the corners. Round 1 (w) and round 4 (t, copies of w8): the corners. */
+    var spots = set !== "w" && set !== "t" ?[["top", "center"], ["bottom", "left"], ["top", "left"], ["bottom", "right"], ["top", "right"]]
       : [["bottom", "right"], ["bottom", "left"], ["top", "right"], ["top", "left"]];
     for (var i = 0; i < spots.length; i++) {
       nav.style.top = nav.style.bottom = nav.style.left = nav.style.right = "auto";
