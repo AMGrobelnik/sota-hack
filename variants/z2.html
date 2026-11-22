@@ -1372,11 +1372,16 @@ function makeDevice(par, i, o) {
   scr.userData.w = sw; scr.userData.h = sh;
   const inner = grp(g, 0, -o.H / 2 + 0.016, -0.012); inner.visible = false;
   box(inner, mPcbG, o.W * 0.7, 0.0016, o.D * 0.6, 0, 0, 0, 0.0004);
-  { const r = rng(90 + i), l = []; for (let k = 0; k < 40; k++) { const w = 0.002 + r() * 0.01; l.push((r() - 0.5) * o.W * 0.62, 0.0008 + w * 0.15, (r() - 0.5) * o.D * 0.5, w, w * 0.3, w * (0.5 + r())); } inst(inner, UNIT, Sd({ color: '#26282c', roughness: 0.6 }), l, { cs: false }); }
+  // the board's other parts keep clear of the chip (by their own height too, so none leans into the chip's picture)
+  { const r = rng(90 + i), l = [], cx = o.slot[0], cz = o.slot[1], kx = o.chip[1] / 2 + 0.0025, kz = (o.chip[2] || o.chip[1]) / 2 + 0.0025;
+    for (let k = 0; k < 40; k++) { const w = 0.002 + r() * 0.01, x = (r() - 0.5) * o.W * 0.62, z = (r() - 0.5) * o.D * 0.5, d = w * (0.5 + r()), h = w * 0.3;
+      if (Math.abs(x - cx) < kx + w / 2 + h && Math.abs(z - cz) < kz + d / 2 + h) continue;
+      l.push(x, 0.0008 + w * 0.15, z, w, h, d); }
+    inst(inner, UNIT, Sd({ color: '#26282c', roughness: 0.6 }), l, { cs: false }); }
   const slot = grp(inner, o.slot[0], 0.0008, o.slot[1]);
   const anchor = new THREE.Object3D(); anchor.position.set(0, 0.0015, 0); slot.add(anchor);
   const glow = new THREE.Sprite(glowMat.clone()); glow.position.set(0, 0.012, 0); glow.scale.setScalar(0.2); glow.renderOrder = 12; slot.add(glow);
-  const d = { g, shell, glass, sm, gm, gBase: 0.3, inner, slot, anchor, glow, scr, extra: [], room: i, chip: o.chip, frame: o.frame, insetDir: V(0.12, 1, -0.22).normalize(), half: V(o.W / 2, o.H / 2, o.D / 2) };
+  const d = { g, shell, glass, sm, gm, gBase: 0.3, inner, slot, anchor, glow, scr, extra: [], room: i, chip: o.chip, half: V(o.W / 2, o.H / 2, o.D / 2) };
   DEVS[i] = d; return d;
 }
 function litRoom(i, c, build) {
@@ -1409,7 +1414,7 @@ litRoom(1, { floor: '#d6cab9', wall: '#efe5d8', wall2: '#e6d7c2', light: '#ffd2a
   lier(n, -0.17, 0.86, 0, Math.PI / 2, Sd({ color: '#f1ece0', roughness: 0.9 }), Sd({ color: '#a7c4e2', roughness: 0.9 })).scale.setScalar(0.32);
   cyl(g, mSteelS, 0.015, 0.015, 1.1, 0.25, 0.55, -0.82);
   const s = makeScreen(1, 'v', VIT.nicu); SCR.push(s);
-  makeDevice(g, 1, { x: 0.25, y: 1.22, z: -0.78, ry: 0.3, W: 0.3, H: 0.22, D: 0.15, screen: s, slot: [0.04, 0.005], chip: ['qfn', 0.005, 0, 12], frame: 0.013 });
+  makeDevice(g, 1, { x: 0.25, y: 1.22, z: -0.78, ry: 0.3, W: 0.3, H: 0.22, D: 0.15, screen: s, slot: [0.04, 0.005], chip: ['qfn', 0.005, 0, 12] });
   const ch = grp(g, 1.3, 0, 0.55, -2.3), mCu = Sd({ color: '#7d8f7a', roughness: 0.9 });
   box(ch, mCu, 0.52, 0.1, 0.5, 0, 0.46, 0, 0.045); box(ch, mCu, 0.52, 0.56, 0.09, 0, 0.78, -0.24, 0.04, { rx: -0.12 });
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) cyl(ch, mSteelS, 0.016, 0.014, 0.42, sx * 0.22, 0.21, sz * 0.2);
@@ -1425,7 +1430,7 @@ litRoom(2, { floor: '#c0c8cd', wall: '#e3e7ea', wall2: '#d3dde4', light: '#ffe0b
     const m = grp(g, sx * 0.95 + 0.62, 0, -1.2, -0.25);
     box(m, mWhiteS, 0.45, 1.2, 0.45, 0, 0.72, 0, 0.04);
     for (let k = 0; k < 2; k++) cyl(m, mGreyS, 0.065, 0.065, 0.03, -0.1 + k * 0.2, 1.0, 0.235, { rx: Math.PI / 2 });
-    if (sx < 0) { const s = makeScreen(3, 'dial'); SCR.push(s); makeDevice(m, 2, { x: 0, y: 1.5, z: 0.04, rx: -0.3, W: 0.4, H: 0.3, D: 0.18, screen: s, slot: [-0.05, 0.0], chip: ['soic', 0.0099, 0.0039, 14], frame: 0.022 }); }
+    if (sx < 0) { const s = makeScreen(3, 'dial'); SCR.push(s); makeDevice(m, 2, { x: 0, y: 1.5, z: 0.04, rx: -0.3, W: 0.4, H: 0.3, D: 0.18, screen: s, slot: [-0.05, 0.0], chip: ['soic', 0.0099, 0.0039, 14] }); }
     else { box(m, mWhiteS, 0.4, 0.3, 0.12, 0, 1.5, 0.04, 0.02, { rx: -0.3 }); }
   }
   sitter(g, -0.95, -0.62, 0, Sd({ color: '#7a5a76', roughness: 0.9 }), Sd({ color: '#474c55', roughness: 0.9 }));
@@ -1438,7 +1443,7 @@ litRoom(3, { floor: '#8fb7b1', wall: '#d6e3e1', wall2: '#c9d9d6', light: '#f2f7f
   const an = grp(g, -1.45, 0, -1.15, 0.3);
   box(an, mWhiteS, 0.66, 0.95, 0.5, 0, 0.6, 0, 0.03); box(an, mSteelS, 0.72, 0.03, 0.55, 0, 1.08, 0.02, 0.01); box(an, mWhiteS, 0.62, 0.38, 0.32, 0, 1.3, -0.08, 0.03);
   const s = makeScreen(2, 'v', VIT.or); SCR.push(s);
-  makeDevice(an, 3, { x: 0, y: 1.66, z: -0.03, W: 0.42, H: 0.3, D: 0.18, screen: s, slot: [0.06, 0.0], chip: ['bga', 0.0105, 0, 13], frame: 0.024 });
+  makeDevice(an, 3, { x: 0, y: 1.66, z: -0.03, W: 0.42, H: 0.3, D: 0.18, screen: s, slot: [0.06, 0.0], chip: ['bga', 0.0105, 0, 13] });
 });
 // the intensive-care monitor: its transform exists now, so the whole site can be placed around its chip
 const icuG = ROOMS[0].g;
@@ -1505,12 +1510,20 @@ tag(INFO[0].device, monG, V(0.05, MH / 2 + 0.03, 0), 46, -50, 1.62, 2.42, 'key')
 
 // ---------- insets for the last chapter: each lit room's chip, seen through its casing
 const insetsEl = document.getElementById('insets');
+// the leader lines pass behind the pictures: a mask with a hole for each picture (and its label) keeps every line off
+// every chip, its own and the others on its way across the grid
+const SVGNS = 'http://www.w3.org/2000/svg', insMask = document.createElementNS(SVGNS, 'mask');
+{ const defs = document.createElementNS(SVGNS, 'defs'), bg = document.createElementNS(SVGNS, 'rect');
+  insMask.id = 'insMask'; insMask.setAttribute('maskUnits', 'userSpaceOnUse');
+  for (const [a, v] of [['x', -1e4], ['y', -1e4], ['width', 2e4], ['height', 2e4]]) { insMask.setAttribute(a, v); bg.setAttribute(a, v); }
+  bg.setAttribute('fill', '#fff'); insMask.appendChild(bg); defs.appendChild(insMask); svg.appendChild(defs); }
 const INS = INFO.map((inf, i) => {
   const el = document.createElement('div'); el.className = 'inset'; el.innerHTML = '<div class="win"></div><div class="lab"></div>'; el.querySelector('.lab').textContent = inf.device; insetsEl.appendChild(el);
   el.setAttribute('role', 'button'); el.tabIndex = 0; el.setAttribute('aria-label', inf.device + ': what its chip decides');
   el.addEventListener('click', () => showPurpose(i)); el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showPurpose(i); } });
   const ln = document.createElementNS('http://www.w3.org/2000/svg', 'line'), dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle'); dot.setAttribute('r', 3); svg.appendChild(ln); svg.appendChild(dot); ln.style.opacity = 0; dot.style.opacity = 0;
-  return { el, win: el.firstChild, ln, dot, cam: new THREE.PerspectiveCamera(10, 1, 0.05, 40), x: 0, y: 0, w: 0, h: 0, shown: -1 };
+  const hole = document.createElementNS(SVGNS, 'rect'); hole.setAttribute('fill', '#000'); insMask.appendChild(hole); ln.setAttribute('mask', 'url(#insMask)');
+  return { el, win: el.firstChild, hole, ln, dot, cam: new THREE.PerspectiveCamera(10, 1, 0.05, 40), x: 0, y: 0, w: 0, h: 0, shown: -1 };
 });
 
 // ---------- the last chapter: choosing a device or its chip says, in one sentence, what it watches and decides
@@ -1548,7 +1561,8 @@ function layoutInsets() {
   const phone = Wd < 700, gap = phone ? 8 : 12, lab = 26; let w, h, gx, gy;
   if (!phone) { w = Math.round(Math.min(240, Math.max(170, Wd * 0.15))); h = Math.round(w * 0.7); const gw = 2 * w + gap, gh = 2 * (h + lab) + gap; gx = Wd - 172 - gw; gy = Math.round(Hd * 0.5 - gh / 2 + 10); }
   else { w = Math.floor((Wd - 12 - 40 - gap) / 2); h = Math.round(w * 0.66); const gh = 2 * (h + lab) + gap; gx = 12; gy = Hd - gh - 10; }
-  INS.forEach((s, i) => { s.w = w; s.h = h; s.x = gx + (i % 2) * (w + gap); s.y = gy + Math.floor(i / 2) * (h + lab + gap); s.el.style.transform = `translate(${s.x}px,${s.y}px)`; s.el.style.width = w + 'px'; s.el.style.height = (h + lab) + 'px'; });
+  INS.forEach((s, i) => { s.w = w; s.h = h; s.x = gx + (i % 2) * (w + gap); s.y = gy + Math.floor(i / 2) * (h + lab + gap); s.el.style.transform = `translate(${s.x}px,${s.y}px)`; s.el.style.width = w + 'px'; s.el.style.height = (h + lab) + 'px';
+    s.hole.setAttribute('x', s.x); s.hole.setAttribute('y', s.y); s.hole.setAttribute('width', w); s.hole.setAttribute('height', h + lab); });
 }
 function resize() {
   Wd = stage.clientWidth; Hd = stage.clientHeight;
@@ -1632,18 +1646,53 @@ function renderReflection() {
   renderer.setRenderTarget(rtRefl); renderer.clear(); renderer.render(scene, mirrorCam); renderer.setRenderTarget(null);
   renderer.shadowMap.autoUpdate = sa; water.visible = true; sky.position.copy(camera.position); sky.updateMatrixWorld();
 }
+// Each picture's camera is fitted to its chip: the same view angle in each device's frame for all four (from
+// above and behind the screen, through the open casing), and a frustum cut to the chip's projected bounds so the
+// chip fills INS_FILL of the frame along its limiting side, centred, at any frame size. The bounds are the
+// corners of every part of the chip (each lead included, its soft shadow left out), kept in the chip's own
+// coordinates.
+const INS_DIR = V(0.12, 1, -0.22).normalize(), INS_UP = V(0, 0, -1), INS_FILL = 0.78, insC = V(), insP = V();
+function chipCorners(dv) {
+  if (dv.corners) return dv.corners;
+  const ch = dv.chipObj, inv = new THREE.Matrix4(), m = new THREE.Matrix4(), mi = new THREE.Matrix4(), b3 = new THREE.Box3();
+  ch.updateMatrixWorld(true); inv.copy(ch.matrixWorld).invert();
+  dv.corners = [];
+  ch.traverse((o) => {
+    if (!o.isMesh || o.userData.noFit) return;
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    const bb = o.geometry.boundingBox, n = o.isInstancedMesh ? o.count : 1;
+    for (let k = 0; k < n; k++) {
+      m.multiplyMatrices(inv, o.matrixWorld); if (o.isInstancedMesh) { o.getMatrixAt(k, mi); m.multiply(mi); }
+      for (let c = 0; c < 8; c++) { const p = V(c & 1 ? bb.max.x : bb.min.x, c & 2 ? bb.max.y : bb.min.y, c & 4 ? bb.max.z : bb.min.z).applyMatrix4(m); dv.corners.push(p); b3.expandByPoint(p); }
+    }
+  });
+  dv.centre = b3.getCenter(V());
+  return dv.corners;
+}
+function fitInsetCam(c, dv, aspect) {
+  const corners = chipCorners(dv), ch = dv.chipObj, dist = 0.42;
+  insC.copy(dv.centre).applyMatrix4(ch.matrixWorld);
+  dv.g.getWorldQuaternion(qd); dirI.copy(INS_DIR).applyQuaternion(qd);
+  c.position.copy(insC).addScaledVector(dirI, dist); c.up.copy(INS_UP).applyQuaternion(qd); c.lookAt(insC); c.updateMatrixWorld();
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const q of corners) { insP.copy(q).applyMatrix4(ch.matrixWorld).applyMatrix4(c.matrixWorldInverse); const u = insP.x / -insP.z, v = insP.y / -insP.z; x0 = Math.min(x0, u); x1 = Math.max(x1, u); y0 = Math.min(y0, v); y1 = Math.max(y1, v); }
+  const hh = Math.max((y1 - y0) / 2, (x1 - x0) / 2 / aspect) / INS_FILL, hw = hh * aspect, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  c.near = 0.05; c.far = dist + 0.18; // the board fills the picture: nothing beyond it shows
+  c.projectionMatrix.makePerspective((cx - hw) * c.near, (cx + hw) * c.near, (cy + hh) * c.near, (cy - hh) * c.near, c.near, c.far, c.coordinateSystem, c.reversedDepth);
+  c.projectionMatrixInverse.copy(c.projectionMatrix).invert();
+}
 function renderInsets(on) {
   const sa = renderer.shadowMap.autoUpdate; renderer.shadowMap.autoUpdate = false; renderer.setScissorTest(true);
-  for (const dv of DEVS) if (dv) dv.glow.visible = false;
+  // the glow and the smoked casing belong to the main view; in a chip's own picture nothing sits in front of it
+  const glassOn = DEVS.map(dv => dv && dv.glass ? dv.glass.visible : false);
+  for (const dv of DEVS) if (dv) { dv.glow.visible = false; if (dv.glass) dv.glass.visible = false; }
   INS.forEach((s, i) => {
     const dv = DEVS[i]; if (!dv || !dv.hasChip) return;
-    dv.anchor.getWorldPosition(tv); dv.g.getWorldQuaternion(qd); dirI.copy(dv.insetDir).applyQuaternion(qd).normalize();
-    const c = s.cam, dist = 0.42; c.position.copy(tv).addScaledVector(dirI, dist); c.up.set(0, 0, -1).applyQuaternion(qd); c.lookAt(tv);
-    c.fov = 2 * Math.atan(dv.frame / 2 / dist) * 180 / Math.PI; c.aspect = s.w / s.h; c.near = 0.05; c.far = dist + 0.18; c.updateProjectionMatrix(); // the board fills the inset: nothing beyond it shows
+    fitInsetCam(s.cam, dv, s.w / s.h);
     const y = Hd - s.y - s.h; renderer.setViewport(s.x, y, s.w, s.h); renderer.setScissor(s.x, y, s.w, s.h);
-    renderer.render(scene, c);
+    renderer.render(scene, s.cam);
   });
-  for (const dv of DEVS) if (dv) dv.glow.visible = true;
+  DEVS.forEach((dv, i) => { if (dv) { dv.glow.visible = true; if (dv.glass) dv.glass.visible = glassOn[i]; } });
   renderer.setScissorTest(false); renderer.setViewport(0, 0, Wd, Hd); renderer.shadowMap.autoUpdate = sa;
 }
 // what the shadow map depends on: the chapter position (which sets every caster), the key light's target and
@@ -1787,7 +1836,7 @@ function render(k, t, dt) {
   if (!deepStarted) { deepStarted = true; setTimeout(() => { buildDeep().catch(e => console.warn('detail build failed', e)); }, 0); }
 }
 S.render = render;
-window.__y1x = { scene, camera, renderer, KF, TAGS, DEVS, ROOMS, D, site };
+window.__y1x = { scene, camera, renderer, KF, TAGS, DEVS, ROOMS, D, site, INS };
 
 // =====================================================================================================
 // Built at idle, after the first frame: the intensive-care room in full, the monitor's insides, the chip,
@@ -2242,7 +2291,7 @@ const icuFull = grp(icuG); icuFull.visible = false;
 
 // ---------- the bedside monitor itself: a moulded case deep enough for its board, a bezel round the screen
 const heroScr = makeScreen(0, 'v', VIT.icu, LITE ? 1 : 1.5); D.heroScr = heroScr;
-const hv = { g: monG, room: 0, frame: 0.03, insetDir: V(0.08, 1, -0.2).normalize(), half: V(MW / 2, MH / 2, MD / 2 + 0.02), extra: [], gBase: 1 };
+const hv = { g: monG, room: 0, half: V(MW / 2, MH / 2, MD / 2 + 0.02), extra: [], gBase: 1 };
 { const m = monG, k = MW / 0.36, z0 = MD / 2 - 0.004;
   hv.sm = mCase.clone(); hv.sm.transparent = true;
   hv.shell = box(m, hv.sm, MW, MH, MD, 0, 0, 0, 0.02 * k);
@@ -2599,13 +2648,13 @@ function ringChip(type, a, b, seed) {
   else if (type === 'wlcsp') { box(g, mBareR, a, 0.00035, a * 0.9, 0, 0.00045, 0, 0.00003); const l = []; const n = Math.round(a / 0.0004); for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) l.push((i - (n - 1) / 2) * 0.0004, 0.00014, (j - (n - 1) / 2) * 0.00036, 0.00013, 0.00014, 0.00013); inst(g, SPHB, mTin, l, { cs: false }); top = 0.0006; }
   else if (type === 'lga') { box(g, mCerW, a, 0.0011, a, 0, 0.00055, 0, 0.00015); box(g, mGold, a * 0.7, 0.00008, a * 0.7, 0, 0.00114, 0, 0.00004); const l = []; for (const [nx, nz] of S4) for (let i = 0; i < 4; i++) { const off = (i - 1.5) * a * 0.2; l.push(nx * a / 2 + (nz ? off : 0), 0.0003, nz * a / 2 + (nx ? off : 0), nx ? 0.00008 : 0.0004, 0.0006, nx ? 0.0004 : 0.00008); } inst(g, UNITB, mGold, l, { cs: false }); top = 0.0012; }
   else if (type === 'dip') { box(g, mEpR[seed % 4], a, 0.0033, b, 0, 0.0025, 0, 0.0004); const n = Math.round(a / 0.00254), l = []; for (const s of [-1, 1]) for (let i = 0; i < n; i++) { const x = (i - (n - 1) / 2) * 0.00254; l.push(x, 0.0021, s * (b / 2 + 0.0004), 0.0006, 0.0003, 0.0008); l.push(x, 0.0011, s * (b / 2 + 0.0008), 0.0005, 0.0022, 0.00025); } inst(g, UNITB, mTin, l, { cs: false }); cyl(g, Sd({ color: '#0d0e10', roughness: 0.7 }), 0.0009, 0.0009, 0.00004, -a / 2 + 0.0014, 0.00415, 0, { cs: false }, 24); markOn(g, a * 0.7, b * 0.7, 0.00415, seed, 0); top = 0.0042; }
-  const sh = blob(g, 0, 0, a * 1.6, (b || a) * 1.6, 0.4); sh.position.y = 0.00001;
+  const sh = blob(g, 0, 0, a * 1.6, (b || a) * 1.6, 0.4); sh.position.y = 0.00001; sh.userData.noFit = true; // the shadow is not part of the chip
   g.userData.top = top; return g;
 }
 
 // ---------- each other lit room's device gets its own chip, in its own package, on its own board
-for (let i = 1; i < 4; i++) { const dv = DEVS[i], [type, a, b, seed] = dv.chip; const c = ringChip(type, a, b, seed); dv.slot.add(c); dv.anchor.position.y = c.userData.top; dv.hasChip = true; }
-hv.hasChip = true;
+for (let i = 1; i < 4; i++) { const dv = DEVS[i], [type, a, b, seed] = dv.chip; const c = ringChip(type, a, b, seed); dv.slot.add(c); dv.chipObj = c; dv.anchor.position.y = c.userData.top; dv.hasChip = true; }
+hv.hasChip = true; hv.chipObj = HC.chip;
 Object.assign(D, { FLOWS, fBoard, fDie, fNet, mNode, nodes, mWireGlow, mLedOut, HC, mWindow, mDieTop });
 tag(window.COPY.tags.sensorInputs, jackG, V(0.036, 0.007, JZ[0]), 40, -46, 3.72, 4.42);
 tag(window.COPY.tags.chip, spin, V(-0.004, 0.0017, -0.005), 40, -70, 3.72, 4.42, 'key');
