@@ -221,7 +221,11 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 Stages, in order: `spec`, `reference`, `propose`, `finetune`, `compile`,
 `verify`, `report`. Each is `started`, `done` or `skipped`; a skipped stage
 carries a short reason. The agent reports them with `./progress` in its
-working folder. `run.finished` carries the agent's last message as
+working folder. With fan-out on, the backend may close a merged stage the
+agent left open (see "Fan-out"); that `done` carries
+`"closed_by": "backend"`. Accuracy-like metrics (accuracy, sensitivity,
+specificity, pass rates) are asked for as a fraction between 0 and 1 with
+no unit; runs recorded before this rule are left as they are. `run.finished` carries the agent's last message as
 `summary` and, when OpenRouter wrote one, the three-bullet run summary as
 `bullets`. `./progress metric <key> <number> [unit] --chip <design_id>`
 (the flag after the number or the unit) adds `chip` to the metric event,
@@ -234,8 +238,9 @@ stopped it or the server was shut down.
 
 The files routes cover the agent's working folder only. Paths are
 run-folder paths such as `workspace/report.md`, the same as an `artifact`
-event's `path`; the `progress` helper and hidden files are not listed, a
-path outside `workspace/` is refused (400), and a file over
+event's `path`; the `progress` and `subagent` helpers and hidden files
+are neither listed nor served (404), a path outside `workspace/` is
+refused (400), and a file over
 `file_max_bytes` (512 KB) is cut, marked with `X-ChipIn-Truncated: true`.
 The brief's `files` entries carry `name`, `size` and an optional `header`
 line (up to 1,000 characters), and `answers` is any JSON object; the
@@ -256,7 +261,7 @@ line, without the server: the same instructions, `./progress` helper and
 joined into one brief.
 
 Both agents get the same standing instructions (`api/instructions.md`,
-plus the chip-lab paragraph when the lab is on): `claude` as a tagged
+plus the training and chip-lab paragraphs when each is on): `claude` as a tagged
 system prompt ahead of its first prompt, `openrouter` appended to the
 OpenHands system message (`AgentContext.system_message_suffix`), which
 keeps OpenHands' own tool rules. `run.json` records them under
@@ -340,8 +345,10 @@ subagent through the same runner and agent backends as the run's own
 agent, with the same environment allowlist and chip-lab settings, keys
 never written into a folder. A subagent works in `workspace/agents/<id>/`
 with its own `./progress` (which refuses `stage` and `chosen`), its own
-instructions (`api/subagent.md`, plus the chip-lab paragraph when the lab
-is on) and its brief in `brief.md`; its last message is saved there as
+instructions (`api/subagent.md`, plus the training and chip-lab paragraphs
+when each is on, delivered as the orchestrator's are), the chip-lab skill
+installed in its folder exactly as for the orchestrator (when the lab is
+on) and its brief in `brief.md`; its last message is saved there as
 `subagent-result.md`. Its raw events and progress lines are under
 `subagents/<id>/` in the run folder. A subagent has no `./subagent` and
 the helper refuses to run inside one. A subagent may still work from the
@@ -363,6 +370,16 @@ merged result on; it never does a batch's work itself. A subagent gets
 `api/subagent.md`: it is one of a batch trying different strategies for
 one stage; it does exactly its strategy, never invents a measurement and
 returns the short result asked for.
+
+Stages left open. An orchestrator may merge a batch and move on without
+marking the stage done. The backend then closes it itself, with an
+ordinary `stage` event (`state: done`, `closed_by: backend`), when a later
+stage is marked started (the `done` comes first) or when the run ends. A
+stage is closed only if the orchestrator marked it started, recorded a
+merge for it and never marked it done or skipped; while a batch of it is
+still queued, running or not yet merged (a retry batch), a later stage
+does not close it; the merge of that batch, or the run's end, does. A
+`done` or `skipped` from the orchestrator itself is left as it is.
 
 The events. Everything a subagent causes (`status`, `tool`, `metric` with
 its optional `chip`, `artifact`, `message`, `cost`) lands in the run's own
@@ -479,8 +496,10 @@ the skill is installed without it, the agent is told to run
 `chiplab agent-doc`, and a warning is logged.
 
 When the lab is on, the runner installs the skill into each run's
-working folder before the agent starts; nothing is written outside the
-run folder, and with the lab off nothing is installed.
+working folder before the agent starts, and into each fan-out subagent's
+folder (`workspace/agents/<id>/`, same paths below) before it starts;
+nothing is written outside the run folder, and with the lab off nothing
+is installed.
 
 | Harness      | Installed at                        | How it loads   |
 | ------------ | ----------------------------------- | -------------- |
@@ -541,7 +560,8 @@ reference and finetune stages are skipped. Name a Python that can train
   sensitivity and false alarms per hour on held-out patients only, per
   patient and pooled, labelled "synthetic data"; hand the trained weights
   to the lab with `ingest-model`. The pooled figures of the chosen design
-  arrive as the metrics `synthetic_sensitivity_pct` and
+  arrive as the metrics `synthetic_sensitivity` (a fraction between 0
+  and 1; runs before this rule used `synthetic_sensitivity_pct`) and
   `synthetic_false_alarms_per_h`, with `patients_pass` / `patients_total`.
 - Unset, or not an executable file (one warning in the log), training is
   off: the environment and instructions are as before, and the agent

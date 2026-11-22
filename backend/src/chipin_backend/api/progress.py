@@ -24,6 +24,7 @@ import json
 import math
 import stat
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -110,8 +111,10 @@ elif cmd == "status":
         fail("status needs a line of text")
     line["text"] = " ".join(rest)
 elif cmd == "artifact":
-    if len(rest) not in (1, 2) or (len(rest) == 2 and rest[1] not in KINDS):
+    if len(rest) not in (1, 2):
         fail("artifact needs a path and optionally a kind")
+    if len(rest) == 2 and rest[1] not in KINDS:
+        fail("unknown artifact kind " + repr(rest[1]) + "; use one of {kinds}")
     line.update(path=rest[0], kind=rest[1] if len(rest) == 2 else "file")
 else:
     fail("unknown command " + repr(cmd))
@@ -181,7 +184,14 @@ class ProgressTailer:
     """Turns new lines of ``progress.jsonl`` into contract events."""
 
     def __init__(
-        self, path: Path, log: EventLog, run_path: Path, workspace: Path, *, marks: bool = True
+        self,
+        path: Path,
+        log: EventLog,
+        run_path: Path,
+        workspace: Path,
+        *,
+        marks: bool = True,
+        on_stage: Callable[[str, str], None] | None = None,
     ) -> None:
         self.path = path
         self.log = log
@@ -189,6 +199,8 @@ class ProgressTailer:
         self.workspace = workspace
         #: False for a subagent: ``stage`` and ``chosen`` lines are skipped.
         self.marks = marks
+        #: Called with ``(stage, state)`` before each ``stage`` event (fan-out closes merged stages).
+        self.on_stage = on_stage
         self._offset = 0
         self.artifacts: set[str] = set()
 
@@ -237,6 +249,8 @@ class ProgressTailer:
             if item["state"] == "skipped" and not reason:
                 raise ValueError("a skipped stage needs a reason")
             round_ = item.get("round")
+            if self.on_stage is not None:
+                self.on_stage(item["name"], item["state"])
             self.log.append(
                 "stage",
                 name=item["name"],

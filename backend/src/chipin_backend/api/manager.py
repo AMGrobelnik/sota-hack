@@ -177,9 +177,7 @@ class RunManager:
         self.runs: dict[str, ApiRun] = {}
         self.summary = summary
         self.instructions = standing_instructions()
-        self.subagent_instructions = subagent_instructions(
-            chiplab_instructions() if chiplab_available() else None
-        )
+        self.subagent_instructions = subagent_standing_instructions()
 
     @property
     def runs_dir(self) -> Path:
@@ -353,7 +351,13 @@ class RunManager:
         ``run_agent`` owns ``run.json`` (status, timings, costs, ``stopped`` on
         cancellation) and closes the runner; this adds the dashboard's view.
         """
-        tailer = ProgressTailer(item.run.path / PROGRESS_FILE, item.log, item.run.path, item.run.workspace)
+        tailer = ProgressTailer(
+            item.run.path / PROGRESS_FILE,
+            item.log,
+            item.run.path,
+            item.run.workspace,
+            on_stage=item.fanout.stage_marked if item.fanout else None,
+        )
         follow = asyncio.create_task(tailer.follow(self.api.progress_poll_s))
         requests = asyncio.create_task(item.fanout.follow(self.api.progress_poll_s)) if item.fanout else None
         status: ApiStatus = "failed"
@@ -414,9 +418,11 @@ class RunManager:
 
     @staticmethod
     async def _close_fanout(item: ApiRun, cost: dict[str, Any] | None) -> dict[str, Any] | None:
-        """Stop the run's subagents; the run's cost with theirs added (one ``cost`` event)."""
+        """Stop the run's subagents and close the merged stages left open; the run's cost with
+        theirs added (one ``cost`` event)."""
         assert item.fanout is not None
         await item.fanout.close()
+        item.fanout.close_merged()
         if not item.fanout.subagents:
             return cost
         own = cost or {"usd": 0.0, "tokens_in": 0, "tokens_out": 0}
@@ -478,11 +484,24 @@ class RunManager:
 def standing_instructions(source: Mapping[str, str] | None = None) -> str:
     """The agent's standing instructions, plus the training and chip-lab paragraphs when each is on."""
     text = INSTRUCTIONS_PATH.read_text(encoding="utf-8")
-    if train_available(source):
-        text = f"{text.rstrip()}\n\n{training_instructions()}"
-    if chiplab_available(source):
-        text = f"{text.rstrip()}\n\n{chiplab_instructions()}"
+    for paragraph in _paragraphs(source):
+        text = f"{text.rstrip()}\n\n{paragraph}"
     return text
+
+
+def subagent_standing_instructions(source: Mapping[str, str] | None = None) -> str:
+    """A fan-out subagent's standing instructions: its own, plus the same paragraphs as the orchestrator's."""
+    return subagent_instructions(*_paragraphs(source))
+
+
+def _paragraphs(source: Mapping[str, str] | None) -> list[str]:
+    """The training and chip-lab paragraphs, each when it is on for an agent started from ``source``."""
+    paragraphs = []
+    if train_available(source):
+        paragraphs.append(training_instructions())
+    if chiplab_available(source):
+        paragraphs.append(chiplab_instructions())
+    return paragraphs
 
 
 def _bullets(result: AgentResult) -> str | None:
@@ -566,4 +585,5 @@ __all__ = [
     "RequestError",
     "RunManager",
     "standing_instructions",
+    "subagent_standing_instructions",
 ]

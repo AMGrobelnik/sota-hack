@@ -16,7 +16,9 @@ Rules:
 - Report each number you measured with
   `./progress metric <key> <number> [unit] --chip <design_id>`, a change of
   activity with `./progress status "<one line>"` and a file worth opening
-  with `./progress artifact <path> file`.
+  with `./progress artifact <path> file`. An accuracy-like figure
+  (accuracy, sensitivity, specificity, a pass rate) is a fraction between
+  0 and 1 with no unit, never a percentage.
 - Do not mark stages and do not name the chosen chip: in your folder
   `./progress stage` and `./progress chosen` are refused, and where the
   chip-lab paragraph below says to mark stages or call chip-report, leave

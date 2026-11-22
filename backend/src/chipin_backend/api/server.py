@@ -227,9 +227,13 @@ def workspace_file(run_path: Path, workspace: Path, rel: str) -> Path:
     if not rel or "\x00" in rel:
         raise RequestError("path is required")
     target = (run_path / rel).resolve()
-    if not target.is_relative_to(workspace.resolve()):
+    root = workspace.resolve()
+    if not target.is_relative_to(root):
         raise RequestError("path must be inside the run's workspace folder")
-    if not target.is_file():
+    inside = target.relative_to(root)
+    # The same files as the listing: helpers and hidden files are not served.
+    hidden = any(part.startswith(".") for part in inside.parts) or _is_helper(inside)
+    if hidden or not target.is_file():
         raise RequestError(f"no file {rel!r}", status=404)
     return target
 

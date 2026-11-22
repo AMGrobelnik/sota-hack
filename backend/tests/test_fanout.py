@@ -12,6 +12,8 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import subprocess
+import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -19,14 +21,27 @@ from typing import Any
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
+from chipin_backend.agents.claude_cli import build_argv
+from chipin_backend.agents.types import AgentResult, AgentSpec
 from chipin_backend.api.config import ApiConfig, FanoutConfig
 from chipin_backend.api.events import STAGES
 from chipin_backend.api.fanout import BATCH_STAGES, ID_ENV, STATE_FILE
-from chipin_backend.api.manager import API_RECORD_FILE, ApiRun, RunManager, standing_instructions
+from chipin_backend.api.manager import (
+    AGENT_BACKENDS,
+    API_RECORD_FILE,
+    ApiRun,
+    RunManager,
+    standing_instructions,
+    subagent_standing_instructions,
+)
+from chipin_backend.api.progress import write_helper
 from chipin_backend.api.server import TOKEN_HEADER, create_app
+from chipin_backend.chiplab import CHIPLAB_BIN_ENV, CLAUDE_PLUGIN_DIR, chiplab_instructions
 from chipin_backend.cli import _parser
+from chipin_backend.compute import local as local_runner
 from chipin_backend.config import BackendConfig
 from chipin_backend.runs import RunDir
+from chipin_backend.training import TRAIN_PYTHON_ENV, training_instructions
 
 TOKEN = "test-session-token"
 AUTH = {TOKEN_HEADER: TOKEN}
@@ -363,7 +378,8 @@ async def test_file_routes_serve_a_subagents_files(config: BackendConfig) -> Non
     async with TestClient(TestServer(app)) as client:
         body = {
             "prompt": _script(
-                './subagent start propose "$ echo hello > note.md && ./progress artifact note.md file"',
+                './subagent start propose "$ echo hello > note.md && echo x > .hidden.md && '
+                './progress artifact note.md file"',
                 "./subagent wait a1",
             ),
             "fanout": ON,
@@ -390,9 +406,20 @@ async def test_file_routes_serve_a_subagents_files(config: BackendConfig) -> Non
         }
         assert "workspace/agents/a1/note.md" in files and "workspace/agents/a1/brief.md" in files
         assert not {"workspace/subagent", "workspace/agents/a1/progress"} & files, "helpers are not listed"
+        assert "workspace/agents/a1/.hidden.md" not in files
         for bad in ("subagents.json", "subagents/a1/progress.jsonl", "workspace/agents/a1/../../../api.json"):
             refused = await client.get(f"/api/runs/{run_id}/file", params={"path": bad}, headers=AUTH)
             assert refused.status == 400, bad
+        # Neither listed nor served: the helpers and hidden files.
+        for hidden in (
+            "workspace/progress",
+            "workspace/subagent",
+            "workspace/agents/a1/progress",
+            "workspace/agents/a1/.hidden.md",
+        ):
+            assert (config.resolved_runs_dir() / run_id / hidden).is_file(), hidden
+            refused = await client.get(f"/api/runs/{run_id}/file", params={"path": hidden}, headers=AUTH)
+            assert refused.status == 404, hidden
 
 
 async def test_fanout_requests_are_checked(config: BackendConfig) -> None:
@@ -568,9 +595,6 @@ def test_run_takes_fanout_options() -> None:
 
 
 def test_the_subagent_helper_refuses_inside_a_subagent(tmp_path: Path) -> None:
-    import os
-    import subprocess
-
     from chipin_backend.api.fanout import write_subagent_helper
 
     helper = write_subagent_helper(tmp_path, tmp_path, wait_s=5, agents=("stub",))
@@ -580,3 +604,229 @@ def test_the_subagent_helper_refuses_inside_a_subagent(tmp_path: Path) -> None:
     assert got.returncode == 1 and "only the orchestrator" in got.stderr
     usage = subprocess.run([str(helper)], capture_output=True, text=True, timeout=30)
     assert usage.returncode == 2 and "./subagent start <stage>" in usage.stderr
+
+
+# ---- stages the orchestrator merged but left open ----
+
+
+def _marks(events: list[dict[str, Any]]) -> list[tuple[str, str, str | None]]:
+    return [(e["name"], e["state"], e.get("closed_by")) for e in _of(events, "stage")]
+
+
+def _index(events: list[dict[str, Any]], type_: str, **match: Any) -> int:
+    return next(
+        i for i, e in enumerate(events) if e["type"] == type_ and all(e.get(k) == v for k, v in match.items())
+    )
+
+
+async def test_a_merged_stage_left_open_is_closed_when_a_later_stage_starts(config: BackendConfig) -> None:
+    item, events = await _run(
+        _manager(config),
+        _script(
+            "./progress stage propose started",
+            './subagent start propose "$ echo A"',
+            "./subagent wait --all",
+            './subagent merge propose --kept a1 --why "the only one"',
+            "./progress stage finetune started",
+            "./progress stage finetune done",
+        ),
+    )
+    assert item.record["status"] == "succeeded"
+    assert _marks(events) == [
+        ("propose", "started", None),
+        ("propose", "done", "backend"),
+        ("finetune", "started", None),
+        ("finetune", "done", None),
+    ]
+    closed = _of(events, "stage", name="propose", state="done")[0]
+    assert closed["stage"] == "propose" and "agent" not in closed
+    assert _index(events, "stage.merged", stage="propose") < _index(
+        events, "stage", name="propose", state="done"
+    )
+
+
+async def test_a_merged_stage_left_open_is_closed_when_the_run_ends(config: BackendConfig) -> None:
+    item, events = await _run(
+        _manager(config),
+        _script(
+            "./progress stage propose started",
+            './subagent start propose "$ echo A"',
+            "./subagent wait --all",
+            './subagent merge propose --kept a1 --why "the only one"',
+        ),
+    )
+    assert _marks(events) == [("propose", "started", None), ("propose", "done", "backend")]
+    done = _index(events, "stage", name="propose", state="done")
+    assert _index(events, "stage.merged", stage="propose") < done < _index(events, "run.finished")
+    assert item.record["status"] == "succeeded"
+
+
+async def test_an_explicit_done_is_left_as_it_is(config: BackendConfig) -> None:
+    _, events = await _run(
+        _manager(config),
+        _script(
+            "./progress stage propose started",
+            './subagent start propose "$ echo A"',
+            "./subagent wait --all",
+            './subagent merge propose --kept a1 --why "the only one"',
+            "./progress stage propose done",
+            "./progress stage finetune started",
+            "./progress stage finetune skipped no GPU here",
+        ),
+    )
+    assert _marks(events) == [
+        ("propose", "started", None),
+        ("propose", "done", None),
+        ("finetune", "started", None),
+        ("finetune", "skipped", None),
+    ]
+
+
+async def test_a_stage_with_a_retry_batch_in_flight_is_not_closed_early(config: BackendConfig) -> None:
+    _, events = await _run(
+        _manager(config),
+        _script(
+            "./progress stage propose started",
+            './subagent start propose "$ echo A"',
+            "./subagent wait --all",
+            './subagent merge propose --kept a1 --why "first try"',
+            './subagent start propose "$ sleep 0.8; echo B"',
+            "./progress stage finetune started",
+            "sleep 0.3",
+            './progress status "ChipIn is waiting for the retry"',
+            "./subagent wait --all",
+            './subagent merge propose --kept a2 --why "the retry is better"',
+            "./progress stage finetune done",
+        ),
+    )
+    assert _marks(events) == [
+        ("propose", "started", None),
+        ("finetune", "started", None),
+        ("propose", "done", "backend"),
+        ("finetune", "done", None),
+    ]
+    done = _index(events, "stage", name="propose", state="done")
+    assert _index(events, "status", text="ChipIn is waiting for the retry") < done
+    retry = [i for i, e in enumerate(events) if e["type"] == "stage.merged"][1]
+    assert _index(events, "subagent.finished", id="a2") < retry < done
+
+
+async def test_a_stage_with_a_running_batch_and_no_merge_is_never_closed(config: BackendConfig) -> None:
+    _, events = await _run(
+        _manager(config),
+        _script(
+            "./progress stage propose started",
+            './subagent start propose "$ sleep 5"',
+            "./progress stage finetune started",
+            "./progress stage finetune done",
+        ),
+    )
+    assert _marks(events) == [
+        ("propose", "started", None),
+        ("finetune", "started", None),
+        ("finetune", "done", None),
+    ]
+    assert _of(events, "subagent.finished", id="a1")[0]["state"] == "stopped"
+
+
+# ---- subagents get the chip-lab skill and the standing instructions ----
+
+
+class _Recorder:
+    """Stands in for a subagent's harness: records the spec the runner hands it."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.specs: list[AgentSpec] = []
+
+    async def run(self, spec: AgentSpec, sink: Any) -> AgentResult:
+        self.specs.append(spec)
+        return AgentResult(agent=spec.name, final_text="ok")
+
+    async def close(self) -> None:
+        return None
+
+
+@pytest.mark.parametrize("harness", ["claude", "openrouter"])
+async def test_subagents_get_the_lab_skill_and_the_standing_instructions(
+    config: BackendConfig, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, harness: str
+) -> None:
+    """Each subagent's folder holds the skill where its harness loads it, as the orchestrator's does;
+    its instructions carry the training and chip-lab paragraphs; no outside instruction file comes with it."""
+    if harness == "openrouter":
+        pytest.importorskip("openhands.sdk")
+        monkeypatch.setenv("OPENROUTER_API_KEY", "fake-key")
+    lab = tmp_path / "lab-bin" / "chiplab"
+    lab.parent.mkdir()
+    lab.write_text('#!/bin/sh\necho "# Chip lab tools"\n', encoding="utf-8")
+    lab.chmod(0o755)
+    for name, value in {
+        "HOME": str(tmp_path / "home"),
+        "PATH": "/usr/bin:/bin",
+        CHIPLAB_BIN_ENV: str(lab.parent),
+        "CHIPLAB_CONFIG": str(tmp_path / "lab" / "config.json"),
+        "CHIPLAB_USER_DIR": str(tmp_path / "lab"),
+        TRAIN_PYTHON_ENV: sys.executable,
+    }.items():
+        monkeypatch.setenv(name, value)
+    marker = "PRIVATE-INSTRUCTIONS-MARKER"
+    for private in ("CLAUDE.md", "CLAUDE.local.md", "AGENTS.md"):
+        (tmp_path / private).write_text(f"{marker}\n", encoding="utf-8")
+    recorder = _Recorder(AGENT_BACKENDS[harness])
+    real = local_runner.backend_for
+    monkeypatch.setattr(
+        local_runner,
+        "backend_for",
+        lambda name, *a, **k: recorder if name == recorder.name else real(name, *a, **k),
+    )
+    item, events = await _run(
+        _manager(config),
+        _script(
+            f'./subagent start propose "Try one design family" --agent {harness}', "./subagent wait --all"
+        ),
+    )
+    assert _of(events, "subagent.finished", id="a1")[0]["state"] == "done"
+    [spec] = recorder.specs
+    folder = item.run.workspace / "agents" / "a1"
+    assert spec.workdir == folder
+    assert spec.system_prompt == subagent_standing_instructions()
+    assert training_instructions() in spec.system_prompt and spec.system_prompt.endswith(
+        chiplab_instructions()
+    )
+    assert marker not in spec.system_prompt
+    if harness == "claude":
+        root = (folder / CLAUDE_PLUGIN_DIR).resolve()
+        assert (root / "skills" / "chiplab" / "SKILL.md").is_file()
+        cli = config.agents.claude_cli
+        argv = build_argv(spec, cli, session_id="sid", resume=False)
+        assert argv[argv.index("--plugin-dir") + 1] == str(root)
+        assert argv[argv.index("--setting-sources") + 1] == ",".join(cli.setting_sources) == ""
+    else:
+        from chipin_backend.agents.openrouter_agent import OpenRouterAgentBackend
+        from chipin_backend.llm.providers import resolve_provider
+
+        assert (folder / ".agents" / "skills" / "chiplab" / "SKILL.md").is_file()
+        backend = OpenRouterAgentBackend(config.agents)
+        agent = backend._build_agent(
+            spec, "openrouter/x", "not-a-key", resolve_provider(config.providers, None)
+        )
+        context = agent.agent_context
+        assert [s.name for s in context.skills] == ["chiplab"]
+        assert context.system_message_suffix == spec.system_prompt
+        dynamic = agent.dynamic_context or ""
+        assert "<name>chiplab</name>" in dynamic and marker not in dynamic
+    for private in ("CLAUDE.md", "CLAUDE.local.md", "AGENTS.md"):
+        assert not list(item.run.path.rglob(private)), private
+
+
+def test_the_helper_names_an_unknown_artifact_kind(tmp_path: Path) -> None:
+    helper = write_helper(tmp_path, tmp_path / "progress.jsonl")
+    got = subprocess.run(
+        [str(helper), "artifact", "note.md", "chart"], capture_output=True, text=True, timeout=30
+    )
+    assert got.returncode == 2
+    assert "unknown artifact kind 'chart'; use one of file|report|chip" in got.stderr
+    ok = subprocess.run(
+        [str(helper), "artifact", "note.md", "chip"], capture_output=True, text=True, timeout=30
+    )
+    assert ok.returncode == 0

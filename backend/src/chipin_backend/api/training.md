@@ -10,7 +10,7 @@ plain `python3` may not be. Run every training and data script with it: `"$CHIPI
   other stages. Choose the chip on validation figures.
 - **Score on the held-out patients only**: sensitivity (events caught of all events) and false alarms per hour,
   per patient and pooled, for every candidate. Report the chosen design's pooled figures as
-  `./progress metric synthetic_sensitivity_pct 92.5 %` and
+  `./progress metric synthetic_sensitivity 0.925` (a fraction between 0 and 1, never a percentage) and
   `./progress metric synthetic_false_alarms_per_h 0.4 /h`, and the held-out patients meeting the target as
   `patients_pass` and `patients_total`.
 - **Label every such figure "synthetic data"** in `report.md` and in status lines. Synthetic figures show the

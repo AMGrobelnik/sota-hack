@@ -160,6 +160,12 @@ class RunDir:
         return self.path / WORKSPACE_DIR
 
     @property
+    def owned_path(self) -> Path:
+        """The folder this run owns: the runner prepares a working folder (the chip-lab skill)
+        only inside it."""
+        return self.path
+
+    @property
     def llm_calls_path(self) -> Path:
         """``llm_calls.jsonl``: one line per OpenRouter call the agent made via ``ask``."""
         return self.path / LLM_CALLS_FILE

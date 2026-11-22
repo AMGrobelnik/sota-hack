@@ -288,9 +288,20 @@ def write_subagent_helper(workspace: Path, run_path: Path, *, wait_s: int, agent
 
 @dataclass(frozen=True)
 class _SubagentDir(RunDir):
-    """``subagents/<id>/`` in the run folder; the runner sends the agent's events to ``sink``."""
+    """``subagents/<id>/`` in the run folder; the runner sends the agent's events to ``sink``.
+
+    ``owner`` is the whole run folder: the subagent's working folder
+    (``workspace/agents/<id>/``) is inside it, so the runner installs the
+    chip-lab skill there as it does for the orchestrator.
+    """
 
     sink: Translator | None = field(default=None, compare=False)
+    owner: Path | None = field(default=None, compare=False)
+
+    @property
+    def owned_path(self) -> Path:
+        """The run folder the subagent belongs to."""
+        return self.owner if self.owner is not None else self.path
 
     def event_sink(self) -> Translator:  # type: ignore[override]
         """The subagent's translator (it stores the raw events too)."""
@@ -501,10 +512,13 @@ def orchestrator_instructions(plan: FanoutPlan) -> str:
     return text
 
 
-def subagent_instructions(chiplab: str | None) -> str:
-    """A subagent's standing instructions, with the chip-lab paragraph when the lab is on."""
+def subagent_instructions(*paragraphs: str | None) -> str:
+    """A subagent's standing instructions, then each paragraph that is on (training, chip lab), in order."""
     text = SUBAGENT_PATH.read_text(encoding="utf-8")
-    return f"{text.rstrip()}\n\n{chiplab}" if chiplab else text
+    for paragraph in paragraphs:
+        if paragraph:
+            text = f"{text.rstrip()}\n\n{paragraph}"
+    return text
 
 
 class TaggedLog:
@@ -618,6 +632,10 @@ class Fanout:
         self.replies: dict[str, dict[str, Any]] = {}
         #: Every merge record, in order, as its ``stage.merged`` event says.
         self.merges: list[dict[str, Any]] = []
+        #: The orchestrator's last mark per stage (``started``, ``done``, ``skipped``).
+        self.marks: dict[str, str] = {}
+        #: The furthest stage (index in ``STAGES``) the orchestrator has marked started.
+        self.reached = -1
         self.closed = False
         self._offset = 0
         self.requests_path = run.path / REQUESTS_FILE
@@ -792,7 +810,52 @@ class Fanout:
         self.merges.append(record)
         self.log.append("stage.merged", **record)
         logger.info("run {}: {} batch merged, kept {}", self.log.run_id, stage, kept or "none")
+        self._close_merged(self.reached)
         return f"{stage} merged: kept {', '.join(kept) or 'none'} of {len(batch)}"
+
+    # ---- stages left open ----
+
+    def stage_marked(self, stage: str, state: str) -> None:
+        """Called with each of the orchestrator's stage marks, before its ``stage`` event is written.
+
+        A later stage starting closes the earlier batch stages that are merged
+        but still open (see :meth:`close_merged`), so their ``done`` comes first.
+        """
+        if state == "started" and stage in STAGES:
+            index = STAGES.index(stage)
+            self._close_merged(index)
+            self.reached = max(self.reached, index)
+        self.marks[stage] = state
+
+    def close_merged(self) -> list[str]:
+        """At the run's end, after its subagents stopped: close every merged batch stage left open."""
+        return self._close_merged(None)
+
+    def _close_merged(self, before: int | None) -> list[str]:
+        """Write a ``done`` flagged ``closed_by: backend`` for each batch stage the orchestrator
+        marked started and merged but never marked done; returns their names.
+
+        ``before`` (a ``STAGES`` index) limits it to earlier stages with no batch
+        still to merge: a stage with a subagent queued, running, or finished but
+        not merged yet (a retry batch in flight) stays open. ``None`` (the run
+        ends): every such stage. An explicit mark from the orchestrator is never
+        changed.
+        """
+        closed = []
+        merged = {i for m in self.merges for i in m["ids"]}
+        for stage in BATCH_STAGES:
+            if before is not None and STAGES.index(stage) >= before:
+                continue
+            if self.marks.get(stage) != "started" or not any(m["stage"] == stage for m in self.merges):
+                continue
+            pending = [s.id for s in self.subagents.values() if s.stage == stage and s.id not in merged]
+            if before is not None and pending:
+                continue
+            self.marks[stage] = "done"
+            self.log.append("stage", name=stage, stage=stage, state="done", closed_by="backend")
+            logger.info("run {}: {} merged but left open; closed by the backend", self.log.run_id, stage)
+            closed.append(stage)
+        return closed
 
     # ---- running ----
 
@@ -868,7 +931,7 @@ class Fanout:
         runner = runner_for(self.config, self.mode)
         result: AgentResult | None = None
         try:
-            result = await runner.run(spec, _SubagentDir(meta, sink=translator))
+            result = await runner.run(spec, _SubagentDir(meta, sink=translator, owner=self.run.path))
             if not result.failed:
                 sub.state = "done"
             elif (result.error or "").startswith("timed out after"):
