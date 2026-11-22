@@ -24,7 +24,9 @@ with the reason: fix the record and send it again. Fields:
   to your earlier name so the record moves over), `label` (a few words), `budget`
   (`{"channels": 2, "name": "2 electrodes"}`, or `sensors` instead of `channels`);
 - `gates`: the lab's measured gate count, ONLY when the lab returned it, else `null`; `gates_est`: your own
-  estimate, or `null`; `depth`: logic depth if known, else `null`;
+  rough gate estimate before the lab has compiled it (for example from the weight count and bit widths; say how
+  in `note`), sent with the first record so the design shows on the chart before compile, else `null`;
+  `depth`: logic depth if known, else `null`;
 - `metrics`: `sensitivity`, `specificity`, `fa_per_hour` (false alarms per hour; the dashboard converts it to
   the user's unit), `agreement` when the task has it, and every metric the targets name; fractions from 0 to 1
   (0.92, not 92), rates per hour;
@@ -33,7 +35,7 @@ with the reason: fix the record and send it again. Fields:
 - `per_patient`: `[{"id": "p01", "caught": 3, "total": 4, "false_alarms": 1, "hours": 24}]` with anonymous
   ids, one row per patient of that split (their sums must equal `counts`);
 - `verified`: `{"vectors": 512, "mismatches": 0, "level": "<the lab's level>", "proved": true}` from the lab's
-  verify tools, else `null`; `data`: `synthetic` or `public:<dataset>`; `note`: one short sentence.
+  verify tools (`level` as the lab returned it, never "None"), else `null`; `data`: `synthetic` or `public:<dataset>`; `note`: one short sentence.
 
 Send a design's record when it is first scored, again as soon as the lab has compiled it (with the lab's measured
 `gates` and its `design_id`, before you verify anything), and again when it is verified (with `verified`); the user
