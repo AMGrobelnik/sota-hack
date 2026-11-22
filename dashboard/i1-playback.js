@@ -113,9 +113,6 @@
     ".pb-dlg header{display:flex;align-items:flex-start;gap:10px;padding:18px 18px 10px}",
     ".pb-dlg h2{font-family:var(--serif);font-weight:400;font-size:22px;margin:0;letter-spacing:-.01em}",
     ".pb-dlg header p{margin:3px 0 0;font-size:12.5px;color:var(--i600);line-height:1.45}",
-    ".pb-rrow{height:auto;min-height:28px;padding-top:4px;padding-bottom:4px;align-items:flex-start}.pb-rrow .g{margin-top:3px}",
-    ".pb-rrow .t{display:flex;flex-direction:column;min-width:0}.pb-rrow .t b{font-weight:500;overflow:hidden;text-overflow:ellipsis}",
-    ".pb-rrow .t small{font-size:11px;font-weight:400;color:var(--i550);overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}",
     ".pb-rrow .g svg{width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}.pb-rrow .g .ok{color:var(--okt)}.pb-rrow .g .bad{color:var(--missed)}",
     ".rv-data{font-size:12.5px;color:var(--i600);margin:8px 0 0;line-height:1.5;max-width:860px}",
     ".rv-note{font-size:13px;color:var(--i800);margin:10px 0 0;line-height:1.5;max-width:860px;padding:8px 12px;border-left:3px solid var(--missed,#b45309);background:var(--i100)}#rvTab>.rv-note{margin:0 0 16px}",
@@ -523,11 +520,11 @@
     var c = r.counts || {}, st = r.state || "succeeded";
     var g = st === "running" ? '<span class="spin"></span>' : st === "succeeded" ? '<svg viewBox="0 0 24 24" class="ok" aria-hidden="true">' + MARK.ok + "</svg>" : st === "failed" ? '<svg viewBox="0 0 24 24" class="bad" aria-hidden="true">' + MARK.bad + "</svg>" : "";
     var sub = [dateTxt(r.started_at), r.duration_s ? durTxt(r.duration_s).trim() : "", c.designs ? fmtN(c.designs) + " designs" : ""].filter(Boolean).join(" · ");
-    var tip = [r.title || r.id, "Recorded run, " + (r.src === "mac" ? "on this computer" + (r.alsoSite ? ", copy on the site" : "") : "copy on this site"), st !== "succeeded" ? st : "",
+    var tip = [r.title || r.id, sub, "Recorded run, " + (r.src === "mac" ? "on this computer" + (r.alsoSite ? ", copy on the site" : "") : "copy on this site"), st !== "succeeded" ? st : "",
       r.preset ? "Run size: " + String(r.preset).charAt(0).toUpperCase() + String(r.preset).slice(1) : "", r.agent || r.model ? "Model: " + usedModel(r) : "",
       r.chosen ? "chosen " + r.chosen : "", c.subagents ? fmtN(c.subagents) + " subagents" : "", c.events ? fmtN(c.events) + " events" : "",
       r.data && r.data.name ? "Data: " + r.data.name + (r.data.licence ? ", " + r.data.licence : "") : "", r.note || ""].filter(Boolean).join("\n");
-    return '<a class="rrow pb-rrow' + (on ? " on" : "") + '" href="#/rec/' + r.src + "/" + encodeURIComponent(r.id) + '/overview" title="' + esc(tip) + '"><span class="g">' + g + '</span><span class="t"><b>' + esc(r.title || r.id) + "</b>" + (sub ? "<small>" + esc(sub) + "</small>" : "") + "</span></a>";
+    return '<a class="rrow pb-rrow' + (on ? " on" : "") + '" href="#/rec/' + r.src + "/" + encodeURIComponent(r.id) + '/overview" title="' + esc(tip) + '"><span class="g">' + g + '</span><span class="t">' + esc(r.title || r.id) + "</span></a>";
   }
   function recents(skip) {
     listsFor(connKey());
