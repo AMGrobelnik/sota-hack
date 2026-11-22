@@ -186,4 +186,5 @@ def test_graph_rtl_rejects_operations_it_does_not_write():
     ops[2] = NS(opcode=1, addr=(0, 1), data=(2,), qint=NS(kif=(1, 6, 0)))
     comb = NS(ops=ops, out_idxs=[2], inp_kifs=np.array([[0, 0], [4, 4], [0, 0]]), out_kifs=np.array([[1], [6], [0]]))
     text = graph_rtl(comb, "m")
-    assert "module m (" in text and "- ({" in text and "<< 2)" in text and "assign model_out[6:0] = v2;" in text
+    assert "module m (" in text and "assign model_out[6:0] = v2;" in text
+    assert "wire [6:0] s2 = {{3{1'b0}}, v0} - {{{1{1'b0}}, v1}, 2'b0};" in text      # v0 - (v1 << 2), 7 bits

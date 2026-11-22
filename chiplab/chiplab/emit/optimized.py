@@ -78,7 +78,8 @@ def _terms(op) -> tuple[list[tuple[int, int, int]], tuple[int, int] | None]:
 def graph_rtl(comb, mod: str) -> str:
     """Verilog-2005 for a solved adder graph: `module <mod> (model_inp, model_out)`, inputs and outputs packed lane
     by lane, lane 0 in the low bits. Every value is an integer n at its own fraction bits f (value = n * 2**-f);
-    a node's value is computed exactly in a wide word, then floored to its fraction bits and wrapped to its width."""
+    a node's value is the shifted sum of its sources, floored to its fraction bits and wrapped to its width (only the
+    bits that reach the result are added: modular arithmetic)."""
     ops = comb.ops
     kif = [tuple(int(x) for x in op.qint.kif) for op in ops]
     width = [sum(k) for k in kif]
@@ -95,10 +96,12 @@ def graph_rtl(comb, mod: str) -> str:
     out_w = [int(w) for w in np.atleast_1d(np.asarray(comb.out_kifs).sum(axis=0))]
     lines = []
 
-    def ext(j: int, n: int) -> str:                 # source j sign- or zero-extended to n bits
+    def fit(j: int, n: int) -> str:                 # the low n bits of source j, sign- or zero-extended
         w = width[j]
+        if n <= w:
+            return f"v{j}" if n == w else (f"v{j}[{n - 1}:0]" if n > 1 else f"v{j}[0]")
         fill = f"v{j}[{w - 1}]" if kif[j][0] else "1'b0"
-        return f"v{j}" if n == w else f"{{{{{n - w}{{{fill}}}}}, v{j}}}"
+        return f"{{{{{n - w}{{{fill}}}}}, v{j}}}"
 
     for i, op in enumerate(ops):
         bw = width[i]
@@ -118,14 +121,16 @@ def graph_rtl(comb, mod: str) -> str:
         terms = [(s, g, sh) for s, g, sh in terms if width[s] > 0]
         lsb = max([kif[s][2] - sh for s, _, sh in terms] + ([const[1]] if const else []) + [kif[i][2]])
         drop = lsb - kif[i][2]                      # low bits floored away (>= 0)
-        cbits = abs(const[0]).bit_length() + (lsb - const[1]) if const else 0
-        ww = max([width[s] + lsb - kif[s][2] + sh for s, _, sh in terms] + [cbits, drop + bw]) + 2
-        parts = []                                  # (sign, operand), shifts parenthesised (<< binds below +)
+        ww = drop + bw                              # the kept bits depend only on the operands' low ww bits
+        parts = []                                  # (sign, operand at the common lsb, ww bits)
         for s, g, sh in terms:
             e = lsb - kif[s][2] + sh
-            parts.append((g, f"({ext(s, ww)} << {e})" if e else ext(s, ww)))
-        if const and const[0]:
-            parts.append((1, f"{ww}'d{(const[0] << (lsb - const[1])) % (1 << ww)}"))
+            if e < ww:
+                parts.append((g, f"{{{fit(s, ww - e)}, {e}'b0}}" if e else fit(s, ww)))
+        cval = (const[0] << (lsb - const[1])) % (1 << ww) if const else 0
+        if cval:
+            parts.append((1, f"{ww}'d{cval}"))
+        parts.sort(key=lambda p: p[0] < 0)          # a positive term first: no subtraction from zero
         body = f"{ww}'d0"
         for n, (g, t) in enumerate(parts):
             body = t if n == 0 and g > 0 else f"{body} {'+' if g > 0 else '-'} {t}"
