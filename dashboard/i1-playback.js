@@ -30,7 +30,8 @@
  *     it is not 1x), so a moment can be linked. While playing the address stays still.
  * Fast speeds stay smooth by batching: every animation frame folds all events up to the new time in one
  * pass and redraws the bar; the views redraw at most ten times a second, each part only when its own
- * signature changed, and the log adds its new rows in one batch (the newest 400 are kept on screen). */
+ * signature changed, and the message view (../i1-messages.js) is fed the new events in one batch. Scrubbing
+ * back clears that view once and refeeds it the events up to the new time, so no later row is left. */
 (function () {
   "use strict";
 
@@ -40,7 +41,6 @@
   var SNAP_TO_LIVE_S = 2;
   var SNAP_EVERY = 64;
   var VIEW_MS = 100;
-  var LOG_MAX = 400;
   var STAGES = ["spec", "reference", "propose", "finetune", "compile", "verify", "report"];
   var STAGE_N = { spec: "Spec", reference: "Reference", propose: "Propose", finetune: "Fine-tune", compile: "Compile", verify: "Verify", report: "Report" };
   var VIEWS = [["overview", "Overview"], ["log", "Log"], ["files", "Files"]];
@@ -142,16 +142,6 @@
     ".rv-sab .dots i.done{background:var(--blue6)}.rv-sab .dots i.failed{background:#ef4444;border-color:#ef4444}",
     ".rv-sab .dots i.kept{box-shadow:0 0 0 2px #fff,0 0 0 3.5px var(--i900)}",
     ".rv-sab .why{font-size:12px;color:var(--i600);line-height:1.45;margin:2px 0 4px 80px}",
-    ".rv-log{list-style:none;margin:0;padding:0;font-size:13px;line-height:1.5}",
-    ".rv-log li{display:grid;grid-template-columns:48px 1fr;gap:10px;padding:6px 0;border-top:1px solid var(--hair)}",
-    ".rv-log li:first-child{border-top:0}.rv-log .at{font-family:var(--mono);font-size:10.5px;color:var(--i500);padding-top:2px}",
-    ".rv-log .k-status,.rv-log .k-tool,.rv-log .k-stage{color:var(--i600);font-size:12.5px}",
-    ".rv-log .k-err{color:var(--badt)}.rv-log .k-msg b{font-weight:600}",
-    ".rv-log .k-fin{background:var(--i100);border-radius:10px;padding:10px 12px;border:0;margin:6px 0}",
-    ".rv-log .k-fin p{margin:0 0 6px}.rv-log .k-fin ul{margin:4px 0 0;padding-left:18px}",
-    ".rv-logp{max-width:860px;margin:0 auto;padding:18px 24px 72px}",
-    ".rv-logp h2,.rv-files h2{font-family:var(--serif);font-weight:400;font-size:22px;margin:0 0 4px}",
-    ".rv-logp>p,.rv-files>p{font-size:12.5px;color:var(--i600);margin:0 0 12px}",
     ".rv-files{max-width:860px;margin:0 auto;padding:18px 24px 72px}",
     ".rv-f{display:flex;gap:10px;align-items:center;width:100%;text-align:left;padding:9px 10px;border-top:1px solid var(--hair);font-size:13px}",
     ".rv-f:hover{background:var(--i100)}.rv-f svg{width:15px;height:15px;fill:none;stroke:var(--i500);stroke-width:2;flex:none}",
@@ -161,9 +151,13 @@
     ".rv-brief{font-size:13px;color:var(--i700);margin:6px 0 0;line-height:1.5;max-width:860px}",
     ".rv-empty{font-size:12.5px;color:var(--i500)}",
     "@media (max-width:1100px){.rv-grid{grid-template-columns:1fr}}",
+    /* the Overview's message panel: about eight rows on a laptop, beside the chart rather than under it */
+    "@media (min-width:1101px){#rvLast.cm-host-panel{height:min(440px,max(320px,calc(100vh - 440px)))}}",
+    "#rvLast .cm-head{flex-wrap:wrap;row-gap:6px}",
+    "#rvBody.cm-host-page{padding:0 24px}@media (max-width:767px){#rvBody.cm-host-page{padding:0 12px}}",
     /* touch: every control is a 44 px target; on a phone the track takes its own row above the buttons */
     "@media (max-width:767px),(pointer:coarse){.pb-b{width:44px;height:44px}.pb-spd{height:44px;min-width:44px}.pb-live{height:44px;padding:0 12px}}",
-    "@media (max-width:767px){.pb-row{flex-wrap:wrap;padding:2px 6px 0;gap:0 2px}.pb-trk{order:-1;flex:1 0 calc(100% - 16px);height:32px;margin:0 8px}.pb-time{margin:0 auto 0 6px}.rv{padding:12px 12px 72px}.rv-logp,.rv-files{padding:12px 12px 72px}.pb-past .lbl{display:none}}",
+    "@media (max-width:767px){.pb-row{flex-wrap:wrap;padding:2px 6px 0;gap:0 2px}.pb-trk{order:-1;flex:1 0 calc(100% - 16px);height:32px;margin:0 8px}.pb-time{margin:0 auto 0 6px}.rv{padding:12px 12px 72px}.rv-files{padding:12px 12px 72px}.pb-past .lbl{display:none}}",
     "@media (prefers-reduced-motion:reduce){.pb-trk.drag .pb-thumb{transform:translate(-50%,-50%)}}"
   ].join("\n");
   document.head.appendChild(css);
@@ -569,6 +563,16 @@
       e._a = Math.max(0, (w - w0 - skipped) / 1000); prev = w;
     });
     rec.w0 = w0; rec.wLast = prev; rec.skipped = skipped; rec.gaps = gaps;
+    // summaries written after the run (chipin-backend summarise) follow its last event and name in "at" the
+    // newest event they cover: they are placed right after that event, so they arrive as the run reaches it
+    var bySeq = {};
+    rec.events.forEach(function (e) { if (e.type !== "summary") bySeq[e.seq] = e; });
+    rec.events.forEach(function (e) {
+      var to = e.type === "summary" && typeof e.at === "number" ? bySeq[e.at] : null;
+      e._k = to && to._a <= e._a ? e.at + 0.5 : e.seq;
+      if (to && to._a <= e._a) e._a = to._a;
+    });
+    rec.events.sort(function (a, b) { return (a._k - b._k) || (a.seq - b.seq); });
     rec.snaps = [{ n: 0, st: newState() }];
     rec.marks = [];
     var seen = {};
@@ -610,6 +614,10 @@
     return { n: 0, stages: stages, status: "", items: [], messages: 0, tools: {}, toolN: 0, designs: {}, order: [], chips: {}, chipOrder: [], run: {}, chosen: null,
       artifacts: [], cost: null, costSum: 0, subs: {}, subOrder: [], merged: {}, mergedOrder: [], errors: 0, finished: null, evidence: null };
   }
+  // runs recorded before the backend sent ratios as fractions mix 0 to 1 and 0 to 100: a ratio metric (by
+  // name) above 1.5 is a percentage. Every other metric is left as it came.
+  var RATIO = /^(?:[a-z0-9]+_)*(?:accuracy|sensitivity|specificity|precision|recall|f1)(?:_(?:test|train|val|heldout|held_out))?$/;
+  function ratio(k, v) { return RATIO.test(String(k)) && typeof v === "number" && v > 1.5 ? v / 100 : v; }
   function cloneState(s) { return JSON.parse(JSON.stringify(s)); }
   function chipOf(st, id) { if (!st.chips[id]) { st.chips[id] = {}; st.chipOrder.push(id); } return st.chips[id]; }
   function apply(st, ev, i) {
@@ -626,13 +634,15 @@
       case "error": st.errors++; st.items.push(i); break;
       case "design": {
         var d = ev.design || ev.record; if (!d || typeof d.id !== "string") break;
+        if (d.metrics) { var dm = {}; for (var mk in d.metrics) dm[mk] = ratio(mk, d.metrics[mk]); d = Object.assign({}, d, { metrics: dm }); }
         if (d.prev_id && d.prev_id !== d.id && st.designs[d.prev_id]) { delete st.designs[d.prev_id]; st.order = st.order.filter(function (x) { return x !== d.prev_id; }); }
         if (!st.designs[d.id]) st.order.push(d.id);
         st.designs[d.id] = d; break;
       }
       case "metric": {
-        if (typeof ev.chip === "string" && ev.chip) chipOf(st, ev.chip)[ev.key] = ev.value;
-        else st.run[ev.key] = ev.value;
+        var mv = ratio(ev.key, ev.value);
+        if (typeof ev.chip === "string" && ev.chip) chipOf(st, ev.chip)[ev.key] = mv;
+        else st.run[ev.key] = mv;
         break;
       }
       case "chosen": if (typeof ev.chip === "string" && ev.chip) { st.chosen = ev.chip; st.items.push(i); } break;
@@ -700,7 +710,7 @@
   }
 
   /* ---------- the recorded run view ---------- */
-  var V = null; // { rec, view, clock, sig: {}, logN }
+  var V = null; // { rec, view, clock, sig: {}, msgKey, msgN }
   function parse() {
     var m = cleanHash().match(/^#\/rec\/(site|mac)\/([^/]+)(?:\/([a-z]+))?/);
     if (!m) return null;
@@ -725,17 +735,18 @@
   }
   function mountView(rec, view, same) {
     var main = $("#main"), p = hashParts();
-    var keep = same && V && V.clock;
+    var keep = (same || (V && V.rec === rec)) && V && V.clock; // several renders while the file loads build one view
     if (!keep) {
       var total = activeTotal(rec), t = p.t != null && isFinite(p.t) ? clamp(p.t, 0, total) : null;
       var ck = new Clock({ total: total, live: rec.running, t: rec.running ? t : t == null ? total : t, speed: p.speed, playing: false });
       if (rec.running && t == null) ck.atLive = true;
-      V = { rec: rec, view: view, clock: ck, sig: {}, logN: 0 };
-    } else { V.view = view; V.sig = {}; V.logN = 0; }
+      V = { rec: rec, view: view, clock: ck, sig: {}, msgKey: "rec:" + rec.key, msgN: 0 };
+      if (window.ChipInMessages) ChipInMessages.reset(V.msgKey);
+    } else { V.view = view; V.sig = {}; }
     main.innerHTML = '<div class="top"><nav class="tabs" aria-label="Run views">' + VIEWS.map(function (v) {
       return '<a class="tab' + (v[0] === view ? " on" : "") + '" href="#/rec/' + rec.src + "/" + encodeURIComponent(rec.id) + "/" + v[0] + '">' + v[1] + "</a>";
     }).join("") + '</nav><span class="grow" style="flex:1"></span><div class="tright">' + pastLink("run") + '<span class="mk topbadge"></span></div></div>' +
-      '<div class="body" id="rvBody">' + (view === "overview" ? overviewHTML() : view === "log" ? '<div class="rv-logp"><h2>Log</h2><p>What the run said and did, up to the time on the bar. Tool calls are one line each.</p><ul class="rv-log" id="rvLog"></ul></div>' : '<div class="rv-files"><h2>Files</h2><p>Files the run had written by the time on the bar.</p><div id="rvFiles"></div></div>') + "</div>";
+      '<div class="body" id="rvBody">' + (view === "overview" ? overviewHTML() : view === "log" ? '' : '<div class="rv-files"><h2>Files</h2><p>Files the run had written by the time on the bar.</p><div id="rvFiles"></div></div>') + "</div>";
     var ctl = {
       clock: V.clock, marks: rec.marks, gaps: rec.gaps, kind: "recorded",
       refreshTotal: function () { if (rec.running || V.clock.live) { V.clock.total = activeTotal(rec); } },
@@ -744,6 +755,7 @@
     };
     mountBar($(".top", main), ctl);
     if (view === "overview") wireOverview();
+    mountMessages(view);
     if (view === "files") $("#rvFiles").addEventListener("click", function (e) { var b = e.target.closest("[data-path]"); if (b) openFile(b.dataset.path); });
     kick();
   }
@@ -755,8 +767,23 @@
       '<div class="tiles" id="rvTiles"></div>' +
       '<section class="rv-grid"><div class="pan chartp"><div class="chh"><h2 id="rvChH">Designs: chip size against</h2><select class="ys" id="rvY" aria-label="Metric on the chart"></select><span class="grow"></span></div>' +
       '<div class="rv-cw"><canvas id="rvChart" role="img" aria-label="Designs found so far"></canvas></div><div class="legend" id="rvLegend"></div></div>' +
-      '<div class="rv-side"><section class="pan rv-pan rv-sab" id="rvSab"></section><section class="pan rv-pan" id="rvLast"></section></div></section>' +
+      '<div class="rv-side"><section class="pan rv-pan" id="rvLast"></section><section class="pan rv-pan rv-sab" id="rvSab"></section></div></section>' +
       '<div class="fun" id="rvFun"></div><p class="funn" id="rvFunn"></p></div>';
+  }
+  // the message view: the Log tab is the whole view, the Overview's side panel its newest lines
+  function mountMessages(view) {
+    var CM = window.ChipInMessages, rec = V.rec;
+    if (!CM) return;
+    if (view === "log") CM.mount($("#rvBody"), { runId: V.msgKey, mode: "page", title: "Messages" });
+    else if (view === "overview") CM.mount($("#rvLast"), { runId: V.msgKey, mode: "panel", title: "Latest from the agent", more: "#/rec/" + rec.src + "/" + encodeURIComponent(rec.id) + "/log" });
+  }
+  // fed the events up to the time on the bar: forward adds the new ones in one batch, back refeeds the prefix once
+  function feedMessages(M) {
+    var CM = window.ChipInMessages, ev = V.rec.events;
+    if (!CM) return;
+    if (M.n < V.msgN) { CM.reset(V.msgKey); V.msgN = 0; }
+    for (var i = V.msgN; i < M.n; i++) CM.feed(ev[i], V.msgKey);
+    V.msgN = M.n;
   }
   function wireOverview() {
     $("#rvY").onchange = function (e) { V.y = e.target.value; V.sig.chart = ""; kick(); };
@@ -787,7 +814,7 @@
   var PREF_Y = ["sensitivity", "test_accuracy", "accuracy", "specificity", "fa_per_hour", "synthetic_sensitivity_pct", "train_accuracy"];
   var LABEL = { sensitivity: "Sensitivity", specificity: "Specificity", fa_per_hour: "False alarms per hour", test_accuracy: "Test accuracy", train_accuracy: "Train accuracy", accuracy: "Accuracy", power_uw_at_rate: "Power (µW)" };
   var label = function (k) { return LABEL[k] || (k.charAt(0).toUpperCase() + k.slice(1)).replace(/_/g, " "); };
-  var isFrac = function (k, pts) { return /accuracy|sensitivity|specificity|agreement/.test(k) && pts.every(function (p) { return p.m[k] == null || p.m[k] <= 1.0001; }); };
+  var isFrac = function (k, pts) { return (RATIO.test(k) || /accuracy|sensitivity|specificity|agreement/.test(k)) && pts.every(function (p) { return p.m[k] == null || p.m[k] <= 1.0001; }); };
   function fmtM(k, v, pts) { if (v == null) return "not reported"; if (isFrac(k, pts || [])) return (v * 100).toFixed(1) + "%"; return Math.abs(v) >= 100 ? fmtN(v) : String(+(+v).toFixed(3)); }
   function niceTicks(a, b, keep) {
     var span = b - a, raw = span / 4, mag = Math.pow(10, Math.floor(Math.log10(raw))), st = [1, 2, 5, 10].map(function (k) { return k * mag; }).find(function (k) { return k >= raw; }) || raw;
@@ -811,8 +838,8 @@
     paintLabels();
     var M = model(V.rec, t);
     V.last = M;
+    feedMessages(M);
     if (V.view === "overview") paintOverview(M);
-    else if (V.view === "log") paintLog(M);
     else paintFiles(M);
   }
   function once(key, sig, fn) { if (V.sig[key] !== sig) { V.sig[key] = sig; fn(); } }
@@ -859,7 +886,6 @@
     });
     paintChart(M);
     once("sab", JSON.stringify([st.subs, st.merged]), function () { $("#rvSab").innerHTML = sabHTML(st); });
-    once("last", [st.items.length, st.finished && 1].join("|"), function () { $("#rvLast").innerHTML = lastHTML(M); });
     once("fun", [M.pts.length, M.chosen && M.chosen.id, M.pts.filter(function (p) { return p.ver; }).length, M.pts.filter(function (p) { return p.gates != null; }).length, live].join("|"), function () {
       var compiled = M.pts.filter(function (p) { return p.gates != null; }).length, ver = M.pts.filter(function (p) { return p.ver; }).length;
       var S = [["Designs proposed", M.pts.length], ["Compiled to gates", compiled], ["Verified against the model", ver], ["Chosen", st.chosen ? 1 : 0]];
@@ -879,15 +905,6 @@
         var a = st.subs[k]; return '<i class="' + (kept[k] ? "kept " : "") + (a.state === "running" ? "" : a.state) + '" title="' + esc(clip(a.name, 120) + ": " + a.state + (kept[k] ? ", kept" : "")) + '"></i>';
       }).join("") + "</span></div>" + (m ? '<p class="why">Kept ' + esc(m.kept.join(", ") || "none") + (m.why ? ": " + esc(clip(m.why, 160)) : "") + "</p>" : "");
     }).join("");
-  }
-  function lastHTML(M) {
-    var rec = V.rec, st = M.st, ev = rec.events;
-    if (st.finished) {
-      var fe = ev[st.finished.i], b = String(fe.bullets || rec.bullets || "").split("\n").map(function (s) { return s.replace(/^[-*]\s*/, "").trim(); }).filter(Boolean);
-      return "<h2>Summary</h2><p class=\"sub\">The run's own last word, written when it ended (" + esc(st.finished.status) + ").</p><p style=\"font-size:12.5px;line-height:1.5;margin:0\">" + esc(clip(plain(fe.summary || rec.summary || ""), 520)) + "</p>" + (b.length ? '<ul style="font-size:12px;color:var(--i700);line-height:1.5;padding-left:16px;margin:8px 0 0">' + b.map(function (x) { return "<li>" + esc(clip(plain(x), 200)) + "</li>"; }).join("") + "</ul>" : "");
-    }
-    var msgs = st.items.filter(function (i) { return ev[i].type === "message"; }).slice(-2);
-    return "<h2>Latest from the agent</h2>" + (msgs.length ? msgs.map(function (i) { return '<p style="font-size:12.5px;line-height:1.5;margin:0 0 8px;color:var(--i800)">' + esc(clip(plain(ev[i].text), 320)) + "</p>"; }).join("") : '<p class="rv-empty">No message yet.</p>') + '<p style="margin:6px 0 0"><a class="qbtn" href="#/rec/' + rec.src + "/" + encodeURIComponent(rec.id) + '/log">Open the log</a></p>';
   }
   function pickY(M) {
     var seen = {};
@@ -942,47 +959,10 @@
       if (est) { g.strokeStyle = "#6366f1"; g.lineWidth = 1.5; g.stroke(); } else { g.fillStyle = yk && p.m[yk] == null ? "#c3c8d4" : "#6366f1"; g.fill(); }
       if (ch) { g.beginPath(); g.arc(x, y, 9, 0, Math.PI * 2); g.strokeStyle = "#141a2e"; g.lineWidth = 2; g.stroke(); }
     });
-    cv.dataset.n = String(shown.length);
+    cv.dataset.n = String(shown.length); cv.dataset.y = yk || ""; cv.dataset.frac = frac ? "1" : ""; cv.dataset.ys = ys.join(","); // for tests
     cv.setAttribute("aria-label", shown.length + " designs with a size" + (M.chosen ? ", chosen chip " + M.chosen.id : ""));
     var noY = shown.length - withY.length;
     $("#rvLegend").innerHTML = '<span><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="4" fill="#6366f1"/></svg>Size measured</span><span><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="3.5" fill="none" stroke="#6366f1" stroke-width="1.5"/></svg>Size estimated</span><span><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="5" fill="none" stroke="#141a2e" stroke-width="2"/></svg>Chosen chip</span>' + (noY && yk ? '<span><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="4" fill="#c3c8d4"/></svg>' + noY + " without " + esc(label(yk).toLowerCase()) + ", on the floor</span>" : "");
-  }
-  function logRow(rec, i, st) {
-    var e = rec.events[i], at = '<span class="at">' + clock(e._a) + "</span>";
-    switch (e.type) {
-      case "message": return '<li class="k-msg">' + at + "<span><b>" + esc(e.role === "user" ? "You" : e.author || "Agent") + ".</b> " + esc(clip(plain(e.text), 1200)) + "</span></li>";
-      case "status": return '<li class="k-status">' + at + "<span>" + esc(e.text) + "</span></li>";
-      case "stage": return '<li class="k-stage">' + at + "<span>" + esc(STAGE_N[e.stage || e.name] || e.stage) + ": " + esc(e.state === "started" ? "started" : e.state) + (e.reason ? ", " + esc(e.reason) : "") + "</span></li>";
-      case "tool": { var s = st.tools[e.call_id]; return '<li class="k-tool">' + at + "<span>" + esc(clip(e.summary || e.name, 200)) + (s && s.state === "failed" ? ", failed" : s && s.state === "started" ? ", running" : "") + "</span></li>"; }
-      case "error": return '<li class="k-err">' + at + "<span>" + esc(e.message) + "</span></li>";
-      case "chosen": return '<li class="k-status">' + at + "<span>Chosen chip: <b>" + esc(e.chip) + "</b></span></li>";
-      case "artifact": return '<li class="k-status">' + at + "<span>Wrote the report, " + esc(e.path || e.name) + "</span></li>";
-      case "subagent.started": return '<li class="k-tool">' + at + "<span>Subagent " + esc(e.agent || e.id || "") + " started on " + esc(STAGE_N[e.stage] || e.stage || "") + ": " + esc(clip(e.name || e.strategy || "", 140)) + "</span></li>";
-      case "stage.merged": return '<li class="k-stage">' + at + "<span>" + esc(STAGE_N[e.stage] || e.stage) + " merged: kept " + esc((e.kept || []).join(", ")) + (e.why ? ", " + esc(clip(e.why, 200)) : "") + "</span></li>";
-      case "run.finished": {
-        var b = String(e.bullets || rec.bullets || "").split("\n").map(function (x) { return x.replace(/^[-*]\s*/, "").trim(); }).filter(Boolean);
-        return '<li class="k-fin">' + at + "<div><p><b>Run " + esc(e.status) + ".</b> " + esc(plain(e.summary)) + "</p>" + (b.length ? "<ul>" + b.map(function (x) { return "<li>" + esc(plain(x)) + "</li>"; }).join("") + "</ul>" : "") + "</div></li>";
-      }
-      default: return "";
-    }
-  }
-  function paintLog(M) {
-    var ul = $("#rvLog"); if (!ul) return;
-    var st = M.st, items = st.items, rec = V.rec;
-    var toolSig = Object.keys(st.tools).filter(function (k) { return st.tools[k].state !== "done"; }).join(",");
-    if (items.length < V.logN || V.logTools !== toolSig) V.logN = 0; // back in time, or a tool's state moved: redraw
-    V.logTools = toolSig;
-    var start = Math.max(V.logN, items.length - LOG_MAX);
-    if (V.logN === 0 || start > V.logN) ul.innerHTML = "";
-    if (items.length > start) {
-      var atBottom = $("#rvBody") && $("#rvBody").scrollHeight - $("#rvBody").scrollTop - $("#rvBody").clientHeight < 40;
-      var html = ""; for (var i = start; i < items.length; i++) html += logRow(rec, items[i], st);
-      ul.insertAdjacentHTML("beforeend", html);
-      while (ul.children.length > LOG_MAX) ul.firstChild.remove();
-      if (atBottom && V.clock.advancing()) $("#rvBody").scrollTop = $("#rvBody").scrollHeight;
-    }
-    V.logN = items.length; ul.dataset.n = String(items.length);
-    if (!items.length && !ul.children.length) ul.innerHTML = '<li><span class="at">0:00</span><span class="rv-empty">Nothing yet at this point in the run.</span></li>';
   }
   function paintFiles(M) {
     var el = $("#rvFiles"); if (!el) return;

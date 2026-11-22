@@ -11,7 +11,7 @@
  *                       "page":  the container itself scrolls; the run summary stays pinned on top
  *       options.title   heading of the panel (default "Messages")
  *   ChipInMessages.feed(event, runId?)        one stream event (any type; unknown ones are ignored)
- *   ChipInMessages.reset()                    forget every run and clear the view
+ *   ChipInMessages.reset(runId?)              forget one run (keeping what is open), or every run
  *   ChipInMessages.state(runId?)              counts per level and what is open (for tests)
  *
  * Levels, top down (the backend's "summary" events: id, level, covers, parent, agent, stage,
@@ -82,7 +82,7 @@
     var seq = typeof ev.seq === "number" ? ev.seq : null;
     if (ev.type === "summary") {
       if (typeof ev.id !== "string" || !ev.level) return;
-      if (!newer(S.sums[ev.id], ev)) return;
+      if (!newer(S.sums[ev.id] && S.sums[ev.id].s, ev)) return;
       var o = S.sums[ev.id];
       S.sums[ev.id] = { s: ev, at: o ? o.at : ++S.sumOrder };
       S.v++; dirty(S); return;
@@ -148,7 +148,7 @@
   // A run summarised after it ran (chipin-backend summarise) has its levels only in summaries.jsonl.
   function fetchSummaries(S) {
     var L = window.ChipInLive;
-    if (S.fetched || !L || !L.base || !L.token || !S.id) return;
+    if (S.fetched || !L || !L.base || !L.token || !S.id || /^rec:/.test(S.id)) return; // a playback ("rec:...") feeds its own summaries
     S.fetched = true;
     fetch(L.base + "/api/runs/" + encodeURIComponent(S.id) + "/summaries", { headers: { "X-ChipIn-Token": L.token }, cache: "no-store" })
       .then(function (r) { return r.ok ? r.json() : { summaries: [] }; })
@@ -297,7 +297,14 @@
     if (S.finished) fetchSummaries(S);
     return { runId: S.id };
   }
-  function reset() {
+  // reset(runId) forgets one run but keeps what its reader opened (a playback scrubbing back refeeds it)
+  function reset(runId) {
+    if (runId != null) {
+      var old = RUNS[runId]; delete RUNS[runId];
+      var S = store(runId); if (old) S.ui = old.ui;
+      if (MV && MV.S === old) { MV.S = S; dirty(S); }
+      return;
+    }
     RUNS = {};
     if (MV && MV.root) { MV.list.innerHTML = ""; MV.sig = {}; MV.S = store(MV.opts.runId); paint(); }
   }
@@ -377,7 +384,7 @@
     var anchor = M.follow && !S.finished ? null : takeAnchor(M);
     // header: live mark, filters, ladder
     var live = M.root.querySelector(".cm-live");
-    var lv = S.finished ? (S.status === "succeeded" ? "Finished" : S.status ? cap(S.status) : "Finished") : S.rawOrder.length || S.t0 ? "Live" : "";
+    var lv = S.finished ? (S.status === "succeeded" ? "Finished" : S.status ? cap(S.status) : "Finished") : /^rec:/.test(S.id) ? "" : S.rawOrder.length || S.t0 ? "Live" : ""; // a playback is not live
     if (live.textContent !== lv) { live.textContent = lv; live.hidden = !lv; live.className = "cm-live" + (S.finished ? " cm-done" : ""); }
     var stages = Object.keys(T.N).filter(function (id) { return T.N[id].level === "stage"; }).map(function (id) { return T.N[id]; }).sort(function (a, b) { return STAGES.indexOf(a.name) - STAGES.indexOf(b.name); });
     var fsHTML = '<option value="">All stages</option>' + stages.map(function (n) { return '<option value="' + esc(n.name) + '"' + (ui.stage === n.name ? " selected" : "") + ">" + esc(STAGE_N[n.name] || n.name) + "</option>"; }).join("");
@@ -404,7 +411,7 @@
     var empty = M.root.querySelector(".cm-empty"), et = "";
     if (!T.N.run.kids || !T.N.run.kids.length) {
       var L = window.ChipInLive;
-      et = S.finished ? "This run logged no messages or tool calls." : S.t0 ? "Waiting for the agent's first message." :
+      et = S.finished ? "This run logged no messages or tool calls." : /^rec:/.test(S.id) && !S.t0 ? "Nothing yet at this point in the run." : S.t0 ?"Waiting for the agent's first message." :
         L && (L.status === "connected" || L.token) ? "Waiting for the run's stream." :
         "No run is connected. Start the backend on this computer with chipin-backend serve, open the link it prints, then start a run or open one of its runs: every message and tool call appears here with its summary as it streams.";
     } else if (!M.list.firstChild) et = "Nothing here matches the filter.";
@@ -471,6 +478,7 @@
     if (expandable) { row.type = "button"; row.setAttribute("data-act", "toggle"); row.setAttribute("aria-expanded", String(!!open)); if (head.label) row.setAttribute("aria-label", head.label); }
     el.className = "cm-n cm-n-" + n.level + (n.raw && n.raw.kind === "user" ? " cm-n-you" : "");
     el.setAttribute("role", "treeitem");
+    if (n.sum) el.setAttribute("data-s", String(n.sum.seq != null ? n.sum.seq : "")); else el.removeAttribute("data-s"); // the summary drawn on this row
     if (expandable) el.setAttribute("aria-expanded", String(!!open)); else el.removeAttribute("aria-expanded");
     var box = row.nextElementSibling;
     if (!open) { if (box) el.removeChild(box); return; }
@@ -591,6 +599,8 @@
     ".cm-host-panel{display:flex;flex-direction:column;padding:0!important;min-height:0}",
     ".cm{position:relative;display:flex;flex-direction:column;min-height:0;font-size:12.5px;color:var(--i700,#3a4052)}",
     "@media (min-width:1101px){.lv-ov .side .lv-log:has(.cm-host-panel){flex:2.6 1 0}}",
+    /* a live Overview: the log shows about eight rows beside the chart, so the side column may outgrow the chart's height */
+    "@media (min-width:1101px){.lv-ov .cgrid2:has(.cm-host-panel)>.chartp{align-self:start}.lv-ov .side:has(.cm-host-panel){min-height:660px}.lv-ov .side .lv-log:has(.cm-host-panel){min-height:490px}}",
     ".cm-panel .cm-live{display:none}.cm-panel .cm-head{padding:0 12px 5px}.cm-panel .cm-ladder{padding:0 12px 6px;gap:1px 8px}.cm-panel .cm-sum{display:flex;align-items:baseline;gap:6px;padding:6px 12px 7px}.cm-panel .cm-sl{flex:none;margin:0}.cm-panel .cm-st{flex:1;min-width:0;line-height:1.4;-webkit-line-clamp:1!important}.cm-panel .cm-st.cm-all{-webkit-line-clamp:unset!important}.cm-panel .cm-more{flex:none;padding:0}.cm-panel .cm-sum:has(.cm-all){flex-wrap:wrap}.cm-panel .cm-lt{display:none}",
     ".cm-all-l{margin-left:auto;font-size:11.5px;color:var(--blue7,#2b55d0);text-decoration:none;white-space:nowrap}.cm-all-l:hover{text-decoration:underline}",
     ".cm-panel{flex:1;padding-top:10px}.cm-panel .cm-scroll{flex:1;overflow:auto;min-height:0;padding:4px 10px 14px 10px;overscroll-behavior:contain}",
