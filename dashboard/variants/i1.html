@@ -818,7 +818,8 @@ select.gfin{padding:0 10px}
 <script src="../i1-playback.js"></script>
 <!-- CHIPPY HOOK: the helper panel (corner button, side panel, example prompts, page actions) lives in ../i1-chippy.js -->
 <script src="../i1-chippy.js"></script>
-<script src="../i1-questions.js"></script><!-- QUESTIONS HOOK: follow-up questions from a connected backend, one extra step before the spec card (window.ChipInQuestions) -->
+<script src="../i1-questions.js"></script>
+<script src="../i1-search.js"></script><!-- SEARCH HOOK: the five search steps between Run and the run view, replayed on examples (window.ChipInSearch) --><!-- QUESTIONS HOOK: follow-up questions from a connected backend, one extra step before the spec card (window.ChipInQuestions) -->
 <script type="module">
 "use strict";
 /* =====================================================================
@@ -2086,6 +2087,7 @@ function flowAct(s, a, el) {
 function startFromSpec() {
   if (window.ChipInLive?.i1?.start(SPEC, () => { SPEC = null; flowSave(); startState.text = ""; })) return; /* LIVE HOOK: a connected backend runs it for real */
   const s = SPEC;
+  const open = (run, fresh) => { const to = () => go(`#/run/${run.id}/overview`); if (window.ChipInSearch) ChipInSearch.play(run, s, { files: MEASURED, designs: designsOf(run).designs, sim: isSim(run), names: Object.fromEntries(MET_KEYS.map(k => [k, tName(k)])), dropped: dropped.map(t => MET[t.metric].name), fresh, to, save: saveRuns }); else to(); }; /* SEARCH HOOK: the search steps replay before the run view (../i1-search.js) */
   let targets = s.targets.filter(t => t.value != null).map(t => ({ metric: t.metric, op: t.op, value: t.value }));
   const dropped = s.case === "neonatal-eeg" && MEASURED.eeg ? targets.filter(t => !inMeasured(t.metric)) : [];
   targets = targets.filter(t => !dropped.includes(t));
@@ -2098,13 +2100,13 @@ function startFromSpec() {
     const c = CASES.af, run = makeRun({ case: "af", title: s.device ? capFirst(s.device) : c.title, device: s.device || c.device, signal: s.signal || c.signal, detect: s.detect || c.detect, task: "screening", targets, primary, data: { mode: "public", files: [] }, brief: s.brief, ...common });
     runs.unshift(run); saveRuns();
     SPEC = null; flowSave(); startState.text = "";
-    go(`#/run/${run.id}/overview`); return;
+    open(run, true); return;
   }
   if (s.case === "af") {
     const af = runs.find(r => r.case === "af");
     Object.assign(af, common, { targets, primary }); af.ui.sel = null; saveRuns();
     SPEC = null; flowSave(); startState.text = "";
-    go(`#/run/${af.id}/overview`); return;
+    open(af, false); return;
   }
   const c = CASES[s.case];
   const o = { case: s.case, title: s.device ? capFirst(s.device) : (c ? c.title : s.brief.slice(0, 60) + (s.brief.length > 60 ? "…" : "")), device: s.device, signal: s.signal, detect: s.detect, task: s.task, targets, primary, preset: s.preset, agent: { ...s.agent }, data: { mode: s.data || "sim", files: s.files, dataset: s.data === "public" ? s.ds || null : null }, brief: s.brief, ...common };
@@ -2112,7 +2114,7 @@ function startFromSpec() {
   const run = makeRun(o);
   runs.unshift(run); saveRuns();
   SPEC = null; flowSave(); startState.text = "";
-  go(`#/run/${run.id}/overview`);
+  open(run, true);
 }
 // Run settings: the spec card stored on the run
 const specRowsHTML = run => run.specCard ? `<h4 class="gsh">Your spec</h4>${run.specCard.map(([k, v]) => `<div class="kv"><span>${esc(k)}</span><span>${esc(v)}</span></div>`).join("")}` : "";
@@ -2671,7 +2673,7 @@ function headAF(run, v) {
     h1 = !run.targets.length ? `The circuit that was built has ${g} gates. Set a target to judge it.` : no.length ? `The ${g}-gate circuit that was built misses your ${andList(no)} target${yes.length ? ` and clears ${andList(yes)}` : ""}.` : `The ${g}-gate circuit that was built clears every target you set.`;
     if (no.length) k1 = `It matched its own model on every test window, so the gap is in the model, not the hardware. The full-precision model reached ${baseWords()}${baseClears(run) ? ", which clears your bar: a better-trained model, not a bigger chip, is the next step" : ""}.`;
     else if (run.targets.length) k1 = `Judged on ${fmt(AF_DESIGN.counts.patients)} test recordings, ${afScopeWord(MEASURED.af.testScope)}.`;
-  } else if (!v.vis.length) h1 = `Reading your brief. The search's ${fmt(N)} real candidate designs arrive next.`;
+  } else if (!v.vis.length) h1 = `Replaying the search. Its ${fmt(N)} real candidate designs arrive next.`;
   else if (v.vis.length < N) h1 = `${fmt(v.vis.length)} of ${fmt(N)} real candidate designs, scored on validation recordings.`;
   else h1 = `${fmt(N)} real candidate designs. Replaying how one was chosen and built.`;
   const chips = run.targets.map((t, i) => { const s = fin ? targetState(run, AF_DESIGN)[i] : null; return `<button class="tgt${t.metric === run.primary ? " pri" : ""}" data-t="${i}" aria-haspopup="dialog" aria-expanded="false" title="Change this target">${esc(MET[t.metric].name)} ${fmtTarget(t)} ${s ? pfHTML(s.ok) : ""}</button>`; }).join("");
