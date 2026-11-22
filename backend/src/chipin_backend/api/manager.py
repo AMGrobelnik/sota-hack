@@ -9,6 +9,8 @@ started through the backend's own runner, plus:
     progress.jsonl      # what the agent reported through ./progress
     evidence.json/.md   # number check, weight bytes, stage timings (see evidence.py)
     workspace/brief.md  # the user's brief, answers and attached-file list
+    workspace/spec.json # the user's structured spec, when the request has one (spec.py)
+    designs.json        # the latest record per candidate design (designs.py)
     workspace/progress  # the progress helper
 
 Run defaults: the Claude agent backend (``claude_cli``) and the local
@@ -35,6 +37,7 @@ from chipin_backend.api.events import API_EVENTS_FILE, EventLog
 from chipin_backend.api.progress import PROGRESS_FILE, ProgressTailer, write_helper
 from chipin_backend.api.scripted import NAME as SCRIPTED
 from chipin_backend.api.scripted import STEP_ENV, register
+from chipin_backend.api.spec import RunSpec, SpecError, parse_spec, spec_instructions, write_spec
 from chipin_backend.api.translate import Translator, clip
 from chipin_backend.chiplab import chiplab_available, chiplab_instructions
 from chipin_backend.compute.base import Runner
@@ -208,6 +211,7 @@ class RunManager:
     def start(self, body: dict[str, Any]) -> ApiRun:
         """Validate a ``POST /api/runs`` body, make the run folder and start the agent."""
         prompt, preset, machine, answers, files = _validate(body, self.api)
+        run_spec = _run_spec(body, self.api)
         provider, model = self._provider_choice(body)
         if len(self.running()) >= self.config.compute.max_concurrent_agents:
             raise RequestError("too many runs in progress; stop one first", status=429)
@@ -218,6 +222,8 @@ class RunManager:
         run = replace(run, sink=translator)
         write_helper(run.workspace, run.path / PROGRESS_FILE)
         (run.workspace / "brief.md").write_text(_brief(prompt, answers, files), encoding="utf-8")
+        if run_spec is not None:
+            write_spec(run.workspace, run_spec)
         record: dict[str, Any] = {
             "id": run.run_id,
             "prompt": prompt,
@@ -235,16 +241,22 @@ class RunManager:
         item.save()
         spec = AgentSpec(
             name="chipin",
-            prompts=[_first_prompt(prompt)],
+            prompts=[f"{run_spec.block}\n\n{_first_prompt(prompt)}" if run_spec else _first_prompt(prompt)],
             backend=AGENT_BACKENDS[self.agent],  # type: ignore[arg-type]
             model=model,
             provider=provider,
             effort=self.api.presets[preset] if preset else None,
-            system_prompt=self.instructions if self.agent == "claude" else None,
+            system_prompt=_with_spec(self.instructions, run_spec) if self.agent == "claude" else None,
             timeout_s=self.api.run_timeout_s,
             env={STEP_ENV: str(self.api.stub_step_s)} if self.agent == "stub" else {},
         )
-        log.append("run.started", prompt=prompt, agent=self.agent, runner=self.runner)
+        log.append(
+            "run.started",
+            prompt=prompt,
+            agent=self.agent,
+            runner=self.runner,
+            spec=run_spec.to_json() if run_spec else None,
+        )
         self.runs[item.id] = item
         item.task = asyncio.create_task(self._drive(item, spec, translator), name=f"run-{item.id}")
         logger.info("run {} started: agent={} runner={} preset={}", item.id, self.agent, self.runner, preset)
@@ -388,6 +400,21 @@ def standing_instructions(source: Mapping[str, str] | None = None) -> str:
     if chiplab_available(source):
         text = f"{text.rstrip()}\n\n{chiplab_instructions()}"
     return text
+
+
+def _run_spec(body: dict[str, Any], api: ApiConfig) -> RunSpec | None:
+    """The request's ``spec``, checked (``None`` when absent); a bad one is a 400 naming the field."""
+    if body.get("spec") is None:
+        return None
+    try:
+        return parse_spec(body["spec"], api.datasets)
+    except SpecError as exc:
+        raise RequestError(str(exc)) from None
+
+
+def _with_spec(instructions: str, run_spec: RunSpec | None) -> str:
+    """The standing instructions, plus the spec and design-record paragraph for a run with a spec."""
+    return f"{instructions.rstrip()}\n\n{spec_instructions()}" if run_spec else instructions
 
 
 def _bullets(result: AgentResult) -> str | None:

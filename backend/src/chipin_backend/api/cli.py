@@ -21,7 +21,14 @@ def add_serve_parser(
     """Register ``serve``; ``common`` adds ``--config`` and ``--env-file``."""
     serve_p = sub.add_parser("serve", parents=[common], help="serve the local API for the ChipIn dashboards")
     serve_p.add_argument("--port", type=int, default=None, help="default: api.yaml port (8797)")
-    serve_p.add_argument("--frontend", type=Path, default=None, help="static folder to serve at /")
+    serve_p.add_argument(
+        "--site",
+        "--frontend",
+        dest="frontend",
+        type=Path,
+        default=None,
+        help="a checkout of the site: served at / from the same origin as the API",
+    )
     serve_p.add_argument(
         "--agent",
         choices=["claude", "stub", "openrouter"],
@@ -39,7 +46,7 @@ def add_serve_parser(
 def run_serve(args: argparse.Namespace, config: BackendConfig) -> int:
     """Start the server, print the ready-to-open link, serve until SIGINT or SIGTERM."""
     if args.frontend is not None and not args.frontend.is_dir():
-        logger.error("--frontend {} is not a folder", args.frontend)
+        logger.error("--site {} is not a folder", args.frontend)
         return 2
     api = load_api_config()
     if args.stub_step is not None:

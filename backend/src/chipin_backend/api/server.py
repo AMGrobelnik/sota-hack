@@ -3,8 +3,9 @@
 127.0.0.1 only. Every ``/api`` request carries the session token in the
 ``X-ChipIn-Token`` header (the event stream may pass it as ``?token=``, as
 ``EventSource`` cannot set headers); ``/api/health`` needs none. CORS is
-granted to https://chipin.space and to http://127.0.0.1 and http://localhost
-on any port, nothing else; a request from any other origin is refused.
+granted to the origins in ``api.yaml``'s ``allowed_origins`` (by default
+https://chipin.space and http://127.0.0.1, http://localhost and http://[::1]
+on any port), nothing else; a request from any other origin is refused.
 
 Routes::
 
@@ -14,6 +15,7 @@ Routes::
     GET  /api/runs/{id}
     GET  /api/runs/{id}/events?token=...&from=<seq>   (text/event-stream)
     GET  /api/runs/{id}/evidence     -> the run's evidence (409 while it runs)
+    GET  /api/runs/{id}/designs      -> {"designs": [...], "chosen"} latest record per design
     POST /api/runs/{id}/messages     -> 202
     POST /api/runs/{id}/stop         -> 202
     GET  /api/runs/{id}/files        -> {"files": [{"path", "size"}]} the agent's working folder
@@ -38,6 +40,7 @@ from aiohttp import web
 from loguru import logger
 
 from chipin_backend.api.config import ApiConfig
+from chipin_backend.api.designs import designs_view
 from chipin_backend.api.manager import ApiAgent, ApiRunner, RequestError, RunManager
 from chipin_backend.api.transcribe import CONTEXT_HEADER, add_transcribe_route, transcribe_ready
 from chipin_backend.config import BackendConfig
@@ -60,9 +63,24 @@ FRONTEND = web.AppKey("frontend", Path)
 Handler = Callable[[web.Request], Awaitable[web.StreamResponse]]
 
 
-def origin_allowed(origin: str | None) -> bool:
-    """Whether ``origin`` may call the API from a browser."""
-    return bool(origin) and ALLOWED_ORIGIN_RE.match(origin or "") is not None
+def origin_allowed(origin: str | None, allowed: list[str] | None = None) -> bool:
+    """Whether ``origin`` may call the API from a browser.
+
+    ``allowed`` is ``api.yaml``'s ``allowed_origins`` (an entry ending in ``:*``
+    allows that origin on any port); ``None`` keeps the built-in rule.
+    """
+    if not origin:
+        return False
+    if allowed is None:
+        return ALLOWED_ORIGIN_RE.match(origin) is not None
+    for entry in allowed:
+        base = entry.removesuffix(":*")
+        if origin in (entry, base):
+            return True
+        port = origin.removeprefix(f"{base}:")
+        if entry.endswith(":*") and port != origin and port.isdigit() and len(port) <= 5:
+            return True
+    return False
 
 
 def _json(data: Any, status: int = 200) -> web.Response:
@@ -79,7 +97,7 @@ async def guard(request: web.Request, handler: Handler) -> web.StreamResponse:
     if not request.path.startswith("/api/"):
         return await handler(request)
     origin = request.headers.get("Origin")
-    if origin is not None and not origin_allowed(origin):
+    if origin is not None and not origin_allowed(origin, request.app[SETTINGS].allowed_origins):
         return _error("origin not allowed", 403)
     if request.method == "OPTIONS":
         return web.Response(status=204)
@@ -98,7 +116,9 @@ async def guard(request: web.Request, handler: Handler) -> web.StreamResponse:
 async def _cors_headers(request: web.Request, response: web.StreamResponse) -> None:
     """Grant CORS to an allowed origin, on every response including streams."""
     origin = request.headers.get("Origin")
-    if not request.path.startswith("/api/") or not origin_allowed(origin):
+    if not request.path.startswith("/api/") or not origin_allowed(
+        origin, request.app[SETTINGS].allowed_origins
+    ):
         return
     response.headers["Access-Control-Allow-Origin"] = origin or ""
     response.headers["Vary"] = "Origin"
@@ -161,6 +181,12 @@ async def get_evidence(request: web.Request) -> web.Response:
         logger.exception("run {}: evidence not computed", item.id)
         return _error(f"the evidence could not be computed ({type(exc).__name__})", 500)
     return _json(evidence)
+
+
+async def get_designs(request: web.Request) -> web.Response:
+    """The latest record of every candidate design the agent scored, and the chosen one."""
+    item = request.app[MANAGER].get(request.match_info["run_id"])
+    return _json(designs_view(item.run.path, item.log))
 
 
 async def post_message(request: web.Request) -> web.Response:
@@ -299,6 +325,7 @@ def create_app(
     app.router.add_get("/api/runs/{run_id}", get_run)
     app.router.add_get("/api/runs/{run_id}/events", stream_events)
     app.router.add_get("/api/runs/{run_id}/evidence", get_evidence)
+    app.router.add_get("/api/runs/{run_id}/designs", get_designs)
     app.router.add_post("/api/runs/{run_id}/messages", post_message)
     app.router.add_post("/api/runs/{run_id}/stop", stop_run)
     app.router.add_get("/api/runs/{run_id}/files", list_files)

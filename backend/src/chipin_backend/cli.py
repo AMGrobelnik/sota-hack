@@ -87,6 +87,12 @@ def _parser() -> argparse.ArgumentParser:
         help="run it as the dashboard does, on this Mac: standing instructions, ./progress, "
         "contract events.jsonl; the prompts are joined into one brief",
     )
+    run.add_argument(
+        "--spec-file",
+        type=Path,
+        default=None,
+        help="with --preset: the run's spec as a JSON file (see README)",
+    )
     ask = sub.add_parser("ask", parents=[common], help="one OpenRouter chat call; prints the answer")
     ask.add_argument("question")
     ask.add_argument("--model", default=None, help="preset name or model id of the provider")
@@ -153,6 +159,9 @@ def _main(argv: list[str] | None) -> int:
         logger.error("give at least one --prompt or --prompt-file")
         return 2
     backend = args.backend
+    if args.spec_file is not None and args.preset is None:
+        logger.error("--spec-file needs --preset (it runs the way the dashboard does)")
+        return 2
     if args.preset is not None:
         return asyncio.run(_dashboard_run(config, args, prompts))
     if args.provider is not None:
@@ -240,6 +249,8 @@ async def _dashboard_run(config: BackendConfig, args: argparse.Namespace, prompt
         api = api.model_copy(update={"run_timeout_s": args.timeout})
     body: dict[str, Any] = {"prompt": "\n\n".join(prompts), "preset": args.preset}
     body.update({k: v for k, v in (("provider", args.provider), ("model", args.model)) if v is not None})
+    if args.spec_file is not None:
+        body["spec"] = json.loads(args.spec_file.read_text(encoding="utf-8"))
     manager = RunManager(config, api, agent=agent, summary=not args.no_summary)
     try:
         item = manager.start(body)

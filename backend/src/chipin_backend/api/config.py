@@ -32,6 +32,17 @@ class ApiConfig(BaseModel):
         default_factory=lambda: {"lite": "low", "pro": "high", "max": "xhigh", "ultra": "max"}
     )
     transcribe: TranscribeConfig = Field(default_factory=TranscribeConfig)
+    #: Browser origins that may call the API; ``:*`` at the end allows any port.
+    allowed_origins: list[str] = Field(
+        default_factory=lambda: [
+            "https://chipin.space",
+            "http://127.0.0.1:*",
+            "http://localhost:*",
+            "http://[::1]:*",
+        ]
+    )
+    #: Public dataset name (a spec's ``data.dataset``) -> a local folder holding it.
+    datasets: dict[str, Path] = Field(default_factory=dict)
 
 
 def load_api_config(path: Path = API_CONFIG_PATH) -> ApiConfig:
