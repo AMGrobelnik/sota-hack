@@ -201,7 +201,8 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 | `status`                       | one "ChipIn is ..." line     |
 | `message`                      | agent or user text           |
 | `tool`                         | a tool call, started or done |
-| `metric`                       | `key` and `value`            |
+| `metric`                       | `key`, `value`, opt. `chip`  |
+| `chosen`                       | `chip`: the run's chosen one |
 | `artifact`                     | a file, such as the report   |
 | `cost`                         | agent cost and tokens        |
 | `error`                        | what went wrong              |
@@ -212,7 +213,11 @@ Stages, in order: `spec`, `reference`, `propose`, `finetune`, `compile`,
 carries a short reason. The agent reports them with `./progress` in its
 working folder. `run.finished` carries the agent's last message as
 `summary` and, when OpenRouter wrote one, the three-bullet run summary as
-`bullets`. Presets map to agent effort: `lite`, `pro`, `max`, `ultra`.
+`bullets`. `./progress metric <key> <number> [unit] --chip <design_id>`
+(the flag after the number or the unit) adds `chip` to the metric event,
+naming the design the number measures; without it the event is as before.
+`./progress chosen <design_id>` writes a `chosen` event with `chip`, the
+run's chosen chip; a later one replaces an earlier one. Presets map to agent effort: `lite`, `pro`, `max`, `ultra`.
 A run cut short ends `stopped`, its summary saying whether the user
 stopped it or the server was shut down.
 
@@ -267,6 +272,10 @@ Point the backend at a lab install (in the environment, `backend/.env` or
   (or the lab's `.venv/bin`), and `CHIPLAB_CONFIG` / `CHIPLAB_USER_DIR` to
   where its config and tools are. The folder goes first on the agent's
   `PATH`; the two lab variables pass through the allowlist unchanged.
+- When the lab is on, the agent also gets `CHIPIN_PROGRESS_CHIP=1`, which
+  tells the lab that `./progress` takes `--chip` and `chosen`; the lab
+  then tags each metric with its design and `chip-report` names the chosen
+  chip.
 - With none of this the lab is off: the agent's environment and
   instructions are as before. A `CHIPIN_CHIPLAB_BIN` with no executable
   `chiplab` in it logs one warning and leaves the lab off.
@@ -280,8 +289,8 @@ guide). The agent calls `chiplab <tool> --json '{...}'` from its working
 folder: compile (`ingest-model` or `compile-ir`, `synthesize`,
 `count-luts`, `map-to-process`), verify (`simulate`, `prove-equivalence`,
 `rtl-simulate`, `verification-level`) and the chip part of report
-(`chip-report`, `layout`, `timing-power`, `tt-package`, `bitstream`,
-`estimate-cost`). It marks the compile and verify stages itself, or passes
+(`layout`, `timing-power`, `tt-package`, `bitstream`, `estimate-cost`,
+and always `chip-report` on the one chosen chip before report is done). It marks the compile and verify stages itself, or passes
 `"progress_stages": true`.
 
 What reaches the dashboard: the lab runs `./progress` as a program, so

@@ -12,6 +12,10 @@ only has to let the agent reach the lab:
   install outside ``~/.chiplab`` and ``~/.config/chiplab``. They are paths,
   not secrets, and pass to the agent unchanged when set.
 
+When the lab is on, the agent also gets ``CHIPIN_PROGRESS_CHIP=1``: the
+``./progress`` helper takes ``metric ... --chip <design_id>`` and
+``chosen <design_id>``, so the lab tags each number with its chip.
+
 With none of these set, the lab counts as present only when ``chiplab`` is
 already on the agent's ``PATH`` (the lab's default install puts it in
 ``~/.local/bin``). Otherwise it is off: the agent's environment and
@@ -32,6 +36,9 @@ CHIPLAB_BIN_ENV = "CHIPIN_CHIPLAB_BIN"
 #: The lab's own variables, passed to the agent when set.
 CHIPLAB_PASSED_NAMES: tuple[str, ...] = ("CHIPLAB_CONFIG", "CHIPLAB_USER_DIR")
 CHIPLAB_COMMAND = "chiplab"
+#: Set to ``1`` for the agent when the lab is on: this backend's ``./progress``
+#: takes ``metric ... --chip <design_id>`` and ``chosen <design_id>``.
+PROGRESS_CHIP_ENV = "CHIPIN_PROGRESS_CHIP"
 #: The paragraph added to the agent's standing instructions when the lab is on.
 CHIPLAB_INSTRUCTIONS_PATH = Path(__file__).parent / "api" / "chiplab.md"
 
@@ -58,7 +65,7 @@ def chiplab_env(source: Mapping[str, str] | None = None) -> dict[str, str]:
         path = os.pathsep.join(p for p in (str(command.parent), path) if p)
     elif not path or shutil.which(CHIPLAB_COMMAND, path=path) is None:
         return {}
-    env = {"PATH": path}
+    env = {"PATH": path, PROGRESS_CHIP_ENV: "1"}
     env.update({name: src[name] for name in CHIPLAB_PASSED_NAMES if src.get(name)})
     return env
 
@@ -78,6 +85,7 @@ __all__ = [
     "CHIPLAB_COMMAND",
     "CHIPLAB_INSTRUCTIONS_PATH",
     "CHIPLAB_PASSED_NAMES",
+    "PROGRESS_CHIP_ENV",
     "chiplab_available",
     "chiplab_env",
     "chiplab_instructions",

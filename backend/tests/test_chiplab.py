@@ -27,7 +27,13 @@ from chipin_backend.api.events import EventLog
 from chipin_backend.api.manager import RunManager, standing_instructions
 from chipin_backend.api.progress import ProgressTailer, write_helper
 from chipin_backend.api.server import TOKEN_HEADER, create_app
-from chipin_backend.chiplab import CHIPLAB_BIN_ENV, chiplab_available, chiplab_env, chiplab_instructions
+from chipin_backend.chiplab import (
+    CHIPLAB_BIN_ENV,
+    PROGRESS_CHIP_ENV,
+    chiplab_available,
+    chiplab_env,
+    chiplab_instructions,
+)
 from chipin_backend.cli import main
 from chipin_backend.config import BackendConfig
 
@@ -180,6 +186,7 @@ def test_lab_off_by_default(tmp_path: Path) -> None:
     env = build_agent_env(base=base)
     assert env["PATH"] == "/usr/bin:/bin"
     assert "CHIPLAB_CONFIG" not in env
+    assert PROGRESS_CHIP_ENV not in env
     assert "Chip lab" not in standing_instructions(base)
 
 
@@ -189,6 +196,7 @@ def test_lab_bin_puts_chiplab_on_the_agent_path(tmp_path: Path) -> None:
     assert env["PATH"] == f"{tmp_path / 'lab-bin'}:/usr/bin:/bin"
     assert env["CHIPLAB_CONFIG"] == base["CHIPLAB_CONFIG"]
     assert env["CHIPLAB_USER_DIR"] == base["CHIPLAB_USER_DIR"]
+    assert env[PROGRESS_CHIP_ENV] == "1"
     assert not {"RUNPOD_API_KEY", "DOCKER_HOST", CHIPLAB_BIN_ENV} & env.keys()
     proc = subprocess.run(
         ["chiplab", "agent-doc"], env=env, cwd=tmp_path, capture_output=True, text=True, timeout=30
@@ -205,7 +213,7 @@ def test_lab_bin_without_a_command_leaves_the_lab_off(tmp_path: Path) -> None:
 def test_default_install_on_path_counts_as_present(tmp_path: Path) -> None:
     _fake_lab(tmp_path / "local-bin")
     base = {"PATH": f"{tmp_path / 'local-bin'}:/bin"}
-    assert chiplab_env(base) == {"PATH": base["PATH"]}
+    assert chiplab_env(base) == {"PATH": base["PATH"], PROGRESS_CHIP_ENV: "1"}
     assert chiplab_available(base)
 
 
@@ -224,6 +232,14 @@ def test_instructions_carry_the_lab_paragraph_only_when_the_lab_is_on(tmp_path: 
     ):
         assert phrase in paragraph
     assert "./progress stage compile started" in paragraph
+    must = (
+        'Before you mark report done, call `chiplab chip-report --json \'{"design_id": '
+        '"<the chip you chose>", "decision_rate_hz": <decisions per second>}\'` on the one chip you '
+        "chose: the chip figures the user sees (area, power, energy, cost, verification) come from "
+        "that call."
+    )
+    assert must in " ".join(on.split())
+    assert "chip-report" not in off
 
 
 def test_verify_stage_means_the_chip_against_its_model() -> None:
@@ -316,6 +332,134 @@ async def test_tailer_refuses_non_finite_numbers(tmp_path: Path) -> None:
     assert log.since(1) == []
 
 
+# ---- which chip a number belongs to: metric --chip and chosen ----
+
+
+def _helper(helper: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run([str(helper), *args], capture_output=True, text=True, timeout=30)
+
+
+def _lines(progress_file: Path) -> list[dict[str, Any]]:
+    return [json.loads(x) for x in progress_file.read_text().splitlines()]
+
+
+def test_helper_tags_a_metric_with_its_chip(tmp_path: Path) -> None:
+    progress_file = tmp_path / "progress.jsonl"
+    helper = write_helper(tmp_path, progress_file)
+    for args in (
+        ("metric", "gates", "2330", "--chip", DESIGN),
+        ("metric", "gates", "2330", "gates", "--chip", DESIGN),
+        ("metric", "area_um2", "-1.5", "um2", "--chip", DESIGN),
+    ):
+        proc = _helper(helper, *args)
+        assert proc.returncode == 0, proc.stderr
+    got = [{k: v for k, v in line.items() if k != "ts"} for line in _lines(progress_file)]
+    assert got == [
+        {"type": "metric", "key": "gates", "value": 2330, "chip": DESIGN},
+        {"type": "metric", "key": "gates", "value": 2330, "unit": "gates", "chip": DESIGN},
+        {"type": "metric", "key": "area_um2", "value": -1.5, "unit": "um2", "chip": DESIGN},
+    ]
+
+
+def test_helper_metric_without_chip_is_unchanged(tmp_path: Path) -> None:
+    """Without --chip the line is byte for byte what the helper wrote before the flag existed."""
+    progress_file = tmp_path / "progress.jsonl"
+    helper = write_helper(tmp_path, progress_file)
+    assert _helper(helper, "metric", "gates", "2330", "gates").returncode == 0
+    assert _helper(helper, "metric", "candidates", "3").returncode == 0
+    raw = progress_file.read_text().splitlines()
+    stamps = [json.loads(x)["ts"] for x in raw]
+    assert raw == [
+        f'{{"ts": "{stamps[0]}", "type": "metric", "key": "gates", "value": 2330, "unit": "gates"}}',
+        f'{{"ts": "{stamps[1]}", "type": "metric", "key": "candidates", "value": 3}}',
+    ]
+
+
+def test_helper_rejects_unknown_flags(tmp_path: Path) -> None:
+    progress_file = tmp_path / "progress.jsonl"
+    helper = write_helper(tmp_path, progress_file)
+    for args in (
+        ("metric", "gates", "2330", "--design", DESIGN),
+        ("metric", "gates", "2330", "gates", "--foo"),
+        ("metric", "gates", "2330", "--foo"),
+        ("metric", "gates", "2330", "gates", "--chip", DESIGN, "--foo", "x"),
+        ("metric", "--chip", DESIGN, "gates", "2330"),
+    ):
+        proc = _helper(helper, *args)
+        assert proc.returncode == 2, args
+        assert "progress: metric needs a key and a number" in proc.stderr, args
+    for args in (("metric", "gates", "1", "--chip"), ("metric", "gates", "1", "--chip", "")):
+        proc = _helper(helper, *args)
+        assert proc.returncode == 2, args
+        assert "--chip needs a design id" in proc.stderr
+    for args in (("chosen",), ("chosen", "a", "b"), ("chosen", "")):
+        assert _helper(helper, *args).returncode == 2, args
+    assert not progress_file.exists()
+    usage = _helper(helper).stderr
+    assert "./progress metric <key> <number> [unit] [--chip <design_id>]" in usage
+    assert "./progress chosen <design_id>" in usage
+
+
+async def test_chip_tags_and_the_chosen_chip_become_events(tmp_path: Path) -> None:
+    run_path = tmp_path / "run"
+    workspace = run_path / "workspace"
+    workspace.mkdir(parents=True)
+    progress_file = run_path / "progress.jsonl"
+    helper = write_helper(workspace, progress_file)
+    for args in (
+        ("metric", "gates", "2867", "gates", "--chip", "aaa111"),
+        ("metric", "gates", "396", "--chip", "bbb222", "gates"),
+        ("metric", "candidates", "3"),
+        ("chosen", "aaa111"),
+        ("chosen", "bbb222"),
+    ):
+        assert _helper(helper, *args).returncode == 0, args
+    log = EventLog(run_path / "events.jsonl", "r1", asyncio.get_running_loop())
+    ProgressTailer(progress_file, log, run_path, workspace).drain()
+    got = _strip(log.since(1))
+    assert got == [
+        {"type": "metric", "key": "gates", "value": 2867, "unit": "gates", "chip": "aaa111"},
+        {"type": "metric", "key": "gates", "value": 396, "unit": "gates", "chip": "bbb222"},
+        {"type": "metric", "key": "candidates", "value": 3},
+        {"type": "chosen", "chip": "aaa111"},
+        {"type": "chosen", "chip": "bbb222"},
+    ]
+    # the backend keeps no run summary of the chosen chip: the last chosen event is the answer
+    assert [e["chip"] for e in got if e["type"] == "chosen"][-1] == "bbb222"
+    on_disk = [json.loads(x) for x in (run_path / "events.jsonl").read_text().splitlines()]
+    assert _strip(on_disk) == got
+
+
+async def test_tailer_refuses_a_bad_chip(tmp_path: Path) -> None:
+    progress_file = tmp_path / "progress.jsonl"
+    progress_file.write_text(
+        '{"type": "metric", "key": "gates", "value": 1, "chip": 7}\n'
+        '{"type": "chosen", "chip": ""}\n'
+        '{"type": "chosen"}\n'
+    )
+    log = EventLog(tmp_path / "events.jsonl", "r1", asyncio.get_running_loop())
+    ProgressTailer(progress_file, log, tmp_path, tmp_path).drain()
+    assert log.since(1) == []
+
+
+async def test_an_old_events_file_still_loads(tmp_path: Path) -> None:
+    """A run stored before chip tags existed loads and replays unchanged."""
+    old = [
+        {"seq": 1, "ts": "2026-11-22T00:15:07+00:00", "run_id": "r0", "type": "run.started", "prompt": "p"},
+        {"seq": 2, "ts": "2026-11-22T00:18:03+00:00", "run_id": "r0", "type": "metric", "key": "gates",
+         "value": 2867, "unit": "gates"},
+        {"seq": 3, "ts": "2026-11-22T00:20:00+00:00", "run_id": "r0", "type": "run.finished",
+         "status": "succeeded"},
+    ]  # fmt: skip
+    path = tmp_path / "events.jsonl"
+    text = "".join(json.dumps(e) + "\n" for e in old)
+    path.write_text(text)
+    log = EventLog(path, "r0", asyncio.get_running_loop())
+    assert log.since(1) == old
+    assert log.finished and log.last_seq == 3
+    assert path.read_text() == text
+
+
 # ---- the same events on the API's stream and in run --preset ----
 
 
@@ -336,6 +480,9 @@ async def test_lab_events_reach_the_api_stream(
         run_id = (await resp.json())["id"]
         workspace = Path(config.runs_dir) / run_id / "workspace"
         await asyncio.to_thread(_run_lab, workspace, build_agent_env(), {"design_id": DESIGN})
+        helper = workspace / "progress"
+        await asyncio.to_thread(_helper, helper, "metric", "trial_gates", "48.7", "gates", "--chip", DESIGN)
+        await asyncio.to_thread(_helper, helper, "chosen", DESIGN)
         stream = await client.get(f"/api/runs/{run_id}/events", params={"token": token})
         events: list[dict[str, Any]] = []
         async with asyncio.timeout(30):
@@ -356,6 +503,11 @@ async def test_lab_events_reach_the_api_stream(
         or (e["type"] == "status" and DESIGN in e["text"])
     ]
     assert from_lab == _expected_lab_events()
+    tagged = [e for e in _strip(events) if e.get("chip")]
+    assert tagged == [
+        {"type": "metric", "key": "trial_gates", "value": 48.7, "unit": "gates", "chip": DESIGN},
+        {"type": "chosen", "chip": DESIGN},
+    ]
     on_disk = [
         json.loads(x) for x in (Path(config.runs_dir) / run_id / "events.jsonl").read_text().splitlines()
     ]
