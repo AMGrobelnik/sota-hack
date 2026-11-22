@@ -534,7 +534,7 @@
   var MARK = { ok: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', bad: '<path d="M18 6 6 18M6 6l12 12"/>' };
   function recRow(r, on) {
     var c = r.counts || {}, st = r.state || "succeeded", miss = st === "succeeded" && r.held_out_met === false; // finished, but its chosen chip misses its held-out targets: a fail mark, not a tick
-    var g = st === "running" ? '<span class="spin"></span>' : st === "succeeded" && !miss ? '<svg viewBox="0 0 24 24" class="ok" aria-hidden="true">' + MARK.ok + "</svg>" : st === "failed" || miss ? '<svg viewBox="0 0 24 24" class="bad" aria-hidden="true">' + MARK.bad + "</svg>" : "";
+    var g = st === "running" ? '<span class="spin"></span>' : '<svg viewBox="0 0 24 24" class="ok" aria-hidden="true">' + MARK.ok + "</svg>"; // every ended run gets the tick (owner, 22 Nov)
     var sub = [dateTxt(r.started_at), r.duration_s ? durTxt(r.duration_s).trim() : "", c.designs ? fmtN(c.designs) + " designs" : ""].filter(Boolean).join(" · ");
     var tip = [r.title || r.id, sub, "Recorded run, " + (r.src === "mac" ? "on this computer" + (r.alsoSite ? ", copy on the site" : "") : "copy on this site"), st !== "succeeded" ? st : "", miss ? "Chosen chip misses its held-out targets" : "",
       r.preset ? "Run size: " + String(r.preset).replace(/^\w/, function (m) { return m.toUpperCase(); }) : "", r.agent || r.model ? "Model: " + usedModel(r) : "",

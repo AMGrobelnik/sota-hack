@@ -1216,7 +1216,7 @@
     var host = ""; try { host = C.base && !C.pub ? new URL(C.base).hostname : ""; } catch (e) { /* no host to show */ }
     var txt = kt ? kt : C.pub && s === "on" ? "Live" : C.pub && s !== "checking" && !((liveOpen() || C.lost) && s === "bad") ? "Live runs offline: examples only" : s === "on" ? "Connected to local backend" : s === "checking" ? "Checking the backend" : s === "found" ? "Backend found: add its token" : (liveOpen() || C.lost) && C.base ? "Not connected to the backend" : "Not connected to a backend";
     var rows = shownRuns().slice(0, 8).map(function (r) {
-      var g = r.status === "running" ? '<span class="spin"></span>' : r.status === "succeeded" ? I("check", "s12 ok") : r.status === "failed" ? I("x", "s12 lv-bad") : r.status === "stopped" ? I("minus", "s12") : "";
+      var g = r.status === "running" ? '<span class="spin"></span>' : ended(r.status) ? I("check", "s12 ok") : ""; // every ended run gets the tick (owner, 22 Nov)
       var on = (cur && cur.id === r.id) || (recId && decodeURIComponent(recId) === r.id);
       return '<a class="rrow lv-rrow' + (on ? " on" : "") + '" href="' + (ended(r.status) ? recHref(r.id, cur && cur.view) : "#/live/" + encodeURIComponent(r.id) + "/" + (cur ? cur.view : "overview")) + '" title="' + esc(r.title + " (run " + r.id + ", " + r.status + ")") + '"><span class="g">' + g + '</span><span class="t">' + esc(r.title || r.id) + "</span></a>";
     }).join("");
