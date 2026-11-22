@@ -81,9 +81,8 @@ def test_prove_sequential_extended_wrappers(tmp_path):
     assert rc == 0 and r["proved"] is True and r["scope"] == "whole design", r
 
 
-@pytest.mark.slow
 @needs_yosys
-@pytest.mark.parametrize("C", [4, 18])
+@pytest.mark.parametrize("C", [4, pytest.param(18, marks=pytest.mark.slow)])
 def test_area_channel_serial_vs_parallel(tmp_path, C):
     r = area_compare(scored_spike(), {**CS, "channels": C}, tmp_path)
     s, p = r["serial"], r["parallel"]

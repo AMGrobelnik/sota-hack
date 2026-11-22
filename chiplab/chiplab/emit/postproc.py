@@ -326,7 +326,7 @@ class Extension:
             else:
                 L.append(f"  wire [{aw - 1}:0] cs_s = {_sx('cs_v', vw, sg, aw)};" if sg else f"  wire [{aw - 1}:0] cs_s = {_zx('cs_v', vw, aw)};")
             if cs["reduce"] == "max":
-                gt = f"($signed(cs_s) > $signed(cs_acc))" if sg else "(cs_s > cs_acc)"
+                gt = "($signed(cs_s) > $signed(cs_acc))" if sg else "(cs_s > cs_acc)"
                 red = f"({gt} ? cs_s : cs_acc)"
             else:
                 red = "(cs_acc + cs_s)"

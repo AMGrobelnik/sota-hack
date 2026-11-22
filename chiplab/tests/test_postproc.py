@@ -14,7 +14,7 @@ import pytest
 from chiplab import config
 from chiplab.emit import postproc as ppm
 from chiplab.emit.postproc import PostprocError, channel_frames, parallel_ir, reference
-from chiplab.emit.stream import emit_stream
+from chiplab.emit.stream import emit_stream, packed_outputs
 from chiplab.emit.verilog import emit
 from chiplab.ingest.intnn import to_ir
 from chiplab.ir.interp import run as interp
@@ -104,7 +104,7 @@ def test_reference_matches_brute_force(pp):
     vals = [int(v) for v in outs["s"][:, 0]]
     assert ref["fields"]["alarm"] == _brute(pp, vals, [int(v >= 1) for v in vals])
     assert ref["event_frames"] == list(range(len(vals)))
-    core = [int(v) for v in __import__("chiplab.emit.stream", fromlist=["x"]).packed_outputs(info, outs)]
+    core = [int(v) for v in packed_outputs(info, outs)]
     assert ref["packed"] == [a | (c << 1) for a, c in zip(ref["fields"]["alarm"], core)]
 
 
