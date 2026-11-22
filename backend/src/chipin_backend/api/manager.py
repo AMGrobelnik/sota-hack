@@ -237,7 +237,7 @@ class RunManager:
             model=model,
             provider=provider,
             effort=self.api.presets[preset] if preset else None,
-            system_prompt=self.instructions if self.agent == "claude" else None,
+            system_prompt=self.instructions,
             timeout_s=self.api.run_timeout_s,
             env={STEP_ENV: str(self.api.stub_step_s)} if self.agent == "stub" else {},
         )

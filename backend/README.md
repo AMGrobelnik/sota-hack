@@ -244,6 +244,13 @@ line, without the server: the same instructions, `./progress` helper and
 `events.jsonl`, on this Mac. Several `--prompt`/`--prompt-file` values are
 joined into one brief.
 
+Both agents get the same standing instructions (`api/instructions.md`,
+plus the chip-lab paragraph when the lab is on): `claude` as a tagged
+system prompt ahead of its first prompt, `openrouter` appended to the
+OpenHands system message (`AgentContext.system_message_suffix`), which
+keeps OpenHands' own tool rules. `run.json` records them under
+`agent.system_prompt`.
+
 ```bash
 chipin-backend run --preset pro --env-file <keys> \
     --prompt-file examples/seizure_eeg_prompt.md --prompt-file <more brief>
