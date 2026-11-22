@@ -1,12 +1,16 @@
-/* Previous/next switching inside one set of ten how-it-works variants: w1..w10 (round 1) or x1..x10 (round 2), chosen by the letter in the file name. */
+/* Previous/next switching inside one set of ten how-it-works variants: w1..w10 (round 1), x1..x10 (round 2) or y1..y10 (round 3), chosen by the letter in the file name. */
 (function () {
   var N = 10;
-  var m = location.pathname.match(/\/([wx])(\d+)(?:\.html)?$/);
+  /* numbers that exist in each set; round 3 skips variants that were not built */
+  var BUILT = { w: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], y: [3, 4, 6, 7, 9, 10] };
+  var m = location.pathname.match(/\/([wxy])(\d+)(?:\.html)?$/);
   var set = m ? m[1] : '';
   var cur = m ? parseInt(m[2], 10) : 0;
-  if (!set || cur < 1 || cur > N) return;
-  function file(n) { return set + (((n - 1 + N) % N) + 1) + '.html'; }
-  function go(d) { location.href = file(cur + d); }
+  var list = BUILT[set] || [];
+  var at = list.indexOf(cur);
+  if (at < 0) return;
+  function file(d) { return set + list[(at + d + list.length) % list.length] + '.html'; }
+  function go(d) { location.href = file(d); }
 
   var css = document.createElement('style');
   css.textContent =
@@ -23,9 +27,9 @@
   nav.id = 'vnav';
   nav.setAttribute('aria-label', 'Switch variant');
   nav.innerHTML =
-    '<a class="a" href="' + file(cur - 1) + '" rel="prev" aria-label="Previous variant">‹</a>' +
+    '<a class="a" href="' + file(-1) + '" rel="prev" aria-label="Previous variant">‹</a>' +
     '<a href="../" aria-label="Back to all variants">' + set + ' ' + cur + ' / ' + N + '</a>' +
-    '<a class="a" href="' + file(cur + 1) + '" rel="next" aria-label="Next variant">›</a>';
+    '<a class="a" href="' + file(1) + '" rel="next" aria-label="Next variant">›</a>';
   document.body.appendChild(nav);
 
   /* park in the first corner where it covers no text, link, control or picture at the top of the page */
@@ -54,7 +58,7 @@
   }
   function place() {
     /* round 2 (x): first the empty middle of the top bar, which stays clear of the page, of its right-side progress indicator and of the corner widgets at every stop; then the corners. Round 1 (w): the corners. */
-    var spots = set === "x" ? [["top", "center"], ["bottom", "left"], ["top", "left"], ["bottom", "right"], ["top", "right"]]
+    var spots = set !== "w" ? [["top", "center"], ["bottom", "left"], ["top", "left"], ["bottom", "right"], ["top", "right"]]
       : [["bottom", "right"], ["bottom", "left"], ["top", "right"], ["top", "left"]];
     for (var i = 0; i < spots.length; i++) {
       nav.style.top = nav.style.bottom = nav.style.left = nav.style.right = "auto";
