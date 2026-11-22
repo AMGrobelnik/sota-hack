@@ -717,6 +717,12 @@ select.gfin{padding:0 10px}
   .ov #ovh{order:0}.ov #ovStatus{order:1}.ov .chartp{order:2}.ov #tiles{order:3}.ov .cgrid2>.insp,.ov .side{order:4}
   .ov #fun{order:5}.ov #funn{order:6}.ov #sab{order:7}.ov #batBand{order:8}.ov .ovf{order:9}
 }
+/* short notes (their full text is on hover, ../i1-tip.js): one line each, tighter around them */
+.tnote .tsep{margin:0 8px;color:var(--i500)}
+.tnote{margin-top:8px}
+.gfq .gw{margin-bottom:10px}
+.gfq .gl+:not(.gw){margin-top:10px}
+.vf{margin-top:8px}
 </style>
 </head>
 <body>
@@ -725,6 +731,7 @@ select.gfin{padding:0 10px}
 <main class="main" id="main"></main>
 <div class="demo" id="demo">Simulated run, demo data</div>
 <script src="../chipin-models.js"></script>
+<script src="../i1-tip.js"></script><!-- TIP HOOK: short notes with their full text on hover, focus or tap (window.ChipInTip) -->
 <script src="../i1-panels.js"></script>
 <!-- LIVE HOOK: live mode (real runs from a local backend) lives in ../i1-live.js, on top of the ../live.js stream reader -->
 <script src="../i1-fold.js"></script><!-- FOLD HOOK: one reducer for a run's figures, shared by live mode and playback (window.ChipInFold) -->
@@ -1687,7 +1694,7 @@ function renderStart() {
   const ag = startState.agent || cfg.agent;
   $("#main").innerHTML = `<div class="start"><div class="scol">
     <section class="band" aria-label="${APP.name}"><span class="hfx" aria-hidden="true"></span><div class="bt">${LOGO.lockupLight("lock")}<h1 class="greet">What should we chip in on?</h1>
-      <p class="subt">Describe the device, what it must detect and the bar it must clear. ${APP.name} finds the smallest chip that clears it, and shows what you give up by going smaller.</p></div></section>
+      <p class="subt"${TA(`Describe the device, what it must detect and the bar it must clear. ${APP.name} finds the smallest chip that clears it, and shows what you give up by going smaller.`)}>${APP.name} finds the smallest chip that clears your bar.</p></div></section>
     <div class="box">
       <textarea id="prompt" rows="2" aria-label="Describe your device" data-voice data-voice-anchor="#go" placeholder="For example: a single-lead ECG patch that detects atrial fibrillation, 90% sensitivity and 85% specificity">${esc(startState.text)}</textarea>
       <div class="crow"><div class="cpills">${agentPill(ag)}</div><span class="grow"></span><button class="chipin" id="go">${I("chip")}Chip in</button></div>
@@ -1814,34 +1821,34 @@ function specLines(s) {
 // ----- the flow's screens -----
 let flowFocus = false, flowTmo = 0;
 function flowGo(step) { flowFocus = true; flowSave(); go("#/new/" + step); }
-const Q = (label, why, body) => `<section class="gfq"><h2 class="gl">${label}</h2><p class="gw">${why}</p>${body}</section>`;
+const Q = (label, why, body, more) => `<section class="gfq"><h2 class="gl">${label}</h2>${why ? `<p class="gw"${TA(more)}>${why}</p>` : ""}${body}</section>`;
 const chipsHTML = (name, opts, cur, label, ask) => `<div class="gch${ask ? " ask" : ""}" role="radiogroup" aria-label="${esc(label)}">${opts.map(([k, n, sub]) => `<button type="button" role="radio" aria-checked="${k === cur}" data-c="${name}" data-v="${esc(k)}"><span>${esc(n)}</span>${sub ? `<small>${esc(sub)}</small>` : ""}</button>`).join("")}</div>`;
 const askLine = t => `<p class="gask">${t}</p>`;
 function progHTML(i) {
   return `<nav class="gfp" aria-label="Steps"><ol>${STEPS.map((x, j) => `<li class="${j < i ? "done" : j === i ? "now" : ""}"><button type="button" data-go="${j + 1}"${j === i ? ' aria-current="step"' : ""} aria-label="Step ${j + 1}: ${x.n}"><span class="gpn">${j + 1}</span><span class="gpl">${x.n}</span></button></li>`).join("")}${window.ChipInQuestions?.dot(i, SPEC) || "" /* QUESTIONS HOOK */}</ol>${i < 5 ? '<button type="button" class="gskip" data-go="spec">Skip to spec</button>' : ""}</nav>`;
 }
-const readLine = s => `Device: ${s.device ? `<b>${esc(s.device)}</b>` : '<span class="gmiss">not named in the brief</span>'}. Signal: ${s.signal ? `<b>${esc(s.signal)}</b>` : '<span class="gmiss">not named in the brief</span>'}. Change either on the spec card.`;
+const readLine = s => `Device: ${s.device ? `<b>${esc(s.device)}</b>` : '<span class="gmiss">not named in the brief</span>'}. Signal: ${s.signal ? `<b>${esc(s.signal)}</b>` : '<span class="gmiss">not named in the brief</span>'}. ${tp("Edit on the spec card.", "Change either on the spec card.")}`;
 function step1(s) {
-  return Q("Your brief", "We read the device, the signal and any targets out of it. Edit it and the answers below follow.",
-    `<div class="box gfb"><textarea id="gfBrief" rows="2" aria-label="Your brief" data-voice>${esc(s.brief)}</textarea></div><p class="gfr" id="gfRead">${readLine(s)}</p>`) + `<div id="gfS1">${step1b(s)}</div>`;
+  return Q("Your brief", "Edit it; the answers below follow.",
+    `<div class="box gfb"><textarea id="gfBrief" rows="2" aria-label="Your brief" data-voice>${esc(s.brief)}</textarea></div><p class="gfr" id="gfRead">${readLine(s)}</p>`, "We read the device, the signal and any targets out of it. Edit it and the answers below follow.") + `<div id="gfS1">${step1b(s)}</div>`;
 }
 function step1b(s) {
   const tk = taskSet(s.task);
   return Q("What it must detect", "The chip is trained and judged on exactly this.",
     `<div class="gfw"><input class="gfin${s.detect ? "" : " ask"}" id="gfDetect" data-voice value="${esc(s.detect)}" placeholder="What must it catch?" aria-label="What it must detect"></div>${s.detect ? "" : askLine("Not in your brief: say what it must catch.")}`)
-    + Q("Task type", "It picks the default targets in step 3. Monitoring and grading can go together.",
-      `<div class="gch${s.task ? "" : " ask"}" role="group" aria-label="Task type">${[["continuous", "Continuous event monitoring"], ["screening", "One-off screening"], ["grading", "Grading"]].map(([k, n]) => `<button type="button" role="checkbox" aria-checked="${tk.has(k)}" data-task="${k}"><span>${n}</span></button>`).join("")}</div>${s.task ? "" : askLine("Not in your brief: pick one.")}`);
+    + Q("Task type", "Sets the default targets in step 3.",
+      `<div class="gch${s.task ? "" : " ask"}" role="group" aria-label="Task type">${[["continuous", "Continuous event monitoring"], ["screening", "One-off screening"], ["grading", "Grading"]].map(([k, n]) => `<button type="button" role="checkbox" aria-checked="${tk.has(k)}" data-task="${k}"><span>${n}</span></button>`).join("")}</div>${s.task ? "" : askLine("Not in your brief: pick one.")}`, "It picks the default targets in step 3. Monitoring and grading can go together.");
 }
 function step2(s) {
   const p = PLACES[s.place] || PLACES.ward;
-  return Q("Who it is for", "Which recordings fit depends on it; the data step checks the fit.",
-    chipsHTML("group", Object.entries(GROUPS).map(([k, g]) => [k, g.n]), s.group, "Patient group", !s.group) + (s.group ? "" : askLine("Not in your brief: pick one.")))
-    + (screenOnly(s) ? Q("Where it is used, and who acts on a result", "A one-off screening test gives one answer per recording, so it is judged by specificity (recordings without the condition correctly passed), not by false alarms over time.",
+  return Q("Who it is for", "Decides which recordings fit.",
+    chipsHTML("group", Object.entries(GROUPS).map(([k, g]) => [k, g.n]), s.group, "Patient group", !s.group) + (s.group ? "" : askLine("Not in your brief: pick one.")), "Which recordings fit depends on it; the data step checks the fit.")
+    + (screenOnly(s) ? Q("Where it is used, and who acts on a result", "Screening is judged by specificity, not false alarms.",
       chipsHTML("place", Object.entries(PLACES).map(([k, x]) => [k, x.n, capFirst(x.r)]), s.place, "Where it is used and who acts on a result")
-      + `<p class="gfr">The task type's default targets are sensitivity and specificity; false alarms are not counted for screening.</p>`)
-    : Q("Where it is used, and who responds to an alert", "It sets how false alarms are counted from here on, per hour on a ward or per night or day at home, and a sensible tolerance for step 3.",
+      + `<p class="gfr"${TA("The task type's default targets are sensitivity and specificity; false alarms are not counted for screening.")}>Default targets: sensitivity and specificity.</p>`, "A one-off screening test gives one answer per recording, so it is judged by specificity (recordings without the condition correctly passed), not by false alarms over time.")
+    : Q("Where it is used, and who responds to an alert", "Sets how false alarms are counted.",
       chipsHTML("place", Object.entries(PLACES).map(([k, x]) => [k, x.n, capFirst(x.r)]), s.place, "Where it is used and who responds")
-      + `<p class="gfr">False alarms counted per ${p.per}${p.h > 1 ? ` (${p.h} hours)` : ""}; default tolerance at most 1 ${faWord(p)}.</p>`));
+      + `<p class="gfr">False alarms counted per ${p.per}${p.h > 1 ? ` (${p.h} hours)` : ""}; default tolerance at most 1 ${faWord(p)}.</p>`, "It sets how false alarms are counted from here on, per hour on a ward or per night or day at home, and a sensible tolerance for step 3."));
 }
 // a screening task with no false-alarm target: judged by specificity, so no false-alarm unit is asked or shown
 const screenOnly = s => taskSet(s.task).has("screening") && !s.targets.some(t => t.metric === "false_alarms_per_hour");
@@ -1851,9 +1858,9 @@ const sizeUsable = s => window.ChipInLive?.i1?.state?.().connection === "on" || 
 function step3(s) {
   const p = PLACES[s.place] || PLACES.ward;
   const rows = s.targets.map((t, i) => tRowHTML(s, t, i, p)).join("");
-  return Q("Targets", "Each one is a bar the chip passes or fails. Numbers from your brief are kept; the rest are defaults for the task type.",
-    `<div class="gts">${rows || askLine("No target yet. Pick a task type in step 1, or add one.")}</div>${s.targets.length < MET_KEYS.length ? `<button type="button" class="gadd" data-a="add">${I("plus", "s13")}Add a target</button>` : ""}`)
-    + (s.targets.length ? Q("Which one the chart plots", "This is the bar drawn on the chart.", chipsHTML("primary", s.targets.map(t => [t.metric, MET[t.metric].short || MET[t.metric].name]), s.primary, "Target the chart plots")) : "");
+  return Q("Targets", "Each is a bar the chip passes or fails.",
+    `<div class="gts">${rows || askLine("No target yet. Pick a task type in step 1, or add one.")}</div>${s.targets.length < MET_KEYS.length ? `<button type="button" class="gadd" data-a="add">${I("plus", "s13")}Add a target</button>` : ""}`, "Each one is a bar the chip passes or fails. Numbers from your brief are kept; the rest are defaults for the task type.")
+    + (s.targets.length ? Q("Which one the chart plots", "", chipsHTML("primary", s.targets.map(t => [t.metric, MET[t.metric].short || MET[t.metric].name]), s.primary, "Target the chart plots")) : "");
 }
 function tRowHTML(s, t, i, p) {
   const m = MET[t.metric], frac = m.kind === "frac", val = t.value == null ? "" : frac ? +(t.value * 100).toFixed(3) : +(t.value * p.h).toFixed(3);
@@ -1868,44 +1875,47 @@ function tRowHTML(s, t, i, p) {
 function step4(s) {
   const b = flowBudgets(s), k = s.cons, j = Math.max(0, b.findIndex(x => x.ch === k.channels)), sim = !hasMeasured(s);
   const list = andList(b.map(x => x.label.toLowerCase()));
-  const spots = sim ? `Compares ${list}. In this demo the search for spots runs on synthetic data and is marked so.` : b.length > 1 ? `Compares every channel budget the measured data holds: ${list}.` : `The measured data holds one budget: ${list}.`;
+  const spots = sim ? tp(`Compares ${list}. Synthetic data in this demo.`, `Compares ${list}. In this demo the search for spots runs on synthetic data and is marked so.`) : b.length > 1 ? tp(`Compares ${list}, from the measured data.`, `Compares every channel budget the measured data holds: ${list}.`) : `The measured data holds one budget: ${list}.`;
   const stepper = `<div class="gst" role="group" aria-label="Electrodes or sensors"><button type="button" data-a="ch-" aria-label="Fewer"${j === 0 ? " disabled" : ""}>${I("minus", "s16")}</button><output aria-live="polite">${esc(b[j].label)}</output><button type="button" data-a="ch+" aria-label="More"${j === b.length - 1 ? " disabled" : ""}>${I("plus", "s16")}</button></div>`;
   const lone = !CASES[s.case] && !s.chans && loneSensor(s.parsed && s.parsed.sigs);
-  return (lone ? Q("How many electrodes or sensors", "It sets which channel-budget curves the chart highlights.", `<p class="gfr">Your brief names one ${esc(s.parsed.sigs[0].name)} sensor. Channel budgets are not modelled for it, so the run uses that one sensor.</p>`) : Q("How many electrodes or sensors", "It sets which channel-budget curves the chart highlights.",
-    chipsHTML("find", [["best", "Find the best spots for me"], ["set", "A set number"]], k.findBest ? "best" : "set", "Electrodes or sensors") + (k.findBest ? `<p class="gfr">${spots}</p>` : `<div class="gfsub">${stepper}<p class="gfr">${sim ? "Simulated: the other budgets stay on the chart, faded." : "The other budgets the data holds stay on the chart, faded."}</p></div>`)))
-    + Q("Battery life", "It sets the battery view: how long the device must run between charges or changes.",
-      `<div class="gbat"><input class="gfin" id="gfBat" inputmode="decimal" aria-label="Battery life, ${k.batU}" value="${esc(k.batN)}">${chipsHTML("batU", [["hours", "hours"], ["days", "days"]], k.batU, "Battery life unit")}</div>`)
-    + Q("Disposable or reusable", "Reusable means charging and cleaning between patients; it sets which batteries fit in the battery view.",
-      chipsHTML("reuse", [["disposable", "Disposable"], ["reusable", "Reusable"]], k.reusable ? "reusable" : "disposable", "Disposable or reusable"));
+  const chWhy = ["Sets which curves the chart highlights.", "It sets which channel-budget curves the chart highlights."];
+  return (lone ? Q("How many electrodes or sensors", chWhy[0], `<p class="gfr"${TA(`Your brief names one ${s.parsed.sigs[0].name} sensor. Channel budgets are not modelled for it, so the run uses that one sensor.`)}>One ${esc(s.parsed.sigs[0].name)} sensor; the run uses it alone.</p>`, chWhy[1]) : Q("How many electrodes or sensors", chWhy[0],
+    chipsHTML("find", [["best", "Find the best spots for me"], ["set", "A set number"]], k.findBest ? "best" : "set", "Electrodes or sensors") + (k.findBest ? `<p class="gfr">${spots}</p>` : `<div class="gfsub">${stepper}<p class="gfr">${sim ? "Simulated: the other budgets stay on the chart, faded." : tp("Other budgets stay on the chart, faded.", "The other budgets the data holds stay on the chart, faded.")}</p></div>`), chWhy[1]))
+    + Q("Battery life", "Time between charges or cell changes.",
+      `<div class="gbat"><input class="gfin" id="gfBat" inputmode="decimal" aria-label="Battery life, ${k.batU}" value="${esc(k.batN)}">${chipsHTML("batU", [["hours", "hours"], ["days", "days"]], k.batU, "Battery life unit")}</div>`, "It sets the battery view: how long the device must run between charges or changes.")
+    + Q("Disposable or reusable", "Sets which batteries fit.",
+      chipsHTML("reuse", [["disposable", "Disposable"], ["reusable", "Reusable"]], k.reusable ? "reusable" : "disposable", "Disposable or reusable"), "Reusable means charging and cleaning between patients; it sets which batteries fit in the battery view.");
 }
 function step5(s) {
   let more = "";
-  if (s.data === "public") more = Q("Which public set", "Picked to match your device; the card says how well it fits.",
-    chipsHTML("ds", Object.entries(DSF).map(([k, d]) => [k, d.short]), s.ds, "Public dataset", !s.ds) + (s.ds ? dsCardHTML(s, s.ds) : askLine("No open set in this demo matches this device. Pick the nearest, or simulate.")));
+  if (s.data === "public") more = Q("Which public set", "Matched to your device; fit on the card.",
+    chipsHTML("ds", Object.entries(DSF).map(([k, d]) => [k, d.short]), s.ds, "Public dataset", !s.ds) + (s.ds ? dsCardHTML(s, s.ds) : askLine("No open set in this demo matches this device. Pick the nearest, or simulate.")), "Picked to match your device; the card says how well it fits.");
   else if (s.data === "own") more = `<div class="gfsub"><input type="file" id="fileIn" multiple hidden><button type="button" class="qbtn" data-a="pick">${I("file", "s14")}Choose files</button>${s.files.length ? `<ul class="gfiles">${s.files.map(f => `<li>${I("file", "s14")}<span>${esc(f.n)}</span><span class="sz">${esc(f.s)}</span></li>`).join("")}</ul>` : ""}</div>`;
-  return Q("Where the recordings come from", "Chips are trained on part of it and judged on patients they never saw.",
-    chipsHTML("data", [["own", "My own recordings"], ["public", "Public data"], ["sim", "Simulate"]], s.data, "Where the data comes from") + `<p class="gfr">${modeNote(s)}</p>`) + more;
+  const mn = modeNote(s);
+  return Q("Where the recordings come from", "Judged on patients the chip never saw.",
+    chipsHTML("data", [["own", "My own recordings"], ["public", "Public data"], ["sim", "Simulate"]], s.data, "Where the data comes from") + `<p class="gfr"${TA(mn[1])}>${mn[0]}</p>`, "Chips are trained on part of it and judged on patients they never saw.") + more;
 }
+// [short, full]: the short line, and the full sentence it shows on hover
 function modeNote(s) {
-  if (s.case === "af") return "This brief is the AF patch case, which has a measured run on the PhysioNet/CinC 2017 set; Run opens it with your targets, marked measured.";
-  if (s.case === "neonatal-eeg" && MEASURED.eeg) return "This case has measured results on the Helsinki set; Run opens them with your answers, marked measured.";
-  if (s.data === "own") return "Files stay in this browser and nothing is uploaded. This demo does not design on attached recordings yet, so the run is simulated and says so.";
-  if (s.data === "public") return "No measured results for this device exist here yet, so the run is simulated and says so.";
-  return `${APP.name} simulates recordings from a small stated model; every number in the run is marked synthetic data.`;
+  if (s.case === "af") return ["AF patch case: Run opens its measured run.", "This brief is the AF patch case, which has a measured run on the PhysioNet/CinC 2017 set; Run opens it with your targets, marked measured."];
+  if (s.case === "neonatal-eeg" && MEASURED.eeg) return ["Run opens the measured Helsinki results.", "This case has measured results on the Helsinki set; Run opens them with your answers, marked measured."];
+  if (s.data === "own") return ["Files stay in this browser. The run is simulated.", "Files stay in this browser and nothing is uploaded. This demo does not design on attached recordings yet, so the run is simulated and says so."];
+  if (s.data === "public") return ["No measured results yet: the run is simulated.", "No measured results for this device exist here yet, so the run is simulated and says so."];
+  return ["Simulated recordings, marked synthetic data.", `${APP.name} simulates recordings from a small stated model; every number in the run is marked synthetic data.`];
 }
 function dsCardHTML(s, k) {
   const d = DSF[k], f = fitNotes(s, k);
   return `<article class="gds" aria-label="${esc(d.name)}"><h3>${linkOr(d.url, d.name)}</h3><dl>
     <dt>Population</dt><dd>${esc(d.pop)}</dd><dt>Channels</dt><dd>${esc(d.ch)}</dd><dt>Labels</dt><dd>${esc(d.labels)}</dd><dt>Licence</dt><dd>${licHTML(d.lic, d.lic_url)}</dd>
     <dt>Link</dt><dd><a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.link)}</a></dd></dl>${d.note ? `<p class="gdn">${esc(d.note)}</p>` : ""}
-    ${f.warn.map(w => `<p class="gfit">${esc(w)}</p>`).join("")}${f.soft ? `<p class="gdn">${esc(f.soft)}</p>` : ""}</article>`;
+    ${f.warn.map(w => `<p class="gfit">${esc(w)}</p>`).join("")}${f.soft ? `<p class="gdn"${TA(f.soft)}>Not your device: results are an approximation.</p>` : ""}</article>`;
 }
 function cardHTML(s) {
   const L = specLines(s);
   const rows = L.map(r => r.k === "Device"
     ? `<div class="gsr"><span class="k">Device</span><div class="v"><div class="gie"><textarea data-sf="device" data-voice rows="1" placeholder="Name the device" aria-label="Device">${esc(s.device)}</textarea></div><div class="gie sm"><textarea data-sf="signal" data-voice rows="1" placeholder="Name the signal or sensors" aria-label="Signal or sensors">${esc(s.signal)}</textarea></div><small>${esc(r.v.split(". ").slice(1).join(". "))}</small></div><button type="button" class="gchg" data-go="1" aria-label="Change the device">Change</button></div>`
     : `<div class="gsr"><span class="k">${r.k}</span><div class="v">${esc(r.v)}</div>${r.go ? `<button type="button" class="gchg" data-go="${r.go}" aria-label="Change ${r.k.toLowerCase()}">Change</button>` : '<span class="gfx">Fixed</span>'}</div>`).join("");
-  const af = s.case === "af" ? `<p class="gfr">${MEASURED.af ? "This brief is the AF patch case: Run replays its real search with your targets." : "This brief is the AF patch case: Run opens its measured run with your targets."}</p>` : "";
+  const af = s.case === "af" ? `<p class="gfr">${MEASURED.af ? tp("AF patch case: Run replays its real search.", "This brief is the AF patch case: Run replays its real search with your targets.") : tp("AF patch case: Run opens its measured run.", "This brief is the AF patch case: Run opens its measured run with your targets.")}</p>` : "";
   return `<p class="gfl">Check it, change anything, then run.</p><div class="gsc">${rows}${window.ChipInQuestions?.cardRows(s, flowSave) || "" /* QUESTIONS HOOK: the answers, editable */}</div>
     <div class="gsq">${sizeUsable(s) ? `<div class="gsqi"><span id="gRs">Run size</span><div class="gseg" role="radiogroup" aria-labelledby="gRs">${PRESETS.map(x => `<button type="button" role="radio" aria-checked="${x.n === s.preset}" data-c="preset" data-v="${x.n}">${x.n}</button>`).join("")}</div>
       <span class="gfx" aria-live="polite">${SUBAGENTS[s.preset]} subagents per stage</span></div>` : ""}
@@ -2135,6 +2145,10 @@ const BCOL = ["#2b55d0", "#0f7a55", "#a04812", "#6b46c1"];
 const budgetIdx = (run, ch) => Math.max(0, budgetsOf(run).findIndex(b => b.ch === ch));
 const budgetLabel = (run, ch) => (budgetsOf(run).find(b => b.ch === ch) || { label: `${ch} channels` }).label;
 const notGiven = s => s ? esc(s) : '<span style="color:#9a7a4e">not given</span>';
+// detail on demand (../i1-tip.js): a short note carries its full sentence, shown on hover, focus or tap
+const TA = d => d ? ` data-tip="${esc(d)}"` : "";
+const tp = (short, d) => d ? `<span${TA(d)}>${short}</span>` : short;
+const plainOf = h => { const t = document.createElement("template"); t.innerHTML = h; return t.content.textContent; }; // inert: nothing in it loads or runs
 function headHTML(run, v) {
   const c = caseOf(run), ch = v.ev.chosen, pr = preset(run.preset);
   let h1;
@@ -2183,18 +2197,19 @@ function tilesBest(run, v) {
   if (d.metrics.lead_time_s != null) out.push(`<div class="tile"><div class="tl">Lead time</div><div class="tv">${d.metrics.lead_time_s.toFixed(1)}<small>s</small></div><div class="ts">${leadNote(run)}</div></div>`);
   const seeds = fileNote(run, /(\d+) training seeds each/), spread = fileNote(run, /pooled sensitivity differs by a median of ([\d.]+) \(max ([\d.]+)\)/);
   const bWhat = fileNote(run, /Baseline, scored the same way: ([^:]+):/);
+  // each note one short line; its full sentence on hover
   const notes = [];
-  if (B) notes.push(`<b>Baseline, not a design of ours:</b> ${esc(bWhat ? bWhat[1] : B.id)}. ${B.counts.events_total ? `${fmt(B.counts.events_caught)} of ${fmt(B.counts.events_total)} ${esc(c.events)} caught pooled, ` : ""}${B.metrics.false_alarms_per_hour != null ? `${faNum(B.metrics.false_alarms_per_hour)} false alarms ${faWord()}, ` : ""}${fmt(B.gates)} gates.`);
-  notes.push(`Picked here by its result on the held-out ${esc(c.whoP)}, the best of ${fmt(N)} designs${seeds ? ` (each shape trained with ${seeds[1]} seeds)` : ""}, so the figure flatters it${spread ? `: training seeds alone move the pooled share by a median of ${Math.round(+spread[1] * 100)} points (at most ${Math.round(+spread[2] * 100)})` : ""}.`);
-  if (front) notes.push("Gates cover the classifier only; the feature front end is not included.");
-  return out.join("") + `<p class="tnote">${notes.join(" ")}</p><span class="mk mea" style="position:absolute;right:12px;top:-9px">measured</span>`;
+  if (B) notes.push(`<span${TA(`Baseline, not a design of ours: ${bWhat ? bWhat[1] : B.id}. ${B.counts.events_total ? `${fmt(B.counts.events_caught)} of ${fmt(B.counts.events_total)} ${c.events} caught pooled, ` : ""}${B.metrics.false_alarms_per_hour != null ? `${faNum(B.metrics.false_alarms_per_hour)} false alarms ${faWord()}, ` : ""}${fmt(B.gates)} gates.`)}><b>Baseline, not ours:</b> ${B.counts.events_total ? `${fmt(B.counts.events_caught)} of ${fmt(B.counts.events_total)} caught, ` : ""}${fmt(B.gates)} gates.</span>`);
+  notes.push(tp(`Best of ${fmt(N)} on held-out ${esc(c.whoP)}, so it flatters.`, `Picked here by its result on the held-out ${c.whoP}, the best of ${fmt(N)} designs${seeds ? ` (each shape trained with ${seeds[1]} seeds)` : ""}, so the figure flatters it${spread ? `: training seeds alone move the pooled share by a median of ${Math.round(+spread[1] * 100)} points (at most ${Math.round(+spread[2] * 100)})` : ""}.`));
+  if (front) notes.push(tp("Gates: classifier only.", "Gates cover the classifier only; the feature front end is not included."));
+  return out.join("") + `<p class="tnote">${notes.join('<span class="tsep" aria-hidden="true">·</span>')}</p><span class="mk mea" style="position:absolute;right:12px;top:-9px">measured</span>`;
 }
 // the lead-time caption: a measured file gives lead_time_s without saying how it is summarised, so say only that
-const leadNote = run => isSim(run) ? "simulated, seconds from onset to alarm" : "seconds, as the results file gives it; how it is averaged is not stated";
+const leadNote = run => isSim(run) ? "simulated, seconds from onset to alarm" : tp("seconds; averaging not stated", "seconds, as the results file gives it; how it is averaged is not stated");
 function bestNote(v) {
   const b = d => `<button class="lnk2" data-sel="${esc(d.id)}" style="color:#7c2d12;font-weight:600;text-decoration:underline">${esc(d.id)} (${fmt(d.gates)} gates)</button>`;
   const [d, ...rest] = v.ev.nearest;
-  return `<p class="nopass">Ringed on the chart: the best design so far, ${b(d)}${rest.length ? `, and the next by the pooled result, ${andList(rest.map(b))}` : ""}. None of them clears your bar.</p>`;
+  return `<p class="nopass">${tp("Ringed:", "Ringed on the chart: the best design so far, then the next by the pooled result.")} best ${b(d)}${rest.length ? `, then ${andList(rest.map(b))}` : ""}. None clears your bar.</p>`;
 }
 function tilesHTML(run, v) {
   if (v.ev.best && v.ev.nearest[0]) return tilesBest(run, v);
@@ -2221,7 +2236,7 @@ function funnelHTML(run, v) {
 }
 function inspHTML(run, v) {
   const d = selDesign(run, v), c = caseOf(run);
-  if (!d) return `<h2>Inspector</h2><p class="is">Click a dot on the chart to see that design here.</p>`;
+  if (!d) return `<h2>Inspector</h2><p class="is">Click a dot on the chart to inspect it.</p>`;
   const isCh = v.ev.chosen && v.ev.chosen.id === d.id, mark = d.source === "measured" ? '<span class="mk mea">measured</span>' : '<span class="mk sim">simulated</span>';
   const rows = [];
   rows.push(["Chip size", `${fmt(d.gates)} gates`]);
@@ -2237,17 +2252,17 @@ function inspHTML(run, v) {
   if (d.verified) rows.push(["Circuit against its model", run.case === "af" ? `${fmt(d.verified.vectors)} of ${fmt(d.verified.vectors)} test windows identical, ${d.verified.mismatches} mismatches` : `${fmt(d.verified.vectors)} test vectors, ${d.verified.mismatches} mismatches${d.verified.proved_equivalent ? ", proved equivalent" : ""}`]);
   else if (d.source === "measured" && run.case !== "af") rows.push(["Circuit against its model", "not checked for this design"]);
   let note = "";
-  if (run.case === "af") note = `<p class="inote gap">The circuit is less accurate than the full-precision model it came from (sensitivity ${fmtVal("sensitivity", AF_BASE.sensitivity_pooled)} and specificity ${fmtVal("specificity", AF_BASE.specificity)} per recording). That is a model gap, not a hardware gap: the circuit matched its own model on every test window.</p>`;
-  else if (d.role === "baseline") note = `<p class="inote">The baseline, scored the same way as the designs. It is a reference, not a design of ours.</p>`;
-  else if (v.ev.best && v.ev.nearest[0] === d) note = `<p class="inote">No design passes every target. This is the best so far by the pooled result on held-out ${esc(c.whoP)}.</p>`;
-  else if (!v.ev.chosen && run.targets.length && v.done) note = `<p class="inote">No design passes every target, so this is the nearest. ${isSim(run) ? "Loosen a target, or try a bigger preset." : "Loosen a target to see which designs clear it."}</p>`;
+  if (run.case === "af") note = `<p class="inote gap"${TA(`The circuit is less accurate than the full-precision model it came from (sensitivity ${fmtVal("sensitivity", AF_BASE.sensitivity_pooled)} and specificity ${fmtVal("specificity", AF_BASE.specificity)} per recording). That is a model gap, not a hardware gap: the circuit matched its own model on every test window.`)}>Model gap, not hardware: full precision ${fmtVal("sensitivity", AF_BASE.sensitivity_pooled)} / ${fmtVal("specificity", AF_BASE.specificity)}.</p>`;
+  else if (d.role === "baseline") note = `<p class="inote"${TA("The baseline, scored the same way as the designs. It is a reference, not a design of ours.")}>Baseline, not a design of ours.</p>`;
+  else if (v.ev.best && v.ev.nearest[0] === d) note = `<p class="inote"${TA(`No design passes every target. This is the best so far by the pooled result on held-out ${c.whoP}.`)}>No design passes. Best so far, pooled.</p>`;
+  else if (!v.ev.chosen && run.targets.length && v.done) note = `<p class="inote"${TA(`No design passes every target, so this is the nearest. ${isSim(run) ? "Loosen a target, or try a bigger preset." : "Loosen a target to see which designs clear it."}`)}>No design passes. This is the nearest.</p>`;
   return `<h2>${d.role === "baseline" ? "Baseline" : "Design"} ${esc(d.id)} ${mark}${isCh ? '<span class="pf ok">Chosen</span>' : ""}</h2><p class="is">${esc(budgetLabel(run, d.channels))}${d.round ? `, round ${d.round}` : ""}</p>
     ${rows.map(([a, b]) => `<div class="irow"><span>${a}</span><b>${b}</b></div>`).join("")}${note}
     <div class="ilinks"><a class="qbtn" href="#/run/${run.id}/chip">${I("chip", "s13")}The chip</a>${window.ChipInReport?.cmpBtn(run, v, d, rpP()) || "" /* REPORT HOOK: compare */}</div>`;
 }
 function afBaseLine(run) {
   const st = run.targets.map(t => meets(t, t.metric === "sensitivity" ? AF_BASE.sensitivity_pooled : t.metric === "specificity" ? AF_BASE.specificity : null));
-  return st.every(x => x === true) ? "The full-precision model it came from clears every target here, so a better-trained model, not a bigger chip, is the next step." : "The full-precision model it came from is shown as a reference line.";
+  return st.every(x => x === true) ? tp("Its full-precision model clears every target.", "The full-precision model it came from clears every target here, so a better-trained model, not a bigger chip, is the next step.") : tp("Full-precision model: the reference line.", "The full-precision model it came from is shown as a reference line.");
 }
 function legendHTML(run, v) {
   if (run.case === "af") return `<span>${shapeSVG(0, "#c3c8d4")}The measured circuit, ringed red where it misses a target</span><span><svg viewBox="0 0 14 14"><path d="M0 7h14" stroke="#141a2e" stroke-width="1.6" stroke-dasharray="3 2.5"/></svg>Your bar</span><span><svg viewBox="0 0 14 14"><path d="M0 7h14" stroke="#6b46c1" stroke-width="1.6" stroke-dasharray="1 2.5"/></svg>Full-precision model, not a chip</span>`;
@@ -2312,7 +2327,7 @@ function updOverview(run) {
     const both = k => mFile(run) && MET[k].fields.length > 1 && MET[k].fields.every(f => v.all.some(d => d.metrics[f] != null));
     $("#ysel").innerHTML = ord.map(k => both(k) ? opt(k, "pooled", `${MET[k].name}, all held-out ${cw.whoP} pooled`) + opt(k, "worst", `${MET[k].name}, worst held-out ${cw.who}`) : opt(k, "", MET[k].name)).join("");
     const np = $("#nopass");
-    np.innerHTML = A ? nopassAF(run, v) : run.case === "af" && run.targets.length && !v.ev.chosen ? `<p class="nopass"><b>One circuit was measured, so there is no family to choose from yet.</b> ${afBaseLine(run)}</p>` : v.ev.best && v.ev.nearest[0] ? bestNote(v) : run.targets.length && !v.ev.chosen && (v.done || isMea(run)) && v.vis.length ? `<p class="nopass">The nearest ${v.ev.nearest.length === 1 ? "is" : "are"} ${v.ev.nearest.map(d => `<button class="lnk2" data-sel="${esc(d.id)}" style="color:#7c2d12;font-weight:600;text-decoration:underline">${esc(d.id)} (${fmt(d.gates)} gates)</button>`).join(", ")}, ringed on the chart.</p>` : "";
+    np.innerHTML = A ? nopassAF(run, v) : run.case === "af" && run.targets.length && !v.ev.chosen ? `<p class="nopass"><b${TA("One circuit was measured, so there is no family to choose from yet.")}>One circuit measured, no family yet.</b> ${afBaseLine(run)}</p>` : v.ev.best && v.ev.nearest[0] ? bestNote(v) : run.targets.length && !v.ev.chosen && (v.done || isMea(run)) && v.vis.length ? `<p class="nopass">The nearest ${v.ev.nearest.length === 1 ? "is" : "are"} ${v.ev.nearest.map(d => `<button class="lnk2" data-sel="${esc(d.id)}" style="color:#7c2d12;font-weight:600;text-decoration:underline">${esc(d.id)} (${fmt(d.gates)} gates)</button>`).join(", ")}, ringed on the chart.</p>` : "";
     np.onclick = e => { const b = e.target.closest("[data-sel]"); if (b) { run.ui.sel = b.dataset.sel; saveRuns(); updOverview(run); } };
   }
   const stTxt = !plays(run) ? "" : A && v.done ? `Replay finished: ${fmt(v.all.length)} candidates and ${v.tl.af.steps.length} steps, ${clock(v.T)} on the demo clock.` : v.done ? `Done.${v.all.length.toLocaleString("en-GB")} designs checked, ${clock(v.T)} on the demo clock.` : run.clock.playing ? v.stage.txt : "Paused. " + v.stage.txt;
@@ -2605,6 +2620,17 @@ function afResultText(run) {
   return `Result against your targets, ${tw} on the test set: ${andList(parts)}. The circuit matched its own model, so any gap is the model, not the hardware (full precision: ${baseWords()}).`;
 }
 const stepText = (run, p, i) => i === MEASURED.af.path.length - 1 && !sameTargets(run.targets, CASES.af.targets) ? afResultText(run) : p.text;
+// the decision path's short lines; a short form is used only while every number in it is still in the file's text
+const AF_SHORT = { 1: "256 designs trained as one GPU batch: about 1,625 a minute, measured.", 2: "Best on validation too large: synthesis stopped past 10 minutes.", 3: "Capped at H x L <= 128 (119 of 256); best under it: L8, 6-bit, H16.", 5: "Bit for bit: 3,880 of 3,880 test windows identical." };
+const numsIn = t => String(t).match(/\d+(?:[.,]\d+)*/g) || [];
+const tgtShort = t => MET[t.metric].kind === "frac" ? (t.op === "<=" ? "at most " : "") + +(t.value * 100).toFixed(2) + "%" : fmtTarget(t);
+// the last step, one line per target: value (target, pass or fail)
+const afResultShort = run => run.targets.length ? run.targets.map(t => { const x = metricOf(run, AF_DESIGN, t.metric).v, ok = meets(t, x); return `${MET[t.metric].name} ${fmtVal(t.metric, x)} (target ${tgtShort(t)}, ${ok === true ? "pass" : ok === false ? "fail" : "not measured"})`; }).join(" · ") : null;
+function stepShort(run, p, i) {
+  if (i === MEASURED.af.path.length - 1) return afResultShort(run);
+  const s = AF_SHORT[p.step], have = numsIn(p.text);
+  return s && numsIn(s).every(n => have.includes(n)) ? s : null;
+}
 
 function headAF(run, v) {
   const N = v.all.length, fin = afFinal(v), g = fmt(AF_DESIGN.gates);
@@ -2612,7 +2638,7 @@ function headAF(run, v) {
   if (fin) {
     const st = targetState(run, AF_DESIGN), no = st.filter(x => x.ok === false).map(x => MET[x.t.metric].name.toLowerCase()), yes = st.filter(x => x.ok === true).map(x => MET[x.t.metric].name.toLowerCase());
     h1 = !run.targets.length ? `The circuit that was built has ${g} gates. Set a target to judge it.` : no.length ? `The ${g}-gate circuit that was built misses your ${andList(no)} target${yes.length ? ` and clears ${andList(yes)}` : ""}.` : `The ${g}-gate circuit that was built clears every target you set.`;
-    if (no.length) k1 = `It matched its own model on every test window, so the gap is in the model, not the hardware. The full-precision model reached ${baseWords()}${baseClears(run) ? ", which clears your bar: a better-trained model, not a bigger chip, is the next step" : ""}.`;
+    if (no.length) k1 = tp(`Full-precision model: ${fmtVal("sensitivity", AF_BASE.sensitivity_pooled)} / ${fmtVal("specificity", AF_BASE.specificity)}${baseClears(run) ? ", clears your bar" : ""}. The gap is the model, not the hardware.`, `It matched its own model on every test window, so the gap is in the model, not the hardware. The full-precision model reached ${baseWords()}${baseClears(run) ? ", which clears your bar: a better-trained model, not a bigger chip, is the next step" : ""}.`);
     else if (run.targets.length) k1 = `Judged on ${fmt(AF_DESIGN.counts.patients)} test recordings, ${afScopeWord(MEASURED.af.testScope)}.`;
   } else if (!v.vis.length) h1 = `Replaying the search. Its ${fmt(N)} real candidate designs arrive next.`;
   else if (v.vis.length < N) h1 = `${fmt(v.vis.length)} of ${fmt(N)} real candidate designs, scored on validation recordings.`;
@@ -2662,7 +2688,7 @@ function funnelAF(run, v) {
     + cell(f.under_cap, "Under the size cap", ph >= 3, live && ph === 3)
     + cell(f.synthesised, "Synthesised to gates", ph >= 4, live && ph === 4)
     + cell(f.verified, "Verified bit for bit", ph >= 5, live && ph === 5, true)
-    + `<div class="fs sep" style="flex:1.7"><div class="fn">About ${about(AF_SPEED.batched)} a minute</div><div class="fl">trained in batches of ${fmt(AF_SPEED.k)}, against about ${about(AF_SPEED.single)} one at a time</div></div>`;
+    + `<div class="fs sep" style="flex:1.7"><div class="fn">About ${about(AF_SPEED.batched)} a minute</div><div class="fl"${TA(`trained in batches of ${fmt(AF_SPEED.k)}, against about ${about(AF_SPEED.single)} one at a time`)}>batches of ${fmt(AF_SPEED.k)}; ${about(AF_SPEED.single)} singly</div></div>`;
   return { html, note: "" };
 }
 function legendAF(run) {
@@ -2671,8 +2697,8 @@ function legendAF(run) {
 }
 function logAF(run, v) {
   const P = MEASURED.af.path, st = v.tl.af.steps;
-  const items = P.slice(0, v.ph).map((p, i) => `<li class="${i === v.ph - 1 && !v.done ? "now" : ""}${!v.done && v.t - st[i] < 0.5 ? " new" : ""}"${p.source ? ` title="From ${esc(p.source)}"` : ""}><span class="n">${esc(p.step)}</span><div><span class="w">${clock(st[i])}</span>${esc(stepText(run, p, i))}</div></li>`).join("");
-  return `<h2>Decision path, replayed</h2><p class="als">The real search's recorded steps on the demo clock. No model runs now.</p>${items ? `<ol>${items}</ol>` : '<p class="wait">The first step appears once the brief is read.</p>'}`;
+  const items = P.slice(0, v.ph).map((p, i) => `<li class="${i === v.ph - 1 && !v.done ? "now" : ""}${!v.done && v.t - st[i] < 0.5 ? " new" : ""}"${p.source ? ` title="From ${esc(p.source)}"` : ""}><span class="n">${esc(p.step)}</span><div><span class="w">${clock(st[i])}</span>${tp(esc(stepShort(run, p, i) || stepText(run, p, i)), stepShort(run, p, i) ? stepText(run, p, i) : "")}</div></li>`).join("");
+  return `<h2>Decision path, replayed</h2><p class="als"${TA("The real search's recorded steps on the demo clock. No model runs now.")}>Recorded steps; no model runs now.</p>${items ? `<ol>${items}</ol>` : '<p class="wait">The first step appears once the brief is read.</p>'}`;
 }
 // the cloud's Y range: the bar, the reference and nearly every candidate; the few far below sit on the bottom edge
 function afYRange(run, key) {
@@ -2684,14 +2710,15 @@ function afYRange(run, key) {
 }
 function cfootAF(run, v) {
   const r = afYRange(run, run.primary), simple = !!SUM()?.simple(run, v, sumP());
-  return `${esc(MEASURED.af.basis || "")}${r.below && !simple ? ` ${fmt(r.below)} candidate${r.below === 1 ? "" : "s"} below ${Math.round(r.lo * 100)}% ${r.below === 1 ? "sits" : "sit"} on the bottom edge.` : ""}`;
+  const edge = r.below && !simple ? ` ${fmt(r.below)} candidate${r.below === 1 ? "" : "s"} below ${Math.round(r.lo * 100)}% ${r.below === 1 ? "sits" : "sit"} on the bottom edge.` : "";
+  return `${MEASURED.af.basis ? tp("Dots are validation scores; the headline figures are test results.", MEASURED.af.basis) : ""}${edge}`;
 }
 function nopassAF(run, v) {
   const F = MEASURED.af; if (!afFinal(v) || !run.targets.length) return "";
   const others = v.all.filter(d => d.under && d !== F.chosenD && passesAll(run, d)).sort((a, b) => afSize(v, a).g - afSize(v, b).g);
   if (!others.length) return "";
   const s = others[0], n = others.length;
-  return `<p class="anote">${n === 1 ? "One other candidate" : `${fmt(n)} other candidates`} under the size cap ${n === 1 ? "passes" : "pass"} your targets on validation; none of them was built or tested. Smallest: <button class="lnk3" data-sel="${esc(s.id)}">${esc(s.id)}</button>, ${estSpan(`about ${fmt(afSize(v, s).g)} gates`, sizeTip())}.</p>`;
+  return `<p class="anote">${tp(`${n === 1 ? "1 other" : `${fmt(n)} others`} under the cap ${n === 1 ? "passes" : "pass"} on validation, not built or tested.`, `${n === 1 ? "One other candidate" : `${fmt(n)} other candidates`} under the size cap ${n === 1 ? "passes" : "pass"} your targets on validation; none of them was built or tested.`)} Smallest: <button class="lnk3" data-sel="${esc(s.id)}">${esc(s.id)}</button>, ${estSpan(`about ${fmt(afSize(v, s).g)} gates`, sizeTip())}.</p>`;
 }
 function tipAF(run, v, d) {
   const sz = afSize(v, d);
@@ -2818,7 +2845,7 @@ function renderChipTab(run, force) {
   const gtxt = A && !sz.m ? `about ${fmt(sz.g)} gates, estimated` : `${fmt(A ? sz.g : d ? d.gates : 0)} gates`;
   $("#body").innerHTML = `<div class="vis">${tabHead(run, d ? `Design ${esc(d.id)}: ${gtxt}` : "The chip", d ? `${A ? esc(cfgText(d)) : esc(budgetLabel(run, d.channels))}, ${dep != null ? `logic depth ${dep}` : "not synthesised"}. Drag to turn it.` : "The chip appears once the first designs are checked.")}
     <div class="stage s3"><div class="g3" id="g3"></div><div class="ccard cmodel" id="chipK" style="left:14px;top:14px">${chipCard(run, v, d)}</div></div>
-    <p class="vf">A drawing: the die's pattern grows with the gate count, but the layout is illustrative, not a place-and-route result. ${run.case === "af" ? "" : `Power on the Overview's battery view is estimated, scaled from other designs, not measured for this one. ${esc(window.ChipInModels ? window.ChipInModels.describeEstimate("chip_power") : "scaled from a layout run of other designs, not measured")}${mFile(run) ? " The results file has no power figure for these designs; layout and timing tools were not run on them." : ""}`}</p></div>`;
+    <p class="vf"${TA(`A drawing: the die's pattern grows with the gate count, but the layout is illustrative, not a place-and-route result. ${run.case === "af" ? "" : `Power on the Overview's battery view is estimated, scaled from other designs, not measured for this one. ${window.ChipInModels ? window.ChipInModels.describeEstimate("chip_power") : "scaled from a layout run of other designs, not measured"}${mFile(run) ? " The results file has no power figure for these designs; layout and timing tools were not run on them." : ""}`}`)}>Illustrative drawing, not a real layout.${run.case === "af" ? "" : " Power: estimated."}</p></div>`;
   mount3D($("#g3"), "chip-" + (c.kind3d || "electrode"), L => buildChip(L, c.kind3d || "electrode"), view => view.update(d), () => `<svg class="v" viewBox="0 0 200 120"><rect x="60" y="20" width="80" height="80" rx="6" fill="#1a2338"/><text x="100" y="64" fill="#fff" font-size="12" text-anchor="middle">${d ? fmt(d.gates) + " gates" : ""}</text></svg>`);
   designsPaint(run, v); /* DESIGNS HOOK */
 }
@@ -2880,7 +2907,7 @@ function renderChat(run, force) {
   const first = force || !$("#feed"); cur.sig = sig;
   const html = evs.map(e => e.k === "you" ? `<div class="you"><p>${esc(e.txt)}</p></div>` : `<div class="msg" style="--rc:${CHAT_K[e.k][1]}"><span class="mav" style="background:${CHAT_K[e.k][1]}1a;color:${CHAT_K[e.k][1]}">${I(CHAT_K[e.k][0])}</span><div><div class="who">${APP.name}<span class="when">${!plays(run) ? "measured run" : clock(e.t)}</span></div><div class="mt">${esc(e.txt)}</div></div></div>`).join("");
   if (first) {
-    $("#body").innerHTML = `<div class="chat"><div class="feed" id="feed"><div class="fin"><p class="cnote2">${isSim(run) ? `This simulated run narrates its own steps. No model was called; ${esc(modelName(run.agent))} is the model the run was labelled with.` : afFile(run) ? "The real search's recorded steps, replayed on the demo clock. No model was called." : "The measured run's results, as recorded."}</p><div id="msgs">${html}</div></div></div>
+    $("#body").innerHTML = `<div class="chat"><div class="feed" id="feed"><div class="fin"><p class="cnote2">${isSim(run) ? tp("Simulated: no model was called.", `This simulated run narrates its own steps. No model was called; ${modelName(run.agent)} is the model the run was labelled with.`) : afFile(run) ? tp("Recorded steps, replayed. No model was called.", "The real search's recorded steps, replayed on the demo clock. No model was called.") : "The measured run's results, as recorded."}</p><div id="msgs">${html}</div></div></div>
       ${window.ChipInLive?.i1?.exampleBox?.() ?? `<div class="comp"><div class="box"><textarea id="note" rows="1" aria-label="Add a note to this run" placeholder="Add a note to this run" data-voice></textarea><button class="send" id="sendN" aria-label="Add note">${I("up")}</button></div></div>`}</div>`; /* LIVE HOOK: the agent message box, disabled and explained on an example run (../i1-live.js) */
     const ta = $("#note"), sb = $("#sendN"); if (ta) { /* LIVE HOOK: no note box when the message box replaced it */
     ta.addEventListener("input", () => sb.classList.toggle("ready", !!ta.value.trim()));
@@ -3045,7 +3072,7 @@ function panelsTick(run, v) {
   const c = panelCtx(run, v), sig = ctxSig(run, c);
   PN.ctx = c; PN.run = run;
   const host = $("#batBand");
-  if (host && !c.caseKind) { if (!host.firstChild) host.innerHTML = `<p class="funn">The battery view covers ECG, EEG and the incubator's radar and thermal sensing; the power model has no figures for this device's sensors yet.</p>`; }
+  if (host && !c.caseKind) { if (!host.firstChild) host.innerHTML = `<p class="funn"${TA("The battery view covers ECG, EEG and the incubator's radar and thermal sensing; the power model has no figures for this device's sensors yet.")}>No battery figures for these sensors yet.</p>`; }
   else if (host && !host._bat) { host._bat = PX.mountBattery(host, c); host._sig = sig; }
   else if (host && host._sig !== sig) { host._bat.update(c); host._sig = sig; }
   const ovh = $("#ovh");
@@ -3067,7 +3094,7 @@ function panelsTick(run, v) {
     if (!cl.unit_cost_text) line?.remove();
     else {
       if (!line) { line = document.createElement("p"); line.className = "cl-line"; const lk = insp.querySelector(".ilinks"); if (lk) insp.insertBefore(line, lk); else insp.appendChild(line); }
-      line.innerHTML = `<span class="est" title="${esc(cl.tip)}">${esc(cl.unit_cost_text)}</span><button type="button" class="lnk" data-cost>Cost assumptions</button>${cl.delta_text ? `<span class="cl-d"><span class="est" title="${esc(cl.tip)}">${esc(cl.delta_text)}</span></span>` : ""}`;
+      line.innerHTML = `<span class="est" title="${esc(cl.unit_cost_short ? `${cl.unit_cost_text}. ${cl.tip}` : cl.tip)}">${esc(cl.unit_cost_short || cl.unit_cost_text)}</span><button type="button" class="lnk" data-cost>Cost assumptions</button>${cl.delta_text ? `<span class="cl-d"><span class="est" title="${esc(cl.tip)}">${esc(cl.delta_text)}</span></span>` : ""}`;
       line.querySelector("[data-cost]").onclick = () => openCostFor(run);
     }
   }
@@ -3286,7 +3313,7 @@ function sabRender(run, v) {
   const grid = !open ? "" : `<div class="sab-g" id="sabG"><p class="sab-gh">${cs ? `Round ${r} of ${nR}, ${esc((SAB_STAGES.find(x => x[0] === cs.stage) || [, cs.stage])[1].toLowerCase())}: ${run.events ? ags.length : W} subagents in parallel, each on ${esc(SAB_KIND[cs.stage] || "its own strategy")}; the main agent keeps the best. ` : "No batch has started yet. "}Hollow: running. Filled: done. Red: failed. Ringed: kept. Simulated.</p>
     <div class="sab-gg">${ags.map(a => `<div class="sab-a"><i class="${kept.has(a.id) ? "kept" : a.state === "running" ? "" : a.state}" aria-hidden="true"></i><b title="${esc(a.strategy)}">${esc(a.strategy)}</b><span>${a.state === "running" ? "running" : esc(a.state + (a.text ? ", " + a.text : ""))}${kept.has(a.id) ? ", kept" : ""}</span></div>`).join("")}</div>
     ${st.stages.some(s => s.merged && (s.round === r || s.stage === "reference")) ? `<ul class="sab-m">${st.stages.filter(s => s.merged && (s.round === r || s.stage === "reference")).map(s => `<li>${sabMergeLine(st, s)}</li>`).join("")}</ul>` : ""}</div>`;
-  const h = `<div class="sab-row"><span class="mk sim">simulated</span><ol class="sab-st" aria-label="Stages">${marks}</ol>${chips ? `<span class="sab-ch" aria-label="${fin} of ${ags.length} subagents finished">${chips}</span>` : ""}<span class="sab-tx">${tx}</span><button type="button" class="sab-more" aria-expanded="${open}" aria-controls="sabG">${open ? "Hide batch" : "Batch details"}</button></div>${grid}`;
+  const h = `<div class="sab-row"><span class="mk sim">simulated</span><ol class="sab-st" aria-label="Stages">${marks}</ol>${chips ? `<span class="sab-ch" aria-label="${fin} of ${ags.length} subagents finished">${chips}</span>` : ""}<span class="sab-tx"${TA(plainOf(tx))}>${tx}</span><button type="button" class="sab-more" aria-expanded="${open}" aria-controls="sabG">${open ? "Hide batch" : "Batch details"}</button></div>${grid}`;
   if (el._h !== h) {
     const f = el.contains(document.activeElement) && document.activeElement.classList.contains("sab-more");
     el._h = h; el.innerHTML = h; if (f) el.querySelector(".sab-more").focus({ preventScroll: true });

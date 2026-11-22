@@ -45,6 +45,8 @@
 
   /* ---------- helpers ---------- */
   var esc = function (s) { return scrub(String(s == null ? "" : s)).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
+  // a short note's full sentence, shown on hover, focus or tap by ../i1-tip.js
+  var tipA = function (full) { return ' data-tip="' + esc(full) + '"'; };
   var num = function (v) { return typeof v === "number" && isFinite(v) ? v : null; };
   var fmt = function (n) { return Math.round(n).toLocaleString("en-GB"); };
   var cap = function (s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; };
@@ -376,13 +378,13 @@
     var ag = order.map(function (k) { return agent[k]; }).sort(function (a, b) { return rank(a) - rank(b); });
     var row = function (r) { return '<div class="irow"><span>' + esc(r[0]) + "</span><b>" + r[1] + "</b></div>"; };
     var mark = dataMark(m.spec, rec ? [rec] : []);
-    return '<div class="vh"><p class="cf-k">Chip ' + esc(id) + (id === m.chosenId ? ", chosen" : "") + " " + mark + "</p>" + variantHTML(rec) + '<h2>The chip</h2><p class="vs">Two kinds of figure: what the chip lab measured on the circuit, and what the agent computed on the patients.</p></div>' +
+    return '<div class="vh"><p class="cf-k">Chip ' + esc(id) + (id === m.chosenId ? ", chosen" : "") + " " + mark + "</p>" + variantHTML(rec) + '<h2>The chip</h2><p class="vs"' + tipA("Two kinds of figure: what the chip lab measured on the circuit, and what the agent computed on the patients.") + '>Lab-measured circuit figures, then agent-computed accuracy.</p></div>' +
       '<section class="stage cf-sec" data-sec="lab"><h3 class="cf-h3">Measured by the chip lab</h3>' + (lab.length || checks.length ? '<div class="cf-kv">' + lab.map(function (r) { return row([r[0], r[1]]); }).join("") + "</div>" : '<p class="cf-sub">The lab has not reported figures for this chip yet.</p>') +
-      (checks.length ? '<h4 class="cf-h4">Vectors checked against the model</h4><div class="cf-kv">' + checks.map(function (c) { return row([c[0], esc(c[1])]); }).join("") + "</div>" + (checks.length > 1 ? '<p class="cf-sub">Each kind of check runs its own set of input vectors, so the counts differ.</p>' : "") : "") + "</section>" +
+      (checks.length ? '<h4 class="cf-h4">Vectors checked against the model</h4><div class="cf-kv">' + checks.map(function (c) { return row([c[0], esc(c[1])]); }).join("") + "</div>" + (checks.length > 1 ? '<p class="cf-sub"' + tipA("Each kind of check runs its own set of input vectors, so the counts differ.") + ">Each check uses its own vectors.</p>" : "") : "") + "</section>" +
       '<section class="stage cf-sec" data-sec="agent"><h3 class="cf-h3">Reported by the agent</h3>' + (ag.length ? '<div class="cf-kv">' + ag.map(function (r) {
         var tg = r.k ? T.filter(function (x) { return x.metric === r.k; })[0] : null, txt = r.k ? fmtV(r.k, r.v, m.spec) : r.v;
         return row([r.label, esc(txt) + (tg ? '<span class="cf-tg">target ' + esc(fmtT(tg, m.spec)) + "</span>" + pf(meets(tg, r.v)) : "")]);
-      }).join("") + '</div><p class="cf-sub">Computed by the agent on ' + (/mk sim/.test(mark) ? "synthetic " : mark ? "public " : "") + "patient data, not measured by the lab.</p>" : '<p class="cf-sub">The agent reported no accuracy figures for this chip.</p>') + "</section>";
+      }).join("") + '</div><p class="cf-sub"' + tipA("Computed by the agent on " + (/mk sim/.test(mark) ? "synthetic " : mark ? "public " : "") + "patient data, not measured by the lab.") + ">By the agent" + (/mk sim/.test(mark) ? " on synthetic data" : mark ? " on public data" : "") + ", not measured by the lab.</p>" : '<p class="cf-sub">The agent reported no accuracy figures for this chip.</p>') + "</section>";
   }
 
   // Subagent batches: one line per stage that opens to its entries. open: { stage: true }

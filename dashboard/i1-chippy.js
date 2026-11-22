@@ -333,8 +333,9 @@
     if (m === "checking") return '<div class="chp-off"><p>Connecting to the backend…</p></div>';
     if (m === "nokey") return '<div class="chp-off"><p>The connected backend has no model key for Chippy, so it cannot answer yet.</p><p>Start the backend with the OpenRouter key set in its environment (the variable named in its settings), then open Chippy again.</p></div>';
     if (m === "down") return '<div class="chp-off"><p>The backend did not answer. Check that it is still running on this computer, then open Chippy again.</p><p><a href="#/configure">Open Configure</a></p></div>';
-    return '<div class="chp-off"><p>Chippy is the guide to ChipIn and your runs: it answers questions about the product and your results, and moves this page to what it is talking about.</p>' +
-      "<p>It needs a ChipIn backend running on your computer, which reads your runs and asks the model. This page has none connected, so Chippy cannot answer here. The example runs on this page work without it.</p>" +
+    // short lines; the full sentences show on hover, focus or tap (../i1-tip.js)
+    return '<div class="chp-off"><p data-tip="Chippy is the guide to ChipIn and your runs: it answers questions about the product and your results, and moves this page to what it is talking about.">Answers questions about ChipIn and your runs.</p>' +
+      '<p data-tip="It needs a ChipIn backend running on your computer, which reads your runs and asks the model. This page has none connected, so Chippy cannot answer here. The example runs on this page work without it.">Needs a ChipIn backend; none is connected here.</p>' +
       '<p><a href="#/configure">Set up a backend under Configure</a></p></div>';
   }
   var GREET = "I’m Chippy, your guide to ChipIn. Ask about the product or any of your runs; I can read their results and files, and open the run, tab or design I am talking about. To steer a run’s agent, use its Chat tab.";

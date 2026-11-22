@@ -54,6 +54,9 @@
   var RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var esc = function (s) { return (window.ChipInFold ? window.ChipInFold.scrub(String(s == null ? "" : s)) : String(s == null ? "" : s)).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
+  // a short note's full sentence, shown on hover, focus or tap by ../i1-tip.js
+  var tipA = function (full) { return full ? ' data-tip="' + esc(full) + '"' : ""; };
+  var setTip = function (el, full) { if (full) el.setAttribute("data-tip", full); else el.removeAttribute("data-tip"); };
   var fmtN = function (n) { return Math.round(n).toLocaleString("en-GB"); };
   var clamp = function (x, a, b) { return Math.max(a, Math.min(b, x)); };
   var num = function (v) { return typeof v === "number" && isFinite(v) ? v : null; };
@@ -709,7 +712,7 @@
       return '<a class="tab' + (v[0] === view ? " on" : "") + '" href="#/rec/' + rec.src + "/" + encodeURIComponent(rec.id) + "/" + v[0] + '">' + v[1] + "</a>";
     }).join("") + '</nav><span class="grow" style="flex:1"></span><div class="tright"><span class="mk topbadge"></span></div></div>' +
       '<div class="lv-lost" id="rvLost" role="alert" hidden></div>' +
-      '<div class="body" id="rvBody">' + (view === "overview" ? overviewHTML() : view === "log" ? "" : view === "files" ? '<div class="rv-files"><h2>Files</h2><p>Files the run had written by the time on the bar.</p><div id="rvFiles"></div></div>' : (view === "chip" ? '<div class="vis dz-vis" id="rvDz"></div>' /* DESIGNS HOOK */ : "") + '<div class="vis" id="rvTab"></div>') + "</div>";
+      '<div class="body" id="rvBody">' + (view === "overview" ? overviewHTML() : view === "log" ? "" : view === "files" ? '<div class="rv-files"><h2>Files</h2><p>Written by the time on the bar.</p><div id="rvFiles"></div></div>' : (view === "chip" ? '<div class="vis dz-vis" id="rvDz"></div>' /* DESIGNS HOOK */ : "") + '<div class="vis" id="rvTab"></div>') + "</div>";
     var ctl = {
       clock: V.clock, marks: rec.marks, gaps: rec.gaps, kind: "recorded",
       refreshTotal: function () { if (rec.running || V.clock.live) { V.clock.total = activeTotal(rec); } },
@@ -857,8 +860,9 @@
       else if (M.pts.length) h1 = "Searching: " + fmtN(M.pts.length) + " design" + (M.pts.length === 1 ? "" : "s") + " so far, no chip chosen yet.";
       else h1 = M.n ? "No design yet. The run is working through its brief." : "Before the first event.";
       $("#rvH1").innerHTML = h1;
-      var ht = heldText(M), he = $("#rvHeld"); he.textContent = ht; he.hidden = !ht;
-      $("#rvBrief").textContent = clip(f.prompt || f.title || "", 420);
+      var ht = heldText(M), he = $("#rvHeld"); he.textContent = heldShort(M) || ht; setTip(he, heldShort(M) ? ht : ""); he.hidden = !ht;
+      // the brief is the run's own text: one short line here, all of it on hover
+      var br = f.prompt || f.title || "", bs = $("#rvBrief"); bs.textContent = clip(br, 110); setTip(bs, br.length > 110 ? clip(br, 1200) : "");
       // the site's index line: the dataset credit and a note added after the run
       var ln = rec.line || {}, dt = ln.data && ln.data.name ? ln.data : null, de = $("#rvData"), ne = $("#rvNote");
       de.hidden = !dt; de.innerHTML = dt ? "Data: " + (dt.url ? '<a href="' + esc(dt.url) + '" target="_blank" rel="noopener">' + esc(dt.name) + "</a>" : esc(dt.name)) + (dt.licence ? ", " + esc(dt.licence) : "") + (dt.credit ? ". " + esc(dt.credit) : "") : "";
@@ -900,8 +904,17 @@
       var S = [["proposed", "Proposed"], ["scored", "Scored"], ["compiled", "Compiled to gates"], ["verified", "Verified against the model"], ["clear", "Clear your targets"], ["chosen", "Chosen"]];
       if (!M.T.length) S = S.filter(function (x) { return x[0] !== "clear"; });
       $("#rvFun").innerHTML = S.map(function (x, i) { return '<div class="fs' + (i === S.length - 1 ? " last" : "") + (!fu[x[0]] ? " mute" : "") + '" data-f="' + x[0] + '"><div class="fn">' + fmtN(fu[x[0]]) + '</div><div class="fl">' + x[1] + "</div></div>"; }).join("");
-      $("#rvFunn").textContent = (live ? "Counted from the design records this run reported so far, up to the time on the bar; the run is still going." : "Counted from the design records this run reported, up to the time on the bar.") + (M.T.length ? " Clear your targets is judged against the run's spec." : "");
+      $("#rvFunn").textContent = live ? "Counts so far; the run is still going." : "Counts up to the time on the bar.";
+      setTip($("#rvFunn"), (live ? "Counted from the design records this run reported so far, up to the time on the bar; the run is still going." : "Counted from the design records this run reported, up to the time on the bar.") + (M.T.length ? " Clear your targets is judged against the run's spec." : ""));
     });
+  }
+  // the same misses, one short line: value (target, fail) per target
+  function heldShort(M) {
+    var c = M.chosen; if (!c || !c.d || c.d.basis === "test") return "";
+    var h = F.heldOut(M.f, c.id, V.rec.final); if (!h) return "";
+    var miss = M.T.filter(function (t) { return h.pooled[t.metric] != null && F.meets(t, h.pooled[t.metric]) === false; });
+    if (!miss.length) return "";
+    return "Held-out: " + miss.map(function (t) { return F.metaOf(t.metric).n.toLowerCase() + " " + F.fmtV(t.metric, h.pooled[t.metric], M.spec) + " (target " + F.fmtT(t, M.spec) + ", fail)"; }).join("; ") + ".";
   }
   // the held-out misses of the chosen chip, worded as the live view words them
   // (a chosen record scored on the test set counts too: its own figures are the held-out ones)

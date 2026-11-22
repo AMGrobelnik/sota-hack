@@ -54,7 +54,7 @@
  *       Drawer "Cost assumptions": every ChipInModels.COST_DEFAULTS input editable, live
  *       recomputation with costModel and costDelta; onChange(inputs) after each valid edit.
  *       The battery class follows the design unless the user picks one.
- *   ChipInPanels.costLine(ctx) -> { unit_cost_text, delta_text, tip }
+ *   ChipInPanels.costLine(ctx) -> { unit_cost_text, unit_cost_short, delta_text, tip }
  *       Unit cost of selected (or chosen) and costDelta's sentence, chosen against selected.
  *   ChipInPanels.openMeasured(facts) -> { close() }
  *       Drawer "Measured so far" listing only the facts handed in:
@@ -245,6 +245,13 @@
   function estT(txt, tip) {
     return '<span class="est" title="' + esc(tip) + '">' + txt + "</span>";
   }
+  // a short note's full sentence, shown on hover, focus or tap by ../i1-tip.js (a plain title without it)
+  function tipA(full) {
+    return window.ChipInTip ? window.ChipInTip.attr(full) : ' title="' + esc(full) + '"';
+  }
+  function plain(h) {
+    return String(h).replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+  }
   var MK_SIM = '<span class="mk sim">simulated</span>';
   var MK_MEA = '<span class="mk mea">measured</span>';
   var MK_ILL = '<span class="mk no">illustrative</span>';
@@ -376,6 +383,8 @@
       ? "The chip is never your battery bottleneck: at most " + estT(sharePct(maxShare), M().describeEstimate("chip_power")) + " of device power in these budgets."
       : "";
     var lede = [story.lead, neck].filter(Boolean).join(" ");
+    // shown short: the chip's share; the channel story (the rows below show its figures) is in the detail
+    if (neck) lede = "<span" + tipA(plain(lede) + " Estimated: " + M().describeEstimate("device_power")) + ">The chip is never the bottleneck: at most " + estT(sharePct(maxShare), M().describeEstimate("chip_power")) + " of device power.</span>";
 
     var dev = ctx.reusable === true ? "a <b>reusable</b> device" : ctx.reusable === false ? "a <b>disposable</b> device" : "";
     var ask = ctx.batteryTargetHours > 0
@@ -427,7 +436,7 @@
       (story.more ? '<details class="cpn-more"><summary>More from the power model</summary><p>' + story.more + "</p></details>" : "") +
       '<p class="cpn-ask">' + ask + "</p>" +
       '<div class="cpn-rows" role="list" aria-label="Battery by ' + esc(unit) + '">' + html + "</div>" + same +
-      '<p class="cpn-foot">Device power is front end, Bluetooth radio and chip; the chip\'s power is an estimate from one layout run. A class needs at least an illustrative ' + minH + " hours per cell or charge " + MK_ILL + " (not a clinical figure). Open a row for its parts and sources.</p>" +
+      '<p class="cpn-foot"' + tipA("Device power is front end, Bluetooth radio and chip; the chip's power is an estimate from one layout run. A class needs at least an illustrative " + minH + " hours per cell or charge (not a clinical figure). Open a row for its parts and sources.") + ">Front end, radio and chip; chip power estimated.</p>" +
       "</div>";
   }
 
@@ -550,27 +559,29 @@
         '<div style="font-size:11.5px;color:var(--cpn-ink3)">' + esc(scopeOf(ctx, iv)) + "</div>" +
         '<div class="cpn-rng">' + rangeRow(ctx.chosen ? "Chosen" : "Selected", iv, "cho") + (sel ? rangeRow("Selected", sel, "sel") : "") +
         '<div class="cpn-ax"><span></span><div><span>0%</span><span>100%</span></div></div>' +
-        (t && t.value >= 0 && t.value <= 1 ? '<p class="cpn-key"><i></i>your target, ' + esc((t.op === "<=" ? "at most " : "at least ") + pct1(t.value).replace(".0%", "%")) + ". The bar is the 95% range, the dot the design's value.</p>" : "") + "</div>";
+        (t && t.value >= 0 && t.value <= 1 ? '<p class="cpn-key"' + tipA("your target, " + (t.op === "<=" ? "at most " : "at least ") + pct1(t.value).replace(".0%", "%") + ". The bar is the 95% range, the dot the design's value.") + '><i></i>your target, ' + esc((t.op === "<=" ? "at most " : "at least ") + pct1(t.value).replace(".0%", "%")) + "; bar: 95% range</p>" : "") + "</div>";
       if (t && t.value >= 0 && t.value <= 1) {
         clin = clin.replace(/<div class="cpn-trk">/g, '<div class="cpn-trk"><i class="cpn-tg" style="left:' + (t.value * 100) + '%"></i>');
       }
       if (sel) {
         var ap = M().cannotTellApart({ low: iv.low, high: iv.high }, { low: sel.low, high: sel.high });
-        apart = '<p class="cpn-apart">' + (ap.overlap
-          ? "The chosen chip (" + pct1(iv.value) + ") and the selected design (" + pct1(sel.value) + ") cannot be told apart on this data: their ranges overlap."
-          : esc(ap.text)) + "</p>";
+        apart = ap.overlap
+          ? '<p class="cpn-apart"' + tipA("The chosen chip (" + pct1(iv.value) + ") and the selected design (" + pct1(sel.value) + ") cannot be told apart on this data: their ranges overlap.") + ">Chosen " + pct1(iv.value) + ", selected " + pct1(sel.value) + ": cannot be told apart.</p>"
+          : '<p class="cpn-apart">' + esc(ap.text) + "</p>";
       }
     } else {
       clin = "No range for " + esc(name.toLowerCase()) + " on this design: its counts are not in the data.";
     }
     var n = ctx.patientsUnseen != null ? ctx.patientsUnseen : c.patients;
     var few = n != null && n < M().CONFIDENCE_THRESHOLDS.low_if_patients_below;
-    var gen = ctx.dataSource === "simulated" || d.source === "simulated"
-      ? "Simulated data " + MK_SIM + ": these figures show how the search behaves, not how a real device performs on real " + esc(who) + "."
-      : (n != null ? "Judged on " + (few ? "only " : "") + fmtInt(n) + " unseen " + esc(who) + (few ? ": one " + esc(one(who)) + " more or less can move the result. " : ", held out before training. ") : "") +
+    var genFull = ctx.dataSource === "simulated" || d.source === "simulated"
+      ? "Simulated data: these figures show how the search behaves, not how a real device performs on real " + who + "."
+      : (n != null ? "Judged on " + (few ? "only " : "") + fmtInt(n) + " unseen " + who + (few ? ": one " + one(who) + " more or less can move the result. " : ", held out before training. ") : "") +
         "They come from the same source as the training data; there is no external validation yet.";
-    var eng = "Power " + est("from one layout run", "chip_power") + ", area " + est("from an assumed size per gate", "area") +
-      " and cost " + est("from illustrative inputs", "cost") + " are estimates, not measurements. Gate counts come from synthesis.";
+    var gen = ctx.dataSource === "simulated" || d.source === "simulated"
+      ? MK_SIM + " <span" + tipA(genFull) + ">Shows the search, not a real device.</span>"
+      : "<span" + tipA(genFull) + ">" + (n != null ? (few ? "Only " : "") + fmtInt(n) + " unseen " + esc(who) + "; " : "") + "no external validation yet.</span>";
+    var eng = estT("Power, area and cost are estimates", "Power from one layout run, area from an assumed size per gate and cost from illustrative inputs are estimates, not measurements. Gate counts come from synthesis. Power: " + M().describeEstimate("chip_power") + " Area: " + M().describeEstimate("area") + " Cost: " + M().describeEstimate("cost")) + "; gate counts come from synthesis.";
     return '<div class="cpn-pan">' +
       '<div class="cpn-h"><h2>How sure is this?</h2></div>' +
       '<div class="cpn-head"><span class="cpn-lvl ' + esc(head.level) + '" aria-hidden="true"><i></i><i></i><i></i></span><b>' + esc(head.text) + "</b></div>" +
@@ -622,6 +633,7 @@
     var m = costFor(ctx, d, ctx.costInputs);
     return {
       unit_cost_text: money(m.unit_cost) + " per unit for chip, battery and assembly (illustrative)",
+      unit_cost_short: money(m.unit_cost) + " a unit (illustrative)",
       delta_text: deltaText(ctx, ctx.costInputs),
       tip: M().describeEstimate("cost"),
     };
@@ -718,13 +730,13 @@
           Object.keys(CLASS_LOOK).map(function (c) {
             return '<option value="' + esc(c) + '"' + (cur === c ? " selected" : "") + ">" + esc(look(c).label) + "</option>";
           }).join("") + "</select>";
-        return '<div class="cpn-f' + (cur ? " edited" : "") + '"><label for="' + id + '">' + esc(f.label) + '</label><span class="d">Assumption. Default: follows the design\'s battery class (ChipIn power model)</span>' + ctl + "</div>";
+        return '<div class="cpn-f' + (cur ? " edited" : "") + '"><label for="' + id + '">' + esc(f.label) + '</label><span class="d"' + tipA("Assumption. Default: follows the design's battery class (ChipIn power model)") + ">Default: the design's battery class</span>" + ctl + "</div>";
       }
       var val = cur !== undefined ? cur : dv;
       ctl = '<input id="' + id + '" data-k="' + esc(f.key) + '" type="' + (f.type === "text" ? "text" : "number") + '" step="any"' + (f.nullable ? ' placeholder="from gates"' : "") + ' value="' + esc(val === null ? "" : val) + '">';
-      return '<div class="cpn-f' + (cur !== undefined ? " edited" : "") + '"><label for="' + id + '">' + esc(f.label) + (f.unit ? ' <span style="font-weight:400;color:var(--cpn-ink3)">(' + esc(f.unit) + ")</span>" : "") + '</label><span class="d">Assumption. Default ' + esc(defText(dv)) + (/illustrative/.test(String(dv)) ? "" : " (illustrative)") + "</span>" + ctl + "</div>";
+      return '<div class="cpn-f' + (cur !== undefined ? " edited" : "") + '"><label for="' + id + '">' + esc(f.label) + (f.unit ? ' <span style="font-weight:400;color:var(--cpn-ink3)">(' + esc(f.unit) + ")</span>" : "") + '</label><span class="d">Default ' + esc(defText(dv)) + "</span>" + ctl + "</div>";
     }).join("");
-    var body = '<div data-out></div><h4>Inputs</h4><p class="cpn-note" style="margin:0 0 4px">Every input is an assumption with an illustrative default; enter your own quotes and the figures above recompute.</p>' + fields + '<button type="button" class="cpn-reset">Reset to the illustrative defaults</button>';
+    var body = '<div data-out></div><h4>Inputs</h4><p class="cpn-note" style="margin:0 0 4px"' + tipA("Every input is an assumption with an illustrative default; enter your own quotes and the figures above recompute.") + ">Assumptions with illustrative defaults; edit to recompute.</p>" + fields + '<button type="button" class="cpn-reset">Reset to the illustrative defaults</button>';
     var dr = drawer("Cost assumptions", body);
     var out = dr.body.querySelector("[data-out]");
     function renderOut() {
@@ -837,7 +849,7 @@
           "</div>";
       }).join("")
       : '<p class="cpn-empty">No measured facts were handed to this drawer.</p>';
-    var dr = drawer("Measured so far", '<p class="cpn-note" style="margin:0 0 6px">Only figures that were measured, each with what it covers.</p>' + body);
+    var dr = drawer("Measured so far", '<p class="cpn-note" style="margin:0 0 6px"' + tipA("Only figures that were measured, each with what it covers.") + ">Measured figures only, with their scope.</p>" + body);
     if (baselineUrl) {
       var addBaseline = function () {
         if (baselineData && dr.body.isConnected) dr.body.insertAdjacentHTML("beforeend", baselineHtml(baselineData));
