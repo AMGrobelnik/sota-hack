@@ -15,6 +15,15 @@ def _c(v: int) -> str:
     return f"(64'sd{v})" if v >= 0 else f"(-64'sd{-v})"
 
 
+def _sum(items: list[str], most: int = 256) -> str:
+    """items joined by +; past `most` items, a balanced parenthesised tree (Yosys's parser crashes on one flat sum
+    of ~700 terms). Up to `most` items the text is the long-standing flat sum."""
+    if len(items) <= most:
+        return " + ".join(items)
+    h = len(items) // 2
+    return f"({_sum(items[:h], most)}) + ({_sum(items[h:], most)})"
+
+
 def emit_golden(ir: dict, module: str, port_info: dict, wide: int | None = None) -> str:
     """wide=None: one uniform width = widest derived signed width + 2 (modular arithmetic is exact there).
     wide=64: the fully naive rendering."""
@@ -43,7 +52,7 @@ def emit_golden(ir: dict, module: str, port_info: dict, wide: int | None = None)
                 e = _c(nd["values"][j])
             elif op == "matvec":
                 b = (nd.get("b") or [0] * len(nd["W"]))[j]
-                e = " + ".join([_c(b)] + [f"({_c(w)} * {x})" for w, x in zip(nd["W"][j], L[nd["src"]]) if w])
+                e = _sum([_c(b)] + [f"({_c(w)} * {x})" for w, x in zip(nd["W"][j], L[nd["src"]]) if w])
             elif op in ("add", "sub"):
                 a, bb = L[nd["a"]], L[nd["b"]]
                 e = f"{a[j] if len(a) > 1 else a[0]} {'+' if op == 'add' else '-'} {bb[j] if len(bb) > 1 else bb[0]}"

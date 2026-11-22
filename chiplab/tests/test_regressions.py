@@ -152,3 +152,12 @@ def test_agent_env_keeps_the_backends_chiplab_vars():
     assert env["PATH"].split(os.pathsep)[0] == "/opt/lab/bin"
     for gone in ("CHIPLAB_HOME", "DOCKER_HOST", "PDK_ROOT", "ANTHROPIC_API_KEY", "CHIPIN_CHIPLAB_BIN"):
         assert gone not in env
+
+
+def test_events_doc_pointer_resolves_through_the_cli():
+    """AGENT.md points to EVENTS.md; an agent with only the installed command can print it."""
+    from chiplab import docs
+    p = subprocess.run([sys.executable, "-m", "chiplab.cli", "agent-doc", "--events"], capture_output=True, text=True,
+                       timeout=120)
+    assert p.returncode == 0 and p.stdout == docs.events_md()
+    assert "`chiplab agent-doc --events`" in docs.agent_md()

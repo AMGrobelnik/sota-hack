@@ -214,8 +214,8 @@ small design; their numbers go in the chip report when run.
   clock (20 MHz) on sky130 and IHP and 100 ns on the slower GF180: that closes for chips of a few thousand gates
   (the M3 run's classifiers needed about 21 ns) and is far faster than a sensor's decision rate. Every timing answer
   also gives `fmax_mhz`, the fastest clock the chip meets.
-- **alkaid-optimised RTL** embeds alkaid's helper modules (LGPL-3.0), copied in at generation time; the default
-  emitter stays the lab's own. Gate counts and area can disagree for alkaid designs (fewer gates, sometimes similar area),
+- **alkaid-optimised RTL** uses alkaid's solver only to pick the shift-add graph; the lab writes that Verilog itself
+  and embeds no alkaid modules, and the default emitter is untouched. Gate counts and area can disagree for alkaid designs (fewer gates, sometimes similar area),
   so look at both.
 - Transistor counts, pre-layout tile counts and `estimate-batch` gate counts are estimates and are labelled as such.
 
@@ -246,7 +246,7 @@ Wrapped or reused, not reimplemented. Licences as published by each project:
 | cocotb | BSD-3-Clause | testbenches |
 | torchlogix | MIT | logic-gate network models (dependency) |
 | TreeLUT | MIT | vendored in `chiplab/ingest/vendor/treelut` with its licence |
-| alkaid | LGPL-3.0 | optional dependency, not vendored; its helper modules appear in `optimizer: alkaid` RTL |
+| alkaid | LGPL-3.0 | optional dependency, not vendored; its solver picks the `optimizer: alkaid` adder graph, no code is embedded |
 | Huey | MIT | job queue |
 | diskcache | Apache-2.0 | result cache |
 | PyTorch | BSD-3-Clause | training and GPU bit-exact checks |

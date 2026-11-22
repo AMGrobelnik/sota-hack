@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import signal
 import subprocess
 import time
 from pathlib import Path
@@ -20,19 +22,35 @@ class SynthError(RuntimeError):
     pass
 
 
+def kill_group(p: subprocess.Popen) -> None:
+    """SIGKILL a process started with start_new_session=True and everything it spawned, then reap it."""
+    try:
+        os.killpg(p.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+    p.communicate()
+
+
 def run(script: str, workdir: Path, timeout: int = 900, name: str = "yosys") -> dict:
     workdir.mkdir(parents=True, exist_ok=True)
     ys = workdir / f"{name}.ys"
     ys.write_text(script)
     log = workdir / f"{name}.log"
     t0 = time.time()
+    # Own process group: on timeout the whole group is killed, so the yosys-abc (or other) child Yosys started
+    # does not outlive it (subprocess.run's timeout kills Yosys only; its ABC child kept running on its own).
+    p = subprocess.Popen([oss_bin("yosys"), "-q", "-l", str(log), "-s", str(ys)], cwd=workdir,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
     try:
-        p = subprocess.run([oss_bin("yosys"), "-q", "-l", str(log), "-s", str(ys)], cwd=workdir,
-                           capture_output=True, text=True, timeout=timeout)
+        _, err = p.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
+        kill_group(p)
         raise SynthError(f"{name}: timed out after {timeout}s (see {log})")
+    except BaseException:  # interrupted: never leave the group running
+        kill_group(p)
+        raise
     if p.returncode != 0:
-        tail = (p.stderr or "")[-1500:] + (log.read_text()[-1500:] if log.exists() else "")
+        tail = (err or "")[-1500:] + (log.read_text()[-1500:] if log.exists() else "")
         raise SynthError(f"{name}: yosys failed:\n{tail}")
     return {"seconds": round(time.time() - t0, 2), "log": str(log)}
 

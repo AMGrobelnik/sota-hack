@@ -24,8 +24,8 @@ GitHub's cloud: commit the folder from `tt-package` and run the `tt-gds` workflo
 - CLI: `chiplab <tool-name> --json '{...}'` (or `--json-file f.json`, or JSON on stdin) prints one JSON object; exit code 0 when `status` is `ok`.
 - Python: `import chiplab.api as lab; lab.<tool_name>(**args)` returns the same dict.
 - Async (several agents at once): `submit-job {tool, args, session_id}` returns a `job_id`; poll `job-status` / `job-result`. Lanes are sized to the machine: cpu = cores - 1, gpu = 1, docker = Docker memory / 12 GB (1-4); override with CHIPLAB_CPU_WORKERS / CHIPLAB_GPU_WORKERS / CHIPLAB_DOCKER_WORKERS (or "lanes" in the config file); `chiplab doctor` shows what it picked. Start workers with `chiplab workers`. Results are cached by content, so duplicate designs return instantly (`cached: true`).
-- Every tool also accepts `run_id`, `session_id`, `round` (events, see EVENTS.md) and `force` (skip the cache).
-- In a ChipIn run (a `./progress` helper in the working folder) every tool reports to the dashboard by itself; see EVENTS.md, "ChipIn dashboard". While you explore, the dashboard shows only `gates` of the latest chip and the run's counters, never a mix of chips. Before you mark report done, call `chiplab chip-report --json '{"design_id": "<the chip you chose>", "decision_rate_hz": <decisions per second>}'` on the one chip you chose: the chip figures the user sees (area, power, energy, cost, verification) come from that call. `report_metrics: true` on any call does the same for that call's design.
+- Every tool also accepts `run_id`, `session_id`, `round` (events, see EVENTS.md: `chiplab agent-doc --events` prints it) and `force` (skip the cache).
+- In a ChipIn run (a `./progress` helper in the working folder) every tool reports to the dashboard by itself; see EVENTS.md (`chiplab agent-doc --events`), "ChipIn dashboard". While you explore, the dashboard shows only `gates` of the latest chip and the run's counters, never a mix of chips. Before you mark report done, call `chiplab chip-report --json '{"design_id": "<the chip you chose>", "decision_rate_hz": <decisions per second>}'` on the one chip you chose: the chip figures the user sees (area, power, energy, cost, verification) come from that call. `report_metrics: true` on any call does the same for that call's design.
 - Timing: `layout` / `timing-power` default to a 50 ns clock (20 MHz; 100 ns on gf180), which closes for chips of a few thousand gates; every answer also gives `fmax_mhz`, the fastest clock the chip meets.
 - Status and exit code are honest: `ok` = 0 (the tool did its job and every check it ran passed), `error` = 1 (it could not do its job; see `error`), `fail` = 2 (it ran, and the design failed a check, e.g. `bit_exact: false`), `timeout` = 3. A queued job is `ok` with `state: queued`.
 - Proof sizes: `prove-equivalence` (gates = RTL) takes about a second at a few thousand gates; with `golden: true` it also proves the RTL against an independent golden model of the IR in one miter (spike, 2.3k gates: about 7 s). `prove-sequential` is compositional (the core is a black box, proven by prove-equivalence), so it proves the clocked wrapper in seconds at any model size; `whole: true` proves the flattened design and is only practical for a few hundred gates.
@@ -269,7 +269,7 @@ chiplab simulate --json '{"design_id": "765fa47586bd", "inputs": "random", "n": 
 
 Fair event-level referee (timescoring 0.0.7): your detections vs reference labels per recording. Returns per-recording tp/fp/refTrue/numSamples, per-patient sums, SzCORE per-patient averages and pooled figures, false alarms per hour and per 24 h, sensitivity at fixed FA/h (0.1, 0.36, 1) from a threshold sweep over scores, worst case, 1 s ROC AUC, patient bootstrap 95% CIs and provenance. profile=szcore (tolerance 30/60 s, merge <90 s, split >300 s; SzCORE-comparable) or neonatal (any overlap, no merge, no split).
 
-- Python: `lab.score_events(recordings: list | None = None, path: str | None = None, profile: str = szcore, params: dict | None = None, nan_policy: str = omit, score_threshold: float = 0.5, fa_targets: list | None = None, thresholds: dict | None = None, n_thresholds: int = 200, n_bootstrap: int = 2000, seed: int = 0, progress_metrics: bool = False) -> dict`
+- Python: `lab.score_events(recordings: list | None = None, path: str | None = None, profile: str = szcore, params: dict | None = None, nan_policy: str = omit, score_threshold: float = 0.5, fa_targets: list | None = None, thresholds: dict | None = None, n_thresholds: int = 200, n_bootstrap: int = 2000, seed: int = 0, progress_metrics: bool = False, design_id: str | None = None) -> dict`
 - Lane: cpu; cached: False
   - `recordings`: list — [{patient_id, recording_id, fs, labels (0/1 per sample), decisions (0/1) and/or scores (float), timestamps (s, optional: gaps split the recording)}] (or give path)
   - `path`: str — JSON file with that list (or {recordings: [...]})
@@ -283,6 +283,7 @@ Fair event-level referee (timescoring 0.0.7): your detections vs reference label
   - `n_bootstrap`: int — patient-level bootstrap resamples (2000)
   - `seed`: int — bootstrap seed (0)
   - `progress_metrics`: bool — send event_sensitivity, fa_per_hour, worst_patient_sensitivity, auc to ./progress (false)
+  - `design_id`: str (optional) — the chip these recordings came from; its ./progress metrics then carry that chip, as chip-report's do (output unchanged)
 
 <details><summary>JSON schema</summary>
 
@@ -337,6 +338,10 @@ Fair event-level referee (timescoring 0.0.7): your detections vs reference label
   "progress_metrics": {
    "type": "boolean",
    "default": false
+  },
+  "design_id": {
+   "type": "string",
+   "default": null
   },
   "run_id": {
    "type": "string"

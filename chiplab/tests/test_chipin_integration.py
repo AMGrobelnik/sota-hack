@@ -116,7 +116,11 @@ def test_lab_reports_through_the_real_progress_helper(backend, tmp_path):
     cfg["home"] = str(tmp_path / "labhome")
     (home / ".config" / "chiplab").mkdir(parents=True)
     (home / ".config" / "chiplab" / "config.json").write_text(json.dumps(cfg))
-    base = {**os.environ, "HOME": str(home), "PATH": os.environ.get("PATH", "")}
+    # The caller's own lab settings (CHIPLAB_CONFIG / CHIPLAB_USER_DIR are passed through by design) must not leak in:
+    # start from a cleaned copy, then plant variables the backend has to strip, so the check below still bites.
+    base = {k: v for k, v in os.environ.items() if not k.startswith("CHIPLAB_") and k not in ("PDK_ROOT", "DOCKER_HOST")}
+    base.update({"HOME": str(home), "PATH": os.environ.get("PATH", ""), "CHIPLAB_HOME": str(tmp_path / "stray"),
+                 "CHIPLAB_OSS": str(tmp_path / "stray"), "PDK_ROOT": str(tmp_path / "stray")})
     (tmp_path / "base_env.json").write_text(json.dumps(base))
     prep = backend("prepare", str(run), str(tmp_path / "base_env.json"))
     assert prep.returncode == 0, prep.stderr[-800:]

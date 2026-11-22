@@ -49,6 +49,8 @@ def main(argv=None) -> int:
         from chiplab import docs
         if "--write" in argv:
             print(json.dumps({"written": docs.write()})); return 0
+        if "--events" in argv:  # EVENTS.md, which AGENT.md points to, for agents without the source tree
+            sys.stdout.write(docs.events_md()); return 0
         print(docs.agent_md()); return 0
     if cmd == "doctor":
         from chiplab.doctor import run, run_agent_env

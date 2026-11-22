@@ -130,9 +130,9 @@ def agent_md() -> str:
            "override with CHIPLAB_CPU_WORKERS / CHIPLAB_GPU_WORKERS / CHIPLAB_DOCKER_WORKERS (or \"lanes\" in the config "
            "file); `chiplab doctor` shows what it picked. Start workers with `chiplab workers`. Results are "
            "cached by content, so duplicate designs return instantly (`cached: true`).",
-           "- Every tool also accepts `run_id`, `session_id`, `round` (events, see EVENTS.md) and `force` (skip the cache).",
+           "- Every tool also accepts `run_id`, `session_id`, `round` (events, see EVENTS.md: `chiplab agent-doc --events` prints it) and `force` (skip the cache).",
            "- In a ChipIn run (a `./progress` helper in the working folder) every tool reports to the dashboard by "
-           "itself; see EVENTS.md, \"ChipIn dashboard\". While you explore, the dashboard shows only `gates` of the "
+           "itself; see EVENTS.md (`chiplab agent-doc --events`), \"ChipIn dashboard\". While you explore, the dashboard shows only `gates` of the "
            "latest chip and the run's counters, never a mix of chips. " + CHIP_REPORT_SENTENCE + " `report_metrics: true` "
            "on any call does the same for that call's design.",
            "- Timing: `layout` / `timing-power` default to a 50 ns clock (20 MHz; 100 ns on gf180), which closes for "
