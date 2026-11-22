@@ -98,7 +98,10 @@ def build_ir(model: dict, n: int, name: str) -> dict:
                   {"id": "y", "op": "cmp", "src": "s", "rel": "ge", "t": model["t"]}]
     elif k == "mlp":
         nodes += [{"id": "h", "op": "matvec", "src": "F", "W": model["W1"], "b": model["b1"]},
-                  {"id": "hr", "op": "clip", "src": "h", "lo": 0, "hi": 1 << 30},
+                  # ReLU. hi is a tight upper bound of h (every count <= n), so the clip never binds from above;
+                  # a needlessly huge constant made the lab's golden-model proof fail (see notes.md).
+                  {"id": "hr", "op": "clip", "src": "h", "lo": 0,
+                   "hi": max(1, max(b + n * sum(max(w, 0) for w in row) for row, b in zip(model["W1"], model["b1"])))},
                   {"id": "s", "op": "matvec", "src": "hr", "W": [model["W2"]]},
                   {"id": "y", "op": "cmp", "src": "s", "rel": "ge", "t": model["t"]}]
     elif k == "tree":

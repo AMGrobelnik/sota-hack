@@ -58,8 +58,7 @@ def _chip(d: Path) -> dict | None:
         return None
     r = json.loads(f.read_text())
     sm = r.get("synth", {}).get("metrics", {})
-    out = {"design_id": r.get("design_id"), "gates": sm.get("gates"), "depth": sm.get("depth"),
-           "cells_by_type": r.get("synth", {}).get("cells_by_type")}
+    out = {"design_id": r.get("design_id"), "gates": sm.get("gates"), "depth": sm.get("depth")}
     out["core_map"] = {p: r["map"][p].get("metrics") for p in r.get("map", {})}
     out["sequential_map"] = {p: {k: v.get(k) for k in ("area_um2", "gate_equivalents", "std_cells", "flip_flops")}
                              for p, v in r.get("seqmap", {}).items()}
@@ -84,6 +83,7 @@ def main() -> None:
     ap.add_argument("--work", type=Path, required=True)
     ap.add_argument("--dest", type=Path, required=True)
     a = ap.parse_args()
+    a.dest.mkdir(parents=True, exist_ok=True)
     res: dict = {"baselines": BASELINES, "v2": {}, "v1": {}, "references": {}}
     models: dict = {}
     for n in WINDOWS:
@@ -107,18 +107,25 @@ def main() -> None:
                 s, t = run["afdb_loso"][fam], run["ltafdb_cross"][fam]
                 res["v1"][f"{fam}_n{n}"] = {"afdb_loso": {c: [s[c]["k"], s[c]["n"]] for c in ("sens", "spec")},
                                             "ltafdb_cross": {c: [t[c]["k"], t[c]["n"]] for c in ("sens", "spec")}}
+    nf = a.work / "nested" / "nested_n128_summary.json"
+    if nf.exists():
+        nr = json.loads(nf.read_text())
+        res["nested_selection_n128_afdb_loso"] = {
+            c: {k: nr[c][k] for k in ("k", "n", "value", "wilson95", "subject_boot95", "worst_subject", "worst_subject_min10")}
+            for c in ("sens", "spec")} | {"chosen_per_fold": nr["chosen_per_fold"]}
     (a.dest / "results.json").write_text(json.dumps(res, indent=1))
     (a.dest / "models").mkdir(exist_ok=True)
     (a.dest / "models" / "final_models_v2.json").write_text(json.dumps(models, indent=1))
     # size-against-accuracy table (markdown rows, short cells)
-    rows = ["| design | gates | depth | GE sky130 | FF | AFDB Se | AFDB Sp | LTAF Se | LTAF Sp |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+    rows = ["| design | gates | depth | GE core | GE chip | FF | AFDB Se | AFDB Sp | LTAF Se | LTAF Sp |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for key, v in sorted(res["v2"].items(), key=lambda kv: ((kv[1]["chip"] or {}).get("gates") or 0)):
         c = v["chip"] or {}
         ge = (c.get("core_map", {}).get("sky130") or {}).get("gate_equivalents")
-        ff = (c.get("sequential_map", {}).get("sky130") or {}).get("flip_flops")
+        sq = c.get("sequential_map", {}).get("sky130") or {}
+        ff, gs = sq.get("flip_flops"), sq.get("gate_equivalents")
         s, t = v["afdb_loso"], v["ltafdb_cross"]
-        rows.append(f"| {key} | {c.get('gates')} | {c.get('depth')} | {ge} | {ff} | "
+        rows.append(f"| {key} | {c.get('gates')} | {c.get('depth')} | {ge} | {gs} | {ff} | "
                     f"{s['sens']['k']}/{s['sens']['n']} | {s['spec']['k']}/{s['spec']['n']} | "
                     f"{t['sens']['value']:.3f} | {t['spec']['value']:.3f} |")
     (a.dest / "size_accuracy_table.md").write_text("\n".join(rows) + "\n")
