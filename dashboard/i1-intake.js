@@ -5,11 +5,12 @@
  *    worked out for the screen that follows and what was found, from the spec itself. On the public
  *    site the lines are a paced replay, marked as one; with a backend connected they tick as the work
  *    is done and the backend's own follow-up questions step (../i1-questions.js) is used as before.
- * 2. With no backend, a short brief gets up to five scripted questions in the chat style (#/new/ask),
- *    one at a time, each with quick picks, free text and a skip. Simple keyword rules pick them; a
- *    topic the brief already answers is never asked. The answers are written into the spec's own
- *    fields (what it detects, who and where, channels, the false-alarm or specificity target, the
- *    battery), so the steps that follow show them; what cannot be read goes on the spec card as notes.
+ * 2. The chat (#/new/ask) is the whole intake: device, who and where, targets, constraints (channels,
+ *    battery, cost), then data with the dataset search inside the chat, one question at a time, each
+ *    with quick picks, free text and a skip. A topic the brief already answers is never asked. With a
+ *    backend connected its own follow-up questions (../i1-questions.js) come last, in the same chat.
+ *    Then the "Your spec" card; the five step screens are only its edit view. Answers go into the
+ *    spec's own fields; battery in words, cost and unread answers ride in the brief (briefNotes).
  *
  * The page calls (dashboard/variants/i1.html, INTAKE HOOK):
  *   ChipInIntake.begin(spec, ctx)            after the brief is submitted
@@ -20,7 +21,7 @@
  *   tasks, met, dsf, fit, measured, cases, sigOf } */
 (function () {
   "use strict";
-  var MAX_Q = 5;
+  var MAX_Q = 9;
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
   var cap = function (t) { t = String(t || "").trim(); return t ? t.charAt(0).toUpperCase() + t.slice(1) : t; };
@@ -68,18 +69,6 @@
       }
     },
     {
-      id: "chans", open: function (s, ctx) { var g = ctx.sigOf(s); return !ctx.cases[s.case] && !s.parsed.chans && (g === "ecg" || g === "eeg"); },
-      q: function (s, ctx) { return ctx.sigOf(s) === "ecg" ? "How many ECG leads can it have?" : "How many electrodes can it have?"; }, why: "Fewer means a smaller, cheaper device; the chart compares them.",
-      opts: function (s, ctx) { return ctx.budgets(s).map(function (b) { return [b.label, String(b.ch)]; }).concat([["Find the best for me", "best"]]); },
-      apply: function (s, ctx, v, text) {
-        var t = String(v || text || "").toLowerCase(), b = ctx.budgets(s), m = t.match(/\b(\d+|single|one|two|three|four|six|eight)\b/);
-        if (/best|any|not sure|don.?t know|you (?:pick|choose)/.test(t)) { s.cons.findBest = true; s.touched.cons = true; return true; }
-        var n = m ? NUMW[m[1]] || parseInt(m[1], 10) : null, hit = b.filter(function (x) { return x.ch === n; })[0];
-        if (!hit) return false;
-        s.cons.findBest = false; s.cons.channels = hit.ch; s.touched.cons = true; return true;
-      }
-    },
-    {
       id: "fa", open: function (s) { return s.task !== "grading" && !s.parsed.targets.some(function (t) { return t.metric === "false_alarms_per_hour" || t.metric === "specificity"; }); },
       q: function (s) { return screening(s) ? "How often may it flag a healthy recording?" : "How often may it raise a false alarm?"; },
       why: "Each false alarm costs trust; fewer needs a bigger chip.",
@@ -101,15 +90,51 @@
       }
     },
     {
+      id: "chans", open: function (s, ctx) { var g = ctx.sigOf(s); return !ctx.cases[s.case] && !s.parsed.chans && (g === "ecg" || g === "eeg"); },
+      q: function (s, ctx) { return ctx.sigOf(s) === "ecg" ? "How many ECG leads can it have?" : "How many electrodes can it have?"; }, why: "Fewer means a smaller, cheaper device; the chart compares them.",
+      opts: function (s, ctx) { return ctx.budgets(s).map(function (b) { return [b.label, String(b.ch)]; }).concat([["Find the best for me", "best"]]); },
+      apply: function (s, ctx, v, text) {
+        var t = String(v || text || "").toLowerCase(), b = ctx.budgets(s), m = t.match(/\b(\d+|single|one|two|three|four|six|eight)\b/);
+        if (/best|any|not sure|don.?t know|you (?:pick|choose)/.test(t)) { s.cons.findBest = true; s.touched.cons = true; return true; }
+        var n = m ? NUMW[m[1]] || parseInt(m[1], 10) : null, hit = b.filter(function (x) { return x.ch === n; })[0];
+        if (!hit) return false;
+        s.cons.findBest = false; s.cons.channels = hit.ch; s.touched.cons = true; return true;
+      }
+    },
+    {
       id: "battery", open: function (s) { return !s.parsed.bat; },
       q: function () { return "How long must one battery last?"; }, why: "A longer life needs a bigger battery or a leaner chip.",
-      opts: function () { return [["24 hours", "24|hours"], ["3 days", "3|days"], ["7 days", "7|days"], ["14 days", "14|days"]]; },
+      ph: "Or type it: as long as possible, max 7 days, 220 mAh",
+      opts: function () { return [["24 hours", "24|hours"], ["3 days", "3|days"], ["7 days", "7|days"], ["14 days", "14|days"], ["As long as possible", "longest"]]; },
+      // a pick sets the hours; typed words are kept as typed (shown on the card, sent in the brief), and a
+      // time in them ("max 7 days") also sets the hours
       apply: function (s, ctx, v, text) {
         var n, u, m;
-        if (v) { n = +v.split("|")[0]; u = v.split("|")[1]; }
-        else if ((m = String(text || "").toLowerCase().match(/(\d+(?:\.\d+)?)\s*-?\s*(hours?|hrs?|days?|weeks?)/))) { n = +m[1]; u = /^w/.test(m[2]) ? "days" : /^d/.test(m[2]) ? "days" : "hours"; if (/^w/.test(m[2])) n *= 7; }
-        if (!(n > 0)) return false;
-        s.cons.batN = n; s.cons.batU = u; s.touched.cons = true; return true;
+        if (v === "longest") { s.cons.batText = "As long as possible"; s.touched.cons = true; return true; }
+        if (v) { n = +v.split("|")[0]; u = v.split("|")[1]; s.cons.batText = ""; }
+        else {
+          var t = String(text || "").trim(); if (!t) return false;
+          s.cons.batText = t;
+          if ((m = t.toLowerCase().match(/(\d+(?:\.\d+)?)\s*-?\s*(hours?|hrs?|h\b|days?|weeks?)/))) { n = +m[1]; u = /^[dw]/.test(m[2]) ? "days" : "hours"; if (/^w/.test(m[2])) n *= 7; }
+        }
+        if (n > 0) { s.cons.batN = n; s.cons.batU = u; }
+        s.touched.cons = true; return true;
+      }
+    },
+    {
+      id: "cost", open: function (s) { return !s.cons.cost; },
+      q: function () { return "How much may the chip cost?"; }, why: "Cheaper means a smaller chip, if it still clears your bar.",
+      opts: function () { return [["Cheapest possible", "Cheapest possible"], ["Cost is not a concern", "Cost is not a concern"]]; },
+      apply: function (s, ctx, v, text) { var t = String(v || text || "").trim(); if (!t) return false; s.cons.cost = t; s.touched.cons = true; return true; }
+    },
+    {
+      id: "data", open: function () { return true; },
+      q: function () { return "What should it be designed on?"; }, why: "The chip is trained on part of it and judged on patients it never saw.",
+      opts: function () { return [["Find public data", "public"], ["My own recordings", "own"], ["Simulated data", "sim"]]; },
+      apply: function (s, ctx, v, text) {
+        var t = String(v || text || "").toLowerCase(), d = /own|my|our/.test(t) ? "own" : /public|open|find|search/.test(t) ? "public" : /sim|synth/.test(t) ? "sim" : "";
+        if (!d) return false;
+        s.data = d; s.touched.data = true; return true;
       }
     }
   ];
@@ -221,11 +246,10 @@
   function begin(s, ctx) {
     s.sq = null; s.stg = {};
     var go = function () {
-      var c = conn();
-      if (c === "on") { stage("brief", s, ctx, function () { ctx.go(1); }); return; }
+      // the chat is the whole intake, with or without a backend (its own questions come at the end)
       var n = pending(s, ctx).length;
-      if (n) s.sq = { ans: {}, order: [], done: false };
-      stage("brief", s, ctx, function () { ctx.go(n ? "ask" : 1); }, n);
+      s.sq = { ans: {}, order: [], done: false };
+      stage("brief", s, ctx, function () { ctx.go("ask"); }, n);
     };
     // a reload: the connection may still be under test; wait for its answer (at most 5 s)
     if (conn() !== "checking") { go(); return; }
@@ -260,20 +284,21 @@
   function askHTML(s, ctx, q, err) {
     return botHTML('<div class="mt">' + esc(q.q(s, ctx)) + '</div><p class="iq-why">' + esc(q.why) + "</p>" +
       '<div class="gch iq-opts" role="group" aria-label="' + esc(q.q(s, ctx)) + '">' + q.opts(s, ctx).map(function (o) { return '<button type="button" data-iq-v="' + esc(o[1]) + '"><span>' + esc(o[0]) + "</span></button>"; }).join("") + "</div>" +
-      '<form class="iq-in" data-iq-form><input type="text" data-voice aria-label="Your answer" placeholder="Or type your own answer" autocomplete="off"><button type="submit" class="send" aria-label="Send">' + SEND + "</button></form>" +
+      '<form class="iq-in" data-iq-form><input type="text" data-voice aria-label="Your answer" placeholder="' + esc(q.ph || "Or type your own answer") + '" autocomplete="off"><button type="submit" class="send" aria-label="Send">' + SEND + "</button></form>" +
       (err ? '<p class="iq-err" role="alert">' + esc(err) + "</p>" : "") +
       '<button type="button" class="iq-skip" data-iq-skip>Skip this question</button>');
   }
   function render(s, ctx) {
     if (!s) return false;
-    if (conn() === "on" && !(s.sq && s.sq.order.length)) { location.replace(location.pathname + location.search + "#/new/1"); return true; }
     css();
     s.sq = s.sq || { ans: {}, order: [], done: false };
     var main = $("#main"), busy = false;
     function cur() { return s.sq.done ? null : pending(s, ctx)[0] || null; }
+    var live = conn() === "on", FQ = window.ChipInQuestions;
+    var scripted = function () { return s.sq.order.filter(function (id) { return !/^fq:/.test(id); }).length; };
     function kicker() {
-      var q = cur(), k = s.sq.order.length + (q ? 1 : 0), n = s.sq.order.length + pending(s, ctx).length;
-      return (q ? "Question " + k + " of " + n : "All answered") + " · scripted, no backend connected";
+      var q = cur(), k = scripted() + (q ? 1 : 0), n = scripted() + pending(s, ctx).length;
+      return (q ? "Question " + k + " of " + n : s.sq.done ? "All answered" : live ? "Your backend's questions" : "All answered") + (live ? " · then your backend's own questions" : " · scripted, no backend connected");
     }
     main.innerHTML = '<div class="gf iq" id="gf"><div class="gfc"><header class="gfh"><p class="gfn" id="iqK"></p><h1 tabindex="-1" id="gfH">A few questions first</h1></header>' +
       '<div class="iq-feed" id="iqFeed" aria-live="polite"></div>' +
@@ -284,7 +309,8 @@
     if (s.sq.order.length) [].forEach.call(feed.children, function (n) { n.classList.add("old"); }); // a revisit: the transcript is already read
     function paintTop() {
       $("#iqK").textContent = kicker();
-      var e = $("#iqEnd"); if (e) { e.className = s.sq.done || !cur() ? "btn p" : "btn s"; e.textContent = s.sq.done || !cur() ? "Continue" : "Skip the questions"; }
+      var over = s.sq.done || (!cur() && !(live && !s.sq.fqDone)); // the backend's questions still to come count as open
+      var e = $("#iqEnd"); if (e) { e.className = over ? "btn p" : "btn s"; e.textContent = over ? "Continue" : "Skip the questions"; }
     }
     function add(html) { var d = document.createElement("div"); d.innerHTML = html; while (d.firstChild) feed.appendChild(d.firstChild); }
     function showAsk(err) {
@@ -313,13 +339,73 @@
       ctx.save();
       add(youHTML(label, v === "__skip"));
       paintTop();
-      typing(cur() ? 850 : 650, function () { showAsk(); });
+      var then = function () { typing(cur() ? 850 : 650, function () { showAsk(); }); };
+      if (q.id === "data" && !skip && s.data === "public") { busy = true; dataSearch(function () { busy = false; then(); }); return; }
+      if (q.id === "data" && !skip && s.data === "own") add(botHTML('<div class="mt">Attach them under Data on your spec. Files stay in this browser.</div>'));
+      then();
     }
+    // the dataset search, inside the chat: the set on record for the device's signal, and how well it fits
+    function dataSearch(then) {
+      var sig = ctx.sigOf(s), d = s.ds && ctx.dsf[s.ds], f = d ? ctx.fit(s, s.ds) : null;
+      if (!d) { s.data = "sim"; ctx.save(); }
+      var L = [
+        { p: "Searching PhysioNet and Zenodo", w: "For " + (sig ? sig.toUpperCase() + " recordings" : "recordings of your signal"), t: "Searched PhysioNet and Zenodo", d: esc(sig ? sig.toUpperCase() + " recordings" : (s.signal || "Your signal")) },
+        d ? { p: "Picking a dataset", w: "Reading its labels and licence", t: "Found: " + d.short, tHTML: "Found: " + link(d.url, d.short), d: esc(d.labels + " · " + d.lic) }
+          : { p: "Picking a dataset", w: "Looking for a set that fits", t: "No open set matches", d: "Simulated data instead, from a small stated model", warn: true }
+      ];
+      if (f) L.push({ p: "Checking the fit with your device", w: "Signal, patients and labels", t: f.warn.length ? "Fit: " + f.warn.length + " warning" + (f.warn.length === 1 ? "" : "s") : "Fits, approximately", d: esc(f.warn.length ? f.warn.join(" ") : "Recorded on other devices: treat results as approximate"), warn: f.warn.length > 0 });
+      var SG = window.ChipInStage, draw = function (k) { return SG ? SG.inline(L, k) : ""; };
+      add(botHTML('<div class="mt">Looking for open data</div><p class="iq-why">From the public sets on record in this demo.</p><div data-iq-ds>' + draw(0) + "</div>"));
+      var box = feed.lastElementChild.querySelector("[data-iq-ds]"), k = 0;
+      box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      (function step() {
+        setTimeout(function () {
+          if (!root.isConnected) return;
+          k++; box.innerHTML = draw(k);
+          if (k < L.length) step(); else { box.removeAttribute("data-iq-ds"); then(); }
+        }, 1100);
+      })();
+    }
+    // with a backend connected: its own questions, once, after the scripted ones (../i1-questions.js)
+    function backendQuestions() {
+      typing(400, function () {
+        busy = true;
+        add(botHTML('<div class="mt">Asking your backend for any follow-up questions</div><span class="iq-dots" aria-label="Waiting"><i></i><i></i><i></i></span>'));
+        var wait = feed.lastElementChild;
+        FQ.ask(s, ctx.save, function (qs) {
+          if (!root.isConnected) return;
+          busy = false; wait.remove();
+          var left = (qs || []).filter(function (q) { return !s.sq.ans["fq:" + q.id]; });
+          (function next(i) {
+            if (i >= left.length) { s.sq.fqDone = true; ctx.save(); finish(); return; }
+            askFq(left[i], function () { typing(650, function () { next(i + 1); }); });
+          })(0);
+        });
+      });
+    }
+    function askFq(q, then) {
+      var ctl = q.kind === "choice"
+        ? '<div class="gch iq-opts" role="group" aria-label="' + esc(q.question) + '">' + q.options.map(function (o) { return '<button type="button" data-fqc="' + esc(o) + '"><span>' + esc(FQ.label(o)) + "</span></button>"; }).join("") + "</div>"
+        : '<form class="iq-in" data-fqf><input type="text" data-voice aria-label="' + esc(q.question) + '" value="' + esc(q["default"]) + '" autocomplete="off"><button type="submit" class="send ready" aria-label="Send">' + SEND + "</button></form>";
+      add(botHTML('<div class="mt">' + esc(q.question) + '</div><p class="iq-why">' + esc(q.why) + "</p>" + ctl));
+      var box = feed.lastElementChild;
+      box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      var done = function (v, shown) {
+        FQ.answer(s, q.id, v);
+        box.outerHTML = botHTML('<div class="mt">' + esc(q.question) + "</div>");
+        s.sq.order.push("fq:" + q.id); s.sq.ans["fq:" + q.id] = { q: q.question, a: shown };
+        ctx.save(); add(youHTML(shown)); then();
+      };
+      box.addEventListener("click", function (e) { var b = e.target.closest("[data-fqc]"); if (b) done(b.dataset.fqc, b.textContent.trim()); });
+      box.addEventListener("submit", function (e) { e.preventDefault(); e.stopPropagation(); var t = box.querySelector("input").value.trim(); if (t) done(t, t); });
+    }
+    function toSpec() { stage("answers", s, ctx, function () { ctx.go("spec"); }); }
     function finish() {
       if (s.sq.done) { paintTop(); return; }
+      if (live && FQ && FQ.ask && !s.sq.fqDone) { backendQuestions(); return; }
       s.sq.done = true; ctx.save(); paintTop();
       add(botHTML('<div class="mt">Thanks. Building your spec from the brief and your answers.</div>'));
-      setTimeout(function () { if (root.isConnected && /#\/new\/ask/.test(location.hash)) stage("answers", s, ctx, function () { ctx.go(1); }); }, 900);
+      setTimeout(function () { if (root.isConnected && /#\/new\/ask/.test(location.hash)) toSpec(); }, 900);
     }
     root.addEventListener("click", function (e) {
       var o = e.target.closest("[data-iq-v]");
@@ -328,10 +414,11 @@
       var g = e.target.closest("[data-iq-go]");
       if (!g) return;
       if (g.dataset.iqGo === "back") { ctx.back(); return; }
-      if (s.sq.done || !cur()) { stage("answers", s, ctx, function () { ctx.go(1); }); return; }
-      s.sq.done = true; ctx.save(); stage("answers", s, ctx, function () { ctx.go(1); });
+      if (s.sq.done || !cur()) { s.sq.done = true; ctx.save(); toSpec(); return; }
+      s.sq.done = true; ctx.save(); toSpec();
     });
     root.addEventListener("submit", function (e) {
+      if (!e.target.matches("[data-iq-form]")) return;
       e.preventDefault();
       var inp = e.target.querySelector("input"), t = inp ? inp.value.trim() : "";
       if (!t) { if (inp) inp.focus(); return; }
@@ -346,10 +433,19 @@
 
   function cardRows(s) {
     var a = s && s.sq && s.sq.ans; if (!a || !Object.keys(a).length) return "";
-    var got = Object.keys(a).filter(function (k) { return !a[k].skip; }).map(function (k) { return a[k].a; }), notes = s.sq.notes || [];
-    if (!got.length && !notes.length) return "";
-    return '<div class="gsr"><span class="k">Your answers</span><div class="v">' + esc(got.join(" · ")) + (notes.length ? '<small>Not read into a field, kept as notes: ' + esc(notes.join("; ")) + "</small>" : "") + '</div><button type="button" class="gchg" data-go="1" aria-label="Change your answers">Change</button></div>';
+    // the answers already sit in the rows above; only what could not be read into a field shows here
+    var notes = s.sq.notes || [];
+    if (!notes.length) return "";
+    return '<div class="gsr"><span class="k">Notes</span><div class="v">' + esc(notes.join("; ")) + '<small>Not read into a field; sent with your brief.</small></div><button type="button" class="gchg" data-go="ask" aria-label="See your answers">See chat</button></div>';
+  }
+  // what the card shows but no field of the run's spec holds: sent as plain lines after the brief
+  function briefNotes(s) {
+    var k = (s && s.cons) || {}, L = [];
+    if (k.batText) L.push("Battery: " + k.batText + ".");
+    if (k.cost) L.push("Cost: " + k.cost + ".");
+    ((s && s.sq && s.sq.notes) || []).forEach(function (n) { L.push(n); });
+    return L.join("\n");
   }
 
-  window.ChipInIntake = { begin: begin, next: next, render: render, cardRows: cardRows, pending: pending };
+  window.ChipInIntake = { begin: begin, next: next, render: render, cardRows: cardRows, pending: pending, briefNotes: briefNotes };
 })();

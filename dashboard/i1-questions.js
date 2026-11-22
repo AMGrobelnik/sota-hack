@@ -43,12 +43,21 @@
   function offered(s) { return !!(s && conn() && !declined(s)); }
   function save() { if (typeof saveFn === "function") saveFn(); }
 
+  // the questions are asked inside the intake chat now (../i1-intake.js), so the steps get no sixth dot
   function dot(i, s) {
-    if (!offered(s)) return "";
+    if (!offered(s) || window.ChipInIntake) return "";
     var now = here, cls = now ? "now" : i >= 5 ? "done" : "";
     return '<li class="' + cls + '"><button type="button" data-go="more"' + (now ? ' aria-current="step"' : "") + ' aria-label="Step 6: A few more"><span class="gpn">6</span><span class="gpl">A few more</span></button></li>';
   }
-  function after(s) { return offered(s) ? "more" : null; }
+  function after(s) { return offered(s) && !window.ChipInIntake ? "more" : null; }
+  // for the chat: the backend's questions for this spec, fetched once; cb([]) when there are none
+  function ask(s, saveIt, cb) {
+    S = s; saveFn = saveIt;
+    if (!offered(s)) { cb([]); return; }
+    if (ready(s) && s.fq.sig === sigOf(s)) { cb(s.fq.questions); return; }
+    fetchQuestions(s, function () { cb(ready(s) ? s.fq.questions : []); });
+  }
+  function answer(s, id, v) { if (!ready(s)) return; s.fq.answers[id] = v; save(); }
   function has(s) { return !!conn() && ready(s); }
 
   // an option written as a raw key ("missed_event") read as words ("Missed event"); the value sent stays the option
@@ -81,7 +90,8 @@
   function onMore() { return /^#\/?new\/more(\/|$)/.test(location.hash); }
   function toSpec() { if (onMore()) location.replace(location.pathname + location.search + "#/new/spec"); }
 
-  function fetchQuestions(s) {
+  function fetchQuestions(s, done) {
+    var fin = function () { if (typeof done === "function") done(); };
     var c = conn(), my = ++seq, sig = sigOf(s), keep = (s.fq && s.fq.answers) || {};
     s.fq = { sig: sig, state: "loading", questions: [], answers: {} };
     save();
@@ -97,14 +107,15 @@
       .catch(function () { return null; })
       .then(function (j) {
         clearTimeout(timer);
-        if (my !== seq || !s.fq || s.fq.sig !== sig) return;
+        if (my !== seq || !s.fq || s.fq.sig !== sig) { fin(); return; }
         var qs = j && Array.isArray(j.questions) ? j.questions.filter(valid).slice(0, 3) : [];
-        if (!qs.length) { s.fq = { sig: sig, state: "empty" }; save(); toSpec(); return; }
+        if (!qs.length) { s.fq = { sig: sig, state: "empty" }; save(); toSpec(); fin(); return; }
         var answers = {};
         qs.forEach(function (q) { if (Object.prototype.hasOwnProperty.call(keep, q.id)) answers[q.id] = keep[q.id]; });
         s.fq = { sig: sig, state: "ready", id: typeof j.id === "string" ? j.id : null, questions: qs, answers: answers };
         save();
         if (onMore() && $("#gfBody")) paintBody(s);
+        fin();
       });
   }
   function valid(q) {
@@ -156,7 +167,7 @@
     if (!has(s)) return "";
     S = s; saveFn = saveIt;
     return s.fq.questions.map(function (q) {
-      return '<div class="gsr fq-row"><span class="k">A few more</span><div class="v"><small class="fq-q">' + esc(q.question) + '</small><div class="gie sm"><textarea data-fq-card="' + esc(q.id) + '" rows="1" aria-label="' + esc(q.question) + '" data-voice>' + esc(label(answerOf(s, q))) + '</textarea></div></div><button type="button" class="gchg" data-go="more" aria-label="Change: ' + esc(q.question) + '">Change</button></div>';
+      return '<div class="gsr fq-row"><span class="k">A few more</span><div class="v"><small class="fq-q">' + esc(q.question) + '</small><div class="gie sm"><textarea data-fq-card="' + esc(q.id) + '" rows="1" aria-label="' + esc(q.question) + '" data-voice>' + esc(label(answerOf(s, q))) + '</textarea></div></div><button type="button" class="gchg" data-go="' + (window.ChipInIntake ? "ask" : "more") + '" aria-label="Change: ' + esc(q.question) + '">Change</button></div>';
     }).join("");
   }
 
@@ -184,5 +195,5 @@
     ".fq-skip{height:36px;padding:0 16px}.gsr .v small.fq-q{margin:0 0 2px}";
   document.head.appendChild(css);
 
-  window.ChipInQuestions = { dot: dot, after: after, has: has, render: render, cardRows: cardRows, payload: payload };
+  window.ChipInQuestions = { dot: dot, after: after, has: has, render: render, cardRows: cardRows, payload: payload, ask: ask, answer: answer, label: label };
 })();
