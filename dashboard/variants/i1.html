@@ -745,7 +745,7 @@ select.gfin{padding:0 10px}
 <script src="../i1-connect.js?v=2"></script><!-- CONNECT HOOK: #backend=...&token=... link stores a local backend for this browser, before i1-live.js reads it -->
 <script src="../i1-live.js?v=pub2"></script>
 <!-- PLAYBACK HOOK: one clock and one playback bar for example and recorded runs, in ../i1-playback.js -->
-<script src="../i1-playback.js?v=pb2a"></script>
+<script src="../i1-playback.js?v=pb2b"></script>
 <!-- CHIPPY HOOK: the helper panel (corner button, side panel, example prompts, page actions) lives in ../i1-chippy.js -->
 <script src="../i1-chippy.js?v=fb3a"></script>
 <script src="../i1-designs.js?v=dn1c"></script><!-- DESIGNS HOOK: the designs a run tried, in the Chip view (window.ChipInDesigns) -->
@@ -1210,6 +1210,10 @@ function timeline(run) {
   if (run._tl) return run._tl;
   const pr = preset(run.preset), SPEC = 2, REP = 2.5, L = 75 / pr.rounds, rounds = [];
   if (designsOf(run).af) return (run._tl = afTimeline(run));
+  // a measured example with no recorded order or times (Neonatal EEG): one step per design in the order its results list them,
+  // step 0 the brief and the last step the report; the bar counts steps, never seconds
+  const MD = designsOf(run);
+  if (run.source !== "measured" && MD.measured && MD.file && MD.designs.length > 1) { MD.designs.forEach((d, i) => { d.at = i + 1; }); return (run._tl = { T: MD.designs.length + 1, rounds: [], SPEC: 1, steps: true }); }
   if (run.source === "measured" || designsOf(run).measured) return (run._tl = { T: 0, rounds: [], SPEC: 0 });
   for (let r = 1; r <= pr.rounds; r++) {
     // round 1 proposes and trains quickly so the first designs land at about 3 s, as on the AF replay
@@ -1234,7 +1238,7 @@ let viewCache = new WeakMap();
 function viewAt(run) {
   const tl = timeline(run), t = elapsed(run), done = t >= tl.T - 1e-6, D = designsOf(run);
   const ph = D.af ? afPhase(tl, t, done) : 0;
-  const vis = done || (!D.af && (run.source === "measured" || D.measured)) ? D.designs : D.designs.filter(d => d.at <= t);
+  const vis = done || (!D.af && !tl.steps && (run.source === "measured" || D.measured)) ? D.designs : D.designs.filter(d => d.at <= t);
   const key = vis.length + "|" + JSON.stringify(run.targets) + "|" + run.primary + "|" + run.judge + "|" + ph;
   let ev = viewCache.get(run);
   if (!ev || ev.key !== key) { ev = { key, ...(D.af ? evaluateAF(run, vis, ph) : evaluate(run, vis)) }; viewCache.set(run, ev); }
@@ -1248,6 +1252,12 @@ function stageAt(run, t) {
     const all = designsOf(run).designs, n = all.filter(d => d.at <= t).length;
     if (n < all.length) return { k: "check", txt: `Replaying the search: validation scores for ${fmt(n)} of ${fmt(all.length)} real candidates` };
     return { k: "report", txt: `Replaying the decision path, step ${afPhase(tl, t, false)} of ${tl.af.steps.length}` };
+  }
+  if (tl.steps) {
+    if (t >= tl.T - 1e-6) return { k: "done", txt: "Done" };
+    if (t < tl.SPEC) return { k: "spec", txt: "Reading the brief and setting the targets" };
+    const all = designsOf(run).designs, n = all.filter(d => d.at <= t).length;
+    return { k: "check", txt: `Measured designs in the order the results list them: ${fmt(n)} of ${fmt(all.length)}` };
   }
   if (run.source === "measured") return { k: "done", txt: "" };
   if (t >= tl.T - 1e-6) return { k: "done", txt: "Done" };
@@ -2106,7 +2116,7 @@ function setBadge(run) {
   b.textContent = run ? badgeText(run) : ""; b.className = run && !isSim(run) ? "demo mea" : "demo";
 }
 // a run with a demo clock: every simulated run, and the AF run when it has the real candidates to replay
-const plays = run => !isMea(run) || afFile(run);
+const plays = run => !isMea(run) || afFile(run) || !!timeline(run).steps;
 function renderRun() {
   const run = findRun(route.id);
   teardown();
@@ -2368,7 +2378,7 @@ function updOverview(run) {
     np.innerHTML = A ? nopassAF(run, v) : run.case === "af" && run.targets.length && !v.ev.chosen ? `<p class="nopass"><b${TA("One circuit was measured, so there is no family to choose from yet.")}>One circuit measured, no family yet.</b> ${afBaseLine(run)}</p>` : v.ev.best && v.ev.nearest[0] ? bestNote(v) : run.targets.length && !v.ev.chosen && (v.done || isMea(run)) && v.vis.length ? `<p class="nopass">The nearest ${v.ev.nearest.length === 1 ? "is" : "are"} ${v.ev.nearest.map(d => `<button class="lnk2" data-sel="${esc(d.id)}" style="color:#7c2d12;font-weight:600;text-decoration:underline">${esc(d.id)} (${fmt(d.gates)} gates)</button>`).join(", ")}, ringed on the chart.</p>` : "";
     np.onclick = e => { const b = e.target.closest("[data-sel]"); if (b) { run.ui.sel = b.dataset.sel; saveRuns(); updOverview(run); } };
   }
-  const stTxt = !plays(run) ? "" : A && v.done ? `Replay finished: ${fmt(v.all.length)} candidates and ${v.tl.af.steps.length} steps, ${clock(v.T)} on the demo clock.` : v.done ? `Done.${v.all.length.toLocaleString("en-GB")} designs checked, ${clock(v.T)} on the demo clock.` : run.clock.playing ? v.stage.txt : "Paused. " + v.stage.txt;
+  const stTxt = !plays(run) ? "" : A && v.done ? `Replay finished: ${fmt(v.all.length)} candidates and ${v.tl.af.steps.length} steps, ${clock(v.T)} on the demo clock.` : v.done && v.tl.steps ? `Done. ${fmt(v.all.length)} measured designs, shown in the order the results list them.` : v.done ? `Done.${v.all.length.toLocaleString("en-GB")} designs checked, ${clock(v.T)} on the demo clock.` : run.clock.playing ? v.stage.txt : "Paused. " + v.stage.txt;
   const s = $("#ovStatus"); if (s.dataset.t !== stTxt) { s.dataset.t = stTxt; s.className = "status" + (v.done ? " done" : ""); s.innerHTML = stTxt ? `${!v.done && run.clock.playing ? '<span class="spin"></span>' : ""}<span>${esc(stTxt)}</span>` : ""; s.style.display = stTxt ? "" : "none"; }
   if (v.funnel && !v.done) { const f = funnelHTML(run, v); if ($("#fun").innerHTML !== f.html) $("#fun").innerHTML = f.html; }
   drawChart(run, v);
@@ -2946,7 +2956,7 @@ function renderChat(run, force) {
   const evs = chatEvents(run), sig = evs.length + "";
   if (!force && sig === cur.sig) return;
   const first = force || !$("#feed"); cur.sig = sig;
-  const html = evs.map(e => e.k === "you" ? `<div class="you"><p>${esc(e.txt)}</p></div>` : `<div class="msg" style="--rc:${CHAT_K[e.k][1]}"><span class="mav" style="background:${CHAT_K[e.k][1]}1a;color:${CHAT_K[e.k][1]}">${I(CHAT_K[e.k][0])}</span><div><div class="who">${APP.name}<span class="when">${!plays(run) ? "measured run" : clock(e.t)}</span></div><div class="mt">${esc(e.txt)}</div></div></div>`).join("");
+  const html = evs.map(e => e.k === "you" ? `<div class="you"><p>${esc(e.txt)}</p></div>` : `<div class="msg" style="--rc:${CHAT_K[e.k][1]}"><span class="mav" style="background:${CHAT_K[e.k][1]}1a;color:${CHAT_K[e.k][1]}">${I(CHAT_K[e.k][0])}</span><div><div class="who">${APP.name}<span class="when">${!plays(run) || timeline(run).steps ? "measured run" : clock(e.t)}</span></div><div class="mt">${esc(e.txt)}</div></div></div>`).join("");
   if (first) {
     $("#body").innerHTML = `<div class="chat"><div class="feed" id="feed"><div class="fin"><p class="cnote2">${isSim(run) ? tp(`Simulated: no model called; labelled ${esc(modelName(run.agent))}.`, `This simulated run narrates its own steps. No model was called; ${modelName(run.agent)} is the model the run was labelled with.`) : afFile(run) ? tp("Recorded steps on a demo clock. No model was called.", "The real search's recorded steps, replayed on the demo clock. No model was called.") : "The measured run's results, as recorded."}</p><div id="msgs">${html}</div></div></div>
       ${window.ChipInLive?.i1?.exampleBox?.() ?? `<div class="comp"><div class="box"><textarea id="note" rows="1" aria-label="Add a note to this run" placeholder="Add a note to this run" data-voice></textarea><button class="send" id="sendN" aria-label="Add note">${I("up")}</button></div></div>`}</div>`; /* LIVE HOOK: the agent message box, disabled and explained on an example run (../i1-live.js) */

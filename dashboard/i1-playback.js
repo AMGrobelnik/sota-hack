@@ -266,10 +266,10 @@
     row.classList.toggle("live", live);
     $("#pbFill", row).style.width = p + "%";
     $("#pbThumb", row).style.left = p + "%";
-    setText($("#pbNow", row), clock(t)); setText($("#pbTot", row), clock(T));
+    setText($("#pbNow", row), fmtT(c, t)); setText($("#pbTot", row), fmtT(c, T));
     var trk = $("#pbTrk", row);
     trk.setAttribute("aria-valuemax", String(Math.round(T))); trk.setAttribute("aria-valuenow", String(Math.round(t)));
-    trk.setAttribute("aria-valuetext", clock(t) + " of " + clock(T) + (live ? ", live" : "") + (stageAt(c, t) ? ", " + stageAt(c, t) : ""));
+    trk.setAttribute("aria-valuetext", fmtT(c, t) + " of " + fmtT(c, T) + (c.steps ? " steps" : "") + (live ? ", live" : "") + (stageAt(c, t) ? ", " + stageAt(c, t) : ""));
     var adv = ck.advancing(), key = [adv, ck.speed, live, ck.live, t >= T - 1e-6, (c.marks || []).length].join("|");
     if (key !== BAR.sig) {
       BAR.sig = key;
@@ -290,6 +290,8 @@
     if (ended && c.onCommit) c.onCommit();
     BAR.raf = requestAnimationFrame(frame);
   }
+  // seconds as a clock; a run with no recorded times counts whole steps instead
+  function fmtT(c, t) { return c.steps ? String(Math.floor(t + 1e-6)) : clock(t); }
   function setText(el, s) { if (el && el.textContent !== s) el.textContent = s; }
   function stageAt(c, t) { var l = ""; (c.marks || []).forEach(function (m) { if (m.t <= t + 1e-6) l = m.label; }); return l; }
   function kick() { if (BAR) BAR.force = true; }
@@ -353,7 +355,7 @@
     var trk = $("#pbTrk", BAR.row), r = trk.getBoundingClientRect(), f = clamp((x - r.left) / r.width, 0, 1), t = f * BAR.ctl.clock.total;
     var tip = BAR.tip || (BAR.tip = document.createElement("div")); tip.className = "pb-tip";
     var st = stageAt(BAR.ctl, t), gap = (BAR.ctl.gaps || []).find(function (g) { return Math.abs(g.t / (BAR.ctl.clock.total || 1) * r.width - f * r.width) <= 4; });
-    tip.textContent = clock(t) + (st ? " · " + st : "") + (gap ? " · " + fmtIdle(gap.ms) + " idle, skipped" : "");
+    tip.textContent = (BAR.ctl.steps ? "Step " + fmtT(BAR.ctl, t) : clock(t)) + (st ? " · " + st : "") + (gap ? " · " + fmtIdle(gap.ms) + " idle, skipped" : "");
     tip.style.left = (f * 100) + "%";
     if (!tip.isConnected) trk.appendChild(tip);
   }
@@ -427,6 +429,8 @@
     if (tl.af) {
       m.push({ t: tl.SPEC, label: "Search" });
       tl.af.steps.forEach(function (s, i) { if (i > 0) m.push({ t: s, label: "Decision step " + (i + 1) }); });
+    } else if (tl.steps) {
+      m.push({ t: tl.SPEC, label: "Designs" }, { t: tl.T - 1, label: "Last design" });
     } else if (tl.rounds && tl.rounds.length) {
       tl.rounds.forEach(function (r) { m.push({ t: r.start, label: "Round " + r.r }); });
       m.push({ t: tl.rounds[tl.rounds.length - 1].end, label: "Report" });
@@ -439,7 +443,9 @@
     var tl = P.timeline(run), T = tl.T, p = hashParts();
     var t0 = P.elapsed(run), playing = !!(run.clock && run.clock.playing) && t0 < T - 1e-6;
     if (p.t != null && isFinite(p.t)) { t0 = clamp(p.t, 0, T); playing = false; }
-    var sp = p.speed != null && SPEEDS.indexOf(p.speed) >= 0 ? p.speed : exSpeed[run.id] || 1;
+    // a run counted in steps plays in about a minute by default (a playback rate, not a claimed duration)
+    var sp0 = tl.steps ? SPEEDS.filter(function (s) { return T / s <= 60; })[0] || SPEEDS[SPEEDS.length - 1] : 1;
+    var sp = p.speed != null && SPEEDS.indexOf(p.speed) >= 0 ? p.speed : exSpeed[run.id] || sp0;
     var ck = new Clock({ total: T, t: t0, speed: sp, playing: playing });
     var wrote = null, lastTick = 0;
     var push = function () { // the page reads run.clock: write the bar's time there, then let it redraw
@@ -447,7 +453,7 @@
     };
     push();
     mountBar(top, {
-      clock: ck, marks: exampleMarks(tl), gaps: [], kind: "example",
+      clock: ck, marks: exampleMarks(tl), gaps: [], kind: "example", steps: !!tl.steps,
       refreshTotal: function () {
         if (run.clock !== wrote) { // the page restarted the run ("Play this run again")
           ck.anchorT = P.elapsed(run); ck.anchorWall = performance.now(); ck.playing = !!run.clock.playing; push();
