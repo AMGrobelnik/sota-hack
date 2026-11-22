@@ -1,0 +1,35 @@
+# Deploys the gh-pages branch root as the GitHub Pages site (chipin.space).
+# Replaces the legacy branch build, whose deploys were cancelled and then
+# stalled the queue for minutes when pushes arrived seconds apart.
+name: pages
+
+on:
+  push:
+    branches: [gh-pages]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time. A running deploy always finishes; newer pushes
+# replace any waiting run, so the newest commit deploys next.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v5
