@@ -159,6 +159,21 @@ def add_luts(raw: dict, luts: dict) -> None:
                        luts_basis=f"synthesize target=xc7 with a {r['cap_s']} s cap (count-luts hit its 900 s cap)")
 
 
+def lut_estimates(rows: list[dict]) -> None:
+    """Where the xc7 LUT count timed out: LUTs = gates x (LUTs per gate of the measured designs, same emitter),
+    a least-squares slope through the origin, labelled as an estimate."""
+    for em in ("default", "alkaid"):
+        pts = [(r["gates"], r["luts_xc7"]) for r in rows if r["emitter"] == em and r["luts_xc7"] and r["gates"]]
+        if not pts:
+            continue
+        k = sum(g * lut for g, lut in pts) / sum(g * g for g, _ in pts)
+        for r in rows:
+            if r["emitter"] == em and not r["luts_xc7"] and r["gates"]:
+                r["luts_xc7_est"] = round(k * r["gates"])
+                r["luts_xc7_est_basis"] = (f"estimate: {k:.3f} LUTs per gate, fitted on the {len(pts)} {em} designs whose "
+                                           f"xc7 LUT count finished")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--raw", type=Path, action="append", required=True)
@@ -174,6 +189,7 @@ def main() -> None:
     raw["orphans_reaped"] = [json.loads(ln) for p in a.reaped if p.exists()
                              for ln in p.read_text().splitlines() if ln.startswith("{")]
     rows = [summary(r) for r in raw["designs"]]
+    lut_estimates(rows)
     fitd, fit_rows = {}, []
     for style in ("ternary", "q4"):
         for em in ("default", "alkaid"):
@@ -224,7 +240,7 @@ def markdown(rows, route_rows, w30) -> str:
         ar = r["area_um2"]
         f = lambda v: f"{v:,.0f}" if v else "-"  # noqa: E731
         L.append(f"| {r['key']} | {f(r['gates'])} | {r['gates_per_weight'] or '-'} | {r['depth'] or '-'} | "
-                 f"{f(r['luts_xc7'])} | {f(ar.get('sky130'))} | {f(ar.get('gf180'))} | {f(ar.get('ihp'))} |")
+                 f"{f(r['luts_xc7']) if r['luts_xc7'] else '~' + f(r.get('luts_xc7_est')) + ' est.'} | {f(ar.get('sky130'))} | {f(ar.get('gf180'))} | {f(ar.get('ihp'))} |")
     L += ["", "| Design | Synth s | Peak MB | Sim | Proof | Proof s | fmax sky/gf est |",
           "| --- | --- | --- | --- | --- | --- | --- |"]
     for r in rows:
