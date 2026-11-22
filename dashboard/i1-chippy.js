@@ -241,6 +241,8 @@
     "  body:has(.main .lv-cxw) .chp-hello{bottom:calc(" + (128 + BUB / 2 - 15) + "px + env(safe-area-inset-bottom,0px))}",
     // the sidebar drawer is open: the avatar steps aside until it closes
     "  body.drawer .chp-btn,body.drawer .chp-hello{display:none}",
+    // the New run questions screen keeps its answer box low: the avatar would sit on its Send button
+    "  body:has(.main .iq) .chp-btn,body:has(.main .iq) .chp-hello{display:none}",
     "  .chp-p{top:auto;left:0;right:0;bottom:0;width:auto;max-width:none;min-height:0;max-height:none;height:min(78vh,680px);border:0;border-radius:16px 16px 0 0;box-shadow:0 -10px 40px rgb(14 21 48/.16);padding-bottom:env(safe-area-inset-bottom,0px);animation:chpUp .2s var(--ease,ease)}",
     "  .chp-scrim{display:block;position:fixed;inset:0;z-index:59;background:rgb(20 20 40/.14)}",
     // a file was opened by Chippy: the sheet shrinks to a bar under the drawer that keeps the line and its Undo

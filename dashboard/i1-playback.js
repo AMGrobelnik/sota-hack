@@ -111,6 +111,7 @@
     ".pb-live i{width:7px;height:7px;border-radius:50%;background:var(--i300)}",
     ".pb-live.on{color:var(--badt);background:rgb(239 68 68/.08);border-color:transparent}.pb-live.on i{background:#ef4444}",
     ".pb-live:not(.on):hover{border-color:var(--i300);color:var(--i900)}",
+    "#rvFun[hidden]{display:none}", // .fun sets display:flex, which would beat the hidden attribute
     ".pb-scrim{position:fixed;inset:0;background:rgb(14 21 48/.28);z-index:80;display:flex;align-items:flex-start;justify-content:center;padding:9vh 16px 16px}",
     ".pb-dlg{background:#fff;border-radius:16px;box-shadow:0 24px 64px -24px rgb(0 0 0/.45);width:min(600px,100%);max-height:80vh;display:flex;flex-direction:column;outline:0}",
     ".pb-dlg header{display:flex;align-items:flex-start;gap:10px;padding:18px 18px 10px}",
@@ -522,10 +523,10 @@
   }
   var MARK = { ok: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', bad: '<path d="M18 6 6 18M6 6l12 12"/>' };
   function recRow(r, on) {
-    var c = r.counts || {}, st = r.state || "succeeded";
-    var g = st === "running" ? '<span class="spin"></span>' : st === "succeeded" ? '<svg viewBox="0 0 24 24" class="ok" aria-hidden="true">' + MARK.ok + "</svg>" : st === "failed" ? '<svg viewBox="0 0 24 24" class="bad" aria-hidden="true">' + MARK.bad + "</svg>" : "";
+    var c = r.counts || {}, st = r.state || "succeeded", miss = st === "succeeded" && r.held_out_met === false; // finished, but its chosen chip misses its held-out targets: a fail mark, not a tick
+    var g = st === "running" ? '<span class="spin"></span>' : st === "succeeded" && !miss ? '<svg viewBox="0 0 24 24" class="ok" aria-hidden="true">' + MARK.ok + "</svg>" : st === "failed" || miss ? '<svg viewBox="0 0 24 24" class="bad" aria-hidden="true">' + MARK.bad + "</svg>" : "";
     var sub = [dateTxt(r.started_at), r.duration_s ? durTxt(r.duration_s).trim() : "", c.designs ? fmtN(c.designs) + " designs" : ""].filter(Boolean).join(" · ");
-    var tip = [r.title || r.id, sub, "Recorded run, " + (r.src === "mac" ? "on this computer" + (r.alsoSite ? ", copy on the site" : "") : "copy on this site"), st !== "succeeded" ? st : "",
+    var tip = [r.title || r.id, sub, "Recorded run, " + (r.src === "mac" ? "on this computer" + (r.alsoSite ? ", copy on the site" : "") : "copy on this site"), st !== "succeeded" ? st : "", miss ? "Chosen chip misses its held-out targets" : "",
       r.preset ? "Run size: " + String(r.preset).replace(/^pro$/i, "large").replace(/^\w/, function (m) { return m.toUpperCase(); }) : "", r.agent || r.model ? "Model: " + usedModel(r) : "",
       r.chosen ? "chosen " + r.chosen : "", c.subagents ? fmtN(c.subagents) + " subagents" : "", c.events ? fmtN(c.events) + " events" : "",
       r.data && r.data.name ? "Data: " + r.data.name + (r.data.licence ? ", " + r.data.licence : "") : "", r.note || ""].filter(Boolean).join("\n");
@@ -744,8 +745,8 @@
   function mountMessages(view) {
     var CM = window.ChipInMessages, rec = V.rec;
     if (!CM) return;
-    if (view === "log") CM.mount($("#rvBody"), { runId: V.msgKey, mode: "page", title: "Messages" });
-    else if (view === "overview") CM.mount($("#rvLast"), { runId: V.msgKey, mode: "panel", title: "Latest from the agent", more: "#/rec/" + rec.src + "/" + encodeURIComponent(rec.id) + "/log" });
+    if (view === "log") CM.mount($("#rvBody"), { runId: V.msgKey, mode: "page", title: "Messages", files: rec.files });
+    else if (view === "overview") CM.mount($("#rvLast"), { runId: V.msgKey, mode: "panel", title: "Latest from the agent", files: rec.files, more: "#/rec/" + rec.src + "/" + encodeURIComponent(rec.id) + "/log" });
   }
   // fed the events up to the time on the bar: forward adds the new ones in one batch, back refeeds the prefix once
   function feedMessages(M) {
@@ -998,7 +999,9 @@
     // axes
     g.textAlign = "right";
     if (yk) niceTicks(c, d, true).forEach(function (v) { var yy = Y(v); g.beginPath(); g.moveTo(x0, yy); g.lineTo(x1, yy); g.stroke(); g.fillText(frac ? Math.round(v * 100) + "%" : String(+v.toPrecision(3)), x0 - 6, yy + 4); });
-    else { g.beginPath(); g.moveTo(x0, (y0 + y1) / 2); g.lineTo(x1, (y0 + y1) / 2); g.stroke(); }
+    else { g.beginPath(); g.moveTo(x0, (y0 + y1) / 2); g.lineTo(x1, (y0 + y1) / 2); g.stroke();
+      // no chip reported a score: the y axis says so instead of standing bare
+      g.save(); g.translate(16, (y0 + y1) / 2); g.rotate(-Math.PI / 2); g.textAlign = "center"; g.fillText("No score reported per chip", 0, 0); g.restore(); }
     g.textAlign = "center";
     var ticks = logx ? [1, 10, 100, 1000, 10000, 100000].filter(function (v) { return lx(v) >= a && lx(v) <= b; }) : niceTicks(a, b);
     ticks.forEach(function (v) { if (v <= 0 && logx) return; g.fillText(fmtN(v), X(v), y1 + 16); });
@@ -1054,7 +1057,8 @@
   }
 
   // leaving a recorded run (or a run page) takes the bar down
-  addEventListener("hashchange", function () { if (!owns()) { if (V) { V = null; } if (BAR && BAR.ctl.kind === "recorded") unmountBar(); } });
+  addEventListener("hashchange", function () { [].forEach.call(document.querySelectorAll(".pb-scrim"), function (s) { s.remove(); }); // a file dialog never outlives the page it was opened on
+    if (!owns()) { if (V) { V = null; } if (BAR && BAR.ctl.kind === "recorded") unmountBar(); } });
 
   /* ---------- for tests: what the open recorded run shows now ---------- */
   function state() {

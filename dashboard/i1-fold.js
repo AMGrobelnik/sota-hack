@@ -45,6 +45,9 @@
   /* ---------- display scrub ---------- */
   var HOME = /\/(?:Users|home)\/[^\/\s"'<>`]+(\/|(?=[\s"'<>`),;:]|$))/g;
   function scrub(s) { return typeof s === "string" && s.indexOf("/") >= 0 ? s.replace(HOME, function (m, sl) { return sl ? "~/" : "~"; }) : s; }
+  // a log row's path read from the repo root: a home or worktree prefix of the repo is left out
+  var REPO = /(?:~|\/(?:Users|home)\/[^\/\s"'<>`]+)\/projects\/sota-hack(?:\/\.worktrees\/[^\/\s"'<>`]+)?(?:\/|(?=[\s"'<>`),;:…]|$))/g;
+  function repoPath(s) { return typeof s === "string" && s.indexOf("/") >= 0 ? scrub(s.replace(REPO, function (m) { return m.slice(-1) === "/" ? "" : "."; })) : s; }
   function scrubEvent(v) {
     if (!v || typeof v !== "object") return v;
     var keys = Array.isArray(v) ? v.map(function (x, i) { return i; }) : Object.keys(v);
@@ -363,7 +366,7 @@
       scored: ds.filter(function (d) { return Object.keys(d.metrics).some(function (k) { return num(d.metrics[k]) != null; }); }).length,
       compiled: ds.filter(function (d) { return num(d.gates) > 0; }).length,
       verified: ds.filter(function (d) { return d.verified && typeof d.verified === "object"; }).length,
-      clear: ds.filter(function (d) { return passAll(T || [], d); }).length,
+      clear: ds.filter(function (d) { return d.verified && typeof d.verified === "object" && passAll(T || [], d); }).length, // only a verified design can clear them, so this count never passes Verified
       chosen: f.chosen ? 1 : 0
     };
   }
@@ -619,7 +622,7 @@
   document.head.appendChild(css);
 
   window.ChipInFold = {
-    version: 1, scrub: scrub, scrubEvent: scrubEvent, create: create, fold: fold, designs: designs, cost: cost, funnel: funnel, heldOut: heldOut,
+    version: 1, scrub: scrub, repoPath: repoPath, scrubEvent: scrubEvent, create: create, fold: fold, designs: designs, cost: cost, funnel: funnel, heldOut: heldOut,
     subsHTML: subsHTML, wireSubs: wireSubs, chipHTML: chipHTML, variantHTML: variantHTML,
     chipName: chipName, chipNameHTML: chipNameHTML, humanLabel: humanLabel, plainWords: plainWords,
     targetsOf: targetsOf, fmtV: fmtV, fmtT: fmtT, meets: meets, passAll: passAll, metaOf: metaOf, MET: MET, FAU: FAU, faUnit: faUnit,

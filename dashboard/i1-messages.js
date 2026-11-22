@@ -33,7 +33,9 @@
   // a chip lab call: chiplab run as a command (at the start, after ; && | or a timeout prefix), not a
   // mention such as "which chiplab python3"
   var LAB_CALL = /(?:^|[;&|(]\s*|\b(?:Ran|do|then|time|timeout\s+\S+)\s+)chiplab\s+([a-z][a-z0-9-]*)/;
-  var esc = function (s) { return (window.ChipInFold ? window.ChipInFold.scrub(String(s == null ? "" : s)) : String(s == null ? "" : s)).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
+  // rows read paths from the repo root; the raw events keep them, with only the home folder as ~ (escRaw)
+  var escWith = function (fn) { return function (s) { var F = window.ChipInFold; return (F && F[fn] ? F[fn](String(s == null ? "" : s)) : String(s == null ? "" : s)).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }; };
+  var esc = escWith("repoPath"), escRaw = escWith("scrub");
   var clip = function (s, n) { s = String(s == null ? "" : s); return s.length > n ? s.slice(0, n - 1) + "\u2026" : s; };
   var firstLine = function (s) { var l = String(s == null ? "" : s).split(/\r?\n/).map(function (x) { return x.trim(); }).filter(Boolean)[0] || ""; return clip(l.replace(/^#+\s*/, ""), 240); };
   var tsMs = function (ts) { var t = Date.parse(ts || ""); return isNaN(t) ? null : t; };
@@ -414,7 +416,7 @@
     setHTML(M, "lad", M.root.querySelector(".cm-ladder"), lad);
     // the run summary, pinned
     var rs = T.N.run.sum, sumHTML;
-    if (rs) sumHTML = '<p class="cm-sl">' + (rs.final ? "Run summary" : "Run summary so far") + srcMark(rs) + '</p><p class="cm-st' + (ui.more ? " cm-all" : "") + '">' + esc(sumText(S, T.N.run)) + "</p>" + (rs.text.length > 160 ? '<button type="button" class="cm-more" data-act="more" aria-expanded="' + ui.more + '">' + (ui.more ? "Show less" : "Show all") + "</button>" : "");
+    if (rs) sumHTML = '<p class="cm-sl">' + (rs.final ? "Run summary" : "Run summary so far") + srcMark(rs) + '</p><p class="cm-st' + (ui.more ? " cm-all" : "") + '">' + chipWordsHTML(S, sumText(S, T.N.run), M.opts.files) + "</p>" + (rs.text.length > 160 ? '<button type="button" class="cm-more" data-act="more" aria-expanded="' + ui.more + '">' + (ui.more ? "Show less" : "Show all") + "</button>" : "");
     else if (S.prompt) sumHTML = '<p class="cm-sl">Run summary pending</p><p class="cm-st cm-pend" title="The run summary comes after the first stage closes; this is the brief\'s first line">' + pendDot() + esc(firstLine(S.prompt)) + "</p>";
     else sumHTML = "";
     if (S.limit) sumHTML += '<p class="cm-lim">Summaries stopped at a limit (' + esc(S.limit.reason || "limit") + "); later rows show their own first line.</p>";
@@ -572,6 +574,27 @@
     }
   }
   function lineOf(S, n) { return n.sum ? sumText(S, n) : n.raw ? itemFirst(S, n.raw) : ""; }
+  // a summary as HTML with each chip id read as the chip's name and the id small after it, as the
+  // headline names the chosen chip (../i1-fold.js chipName over this run's own events)
+  function chipWordsHTML(S, s, files) {
+    var F = window.ChipInFold, html = esc(s);
+    if (!F || !F.create || !F.fold || !F.chipName) return html;
+    var seqs = Object.keys(S.ev);
+    if (!S.cf || S.cf.n !== seqs.length) {
+      var f = F.create();
+      seqs.map(Number).sort(function (a, b) { return a - b; }).forEach(function (q) { try { F.fold(f, S.ev[q]); } catch (e) { /* an event the fold cannot read names no chip */ } });
+      S.cf = { n: seqs.length, f: f };
+    }
+    var cf = S.cf.f, ids = {};
+    Object.keys(cf.designs).concat(Object.keys(cf.labels || {}), Object.keys(cf.chips)).forEach(function (k) { if (k && k.length >= 4) ids[k] = 1; });
+    var list = Object.keys(ids).sort(function (a, b) { return b.length - a.length; }).map(function (k) { return k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); });
+    var idHTML = function (k) { return '<span class="cm-cid" title="Technical id of this chip">' + esc(k) + "</span>"; };
+    if (list.length) html = html.replace(new RegExp("(^|[^\\w-])(" + list.join("|") + ")(?![\\w-])", "g"), function (m, pre, k, off) {
+      var c = F.chipName(cf, k, { files: files }), nm = /chip\s*$/i.test(pre === "" ? html.slice(0, off) : html.slice(0, off + 1)) ? c.name.replace(/^chip\s+/i, "") : c.name; return pre + (nm ? esc(nm.replace(/^./, function (x) { return x.toLowerCase(); })) + " " : "") + idHTML(k);
+    });
+    // a hash the run's events never described still reads small, never as a word in the sentence
+    return html.replace(/(^|[^\w">-])([0-9a-f]{12})(?![\w-])/g, function (m, pre, k) { return pre + idHTML(k); });
+  }
   // a line's summary as shown: a metric step in the page's own words (the Chip tab's label and unit),
   // any other summary with the raw metric keys in it read as their labels
   function sumText(S, n) {
@@ -581,7 +604,7 @@
   }
   function metaHTML(a, t) { return '<span class="cm-meta">' + (a ? "<span>" + esc(a) + "</span>" : "") + (t ? '<span class="cm-t">' + esc(t) + "</span>" : "") + "</span>"; }
 
-  function pre(t, cls) { return '<pre class="cm-pre' + (cls ? " " + cls : "") + '">' + esc(t) + "</pre>"; }
+  function pre(t, cls, e) { return '<pre class="cm-pre' + (cls ? " " + cls : "") + '">' + (e || esc)(t) + "</pre>"; }
   function bodyHTML(S, n) {
     var out = [], evs = n.seqs.slice().sort(function (a, b) { return a - b; }).map(function (q) { return S.ev[q]; }).filter(Boolean);
     if (n.sum) out.push('<p class="cm-bs"><span>Summary</span>' + esc(sumText(S, n)) + (n.sum.source === "verbatim" ? ' <em>(its own words)</em>' : n.sum.source === "fallback" ? " <em>(first line, no model answer)</em>" : "") + "</p>");
@@ -603,7 +626,7 @@
       out.push('<div class="cm-sec"><h4>' + esc(h) + '<span>event ' + e.seq + "</span></h4>" + pre(t || "") + "</div>");
     });
     if (!evs.length) out.push('<p class="cm-mute">The events this line covers have not reached this page.</p>');
-    else out.push('<button type="button" class="cm-rawb" data-act="raw" aria-expanded="false">Show the raw events</button><div class="cm-raw" hidden>' + pre(evs.map(function (e) { return JSON.stringify(e, null, 2); }).join("\n\n"), "cm-json") + "</div>");
+    else out.push('<button type="button" class="cm-rawb" data-act="raw" aria-expanded="false">Show the raw events</button><div class="cm-raw" hidden>' + pre(evs.map(function (e) { return JSON.stringify(e, null, 2); }).join("\n\n"), "cm-json", escRaw) + "</div>");
     return out.join("");
   }
 
@@ -641,6 +664,7 @@
     ".cm-lv b{font-weight:650;color:var(--i900);font-variant-numeric:tabular-nums}.cm-lv:hover{color:var(--i900)}.cm-lv.on{border-bottom-color:var(--blue7,#2b55d0);color:var(--i900)}",
     ".cm-sum{padding:9px 14px 10px;border-bottom:1px solid var(--hair,rgb(0 0 0/.07))}.cm-page .cm-sum{padding:10px 2px 12px}.cm-sum[hidden]{display:none}",
     ".cm-sl{margin:0 0 3px;font-size:11px;font-weight:600;color:var(--i550)}",
+    ".cm-cid{font-family:var(--mono,ui-monospace,monospace);font-size:10.5px;font-weight:400;color:var(--i550,#7a8194);letter-spacing:0}",
     ".cm-st{margin:0;font-family:var(--serif,Georgia,serif);font-size:14.5px;line-height:1.5;color:var(--i900);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}.cm-st.cm-all{display:block}.cm-panel .cm-st{font-size:13.5px;-webkit-line-clamp:2}",
     ".cm-more{font:inherit;font-size:11.5px;color:var(--blue7);background:none;border:0;padding:2px 0 0;cursor:pointer}",
     ".cm-lim{margin:6px 0 0;font-size:11.5px;color:var(--amb,#b45309)}",
@@ -699,6 +723,6 @@
   document.head.appendChild(css);
 
   // MSGROW HOOK: what ../i1-msgrow.js borrows to draw one row per message from this store
-  var H = { esc: esc, ico: ico, firstLine: firstLine, itemFirst: itemFirst, sumText: sumText, rel: rel };
+  var H = { esc: esc, escRaw: escRaw, ico: ico, firstLine: firstLine, itemFirst: itemFirst, sumText: sumText, rel: rel };
   window.ChipInMessages = { mount: mount, feed: feed, reset: reset, state: state, version: 1 };
 })();

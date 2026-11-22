@@ -143,7 +143,7 @@
     if (/^[[{]/.test(x)) { try { return { t: JSON.stringify(JSON.parse(x), null, 2), json: true }; } catch (e) { /* not JSON */ } }
     return { t: s, json: false };
   }
-  function block(H, t, cls) { return '<pre class="cm-pre cm-mr-pre' + (cls ? " " + cls : "") + '" tabindex="0">' + H.esc(t) + "</pre>"; }
+  function block(H, t, cls, raw) { return '<pre class="cm-pre cm-mr-pre' + (cls ? " " + cls : "") + '" tabindex="0">' + (raw && H.escRaw ? H.escRaw : H.esc)(t) + "</pre>"; }
   // prose as written; fenced code and whole-JSON messages in monospace
   function prose(H, text) {
     var s = String(text == null ? "" : text), p = pretty(s);
@@ -174,7 +174,7 @@
       });
     }
     if (!evs.length) out.push('<p class="cm-mute">The events of this row have not reached this page.</p>');
-    else out.push('<button type="button" class="cm-rawb" data-act="raw" aria-expanded="false">Show the raw events</button><div class="cm-raw" hidden>' + block(H, evs.map(function (e) { return JSON.stringify(e, null, 2); }).join("\n\n"), "cm-json") + "</div>");
+    else out.push('<button type="button" class="cm-rawb" data-act="raw" aria-expanded="false">Show the raw events</button><div class="cm-raw" hidden>' + block(H, evs.map(function (e) { return JSON.stringify(e, null, 2); }).join("\n\n"), "cm-json", true) + "</div>");
     return out.join("");
   }
 
