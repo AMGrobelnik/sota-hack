@@ -15,6 +15,7 @@ import json
 import os
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -23,12 +24,12 @@ import yaml
 from aiohttp.test_utils import TestClient, TestServer
 from loguru import logger
 
-from chipin_backend.agents.claude_cli import build_argv, plugin_dirs
+from chipin_backend.agents import AgentResult, AgentSpec, backend_for
+from chipin_backend.agents.claude_cli import build_argv, plugin_dirs, transcript_path
 from chipin_backend.agents.env import build_agent_env
-from chipin_backend.agents.types import AgentResult, AgentSpec
 from chipin_backend.api.config import ApiConfig
 from chipin_backend.api.events import EventLog
-from chipin_backend.api.manager import RunManager, standing_instructions
+from chipin_backend.api.manager import ApiAgent, RunManager, standing_instructions
 from chipin_backend.api.progress import ProgressTailer, write_helper
 from chipin_backend.api.server import TOKEN_HEADER, create_app
 from chipin_backend.chiplab import (
@@ -95,6 +96,7 @@ LAB_VALUES: dict[str, int | float] = {
     "best_gates": 1904,
 }
 DESIGN = "765fa47586bd"
+FAKE_CLAUDE = Path(__file__).with_name("fake_claude_cli.py")
 #: What the fake lab prints for ``chiplab agent-doc`` (the real lab prints its AGENT.md).
 LAB_REFERENCE = "# fake chip lab: interface for AI scientists\n\n### `synthesize`\n\nGates from a design."
 #: (workspace path, artifact kind) the lab copies into a ChipIn workspace (section 5 of the guide).
@@ -293,6 +295,112 @@ def test_both_run_paths_get_the_same_instructions(
 
     assert asyncio.run(build()) == standing_instructions()
     assert "Chip lab" in standing_instructions()
+
+
+# ---- the instructions reach both harnesses ----
+
+
+def _flat(text: str) -> str:
+    return " ".join(text.split())
+
+
+async def _dashboard_spec(
+    agent: ApiAgent, config: BackendConfig, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> AgentSpec:
+    """The spec a dashboard run hands its agent, with the lab on (the agent itself not started)."""
+    for name, value in _lab_env(tmp_path).items():
+        monkeypatch.setenv(name, value)
+    seen: list[AgentSpec] = []
+
+    async def fake_run_agent(spec: AgentSpec, _config: BackendConfig, **kwargs: Any) -> Any:
+        seen.append(spec)
+        return kwargs["run"], AgentResult(agent=spec.name, final_text="ok")
+
+    monkeypatch.setattr("chipin_backend.api.manager.run_agent", fake_run_agent)
+    item = RunManager(config, ApiConfig(), agent=agent, summary=False).start(
+        {"prompt": "a seizure detector", "preset": "pro"}
+    )
+    assert item.task is not None
+    await item.task
+    [spec] = seen
+    return replace(spec, workdir=tmp_path / "work", timeout_s=120)
+
+
+def _assert_carries_the_instructions(text: str) -> None:
+    flat = _flat(text)
+    assert _flat(standing_instructions()) in flat
+    assert _flat(chiplab_instructions()) in flat
+    assert "./progress stage" in flat and "chiplab agent-doc" in flat
+
+
+async def test_claude_agent_is_typed_the_instructions_and_the_lab_page(
+    tmp_path: Path, config: BackendConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec = await _dashboard_spec("claude", config, tmp_path, monkeypatch)
+    fake = tmp_path / "bin" / "claude"
+    fake.parent.mkdir()
+    fake.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{FAKE_CLAUDE}" "$@"\n')
+    fake.chmod(0o755)
+    cli = config.agents.claude_cli.model_copy(
+        update={"cli_path": str(fake), "config_dir": tmp_path / "claude-config"}
+    )
+    agents = config.agents.model_copy(update={"claude_cli": cli})
+    result = await backend_for("claude_cli", agents).run(spec, _Sink())
+    assert not result.failed, result.error
+
+    transcript = transcript_path(tmp_path / "claude-config", spec.workdir.resolve(), result.session_id)
+    records = [json.loads(line) for line in transcript.read_text().splitlines()]
+    typed = next(r["message"]["content"] for r in records if r.get("type") == "user")
+    assert "<system-prompt>" in typed
+    _assert_carries_the_instructions(typed)
+
+
+async def test_openrouter_agent_gets_the_instructions_and_the_lab_page_as_its_system_message(
+    tmp_path: Path, config: BackendConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytest.importorskip("openhands.sdk")
+    from openhands.sdk.llm import Message, MessageToolCall, TextContent
+    from openhands.sdk.testing import TestLLM
+    from pydantic import SecretStr
+
+    from chipin_backend.agents.openrouter_agent import OpenRouterAgentBackend
+
+    spec = await _dashboard_spec("openrouter", config, tmp_path, monkeypatch)
+    assert spec.workdir is not None
+    # The lab is on, so the run's folder holds the chip-lab skill as well.
+    assert install_skill(spec.workdir, "openrouter") is not None
+    sent: list[list[Any]] = []
+
+    class RecordingLLM(TestLLM):
+        def completion(self, messages: list[Any], *args: Any, **kwargs: Any) -> Any:
+            sent.append(list(messages))
+            return super().completion(messages, *args, **kwargs)
+
+    def scripted_llm(
+        self: Any, model: str, key: str, provider: Any, *, usage_id: str, fallback: Any = None
+    ) -> Any:
+        finish = MessageToolCall(
+            id="call_1", name="finish", arguments=json.dumps({"message": "done"}), origin="completion"
+        )
+        reply = Message(role="assistant", content=[TextContent(text="")], tool_calls=[finish])
+        return RecordingLLM.from_messages([reply], usage_id=usage_id, api_key=SecretStr(key))
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "fake-key")
+    monkeypatch.setattr(OpenRouterAgentBackend, "_build_llm", scripted_llm)
+    result = await backend_for("openrouter", config.agents).run(spec, _Sink())
+    assert not result.failed, result.error
+
+    system = [m for m in sent[0] if m.role == "system"]
+    assert len(system) == 1
+    text = "".join(getattr(c, "text", "") for c in system[0].content)
+    _assert_carries_the_instructions(text)
+    assert "OpenHands" in text  # the SDK's own system message is kept, not replaced
+    assert "<available_skills>" in text and "<name>chiplab</name>" in text  # and the skill with it
+
+
+class _Sink:
+    def emit(self, event: Any) -> None:
+        return None
 
 
 # ---- the lab's reports -> progress.jsonl -> events ----

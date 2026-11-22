@@ -361,7 +361,7 @@ class OpenRouterAgentBackend(AgentBackend):
 
     def _build_agent(self, spec: AgentSpec, model: str, key: str, provider: Provider) -> Any:
         """The OpenHands ``Agent``: LLM (with backup model), tools, prompt, MCP servers."""
-        from openhands.sdk import Agent
+        from openhands.sdk import Agent, AgentContext
         from openhands.sdk.llm.fallback_strategy import FallbackStrategy
         from openhands.sdk.tool import Tool
         from openhands.tools import FileEditorTool, TaskTrackerTool, TerminalTool
@@ -382,14 +382,17 @@ class OpenRouterAgentBackend(AgentBackend):
         terminal_params = {"env": build_agent_env(spec.env), "terminal_type": "subprocess"}
         tools = [Tool(name=classes[n].name, params=terminal_params if n == "terminal" else {}) for n in names]
         kwargs: dict[str, Any] = {"llm": llm, "tools": tools}
+        # One context for both: the instructions are appended to OpenHands' own
+        # system message (which keeps its tool rules) and the skills are listed in it.
+        context: dict[str, Any] = {}
         if spec.system_prompt:
-            kwargs["system_prompt"] = spec.system_prompt
+            context["system_message_suffix"] = spec.system_prompt
+        if spec.workdir is not None and (skills := workspace_skills(spec.workdir)):
+            context["skills"] = skills
+        if context:
+            kwargs["agent_context"] = AgentContext(**context)
         if servers := mcp_servers_for(spec.mcp_servers):
             kwargs["mcp_config"] = servers
-        if spec.workdir is not None and (skills := workspace_skills(spec.workdir)):
-            from openhands.sdk import AgentContext
-
-            kwargs["agent_context"] = AgentContext(skills=skills)
         return Agent(**kwargs)
 
     async def _turn(
