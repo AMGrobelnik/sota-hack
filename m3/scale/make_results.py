@@ -228,6 +228,7 @@ def main() -> None:
                            "window_bits": WINDOW_BITS, "dff_um2": DFF_UM2, "ns_per_level": NS_PER_LEVEL,
                            "routes": ROUTES},
            "summary": rows, "area_fit": fit_rows, "fit": route_rows, "fit_30k": w30, "designs": raw["designs"]}
+    out = scrub(out)  # last, so data added after the merge (LUT retries, reaper logs) is scrubbed too
     a.out.write_text(json.dumps(out, indent=1, default=str))
     if a.md:
         a.md.write_text(markdown(rows, route_rows, w30))
