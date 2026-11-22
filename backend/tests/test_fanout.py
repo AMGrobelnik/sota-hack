@@ -14,6 +14,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -23,7 +24,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from chipin_backend.agents.claude_cli import build_argv
 from chipin_backend.agents.types import AgentResult, AgentSpec
-from chipin_backend.api.config import ApiConfig, FanoutConfig
+from chipin_backend.api.config import ApiConfig, FanoutConfig, load_api_config
 from chipin_backend.api.events import STAGES
 from chipin_backend.api.fanout import BATCH_STAGES, ID_ENV, STATE_FILE
 from chipin_backend.api.manager import (
@@ -34,12 +35,12 @@ from chipin_backend.api.manager import (
     standing_instructions,
     subagent_standing_instructions,
 )
-from chipin_backend.api.progress import write_helper
+from chipin_backend.api.progress import DEADLINE_ENV, LIMIT_ENV, write_helper
 from chipin_backend.api.server import TOKEN_HEADER, create_app
 from chipin_backend.chiplab import CHIPLAB_BIN_ENV, CLAUDE_PLUGIN_DIR, chiplab_instructions
 from chipin_backend.cli import _parser
 from chipin_backend.compute import local as local_runner
-from chipin_backend.config import BackendConfig
+from chipin_backend.config import BackendConfig, load_config
 from chipin_backend.runs import RunDir
 from chipin_backend.training import TRAIN_PYTHON_ENV, training_instructions
 
@@ -256,6 +257,92 @@ async def test_a_subagent_timing_out_is_reported(config: BackendConfig) -> None:
     assert _of(events, "subagent.finished", id="a1")[0]["state"] == "timed out"
 
 
+async def test_a_subagent_past_its_limit_is_ended_and_its_siblings_finish(config: BackendConfig) -> None:
+    """The slow one's process is gone, the orchestrator reads 'timed out' with its partial
+    result, the event records it, and the quick sibling's result is unaffected."""
+    manager = _manager(config, subagent={"timeout_s": 2})
+    slow = (
+        "$ ./progress metric sensitivity 0.81 --chip grid-best; ./progress time > left.txt; "
+        "sleep 30 & echo $! > pid; wait"
+    )
+    item, events = await _run(
+        manager,
+        _script(
+            f"./subagent start propose '{slow}' --name slow",
+            "./subagent start propose '$ sleep 0.3; echo quick-done' --name quick",
+            "./subagent wait --all --timeout 20",
+        ),
+    )
+    assert item.record["status"] == "succeeded"
+    finished = {e["id"]: e for e in _of(events, "subagent.finished")}
+    assert finished["a2"]["state"] == "done" and "quick-done" in finished["a2"]["result"]
+    timed = finished["a1"]
+    assert timed["state"] == "timed out" and 2 <= timed["seconds"] < 10
+    assert "time limit of 2 seconds" in timed["error"] and "partial" in timed["error"]
+    out = _outputs(item)
+    assert 'slow" (propose, stub): timed out' in out
+    assert "error: hit its time limit of 2 seconds" in out
+    assert "reported before it was stopped: sensitivity 0.81 (chip grid-best)" in out, "the partial result"
+    left = (item.run.workspace / "agents" / "a1" / "left.txt").read_text()
+    assert left.startswith("time left: ") and "of your 2 seconds limit" in left
+    sleeper = int((item.run.workspace / "agents" / "a1" / "pid").read_text())
+    for _ in range(50):
+        if not _alive(sleeper):
+            break
+        await asyncio.sleep(0.1)
+    assert not _alive(sleeper), "nothing of the timed-out subagent is left running"
+
+
+@pytest.mark.parametrize("limit", [90, 420])
+async def test_both_prompts_carry_the_configured_time_limit(
+    config: BackendConfig, monkeypatch: pytest.MonkeyPatch, limit: int
+) -> None:
+    """The subagent's own prompt and the orchestrator's instructions state the configured
+    limit in words (never a fixed 10 minutes); the subagent's environment holds its deadline."""
+    words = {90: "1 minute 30 seconds", 420: "7 minutes"}[limit]
+    recorder = _Recorder(AGENT_BACKENDS["claude"])
+    real = local_runner.backend_for
+    monkeypatch.setattr(
+        local_runner,
+        "backend_for",
+        lambda name, *a, **k: recorder if name == recorder.name else real(name, *a, **k),
+    )
+    item, _ = await _run(
+        _manager(config, subagent={"timeout_s": limit}),
+        _script('./subagent start propose "Try one design family" --agent claude', "./subagent wait a1"),
+    )
+    system = json.loads(item.run.record_path.read_text())["agent"]["system_prompt"]
+    assert f"Each subagent has a hard limit of {words}" in system and "`timed out`" in system
+    [spec] = recorder.specs
+    prompt = spec.prompts[0]
+    assert f"You have at most {words} from now" in prompt
+    assert "partial result before the limit rather than nothing" in prompt
+    assert "10 minutes" not in prompt and "10 minutes" not in system
+    assert spec.timeout_s == limit and spec.env[LIMIT_ENV] == str(limit)
+    assert limit - 30 < float(spec.env[DEADLINE_ENV]) - time.time() <= limit + 0.1
+
+
+def test_the_progress_helper_tells_a_subagent_its_time_left(tmp_path: Path) -> None:
+    write_helper(tmp_path, tmp_path / "progress.jsonl", subagent=True)
+    env = {**os.environ, DEADLINE_ENV: str(time.time() + 125), LIMIT_ENV: "600"}
+
+    def call(*args: str, environ: dict[str, str]) -> str:
+        done = subprocess.run(
+            [str(tmp_path / "progress"), *args], env=environ, capture_output=True, text=True, timeout=30
+        )
+        assert done.returncode == 0, done.stderr
+        return done.stdout
+
+    left = call("time", environ=env)
+    assert left.startswith("time left: 2 minutes") and "of your 10 minutes limit" in left
+    status = call("status", "grid search running", environ=env).splitlines()
+    assert status[0] == "ok" and status[1].startswith("time left: 2 minutes")
+    assert call("metric", "gates", "12", environ=env) == "ok\n", "only status and time add the line"
+    plain = {k: v for k, v in env.items() if k not in (DEADLINE_ENV, LIMIT_ENV)}
+    assert call("status", "x", environ=plain) == "ok\n"
+    assert call("time", environ=plain) == "no time limit is set here\n"
+
+
 def _alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -443,10 +530,10 @@ async def test_fanout_requests_are_checked(config: BackendConfig) -> None:
     ("preset", "width", "total", "usd", "timeout"),
     [
         ("lite", 3, 17, 0.85, 600),
-        ("pro", 10, 52, 2.6, 1200),
-        ("max", 15, 78, 3.9, 1500),
-        ("ultra", 20, 104, 5.2, 1800),
-        (None, 3, 17, 0.85, 1200),
+        ("pro", 10, 52, 2.6, 600),
+        ("max", 15, 78, 3.9, 600),
+        ("ultra", 20, 104, 5.2, 600),
+        (None, 10, 52, 2.6, 600),  # no preset: the large (pro) run size
     ],
 )
 async def test_the_preset_sets_the_batch_size_and_its_limits(
@@ -458,6 +545,24 @@ async def test_the_preset_sets_the_batch_size_and_its_limits(
     assert (plan["max_usd"], plan["timeout_s"]) == (pytest.approx(usd), timeout)
     assert plan["stages"] == list(BATCH_STAGES)
     assert f"limits: width {width}, max_parallel {width}, max_total {total}" in _outputs(item)
+
+
+def test_the_limit_is_ten_minutes_and_a_config_overlay_changes_it(tmp_path: Path) -> None:
+    api = load_api_config()
+    assert api.default_preset == "pro", "a run that names no size is a large one"
+    sub = api.fanout.subagent
+    assert sub.timeout_s is None and set(sub.timeouts.values()) == {600} and sub.default_timeout_s == 600
+    overlay = tmp_path / "overlay.yaml"
+    overlay.write_text(
+        "compute:\n  max_concurrent_agents: 2\napi:\n  fanout:\n    subagent:\n      timeout_s: 45\n",
+        encoding="utf-8",
+    )
+    over = load_api_config(overlay=load_config(overlay).api)
+    assert over.fanout.subagent.timeout_s == 45 and over.port == api.port
+    assert over.fanout.subagent.timeouts == sub.timeouts, "the overlay merges, it does not replace"
+    overlay.write_text("api:\n  fanout:\n    subagent:\n      timeout_sec: 45\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="timeout_sec"):
+        load_api_config(overlay=load_config(overlay).api)
 
 
 async def test_automatic_models_put_the_subagents_on_the_smaller_claude_model(

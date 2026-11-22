@@ -53,7 +53,14 @@ chip's `decision_rate_hz`. When the brief says no physical layout, run no
 layout, timing-power, tt-package, tt-export or bitstream call, not even
 when chip-report fails. Subagents run on {subagent};
 do not pass `--agent` or `--model` unless the user asked for it. This run
-allows {max_total} subagents in all and {timeout_min} minutes each; a
-start beyond a limit is refused with a message that says why, and then
-you carry on with what you have. `./subagent list` shows every subagent
-and every merge.
+allows {max_total} subagents in all; a start beyond that is refused with
+a message that says why, and then you carry on with what you have.
+`./subagent list` shows every subagent and every merge.
+
+Each subagent has a hard limit of {time_limit} from its start. Size every
+brief so that its work (searches, training, compiling) fits well inside
+it; split a big job into several subagents rather than one long one. A
+subagent still running at the limit is stopped, and `./subagent wait`
+shows it as `timed out` with whatever partial result it had: use what is
+useful in it, start a smaller retry if the stage needs it, and go on with
+the others.

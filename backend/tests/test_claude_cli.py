@@ -381,3 +381,55 @@ async def test_live_claude_cli_run(config: BackendConfig, tmp_path: Path) -> Non
     assert (tmp_path / "work" / "hello.txt").read_text().strip() == "hello chipin"
     assert "tool_call" in sink.kinds()
     assert result.cost_usd > 0
+
+
+def test_close_still_kills_the_tree_when_the_terminal_read_fails(tmp_path: Path) -> None:
+    """At a time limit ``close`` runs while the turn's thread still reads the terminal, and
+    pexpect's read can fail with BlockingIOError: the whole tree must still be killed, and
+    the error must not replace the time-limit result."""
+    import os
+    import time
+
+    import pexpect
+
+    from chipin_backend.agents._claude.repl import ReplSession
+
+    script = tmp_path / "tree.sh"
+    pid_file = tmp_path / "pid"
+    script.write_text(f"#!/bin/sh\nsleep 60 &\necho $! > {pid_file}\nwait\n")
+    script.chmod(0o755)
+    session = ReplSession(
+        argv_for=lambda _sid, _resume: [],
+        cli_path=str(script),
+        cwd=tmp_path,
+        env={},
+        config_dir=tmp_path / "cfg",
+        configured_dir=None,
+        permission_mode="bypassPermissions",
+        stall_s=60,
+        turn_cap_s=60,
+        on_record=lambda _rec: None,
+    )
+    child = pexpect.spawn(str(script), cwd=str(tmp_path))
+    for _ in range(100):
+        if pid_file.exists() and pid_file.read_text().strip():
+            break
+        time.sleep(0.05)
+    sleeper = int(pid_file.read_text())
+
+    def busy(*_args: Any, **_kwargs: Any) -> None:
+        raise BlockingIOError(35, "Resource temporarily unavailable")
+
+    child.expect = busy  # type: ignore[method-assign]
+    session._child = child
+    session.close()  # must not raise
+    assert session._child is None
+    for _ in range(50):
+        try:
+            os.kill(sleeper, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.1)
+    else:
+        os.kill(sleeper, 9)
+        pytest.fail("the CLI's child process outlived close()")

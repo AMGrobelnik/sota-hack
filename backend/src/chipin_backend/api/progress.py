@@ -29,7 +29,7 @@ import math
 import re
 import stat
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +43,30 @@ PROGRESS_FILE = "progress.jsonl"
 HELPER_NAME = "progress"
 ARTIFACT_KINDS = ("file", "report", "chip")
 STAGE_STATES = ("started", "done", "skipped")
+#: Set in a subagent's environment: when its time limit ends (Unix seconds), and the limit itself.
+DEADLINE_ENV = "CHIPIN_DEADLINE"
+LIMIT_ENV = "CHIPIN_TIME_LIMIT_S"
+
+
+def limit_words(seconds: float) -> str:
+    """A time limit in plain words: ``10 minutes``, ``1 minute 30 seconds``, ``4 seconds``."""
+    whole = max(0, int(seconds))
+    minutes, rest = divmod(whole, 60)
+    parts = [f"{n} {unit}{'' if n == 1 else 's'}" for n, unit in ((minutes, "minute"), (rest, "second")) if n]
+    return " ".join(parts) or "0 seconds"
+
+
+def time_left_line(env: Mapping[str, str], now: float) -> str:
+    """``./progress``'s line on the time a subagent has left; empty without a limit."""
+    try:
+        deadline, limit = float(env.get("CHIPIN_DEADLINE", "")), float(env.get("CHIPIN_TIME_LIMIT_S", ""))
+    except ValueError:
+        return ""
+    return (
+        f"time left: {limit_words(deadline - now)} of your {limit_words(limit)} limit; "
+        "at the limit you are stopped, so report your result before it"
+    )
+
 
 #: The chip lab reports through this helper by itself. With ``CHIPIN_PROGRESS_CHIP=1`` it adds
 #: ``--chip <design_id>`` to every figure of one chip; an older lab sends none. Before a tool
@@ -106,9 +130,10 @@ usage:
   ./progress status "<one present-tense line>"
   ./progress artifact <path in this folder> [{kinds}]
   ./progress design <design.json | '{{json object}}'>
+  ./progress time    (a subagent: the time left of its limit)
 """
 from __future__ import annotations
-import json, math, sys
+import json, math, os, sys, time
 from datetime import datetime, timezone
 
 OUT = {out!r}
@@ -116,6 +141,8 @@ STAGES = {stages_t!r}
 KINDS = {kinds_t!r}
 
 {validator}
+
+{time_left}
 
 
 def fail(msg):
@@ -189,11 +216,16 @@ elif cmd == "design":
         line.update(validate_design(record))
     except (OSError, ValueError) as exc:
         fail("design record refused: " + str(exc))
+elif cmd == "time":
+    print(time_left_line(os.environ, time.time()) or "no time limit is set here")
+    sys.exit(0)
 else:
     fail("unknown command " + repr(cmd))
 with open(OUT, "a", encoding="utf-8") as handle:
     handle.write(json.dumps(line) + "\\n")
 print("ok")
+if cmd == "status" and time_left_line(os.environ, time.time()):
+    print(time_left_line(os.environ, time.time()))
 '''
 
 
@@ -243,6 +275,7 @@ def write_helper(
         kinds="|".join(ARTIFACT_KINDS),
         kinds_t=ARTIFACT_KINDS,
         validator=inspect.getsource(validate_design),
+        time_left=inspect.getsource(limit_words) + "\n\n" + inspect.getsource(time_left_line),
     )
     if subagent:
         source = source.replace(_DISPATCH, _SUBAGENT_REFUSAL + _DISPATCH, 1)
@@ -393,4 +426,14 @@ def _chip(value: object) -> str:
     return clip(value.strip(), 200)
 
 
-__all__ = ["ARTIFACT_KINDS", "HELPER_NAME", "PROGRESS_FILE", "ProgressTailer", "write_helper"]
+__all__ = [
+    "ARTIFACT_KINDS",
+    "DEADLINE_ENV",
+    "HELPER_NAME",
+    "LIMIT_ENV",
+    "PROGRESS_FILE",
+    "ProgressTailer",
+    "limit_words",
+    "time_left_line",
+    "write_helper",
+]

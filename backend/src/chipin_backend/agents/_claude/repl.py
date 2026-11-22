@@ -546,8 +546,12 @@ class ReplSession:
                     time.sleep(0.3)
                     self._write("\r", deadline=time.monotonic() + SHORT_WRITE_S)
                     self._child.expect(pexpect.EOF, timeout=5)
-                except (TimeoutError, pexpect.TIMEOUT, pexpect.EOF):
-                    pass  # a CLI that will not quit is killed below
+                except (TimeoutError, pexpect.TIMEOUT, pexpect.EOF, OSError):
+                    # A CLI that will not quit is killed below. OSError: at a time
+                    # limit this runs while the turn's thread still reads the same
+                    # terminal, and the read can fail (BlockingIOError); the tree
+                    # must still be killed and the time limit reported, not this.
+                    pass
                 self.kill(descendants)
         finally:
             trust, self._trust = self._trust, None

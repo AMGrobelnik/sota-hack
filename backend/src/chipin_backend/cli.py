@@ -421,7 +421,7 @@ async def _dashboard_run(config: BackendConfig, args: argparse.Namespace, prompt
     if agent is None:
         logger.error("--preset takes the backends {}", ", ".join(sorted(DASHBOARD_AGENTS)))
         return 2
-    api = load_api_config()
+    api = load_api_config(overlay=config.api)
     if args.timeout is not None:
         api = api.model_copy(update={"run_timeout_s": args.timeout})
     body: dict[str, Any] = {"prompt": "\n\n".join(prompts), "preset": args.preset}

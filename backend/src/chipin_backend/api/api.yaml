@@ -27,6 +27,7 @@ presets:
   pro: high
   max: xhigh
   ultra: max
+default_preset: pro       # a request with no preset (the page calls pro Large)
 
 # Fan-out: the run's agent becomes an orchestrator. In each of reference,
 # propose, finetune, compile and verify it runs ONE batch of subagents that
@@ -56,13 +57,16 @@ fanout:
     openrouter_model: null  # automatic model of openrouter subagents; null = agents.openrouter.model
     provider: null          # openrouter harness only; null = openrouter
     effort: null            # null = the orchestrator's effort (the preset's)
-    timeout_s: null         # wall clock per subagent; null = the preset's below
-    timeouts:               # higher presets think longer
+    timeout_s: null         # hard wall clock per subagent; null = the preset's below.
+                            # A subagent still running then is stopped (its whole
+                            # process tree) and reported "timed out" with its partial
+                            # result. A --config overlay sets it as api.fanout.subagent.timeout_s
+    timeouts:               # at most 10 minutes per subagent, every run size
       lite: 600
-      pro: 1200
-      max: 1500
-      ultra: 1800
-    default_timeout_s: 1200 # a run with no preset
+      pro: 600
+      max: 600
+      ultra: 600
+    default_timeout_s: 600  # a run with no preset
 
 # POST /api/transcribe: one spoken phrase to text through OpenRouter
 # (needs OPENROUTER_API_KEY). Model names are OpenRouter ids.

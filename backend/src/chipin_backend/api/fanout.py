@@ -41,7 +41,15 @@ from loguru import logger
 from chipin_backend.agents.types import AgentResult, AgentSpec, utc_now
 from chipin_backend.api.config import ApiAgent, FanoutConfig
 from chipin_backend.api.events import STAGES, EventLog
-from chipin_backend.api.progress import PROGRESS_FILE, ProgressTailer, _interpreter, write_helper
+from chipin_backend.api.progress import (
+    DEADLINE_ENV,
+    LIMIT_ENV,
+    PROGRESS_FILE,
+    ProgressTailer,
+    _interpreter,
+    limit_words,
+    write_helper,
+)
 from chipin_backend.api.spec import RunSpec, write_spec
 from chipin_backend.api.translate import Translator, clip
 from chipin_backend.compute.factory import runner_for
@@ -504,7 +512,7 @@ def orchestrator_instructions(plan: FanoutPlan) -> str:
         "{width}": str(plan.width),
         "{wait_s}": str(plan.wait_timeout_s),
         "{max_total}": str(plan.max_total),
-        "{timeout_min}": str(max(1, round(plan.timeout_s / 60))),
+        "{time_limit}": limit_words(plan.timeout_s),
         "{subagent}": f"the {plan.agent} harness"
         + (f" with the model {plan.model}" if plan.model else "")
         + (f" at {plan.effort} effort" if plan.effort else ""),
@@ -939,7 +947,12 @@ class Fanout:
             system_prompt=self.instructions,
             workdir=folder,
             timeout_s=self.plan.timeout_s,
-            env={ID_ENV: sub.id, **(self.stub_env if sub.agent == "stub" else {})},
+            env={
+                ID_ENV: sub.id,
+                DEADLINE_ENV: f"{time.time() + self.plan.timeout_s:.1f}",
+                LIMIT_ENV: str(self.plan.timeout_s),
+                **(self.stub_env if sub.agent == "stub" else {}),
+            },
         )
         runner = runner_for(self.config, self.mode)
         result: AgentResult | None = None
@@ -947,19 +960,26 @@ class Fanout:
             result = await runner.run(spec, _SubagentDir(meta, sink=translator, owner=self.run.path))
             if not result.failed:
                 sub.state = "done"
-            elif (result.error or "").startswith("timed out after"):
-                sub.state = "timed out"
+            elif self._over_limit(started, result.error):
+                self._timed_out(sub)
             else:
                 sub.state = "failed"
-            sub.error = clip(result.error, 300) if result.failed and result.error else None
+            if sub.state == "failed":
+                sub.error = clip(result.error, 300) if result.error else None
         except asyncio.CancelledError:
             sub.state = "stopped"
             sub.error = "stopped because the run ended or was stopped"
             raise
         except Exception as exc:
-            logger.exception("run {}: subagent {} failed in the runner", self.log.run_id, sub.id)
-            sub.state = "failed"
-            sub.error = clip(f"{type(exc).__name__}: {exc}", 300)
+            if self._over_limit(started, None):
+                logger.warning(
+                    "run {}: subagent {} ended at its time limit: {!r}", self.log.run_id, sub.id, exc
+                )
+                self._timed_out(sub)
+            else:
+                logger.exception("run {}: subagent {} failed in the runner", self.log.run_id, sub.id)
+                sub.state = "failed"
+                sub.error = clip(f"{type(exc).__name__}: {exc}", 300)
         finally:
             await runner.close()
             follow.cancel()
@@ -969,9 +989,40 @@ class Fanout:
             sub.finished_at = utc_now()
             sub.cost = translator.cost
             sub.result = translator.last_text or (result.final_text if result else "") or ""
+            if sub.state == "timed out":
+                sub.result = self._partial(sub, sub.result)
             if sub.error is None and translator.error_text and sub.state != "done":
                 sub.error = clip(translator.error_text, 300)
             self._finished(sub, folder)
+
+    def _over_limit(self, started: float, error: str | None) -> bool:
+        """Whether a subagent that ended badly ran into its wall clock (any harness's wording)."""
+        if (error or "").startswith("timed out after"):
+            return True
+        return time.monotonic() - started >= self.plan.timeout_s
+
+    def _timed_out(self, sub: Subagent) -> None:
+        sub.state = "timed out"
+        sub.error = (
+            f"hit its time limit of {limit_words(self.plan.timeout_s)} and was stopped; "
+            "the result is the partial one it had by then"
+        )
+
+    def _partial(self, sub: Subagent, text: str) -> str:
+        """A timed-out subagent's result: its last message and the numbers it reported."""
+        lines = [text.strip() or "(it wrote no message before it was stopped)"]
+        metrics = [e for e in self.log.since(1) if e["type"] == "metric" and e.get("agent") == sub.id]
+        if metrics:
+            lines.append(
+                "Numbers it reported before it was stopped: "
+                + "; ".join(
+                    f"{e.get('key')} {e.get('value')}"
+                    + (f" {e['unit']}" if e.get("unit") else "")
+                    + (f" (chip {e['chip']})" if e.get("chip") else "")
+                    for e in metrics[-20:]
+                )
+            )
+        return "\n".join(lines)
 
     def _finished(self, sub: Subagent, folder: Path) -> None:
         try:
@@ -996,7 +1047,7 @@ class Fanout:
         # Absolute folders: some harnesses' file tools take absolute paths only.
         mine = (self.run.workspace / AGENTS_DIR / sub.id).resolve()
         theirs = self.run.workspace.resolve()
-        minutes = max(1, round(self.plan.timeout_s / 60))
+        limit = limit_words(self.plan.timeout_s)
         block = f"{self.run_spec.block}\n\n" if self.run_spec is not None else ""
         return block + (
             f'You are subagent {sub.id} ("{sub.name}") of a ChipIn run, one of the batch trying '
@@ -1006,7 +1057,13 @@ class Fanout:
             "and paths in the brief are relative to it unless they say otherwise. The brief is also in "
             "brief.md:\n\n"
             f"{sub.brief}\n\n"
-            f"Do exactly that strategy within {minutes} minutes, report each number with "
+            f"You have at most {limit} from now. At that limit you are stopped, whatever you are "
+            "doing, and the orchestrator gets only what you reported by then, so plan for it: size "
+            "every search, training and script to finish well inside the limit, never wait on a "
+            "job longer than the time you have left, and give a partial result before the limit "
+            "rather than nothing. `./progress time` prints the time you have left, and so does "
+            "every `./progress status` reply. "
+            "Do exactly that strategy, report each number with "
             "./progress metric ... --chip <design_id>, and end with the short result the brief asks for."
         )
 

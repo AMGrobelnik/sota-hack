@@ -175,6 +175,10 @@ class BackendConfig(_Section):
     providers: dict[str, ProviderConfig] = Field(default_factory=dict)
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
     compute: ComputeConfig = Field(default_factory=ComputeConfig)
+    #: Laid over the API server's ``api.yaml`` (e.g. ``api.fanout.subagent.timeout_s``),
+    #: so a ``--config`` overlay can change those settings too; checked by
+    #: :func:`chipin_backend.api.config.load_api_config`.
+    api: dict[str, Any] = Field(default_factory=dict)
 
     def resolved_runs_dir(self) -> Path:
         """``runs_dir`` as an absolute path."""
