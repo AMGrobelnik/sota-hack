@@ -19,7 +19,7 @@ Routes::
     GET  /api/runs/{id}/designs      -> {"designs": [...], "chosen"} latest record per design
     POST /api/runs/{id}/messages     -> 202 {"accepted", "id", "delivery"} (see api/steer.py)
     POST /api/runs/{id}/stop         -> 202
-    GET  /api/runs/{id}/files        -> {"files": [{"path", "size"}]} the agent's working folder
+    GET  /api/runs/{id}/files        -> {"files": [{"path", "size"}], "total", "truncated"} workspace
     GET  /api/runs/{id}/file?path=workspace/report.md   -> the file as UTF-8 text
     GET  /api/history                -> {"runs": [...]} picker facts per run, newest first
     GET  /api/runs/{id}/history?from=<seq>&limit=<n>   -> every event, or one page of them
@@ -259,10 +259,21 @@ async def stop_run(request: web.Request) -> web.Response:
 
 
 async def list_files(request: web.Request) -> web.Response:
-    """Every file in the run's working folder, as run-folder paths (like artifact paths)."""
+    """The run's working folder, as run-folder paths (like artifact paths); the files that matter first.
+
+    ``total`` is how many files there are and ``truncated`` whether ``files`` stops short of them.
+    """
     item = request.app[MANAGER].get(request.match_info["run_id"])
+    chosen = [e["chip"] for e in item.log.since(1) if e.get("type") == "chosen" and e.get("chip")]
+    files, total = await asyncio.to_thread(
+        workspace_files,
+        item.run.path,
+        item.run.workspace,
+        request.app[SETTINGS].max_files,
+        str(chosen[-1]) if chosen else None,
+    )
     return _json(
-        {"files": workspace_files(item.run.path, item.run.workspace, request.app[SETTINGS].max_files)},
+        {"files": files, "total": total, "truncated": total > len(files)},
         public=False,  # run-folder paths: the identifiers ``file?path=`` takes
     )
 
@@ -290,19 +301,42 @@ def _is_helper(rel: Path) -> bool:
     return len(parts) == 3 and parts[0] == "agents" and parts[2] == "progress"
 
 
-def workspace_files(run_path: Path, workspace: Path, limit: int) -> list[dict[str, Any]]:
-    """Files under ``workspace`` (no hidden ones, no helpers), first ``limit`` by path."""
+#: The run's top-level records and reports, listed first in this order (by file name stem).
+TOP_RECORDS = ("report", "final_record", "designs", "spec", "summar")
+
+
+def _file_rank(rel: Path, chosen: str | None) -> tuple[int, int]:
+    """Top-level records and reports first, then the chosen chip's files, then the rest."""
+    if len(rel.parts) == 1:
+        stem = rel.stem.lower()
+        for n, name in enumerate(TOP_RECORDS):
+            if stem.startswith(name):
+                return 0, n
+    if chosen and len(rel.parts) > 2 and rel.parts[:2] == ("chips", chosen):
+        return 1, 0
+    return 2, 0
+
+
+def workspace_files(
+    run_path: Path, workspace: Path, limit: int, chosen: str | None = None
+) -> tuple[list[dict[str, Any]], int]:
+    """Files under ``workspace`` (no hidden ones, no helpers), at most ``limit``, and how many there are.
+
+    The run's top-level records and reports come first (report, final record, designs, spec,
+    summaries), then the files of the ``chosen`` chip (``chips/<chosen>/``), then the rest; by
+    path within each.
+    """
     if not workspace.is_dir():
-        return []
-    out: list[dict[str, Any]] = []
-    for path in sorted(workspace.rglob("*")):
+        return [], 0
+    found: list[tuple[tuple[int, int], str, Path]] = []
+    for path in workspace.rglob("*"):
         rel = path.relative_to(workspace)
         if any(part.startswith(".") for part in rel.parts) or _is_helper(rel) or not path.is_file():
             continue
-        out.append({"path": str(path.relative_to(run_path)), "size": path.stat().st_size})
-        if len(out) >= limit:
-            break
-    return out
+        found.append((_file_rank(rel, chosen), str(rel), path))
+    found.sort(key=lambda f: (f[0], f[1]))
+    out = [{"path": str(p.relative_to(run_path)), "size": p.stat().st_size} for _, _, p in found[:limit]]
+    return out, len(found)
 
 
 def workspace_file(run_path: Path, workspace: Path, rel: str) -> Path:

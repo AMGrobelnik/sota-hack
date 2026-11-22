@@ -48,7 +48,10 @@ in tiers, so the lines a reader opens first are the last to go:
   message of at most ``verbatim_max_chars``. The model is asked only for a
   long message, and step calls may spend at most ``step_share`` of the cap;
 - group, subagent, batch, interim stage and interim run lines may spend up
-  to the cap less a reserve of ``reserve_share``;
+  to the cap less a reserve: the dearest closing call so far (before one,
+  the dearest stage or run call) times the closing lines still owed (a
+  final line per stage not yet closed, plus the run's), at most
+  ``reserve_max_share`` of the cap;
 - the reserve is for the closing lines: each stage's final line and the
   run's final line, written last, which may spend up to the cap.
 
@@ -109,7 +112,7 @@ class LevelSettings(BaseModel):
     model: str | None = None
     max_usd_per_run: float = 0.05
     step_share: float = 0.5
-    reserve_share: float = 0.2
+    reserve_max_share: float = 0.5
     closing_reserve_s: float = 30.0
     max_calls_per_minute: int = 30
     max_failures: int = 3
@@ -828,6 +831,10 @@ class Writer:
         self.step_spent = 0.0
         #: The dearest call so far per level: the room a tier needs for one more.
         self.dearest: dict[str, float] = {}
+        #: The dearest closing call so far, and the closing lines written: they size the reserve.
+        self.closing_dearest = 0.0
+        self.closed_stages: set[str] = set()
+        self.run_closed = False
         self.tiers_out: set[str] = set()
         self.failures = 0
         self.off = ""
@@ -1125,17 +1132,32 @@ class Writer:
 
     # ---- calls and limits ----
 
+    def _dearest_like(self, level: Level) -> float:
+        """The dearest call of ``level`` so far; before its first, the dearest call of any level."""
+        return self.dearest.get(level, max(self.dearest.values(), default=0.0))
+
+    def reserve(self) -> float:
+        """What is kept for the closing lines still owed, at most ``reserve_max_share`` of the cap.
+
+        The dearest closing call so far (before one, the dearest stage or run call) times the
+        closing lines still owed: a final line for every stage not yet closed, plus the run's.
+        """
+        per_line = max(self.closing_dearest, self.dearest.get("stage", 0.0), self.dearest.get("run", 0.0))
+        per_line = per_line or self._dearest_like("stage")
+        stages = set(STAGES) | set(self.levels.stages)
+        owed = len(stages - self.closed_stages) + (0 if self.run_closed else 1)
+        return min(self.s.max_usd_per_run * self.s.reserve_max_share, per_line * owed)
+
     def _room(self, level: Level, closing: bool) -> tuple[float, str]:
         """What ``level``'s tier may still spend, and the limit reason when it runs out."""
         cap = self.s.max_usd_per_run
-        below_reserve = cap * (1 - self.s.reserve_share) - self.spent
+        below_reserve = cap - self.reserve() - self.spent
         if level == "item":
             return min(cap * self.s.step_share - self.step_spent, below_reserve), "steps"
         if closing and level == "run":
             return cap - self.spent, "cost"
         if closing:  # a final stage line leaves room for one run line, which comes last
-            run_call = self.dearest.get("run", max(self.dearest.values(), default=0.0))
-            return cap - self.spent - run_call, "closing"
+            return cap - self.spent - self._dearest_like("run"), "closing"
         return below_reserve, "parts"
 
     async def _call(
@@ -1154,7 +1176,9 @@ class Writer:
         if self.off:
             return None
         room, reason = self._room(level, closing)
-        need = self.dearest.get(level, max(self.dearest.values(), default=0.0))
+        if reason in self.tiers_out:
+            return None  # a spent tier stays spent, though a shrinking reserve frees room later
+        need = self._dearest_like(level)
         if room <= 0 or room < need:
             if reason == "cost":
                 self._limit("cost")
@@ -1197,6 +1221,8 @@ class Writer:
         if level == "item":
             self.step_spent += reply.cost_usd
         self.dearest[level] = max(self.dearest.get(level, 0.0), reply.cost_usd)
+        if closing:
+            self.closing_dearest = max(self.closing_dearest, reply.cost_usd)
         if not reply.text:
             self.failures += 1
             if self.failures >= self.s.max_failures:
@@ -1247,6 +1273,10 @@ class Writer:
         final: bool = True,
     ) -> None:
         self.stats[level].lines[source] = self.stats[level].lines.get(source, 0) + 1
+        if final and level == "stage" and stage:
+            self.closed_stages.add(stage)
+        elif final and level == "run":
+            self.run_closed = True
         self.emit(
             SUMMARY,
             {

@@ -121,6 +121,40 @@ async def test_every_display_route_is_scrubbed_and_file_paths_still_work(client:
     assert HOME in (item.run.path / "events.jsonl").read_text()
 
 
+@pytest.mark.parametrize(
+    ("raw", "want"),
+    [
+        ("Janedoe ran it", "[user] ran it"),
+        ("JANEDOE ran it", "[user] ran it"),
+        ("see janedoe_tools and janedoe2 and 2janedoe", "see [user]_tools and [user]2 and 2[user]"),
+        ("on Janes-Laptop.local and JANES-LAPTOP_2", "on [host].local and [host]_2"),
+        ("open file:///x?p=%2FUsers%2Fjanedoe%2Fprojects%2Fa.md", "open file:///x?p=~%2Fprojects%2Fa.md"),
+        ("p=%2fusers%2fJaneDoe%2fdocs", "p=~%2fdocs"),
+        ("p=%2Fhome%2Fsomeone%2Fdocs and /USERS/someone/x", "p=~%2Fdocs and ~/x"),
+        ("p=%2FUsers%2Fjane%40doe%2Fdocs", "p=~%2Fdocs"),
+    ],
+)
+def test_names_in_any_case_beside_underscores_and_encoded_home_paths(raw: str, want: str) -> None:
+    assert Scrubber(home=HOME, host_names=(HOST,), user=USER).text(raw) == want
+
+
+def test_longer_words_holding_a_name_are_left() -> None:
+    scrubber = Scrubber(home="/Users/mira", host_names=("orbit",), user="mira")
+    text = "Admiral Miranda renamed miras in orbital mira9 and 9mira, but 10mira9 too"
+    assert (
+        scrubber.text(text)
+        == "Admiral Miranda renamed miras in orbital [user]9 and 9[user], but 10[user]9 too"
+    )
+    digits = Scrubber(home="/Users/dev42", host_names=(), user="dev42")
+    assert digits.text("dev42 dev420 dev42_x Dev42a") == "[user] dev420 [user]_x [user]a"
+
+
+def test_the_names_come_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LOGNAME", "quillon")
+    monkeypatch.setenv("USER", "quillon")
+    assert Scrubber(home="/nowhere", host_names=()).text("Quillon and QUILLON_x") == "[user] and [user]_x"
+
+
 # ---------------------------------------------------------------- B1: what leaves the machine
 
 
@@ -296,6 +330,32 @@ async def test_closing_lines_are_model_written_within_the_cap_when_steps_run_out
     after_steps = out[next(i for i, x in enumerate(out) if x.get("reason") == "steps") :]
     assert any(x.get("level") == "group" and x.get("source") == "model" for x in after_steps)
     assert {x["source"] for x in after_steps if x.get("level") == "item"} <= {"verbatim", "fallback"}
+
+
+async def test_closing_lines_stay_model_written_with_a_cost_model_twice_as_dear() -> None:
+    class Dearer(Recording):
+        """A summary call costs $0.001 and a step $0.0005 per item, both doubled.
+
+        Under the old fixed reserve (a fifth of the cap) one stage's final line fell back.
+        """
+
+        async def __call__(self, *, system: str, prompt: str, max_tokens: int) -> Summary:
+            reply = await super().__call__(system=system, prompt=prompt, max_tokens=max_tokens)
+            items = len(json.loads(prompt)) if system.startswith("You write the entries") else 0
+            reply.cost_usd = 2 * (0.0005 * items if items else 0.001)
+            return reply
+
+    cap = 0.05
+    out, stats = await replay(
+        _wide_run().events, settings(max_usd_per_run=cap, max_calls_per_minute=10_000), Dearer()
+    )
+    assert stats["usd"] <= cap
+    reasons = [x["reason"] for x in out if x["type"] == LIMIT]
+    assert "cost" not in reasons and "closing" not in reasons
+    by_id = latest(out)
+    stages = ("spec", "reference", "propose", "finetune", "compile", "verify", "report")
+    closing = [by_id["run"], *(by_id[f"stage:{n}"] for n in stages)]
+    assert all(x["final"] and x["source"] == "model" for x in closing), [x["source"] for x in closing]
 
 
 async def test_the_reserve_is_kept_for_the_closing_lines() -> None:

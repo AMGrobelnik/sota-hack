@@ -1,8 +1,10 @@
 """One scrubber for everything that leaves the backend: the API, the export and model requests.
 
-Home folder paths become ``~``, anything that looks like a key or token and
-every e-mail address becomes ``[removed]``, and this machine's host and user
-names become ``[host]`` and ``[user]``. The export (``export.py``), every API
+Home folder paths become ``~`` (URL-encoded ones such as ``%2FUsers%2F...``
+too), anything that looks like a key or token and every e-mail address
+becomes ``[removed]``, and this machine's host and user names (read at run
+time, matched in any case and next to an underscore or digit, never inside a
+longer word) become ``[host]`` and ``[user]``. The export (``export.py``), every API
 route that serves text for display, and every request to an outside model
 (the summary model and Chippy's model) pass through the same rules, so what
 the page shows and what a model reads never holds a private detail. Files on
@@ -41,7 +43,30 @@ SECRET_ASSIGN = re.compile(
     r"(?i)\b((?:[a-z0-9]+_)*(?:token|api_?key|apikey|secret|password|passwd))(\"?'?\s*[:=]\s*[\"']?)([A-Za-z0-9._\-/+]{8,})"
 )
 EMAIL = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}")
-HOME_GENERIC = re.compile(r"(?:/Users|/home)/[^/\s\"'`:;,)]+")
+HOME_GENERIC = re.compile(r"(?:/Users|/home)/[^/\s\"'`:;,)]+", re.IGNORECASE)
+#: A home path inside a URL or a query string: ``%2FUsers%2Fname`` (hex digits in any case).
+HOME_ENCODED = re.compile(
+    r"%2F(?:Users|home)%2F(?:(?!%2F)[^/\s\"'`:;,)&?#%]|%(?!2F)[0-9A-F]{2})+", re.IGNORECASE
+)
+
+
+def _name_pattern(name: str) -> re.Pattern[str]:
+    """``name`` in any case, where it is not part of a longer word or number.
+
+    An underscore, a digit next to a letter or any punctuation ends the name
+    (``name_tools``, ``name2``, ``Name.local``); a letter next to a letter, or a
+    digit next to a digit, makes a longer word (``names``, ``rename``) that is left.
+    """
+
+    def guard(char: str) -> str:
+        if char.isalpha():
+            return "A-Za-z"
+        return "0-9" if char.isdigit() else ""
+
+    before, after = guard(name[0]), guard(name[-1])
+    head = f"(?<![{before}])" if before else ""
+    tail = f"(?![{after}])" if after else ""
+    return re.compile(f"{head}{re.escape(name)}{tail}", re.IGNORECASE)
 
 
 def _host_names() -> tuple[str, ...]:
@@ -73,8 +98,8 @@ class Scrubber:
     )
 
     def __post_init__(self) -> None:
-        self._hosts = [re.compile(rf"\b{re.escape(h)}\b", re.IGNORECASE) for h in self.host_names if h]
-        self._user = re.compile(rf"\b{re.escape(self.user)}\b") if self.user else None
+        self._hosts = [_name_pattern(h) for h in self.host_names if h]
+        self._user = _name_pattern(self.user) if self.user else None
 
     def _sub(
         self, pattern: re.Pattern[str], repl: str | Callable[[re.Match[str]], str], text: str, key: str
@@ -92,6 +117,7 @@ class Scrubber:
                 out = out.replace(self.home, "~")
                 self.counts["home_paths"] += n
         out = self._sub(HOME_GENERIC, "~", out, "home_paths")
+        out = self._sub(HOME_ENCODED, "~", out, "home_paths")
         for pattern in KEY_PATTERNS:
             out = self._sub(pattern, REMOVED, out, "keys")
         out = self._sub(SECRET_ASSIGN, lambda m: f"{m.group(1)}{m.group(2)}{REMOVED}", out, "keys")
@@ -136,6 +162,7 @@ def scrub_value(data: Any) -> Any:
 
 __all__ = [
     "EMAIL",
+    "HOME_ENCODED",
     "HOME_GENERIC",
     "KEY_PATTERNS",
     "REMOVED",

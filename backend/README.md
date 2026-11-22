@@ -230,9 +230,13 @@ Limits, per run:
   model spend, spent in tiers so the top lines are the last to go:
   - step (item) calls may spend at most `step_share` (half) of the cap;
   - group, subagent, batch and interim stage and run lines may spend up
-    to the cap less `reserve_share` (a fifth);
+    to the cap less a reserve;
   - that reserve is for the closing lines (each stage's final line and the
     run's final line), which are written last and may spend up to the cap.
+    It is the dearest closing call so far (before one, the dearest stage
+    or run call) times the closing lines still owed (a final line per
+    stage not yet closed, plus the run's), at most `reserve_max_share`
+    (half) of the cap, so a dearer model keeps a bigger reserve.
 
   A call is made only while its tier has room for the dearest call of its
   level so far. When a tier is spent, one `summary.limit` event
@@ -485,6 +489,20 @@ event's `path`; the `progress` and `subagent` helpers and hidden files
 are neither listed nor served (404), a path outside `workspace/` is
 refused (400), and a file over
 `file_max_bytes` (512 KB) is cut, marked with `X-ChipIn-Truncated: true`.
+
+`GET /api/runs/{id}/files` lists at most `max_files` (200, `api.yaml`)
+files, the ones the page needs first:
+
+1. the run's top-level records and reports, in this order: `report`,
+   `final_record`, `designs`, `spec`, then summaries;
+2. the chosen chip's files (`workspace/chips/<chosen>/`, from the latest
+   `chosen` event);
+3. everything else.
+
+Within each group the files go by path. Next to `files` the answer
+carries `total` (how many files the folder holds) and `truncated` (true
+when `files` stops short of `total`).
+
 The brief's `files` entries carry `name`, `size` and an optional `header`
 line (up to 1,000 characters), and `answers` is any JSON object; the
 dashboards put their assumptions there as `answers.assumptions`.

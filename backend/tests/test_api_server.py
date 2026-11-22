@@ -20,7 +20,7 @@ from chipin_backend.api.config import ApiConfig, load_api_config
 from chipin_backend.api.events import STAGES, EventLog
 from chipin_backend.api.manager import API_RECORD_FILE, ApiRun, RunManager
 from chipin_backend.api.progress import ProgressTailer, write_helper
-from chipin_backend.api.server import TOKEN_HEADER, create_app, serve
+from chipin_backend.api.server import MANAGER, TOKEN_HEADER, create_app, serve
 from chipin_backend.api.translate import Translator, tool_summary
 from chipin_backend.cli import _parser
 from chipin_backend.config import BackendConfig
@@ -375,6 +375,49 @@ async def test_the_agents_files_are_listed_and_read(client: TestClient, config: 
         assert got.status == status, bad
     assert (await client.get(f"/api/runs/{run_id}/file", params={"path": report})).status == 401
     assert (await client.get("/api/runs/20260101-000000-abcdef/files", headers=AUTH)).status == 404
+
+
+async def test_a_capped_listing_puts_the_records_and_the_chosen_chip_first(config: BackendConfig) -> None:
+    app = create_app(
+        _config(config), _api(0.01).model_copy(update={"max_files": 9}), token=TOKEN, agent="stub"
+    )
+    async with TestClient(TestServer(app)) as c:
+        run_id = await _start(c)
+        await _events(c, run_id)
+        item = c.app[MANAGER].get(run_id)
+        ws = item.run.workspace
+        for name in ("final_record.json", "designs.json", "summary.md", "zz.md"):
+            (ws / name).write_text("{}")
+        for chip in ("aaaa00000001", "cccc00000003"):
+            (ws / "chips" / chip).mkdir(parents=True)
+            for f in ("design.v", "ir.json"):
+                (ws / "chips" / chip / f).write_text("x")
+        (ws / "agents" / "a1").mkdir(parents=True)
+        for n in range(30):
+            (ws / "agents" / "a1" / f"s_{n:02}.json").write_text("{}")
+        item.log.reopen()
+        item.log.append("chosen", chip="aaaa00000001")
+        item.log.append("chosen", chip="cccc00000003")  # a later choice replaces the first
+        item.log.append("run.finished", status="succeeded", summary="again")
+        body = await (await c.get(f"/api/runs/{run_id}/files", headers=AUTH)).json()
+    paths = [f["path"] for f in body["files"]]
+    assert paths[:7] == [
+        "workspace/report.md",
+        "workspace/final_record.json",
+        "workspace/designs.json",
+        "workspace/spec.md",
+        "workspace/summary.md",
+        "workspace/chips/cccc00000003/design.v",
+        "workspace/chips/cccc00000003/ir.json",
+    ]
+    assert len(paths) == 9 and body["truncated"] is True
+    on_disk = [
+        p
+        for p in ws.rglob("*")
+        if p.is_file() and p.name not in ("progress", "subagent") and not p.name.startswith(".")
+    ]
+    assert body["total"] == len(on_disk) > 9
+    assert all(isinstance(f["size"], int) for f in body["files"])
 
 
 async def test_a_long_file_is_cut_and_marked(config: BackendConfig) -> None:
