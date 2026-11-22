@@ -141,6 +141,12 @@
     "@keyframes chpIn{from{transform:translateX(16px);opacity:0}to{transform:none;opacity:1}}",
     "@media (min-width:1100px){body.chp-open .main{right:" + W + "px}}",
     ".chp-scrim{display:none}",
+    // the page's file drawer and the panel coexist: the drawer (and its scrim) stop at the panel's edge
+    "@media (min-width:768px){body.chp-open .drawer{right:" + W + "px;max-width:calc(100vw - " + W + "px)}body.chp-open .dscrim{right:" + W + "px}}",
+    // the sidebar's account row leaves room for the pill beside it
+    "@media (min-width:768px){body:not(.col) .acct{padding-right:104px}.acct button .hc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}",
+    // no backend: nothing can be asked, so no new conversation and no microphone
+    ".chp-p.chp-nomode #chpNew,.chp-p.chp-nomode .cv-mic{display:none}",
     ".chp-p[hidden],.chp-scrim[hidden]{display:none!important}",
     ".chp-h{display:flex;align-items:center;gap:8px;padding:12px 10px 10px 16px;border-bottom:1px solid var(--hair,rgb(0 0 0/.07))}",
     ".chp-h .chp-mark{width:20px;height:20px;color:var(--navy,#0e1530)}",
@@ -203,6 +209,12 @@
     "  #demo{right:50px}",
     "  .chp-p{top:auto;left:0;width:auto;height:min(78vh,680px);border-left:0;border-radius:16px 16px 0 0;box-shadow:0 -10px 40px rgb(14 21 48/.16);animation:chpUp .2s var(--ease,ease)}",
     "  .chp-scrim{display:block;position:fixed;inset:0;z-index:59;background:rgb(20 20 40/.14)}",
+    // a file was opened by Chippy: the sheet shrinks to a bar under the drawer that keeps the line and its Undo
+    "  .chp-p.chp-mini{height:auto;max-height:30vh;z-index:80;animation:none}",
+    "  .chp-p.chp-mini .chp-h,.chp-p.chp-mini .chp-ex,.chp-p.chp-mini .chp-c,.chp-p.chp-mini .chp-log>:not(.chp-keep){display:none}",
+    "  .chp-p.chp-mini .chp-log{flex:none;padding:10px 14px;gap:0}",
+    "  .chp-scrim.chp-mini{display:none}",
+    "  body.chp-mini .drawer{bottom:var(--chp-bar,64px)}body.chp-mini .dscrim{bottom:var(--chp-bar,64px)}",
     "  .chp-h{padding-top:10px}",
     "}",
     "@keyframes chpUp{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}",
@@ -211,7 +223,7 @@
 
   /* ---------- state ---------- */
   var S = {
-    open: false, busy: false, conv: ssGet(K_CONV), items: (ssGet(K_ITEMS) || []).map(function (it) { if (it && it.pending) { it.pending = false; it.undo = false; } return it; }), abort: null,
+    open: false, busy: false, conv: ssGet(K_CONV), items: (ssGet(K_ITEMS) || []).map(function (it) { if (it && it.pending) { it.pending = false; it.undo = false; } if (it) delete it.keep; return it; }), abort: null,
     sugg: [], suggKey: null, mode: "off", turn: null, undo: [], lastActionAt: 0
   };
   var UI = {};
@@ -250,6 +262,7 @@
     UI.send.onclick = function () { if (S.busy) stopAnswer(); else submit(); };
     UI.ex.addEventListener("click", function (e) { var b = e.target.closest("button[data-i]"); if (b && !S.busy) ask(S.sugg[+b.dataset.i].prompt); });
     UI.log.addEventListener("click", onLogClick);
+    p.addEventListener("click", function (e) { if (p.classList.contains("chp-mini") && !e.target.closest(".chp-undo")) mini(false); });
     p.addEventListener("keydown", function (e) { if (e.key === "Escape" && !document.querySelector(".pop,.mbg")) { e.stopPropagation(); close(); } });
     if (window.ChipVoice && window.ChipVoice.attach) { try { window.ChipVoice.attach(p); } catch (e) { /* voice optional */ } }
   }
@@ -262,6 +275,7 @@
     b.disabled = !S.busy && S.mode !== "on";
     UI.in.disabled = S.mode !== "on";
     UI.p.classList.toggle("chp-busy", S.busy);
+    UI.p.classList.toggle("chp-nomode", S.mode !== "on");
     UI.ex.querySelectorAll("button").forEach(function (x) { x.disabled = S.busy; });
   }
 
@@ -278,11 +292,22 @@
     if (!S.open) return;
     S.open = false;
     UI.p.hidden = true; UI.scrim.hidden = true;
+    mini(false);
     document.body.classList.remove("chp-open"); UI.btn.setAttribute("aria-expanded", "false");
     relayout();
     if (UI.btn) UI.btn.focus({ preventScroll: true });
   }
   function toggle() { if (S.open) close(); else open(); }
+  // phones: the sheet becomes a small bar showing the line that carries Undo; a tap on the bar restores the sheet
+  function mini(on, idx) {
+    if (!UI.p) return;
+    S.items.forEach(function (it) { delete it.keep; });
+    if (on && idx != null && S.items[idx]) S.items[idx].keep = true;
+    UI.log.querySelectorAll(":scope > [data-k]").forEach(function (n, i) { n.classList.toggle("chp-keep", !!(S.items[i] && S.items[i].keep)); });
+    var m = !!on && matchMedia("(max-width:767px)").matches && S.open;
+    UI.p.classList.toggle("chp-mini", m); UI.scrim.classList.toggle("chp-mini", m); document.body.classList.toggle("chp-mini", m);
+    if (m) requestAnimationFrame(function () { document.documentElement.style.setProperty("--chp-bar", UI.p.offsetHeight + "px"); });
+  }
   // the page column narrows beside the panel on wide screens; charts redraw on resize
   function relayout() { if (innerWidth >= 1100) requestAnimationFrame(function () { dispatchEvent(new Event("resize")); }); }
 
@@ -329,6 +354,7 @@
     else if (it.k === "t") n = el("div", "chp-t", it.text);
     else if (it.k === "did") {
       n = el("div", "chp-did" + (it.undone ? " undone" : "") + (it.bad ? " bad" : "") + (it.pending ? " pending" : ""));
+      if (it.keep) n.classList.add("chp-keep");
       n.appendChild(el("span", null, it.text + (it.undone ? " Undone." : "")));
       if (it.undo && !it.undone && !it.bad && !it.pending) { var u = el("button", "chp-undo"); u.type = "button"; u.dataset.undo = String(i); u.innerHTML = icon("undo"); u.appendChild(document.createTextNode("Undo")); n.appendChild(u); }
     } else if (it.k === "pr") {
@@ -352,11 +378,13 @@
   function scrollEnd(force) { var l = UI.log; if (force || l.scrollHeight - l.scrollTop - l.clientHeight < 120) l.scrollTop = l.scrollHeight; }
 
   // plain text with minimal formatting, built from elements; ids of runs and designs become links.
-  // A design id belongs to the open run (or the run an action of this turn opened), else to the first run named.
+  // A design id belongs to the run named before it in the answer; with none named, to the open run (or the run an action
+  // of this turn opened) and only when that run's chart has the design, else it stays plain text.
   function renderText(root, text, ctx) {
     root.textContent = "";
     var blocks = String(text || "").replace(/\r/g, "").split(/\n{2,}/);
     var run = ctx.run || null;
+    NAMED = false;
     blocks.forEach(function (b) {
       var lines = b.split("\n").filter(function (l) { return l.trim() !== ""; });
       if (!lines.length) return;
@@ -371,6 +399,13 @@
         root.appendChild(p);
       }
     });
+  }
+  // a bare design id (no run named in the answer) is linked only when the open run's chart has that design
+  var NAMED = false;
+  function knownDesign(run, d) {
+    var w = where(); if (w.kind !== "live" || w.id !== run) return false;
+    if (liveSel(run) === d || inspId() === d) return true;
+    try { var st = window.ChipInLive.i1.state(); return !!(st.chart && st.chart.some(function (p) { return p.id === d; })); } catch (e) { return false; }
   }
   function inline(parent, line, run) {
     var re = /\*\*([^*]+)\*\*|`([^`]+)`/g, last = 0, m;
@@ -387,8 +422,8 @@
     while ((m = re.exec(s))) {
       if (m.index > last) parent.appendChild(document.createTextNode(s.slice(last, m.index)));
       var b = el("button", "chp-lk", m[0]); b.type = "button";
-      if (m[1]) { run = run || m[1]; b.dataset.run = m[1]; b.title = "Open run " + m[1]; }
-      else if (run) { b.dataset.design = m[2]; b.dataset.run = run; b.title = "Select design " + m[2]; }
+      if (m[1]) { run = m[1]; NAMED = true; b.dataset.run = m[1]; b.title = "Open run " + m[1]; }
+      else if (run && (NAMED || knownDesign(run, m[2]))) { b.dataset.design = m[2]; b.dataset.run = run; b.title = "Select design " + m[2]; }
       else { parent.appendChild(document.createTextNode(m[0])); last = re.lastIndex; continue; }
       parent.appendChild(b); last = re.lastIndex;
     }
@@ -676,7 +711,7 @@
     return goHash("#/live/" + encodeURIComponent(id) + "/overview").then(function () {
       return until(function () { return document.querySelector('#lvFiles [data-open="' + CSS.escape(path) + '"], #lvInsp [data-open="' + CSS.escape(path) + '"]'); }, 6000);
     }).then(function (b) {
-      if (b) { b.click(); return null; }
+      if (b) { b.click(); if (document.querySelector(".lv-drawer")) { var at = -1; S.items.forEach(function (it, k) { if (it.a && it.a.kind === "open_file") at = k; }); setTimeout(function () { mini(true, at); }, 0); } return null; }
       return { bad: "The live view does not list " + String(path).split("/").pop() + ", so it was not opened." };
     });
   }
@@ -706,6 +741,13 @@
       return null;
     });
   }
+  // close the page's file drawer the way a user does: its scrim, else its own close button
+  function closeFile() {
+    var sc = $(".lv-dscrim"), d = $(".lv-drawer");
+    if (sc) sc.click(); else if (d) { var x = $(".dh button", d); if (x) x.click(); }
+    if ($(".lv-drawer")) { var l = $(".lv-drawer"); l.remove(); var q = $(".lv-dscrim"); if (q) q.remove(); }
+    mini(false);
+  }
   function undo(i) {
     var it = S.items[i]; if (!it || it.undone || !it.snap) return;
     var s = it.snap, cur = snapshot();
@@ -722,6 +764,7 @@
         });
       }
       if (it.a.kind === "set_playback" && s.t != null && $("#pbTrk")) seek(s.t);
+      if (it.a.kind === "open_file") closeFile();
     }).then(function () { it.undone = true; redraw(i); });
   }
 
