@@ -671,9 +671,15 @@ Point the backend at a lab install (in the environment, `backend/.env` or
   where its config and tools are. The folder goes first on the agent's
   `PATH`; the two lab variables pass through the allowlist unchanged.
 - When the lab is on, the agent also gets `CHIPIN_PROGRESS_CHIP=1`, which
-  tells the lab that `./progress` takes `--chip` and `chosen`; the lab
-  then tags each metric with its design and `chip-report` names the chosen
-  chip.
+  tells the lab that `./progress` takes `--chip` and `chosen`. The lab
+  itself reports its metrics without `--chip`: before each tool about one
+  design it writes a status line naming that design, and the progress
+  tailer tags the tool's metrics (gates, depth, LUTs, area, verification
+  and the rest) with it, for the orchestrator and subagents alike. A lab
+  metric about no one design (a batch count) stays untagged.
+- The evidence step (`evidence.json`) describes the chip of the run's last
+  `chosen` event. Only a run without one gets an inferred chip, with
+  `chip_inferred: true` and `chip_selected_by` saying how it was picked.
 - With none of this the lab is off: the agent's environment and
   instructions are as before. A `CHIPIN_CHIPLAB_BIN` with no executable
   `chiplab` in it logs one warning and leaves the lab off.

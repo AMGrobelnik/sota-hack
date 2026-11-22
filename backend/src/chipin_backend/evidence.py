@@ -877,18 +877,39 @@ def laid_out_chips(run: Path, events: list[dict[str, Any]]) -> list[Path]:
     return [root / n for n in names if root is not None and (root / n).is_dir()]
 
 
-def select_chip(run: Path, events: list[dict[str, Any]]) -> tuple[Path | None, str]:
-    """The chip the run selected and why.
+def chosen_chip(events: list[dict[str, Any]]) -> str | None:
+    """The design id of the run's last ``chosen`` event, or ``None`` when it has none."""
+    ids = [str(e["chip"]) for e in events if e.get("type") == "chosen" and e.get("chip")]
+    return ids[-1] if ids else None
 
-    The chip the report names most often (laid-out chips first); if the report names none,
-    the first laid-out chip whose model carries weights; else the first chip with weights.
+
+def select_chip(run: Path, events: list[dict[str, Any]]) -> tuple[Path | None, str, bool]:
+    """The chip the run selected, why, and whether it was inferred.
+
+    The chip of the run's last ``chosen`` event. Only when there is none (or its folder is
+    missing) is the chip inferred: the one the report names most often (laid-out chips
+    first); else the first laid-out chip whose model carries weights; else the first chip
+    with weights.
     """
     root = _chips_root(run)
     if root is None:
-        return None, "no chips/ folder"
+        return None, "no chips/ folder", False
     chips = [p for p in sorted(root.iterdir()) if p.is_dir()]
     if not chips:
-        return None, "chips/ is empty"
+        return None, "chips/ is empty", False
+    chosen = chosen_chip(events)
+    if chosen is not None and (root / chosen).is_dir():
+        return root / chosen, "the run's chosen chip (its last chosen event)", False
+    if chosen is None:
+        prefix = "inferred, the run has no chosen event: "
+    else:
+        prefix = f"inferred, the chosen chip {chosen} has no folder under chips/: "
+    chip, why = _infer_chip(run, events, chips)
+    return chip, prefix + why, True
+
+
+def _infer_chip(run: Path, events: list[dict[str, Any]], chips: list[Path]) -> tuple[Path, str]:
+    """The chip a run without a usable ``chosen`` event most likely selected, and why."""
     laid_out = laid_out_chips(run, events)
     report = find_report(run, events)
     text = report.read_text(encoding="utf-8") if report else ""
@@ -1027,10 +1048,15 @@ def _lab_cross_checks(run: Path, chip: Path) -> list[str]:
 def weight_bytes(run: Path, events: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Measurement B for the chip the run selected, plus one line per other laid-out chip."""
     events = read_events(run) if events is None else events
-    chip, why = select_chip(run, events)
+    chip, why, inferred = select_chip(run, events)
     if chip is None:
         return {"chip": None, "note": why}
-    out: dict[str, Any] = {"chip": chip.name, "chip_selected_by": why, **chip_weight_figures(run, chip)}
+    out: dict[str, Any] = {
+        "chip": chip.name,
+        "chip_selected_by": why,
+        "chip_inferred": inferred,
+        **chip_weight_figures(run, chip),
+    }
     others = []
     for other in laid_out_chips(run, events):
         if other != chip:
@@ -1441,6 +1467,7 @@ __all__ = [
     "LIMITS",
     "build_evidence",
     "check_numbers",
+    "chosen_chip",
     "classify_claim",
     "emit_evidence",
     "evidence_summary",
