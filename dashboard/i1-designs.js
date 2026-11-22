@@ -4,7 +4,7 @@
  *
  *   ChipInDesigns.paintExample(anchor, ctx)  the example runs (variants/i1.html renderChipTab): the AF
  *                                            candidates, the neonatal EEG results file, simulated runs.
- *                                            The panel goes just before anchor (the 3D chip's stage).
+ *                                            The panel goes just after anchor (the 3D chip's stage) and its note.
  *   ChipInDesigns.paintRun(host, ctx)        recorded and live runs, from the shared fold (../i1-fold.js)
  *   ChipInDesigns.parseWeights(text)         weights written in a design's note or label, or null
  *
@@ -137,13 +137,23 @@
     return { ins, bits: num(c.bits), layers: W2 ? [H, W2.length] : [H], weights: W, ops };
   }
   // shape words in a label: "int MLP 2h 3f 4-bit w", "integer linear 2f", "band detector, 3 comparators"
-  function fromLabel(label) {
+  // bit widths: "4-bit w" and "4-bit weights" are the weights' width, never the inputs'; input bits come from
+  // the label's other n-bit, else from the note ("6-bit features", "features ll0 and band1 (6-bit)")
+  const WBIT = /(\d+)-bit\s*(?:w\b|weights?\b)/;
+  function bitsOf(label, note) {
+    const s = String(label || "").toLowerCase(), t = String(note || "").toLowerCase();
+    const lb = s.replace(new RegExp(WBIT.source, "g"), " ").match(/(\d+)-bit/);
+    const nb = t.match(/(\d+)-bit\s+(?:unsigned\s+)?(?:features?|inputs?|ints?|integers?)\b|features?\b[^.;\n]{0,40}?\((\d+)-bit\)|unsigned\s+(\d+)-bit/);
+    const wb = s.match(WBIT) || t.match(WBIT);
+    return { bits: lb ? +lb[1] : nb ? +(nb[1] || nb[2] || nb[3]) : null, wbits: wb ? +wb[1] : null };
+  }
+  function fromLabel(label, note) {
     const s = String(label || "").toLowerCase(); if (!s) return null;
-    const f = s.match(/(\d+)\s*f\b|(\d+)-feature|(\d+) features?|(\d+) lanes?/), h = s.match(/(\d+)\s*h\b|(\d+) hidden|(\d+) comparators?/), b = s.match(/(\d+)-bit/);
+    const f = s.match(/(\d+)\s*f\b|(\d+)-feature|(\d+) features?|(\d+) lanes?/), h = s.match(/(\d+)\s*h\b|(\d+) hidden|(\d+) comparators?/), b = bitsOf(label, note);
     const ins = f ? +(f[1] || f[2] || f[3] || f[4]) : /threshold/.test(s) ? 1 : null;
     const hid = h ? +(h[1] || h[2] || h[3]) : /linear|logistic|threshold/.test(s) ? 0 : null;
-    if (ins == null && hid == null) return null;
-    return { ins, layers: hid ? [hid, 1] : hid === 0 ? [1] : null, bits: b ? +b[1] : null };
+    if (ins == null && hid == null) return { ins: null, layers: null, bits: b.bits, wbits: b.wbits };
+    return { ins, layers: hid ? [hid, 1] : hid === 0 ? [1] : null, bits: b.bits, wbits: b.wbits };
   }
   const levelsOf = W => { const s = new Set(); W.forEach(l => l.W.forEach(r => r.forEach(x => s.add(x)))); return s.size; };
   const maxAbsOf = W => W.reduce((a, l) => l.W.reduce((a2, r) => r.reduce((a3, x) => Math.max(a3, Math.abs(x)), a2), a), 0) || 1;
@@ -170,6 +180,9 @@
       const n = cols.length, xs = cols.map((_, i) => n === 1 ? 15 : 4.5 + i * (21 / (n - 1)));
       const hs = cols.map(u => u <= 1 ? 0 : 2.6 + 13.4 * Math.sqrt((u - 1) / Math.max(1, S.maxU - 1)));
       const op = linkOp(it.lev);
+      // a network shared by several channels: faint copies stacked behind it (1 for 2 channels, 2 for 4, 3 for more)
+      const cp = it.shared > 1 ? (it.shared <= 2 ? 1 : it.shared <= 4 ? 2 : 3) : 0;
+      for (let k = cp; k >= 1; k--) out.push(`<g transform="translate(${1.6 * k} ${-1.6 * k})" opacity="${(0.32 - 0.07 * k).toFixed(2)}">` + cols.map((u, i) => u <= 1 ? `<circle cx="${xs[i]}" cy="${cy}" r="1.5" fill="currentColor"/>` : `<rect x="${(xs[i] - 1).toFixed(2)}" y="${(cy - hs[i] / 2).toFixed(2)}" width="2" height="${hs[i].toFixed(2)}" rx="0.9" fill="currentColor"/>`).join("") + `</g>`);
       for (let i = 0; i < n - 1; i++) out.push(`<path d="M${xs[i]} ${cy - hs[i] / 2}L${xs[i + 1]} ${cy - hs[i + 1] / 2}V${cy + hs[i + 1] / 2}L${xs[i]} ${cy + hs[i] / 2}Z" fill="currentColor" fill-opacity="${op}"/>`);
       cols.forEach((u, i) => {
         const w = i === 0 ? 1.6 + clamp((it.bits || 4) - 4, 0, 4) * 0.32 : 2;
@@ -188,6 +201,8 @@
       const w = Math.max(1.5, 24 * Math.log(it.size.g + 1) / Math.log(S.maxG + 1));
       out.push(it.size.k === "e" ? `<rect x="3.4" y="21.4" width="${(w - 0.8).toFixed(2)}" height="2.2" rx="1.1" fill="#fff" stroke="currentColor" stroke-width=".8"/>` : `<rect x="3" y="21" width="${w.toFixed(2)}" height="3" rx="1.5" fill="currentColor"/>`);
     }
+    // verified bit for bit, whatever its group: a small green dot in the corner
+    if (it.vmark) out.push(`<circle cx="27.4" cy="2.6" r="2" fill="#0f7a55" stroke="#fff" stroke-width=".8"/>`);
     return `<svg viewBox="0 0 30 26" aria-hidden="true">${out.join("")}</svg>`;
   }
 
@@ -203,8 +218,19 @@
       out.push(`<path d="M190 60H260" stroke="#9aa0ae" stroke-width="1.2"/><text x="40" y="${H - 12}" font-size="10.5" fill="#5c6276">${esc(it.chans ? pl(it.chans, "channel") : "inputs")}</text><text x="260" y="${H - 12}" font-size="10.5" fill="#5c6276" text-anchor="end">alarm</text>`);
       return `<svg class="dz-big" viewBox="0 0 ${W} ${H}" role="img" aria-label="Shape: ${esc(it.chans ? pl(it.chans, "channel") : "inputs")} into a block of ${it.size ? fmt(it.size.g) : "unknown"} gates">${out.join("")}</svg>`;
     }
-    const n = cols.length, xs = cols.map((_, i) => 34 + i * ((W - 68) / Math.max(1, n - 1)));
-    const pos = cols.map(u => { const k = Math.min(u, 24), span = Math.min(bot - top, (k - 1) * 18); return Array.from({ length: k }, (_, j) => (top + bot) / 2 - span / 2 + (k > 1 ? j * span / (k - 1) : 0)); });
+    // a network shared by several channels leaves room on the right for the max over channels, then the alarm
+    const sh = it.shared > 1, R = sh ? 74 : 0;
+    const n = cols.length, xs = cols.map((_, i) => 34 + i * ((W - 68 - R) / Math.max(1, n - 1)));
+    const pos = cols.map(u => { const k = Math.min(u, 24), span = Math.min(bot - top - (sh ? 10 : 0), (k - 1) * 18); return Array.from({ length: k }, (_, j) => (top + bot) / 2 + (sh ? 5 : 0) - span / 2 + (k > 1 ? j * span / (k - 1) : 0)); });
+    if (sh) {
+      const cp = Math.min(2, it.shared - 1), mx = xs[n - 1] + 30, my = (top + bot) / 2 + 5;
+      for (let k = cp; k >= 1; k--) {
+        out.push(`<g transform="translate(${5 * k} ${-5 * k})" opacity="${k === 1 ? 0.3 : 0.18}">` + cols.map((u, i) => pos[i].map(y => `<circle cx="${xs[i]}" cy="${y.toFixed(1)}" r="${u > 16 ? 2.2 : 3}" fill="none" stroke="currentColor" stroke-width="1"/>`).join("")).join("") + `</g>`);
+        out.push(`<path d="M${xs[n - 1] + 5 * k} ${my - 5 * k}L${mx} ${my}" stroke="currentColor" stroke-opacity=".3" stroke-width="1"/>`);
+      }
+      out.push(`<path d="M${xs[n - 1]} ${my}H${mx}" stroke="currentColor" stroke-opacity=".6" stroke-width="1.1"/><rect x="${mx}" y="${my - 11}" width="28" height="22" rx="5" fill="#fff" stroke="currentColor" stroke-width="1.4"/><text x="${mx + 14}" y="${my + 3.5}" font-size="10" text-anchor="middle" fill="#4a5062">max</text><path d="M${mx + 28} ${my}H${W - 8}" stroke="currentColor" stroke-opacity=".6" stroke-width="1.1"/>`);
+      out.push(`<text x="${W - 6}" y="${my - 20}" font-size="10.5" fill="#5c6276" text-anchor="end">× ${fmt(it.shared)} channels</text><text x="${W - 6}" y="${H - 12}" font-size="10.5" fill="#5c6276" text-anchor="end">alarm</text>`);
+    }
     const wts = it.weights && it.weights.layers, m = wts ? maxAbsOf(wts) : 1;
     for (let i = 0; i < n - 1; i++) {
       const L = wts && wts[i] && wts[i].W.length === cols[i + 1] && wts[i].W.every(r => r.length === cols[i]) ? wts[i].W : null;
@@ -222,9 +248,10 @@
       if (u > 24) out.push(`<rect x="${xs[i] - 3}" y="${P[0] - 3}" width="6" height="${P[P.length - 1] - P[0] + 6}" rx="3" fill="currentColor"/>`);
       else P.forEach(y => out.push(`<circle cx="${xs[i]}" cy="${y.toFixed(1)}" r="${u > 16 ? 2.6 : 3.4}" fill="#fff" stroke="currentColor" stroke-width="1.4"/>`));
       const lab = i === 0 ? `${fmt(u)} in` : i === n - 1 ? (u === 1 ? "out" : `${fmt(u)} out`) : `${fmt(u)} hidden`;
-      out.push(`<text x="${xs[i]}" y="${H - 12}" font-size="10.5" fill="#5c6276" text-anchor="${i === 0 ? "start" : i === n - 1 ? "end" : "middle"}" dx="${i === 0 ? -6 : i === n - 1 ? 6 : 0}">${lab}</text>`);
+      const end = i === n - 1 && !sh;
+      out.push(`<text x="${xs[i]}" y="${H - 12}" font-size="10.5" fill="#5c6276" text-anchor="${i === 0 ? "start" : end ? "end" : "middle"}" dx="${i === 0 ? -6 : end ? 6 : 0}">${lab}</text>`);
     });
-    return `<svg class="dz-big" viewBox="0 0 ${W} ${H}" role="img" aria-label="Structure: ${cols.map(fmt).join(", then ")} units${wts ? "; links coloured by weight" : ""}">${out.join("")}</svg>`;
+    return `<svg class="dz-big" viewBox="0 0 ${W} ${H}" role="img" aria-label="Structure: ${cols.map(fmt).join(", then ")} units${sh ? `, one network shared by ${it.shared} channels, then the highest score over channels sets the alarm` : ""}${wts ? "; links coloured by weight" : ""}">${out.join("")}</svg>`;
   }
 
   // one weight matrix as a grid, one cell per weight, on a diverging scale shared by the design
@@ -268,6 +295,7 @@
       `<span><svg viewBox="0 0 30 14"><rect x="3" y="5" width="24" height="3" rx="1.5" fill="#e7e9ee"/><rect x="3" y="5" width="15" height="3" rx="1.5" fill="#4a5062"/></svg>gates, ${o.sim ? "simulated" : "measured"}</span>` +
       (o.est ? `<span><svg viewBox="0 0 30 14"><rect x="3" y="5" width="24" height="3" rx="1.5" fill="#e7e9ee"/><rect x="3.4" y="5.4" width="14.2" height="2.2" rx="1.1" fill="#fff" stroke="#4a5062" stroke-width=".8"/></svg>gates, estimated</span>` : "");
   };
+  const VDOT = `<span><svg viewBox="0 0 30 14"><circle cx="15" cy="7" r="3" fill="#0f7a55"/></svg>verified bit for bit</span>`;
   function skeleton(host, title) {
     host.innerHTML = `<section class="dz" aria-label="${esc(title)}"><div class="dz-h"><h3>${esc(title)}</h3><span class="dz-n"></span><span class="dz-mk"></span></div><div class="dz-lg"></div>` +
       `<div class="dz-b"><div class="dz-grid" role="list"></div><aside class="dz-d" aria-live="polite"></aside></div></section>`;
@@ -370,7 +398,9 @@
   function exampleHost(anchor) {
     if (!anchor || !anchor.parentNode) return null;
     let host = anchor.parentNode.querySelector(":scope > .dz-host");
-    if (!host) { host = document.createElement("div"); host.className = "dz-host"; anchor.parentNode.insertBefore(host, anchor); }
+    // below the chip and its note, so the 3D chip stays the first thing in view
+    const after = anchor.nextElementSibling && anchor.nextElementSibling.classList.contains("vf") ? anchor.nextElementSibling : anchor;
+    if (!host) { host = document.createElement("div"); host.className = "dz-host"; anchor.parentNode.insertBefore(host, after.nextSibling); }
     return host;
   }
   function paintExample(anchor, ctx) {
@@ -382,7 +412,7 @@
   const tipOf = it => [it.id, it.chosen ? (it.pill || "chosen") : it.why || it.stText, it.size ? (it.size.g === 0 ? "0 gates" : (it.size.k === "e" ? "about " : "") + fmt(it.size.g) + " gates" + (it.size.k === "e" ? ", estimated" : it.size.k === "s" ? ", simulated" : "")) : ""].filter(Boolean).join(" · ");
   function finish(it) {
     it.tip = tipOf(it);
-    it.gsig = [it.ins, it.layers && it.layers.join(","), it.lev, it.bits, it.chans, it.size && it.size.g, it.size && it.size.k].join("|");
+    it.gsig = [it.ins, it.layers && it.layers.join(","), it.lev, it.bits, it.chans, it.shared, it.vmark ? 1 : 0, it.size && it.size.g, it.size && it.size.k].join("|");
     it.dsig = [it.c, it.why, it.pill, it.gsig, it.weights ? 1 : 0, it.facts.map(r => r[1]).join("|")].join("|");
     return it;
   }
@@ -435,17 +465,19 @@
     ctx.designs.forEach(d => {
       const ch = num(d.channels) || 1, H = num(d.hidden_units), base = d.role === "baseline";
       const it = { id: d.id, chans: ch, size: num(d.gates) != null ? { g: d.gates, k: "m" } : null, facts: [], lev: num(d.weight_levels) };
-      if (!base && H != null) { it.ins = 6 * ch; it.layers = H ? [H, 1] : [1]; it.bits = 6; }
+      // one tiny network of 6 features, shared by the channels; the alarm takes the highest score over channels
+      if (!base && H != null) { it.ins = 6; it.layers = H ? [H, 1] : [1]; it.bits = 6; it.shared = ch; }
       const caught = d.counts && num(d.counts.events_caught), tot = d.counts && num(d.counts.events_total);
-      if (base) { it.grp = "base"; it.c = "s-base"; it.why = "baseline, not ours"; }
-      else if (d.id === ctx.chosenId) { it.grp = "chosen"; it.c = "s-chosen"; it.chosen = true; }
+      if (ver(d)) it.vmark = true;
+      if (base) { it.grp = "base"; it.c = "s-base"; it.why = ver(d) ? "baseline, verified" : "baseline, not ours"; }
+      else if (d.id === ctx.chosenId) { it.grp = "chosen"; it.c = "s-chosen"; it.chosen = true; if (ver(d)) it.pill = "Chosen, verified"; }
       else if (num(d.gates) === 0) { it.grp = "const"; it.c = "s-drop"; it.why = "constant output"; }
-      else if (near.has(d.id)) { it.grp = "best"; it.c = "s-best"; it.why = "best, misses bar"; }
+      else if (near.has(d.id)) { it.grp = "best"; it.c = "s-best"; it.why = ver(d) ? "verified, misses bar" : "best, misses bar"; }
       else if (ver(d)) { it.grp = "ver"; it.c = "s-ver"; it.stText = "verified"; }
       else if (caught === 0) { it.grp = "none"; it.c = "s-drop"; it.why = "caught nothing"; }
       else { it.grp = "comp"; it.c = "s-comp"; it.stText = "compiled"; }
       it.label = base ? "line length against a threshold" : `${ctx.budget ? ctx.budget(ch) : pl(ch, "channel")}, ${H ? H + " hidden units" : "one linear unit"}, ${it.lev || "?"}-level weights`;
-      if (!base) it.facts.push(["Shape", `6 features × ${pl(ch, "channel")}, ${H ? H + " hidden" : "no hidden layer"}, 1 output; one network shared by the channels`]);
+      if (!base) it.facts.push(["Shape", `6 features, ${H ? H + " hidden" : "no hidden layer"}, 1 output; ${ch === 1 ? "one network on 1 channel" : `one network shared by the ${ch} channels, alarm on the highest score`}`]);
       if (it.lev) it.facts.push(["Weights", `${it.lev} levels`]);
       it.facts.push(["Size", sizeHTML(it.size) + " (classifier only)"]);
       if (num(d.depth) != null) it.facts.push(["Logic depth", fmt(d.depth)]);
@@ -462,7 +494,7 @@
     return {
       items, S, defId: ctx.chosenId || (ctx.nearIds || [])[0] || null,
       groups: [{ k: "chosen", t: "Chosen", c: "s-chosen" }, { k: "best", t: "Best so far, misses the bar", c: "s-best" }, { k: "ver", t: "Verified bit for bit", c: "s-ver" }, { k: "comp", t: "Compiled, catch some events", c: "s-comp" }, { k: "none", t: "Dropped: caught nothing", c: "s-drop" }, { k: "const", t: "Dropped: constant output", c: "s-drop" }, { k: "base", t: "Baseline, not ours", c: "s-base" }],
-      count: pl(items.filter(x => x.grp !== "base").length, "design") + " compiled", mark: '<span class="mk mea">measured</span>', legend: LEGEND(S, {}) + "<span>darker links: more weight levels</span>", empty: "No designs in the file."
+      count: pl(items.filter(x => x.grp !== "base").length, "design") + " compiled", mark: '<span class="mk mea">measured</span>', legend: LEGEND(S, {}) + `<span>${glyph({ ins: 6, layers: [4, 1], lev: 3, bits: 6, shared: 18 }, { maxU: 8, maxG: S.maxG })}stacked: one network shared by the channels</span>` + "<span>darker links: more weight levels</span>" + (items.some(x => x.vmark) ? VDOT : ""), empty: "No designs in the file."
     };
   }
   function buildSim(ctx) {
@@ -504,8 +536,10 @@
   function buildRun(ctx, F) {
     const f = ctx.f, files = ctx.files || [], arts = ctx.arts || [], T = ctx.T || (F ? F.targetsOf(ctx.spec) : []);
     let recs = F ? F.designs(f) : [];
-    const fromChips = !recs.length;
-    if (fromChips) recs = Object.keys(f.chips || {}).filter(id => num(f.chips[id].gates) != null).map(id => ({ id, label: "", metrics: {}, gates: null, gates_est: null, depth: num(f.chips[id].depth), verified: null, budget: {} }));
+    // no design records: list the chips the lab measured, but only when there are some
+    const chipRecs = recs.length ? [] : Object.keys(f.chips || {}).filter(id => num(f.chips[id].gates) != null).map(id => ({ id, label: "", metrics: {}, gates: null, gates_est: null, depth: num(f.chips[id].depth), verified: null, budget: {} }));
+    const fromChips = chipRecs.length > 0;
+    if (fromChips) recs = chipRecs;
     const reached = p => ctx.ended || arts.some(a => a && a.path === p);
     const irFile = id => files.find(x => x && typeof x.path === "string" && x.path.endsWith("/chips/" + id + "/ir.json"));
     const irArt = id => arts.find(a => a && typeof a.path === "string" && a.path.endsWith("/chips/" + id + "/ir.json"));
@@ -523,10 +557,12 @@
         if (!r.label && fl.text) { try { const nm = JSON.parse(fl.text).name; it.label = nm && !/^(model|chip|design)$/i.test(nm) ? nm : ""; } catch (e) { /* no name */ } }
       }
       const pw = !ir && (parseWeights(r.note) || parseWeights(r.label));
-      const ls = fromLabel(r.label);
+      const ls = fromLabel(r.label, r.note), bw = bitsOf(r.label, r.note);
       if (!ir) {
         if (pw) { it.ins = pw.W[0].length; it.layers = [1]; it.lev = levelsOf([{ W: pw.W }]); it.weights = { layers: [{ name: "w", W: pw.W, b: pw.b }], names: pw.names, src: pw.how === "rule" && parseWeights(r.label) && !parseWeights(r.note) ? "the design's label (its weighted-sum rule)" : "the design's own note" }; }
-        if (ls) { if (it.ins == null && ls.ins != null) it.ins = ls.ins; if (!it.layers && ls.layers) it.layers = ls.layers; if (ls.bits) it.bits = ls.bits; }
+        if (ls) { if (it.ins == null && ls.ins != null) it.ins = ls.ins; if (!it.layers && ls.layers) it.layers = ls.layers; }
+        if (bw.bits) it.bits = bw.bits;
+        it.wbits = bw.wbits;
         if (it.ins != null && !it.layers) it.layers = [1];
         if (it.layers && it.ins == null) it.layers = null;
         if (!it.weights) it.wnone = irArt(id) && !fl ? "Weights are in this chip's ir.json; open it under Files." : "Weights not recorded for this design; the shape comes from its label.";
@@ -535,13 +571,16 @@
       if (!it.label) it.label = r.label || "";
       // state
       const fails = T.filter(t => F && F.meets(t, num(r.metrics && r.metrics[t.metric])) === false).map(t => SHORT[t.metric] || (F ? F.metaOf(t.metric).n.toLowerCase() : t.metric));
+      if (ver) it.vmark = true;
       if (id === ctx.chosen) { it.grp = "chosen"; it.c = "s-chosen"; it.chosen = true; it.pill = ver ? "Chosen, verified" : "Chosen"; }
-      else if (fails.length) { it.grp = "miss:" + (fails.length > 1 ? "2" : fails[0]); it.c = "s-drop"; it.why = fails.length > 1 ? "misses " + fails.length + " targets" : "misses " + fails[0]; }
+      else if (fails.length) { it.grp = "miss:" + (fails.length > 1 ? "2" : fails[0]); it.c = "s-drop"; it.why = (ver ? "verified, " : "") + (fails.length > 1 ? "misses " + fails.length + " targets" : "misses " + fails[0]); }
       else if (ver) { it.grp = "ver"; it.c = "s-ver"; it.stText = "verified"; }
       else if (gm != null) { it.grp = "comp"; it.c = "s-comp"; it.stText = gm === 0 ? "compiled, 0 gates" : "compiled"; }
       else { it.grp = "score"; it.c = "s-score"; it.stText = "scored, not compiled"; }
       // key numbers
       if (it.ins != null && it.layers) it.facts.push(["Shape", `${pl(it.ins, "input")}${it.layers.length > 1 ? ", " + it.layers.slice(0, -1).join(" then ") + " hidden" : ""}, ${it.layers[it.layers.length - 1] === 1 ? "1 output" : it.layers[it.layers.length - 1] + " outputs"}`]);
+      if (it.bits) it.facts.push(["Inputs", `${it.bits}-bit`]);
+      if (it.wbits) it.facts.push(["Weights", `${it.wbits}-bit`]);
       if (r.budget && r.budget.name) it.facts.push(["Budget", esc(r.budget.name)]);
       it.facts.push(["Size", it.size ? (it.size.k === "e" ? sizeHTML(it.size, "Estimated by the agent; the chip lab has not measured it") : it.size.g === 0 ? "0 gates, measured by the lab" : `${fmt(it.size.g)} gates, measured by the lab`) : "not reported"]);
       const dep = num(r.depth) != null ? r.depth : num(cm.depth); if (dep != null) it.facts.push(["Logic depth", fmt(dep)]);
@@ -562,8 +601,8 @@
     return {
       items, S, defId: ctx.chosen && items.some(x => x.id === ctx.chosen) ? ctx.chosen : last,
       groups: [{ k: "chosen", t: "Chosen", c: "s-chosen" }, { k: "ver", t: "Verified", c: "s-ver" }, { k: "comp", t: "Compiled by the lab", c: "s-comp" }, { k: "score", t: "Scored, size estimated", c: "s-score" }].concat(misses.map(k => ({ k, t: k === "miss:2" ? "Misses several targets" : "Misses " + k.slice(5), c: "s-drop" }))),
-      count: pl(items.length, fromChips ? "chip" : "design") + (ctx.ended ? "" : " so far") + (fromChips ? ", from the lab's figures" : ""), mark: '<span class="mk mea">recorded</span>',
-      legend: LEGEND(S, { est: items.some(x => x.size && x.size.k === "e") }), empty: ctx.ended ? "This run reported no designs." : "Designs appear as the agent reports them."
+      count: !items.length ? (ctx.ended ? "No designs reported" : "No designs yet") : pl(items.length, fromChips ? "chip" : "design") + (ctx.ended ? "" : " so far") + (fromChips ? ", from the lab's figures" : ""), mark: '<span class="mk mea">recorded</span>',
+      legend: LEGEND(S, { est: items.some(x => x.size && x.size.k === "e") }) + (items.some(x => x.vmark) ? VDOT.replace("verified bit for bit", "verified") : ""), empty: ctx.ended ? "This run reported no designs." : "Designs appear as the agent reports them."
     };
   }
 
