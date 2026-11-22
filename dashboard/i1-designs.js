@@ -365,8 +365,9 @@
     if (!it) { d.innerHTML = `<p class="dz-none">${esc(M.empty || "No design yet.")}</p>`; return; }
     const pill = it.chosen ? `<span class="pf ok">${esc(it.pill || "Chosen")}</span>` : it.c === "s-drop" ? `<span class="pf no">${esc(it.why || "Dropped")}</span>` : it.c === "s-best" ? `<span class="pf no">${esc(it.why || "Misses the bar")}</span>` : `<span class="pf na">${esc(it.why || it.stText || "")}</span>`;
     // a design is named in words (its label, read by ../i1-fold.js humanLabel); the technical id stays small under it
-    const nm = it.label ? ((window.ChipInFold && window.ChipInFold.humanLabel) ? window.ChipInFold.humanLabel(it.label) : it.label) : "";
-    d.innerHTML = `<div class="dz-dh">${nm ? `<span class="dz-nm" style="font-weight:600;font-size:13px;color:var(--i900)">${esc(nm)}</span>` : `<span class="dz-id">${esc(it.id)}</span>`}${pill}</div>${nm ? `<p class="dz-lab"><span class="dz-id" style="font-size:10.5px;color:var(--i550,#7a8194)" title="Technical id">${esc(it.id)}</span></p>` : ""}` +
+    const hl = it.label ? ((window.ChipInFold && window.ChipInFold.humanLabel) ? window.ChipInFold.humanLabel(it.label) : it.label) : "";
+    const nm = it.plain || hl, wk = it.plain && it.label && hl !== it.plain ? it.label : "";
+    d.innerHTML = `<div class="dz-dh">${nm ? `<span class="dz-nm" style="font-weight:600;font-size:13px;color:var(--i900)">${esc(nm)}</span>` : `<span class="dz-id">${esc(it.id)}</span>`}${pill}</div>${nm ? `<p class="dz-lab">${wk ? `<span class="dz-wk" style="font-size:11px;color:var(--i550,#7a8194)" title="Working name in the design file">${esc(wk)}</span> ` : ""}<span class="dz-id" style="font-size:10.5px;color:var(--i550,#7a8194)" title="Technical id">${esc(it.id)}</span></p>` : ""}` +
       `<div style="color:var(--c)" class="${it.c}">${bigDrawing(it)}</div>` +
       it.facts.map(r => `<div class="irow"><span>${esc(r[0])}</span><b>${r[1]}</b></div>`).join("") +
       `<p class="dz-wh">Weights</p>${weightsHTML(it)}`;
@@ -415,7 +416,7 @@
   function finish(it) {
     it.tip = tipOf(it);
     it.gsig = [it.ins, it.layers && it.layers.join(","), it.lev, it.bits, it.chans, it.shared, it.vmark ? 1 : 0, it.size && it.size.g, it.size && it.size.k].join("|");
-    it.dsig = [it.c, it.why, it.pill, it.gsig, it.weights ? 1 : 0, it.facts.map(r => r[1]).join("|")].join("|");
+    it.dsig = [it.plain, it.label, it.c, it.why, it.pill, it.gsig, it.weights ? 1 : 0, it.facts.map(r => r[1]).join("|")].join("|");
     return it;
   }
   function sizeHTML(sz, tip) {
@@ -571,6 +572,8 @@
         if (!it.weights && !it.layers) it.wnone = "Weights and shape not recorded for this design.";
       }
       if (!it.label) it.label = r.label || "";
+      // the plain-language name first (ChipInFold.chipName, as the headline and Run summary read it); the working name stays small after it
+      { const cn = F && F.chipName ? F.chipName(f, id, { files }) : null; it.plain = cn && (cn.from === "label" || cn.from === "ir") ? cn.name : ""; }
       // state
       const fails = T.filter(t => F && F.meets(t, num(r.metrics && r.metrics[t.metric])) === false).map(t => SHORT[t.metric] || (F ? F.metaOf(t.metric).n.toLowerCase() : t.metric));
       if (ver) it.vmark = true;
