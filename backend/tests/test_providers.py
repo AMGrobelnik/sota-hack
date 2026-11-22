@@ -221,3 +221,57 @@ async def test_post_run_expands_a_preset_model(
         )
         assert resp.status < 300
     assert seen[0].model == "thinkingmachines/inkling-2-small"
+
+
+@pytest.mark.parametrize(
+    ("server_agent", "body", "backend", "model"),
+    [
+        (
+            "claude",
+            {"agent": "openrouter", "model": "thinkingmachines/inkling-2-mini"},
+            "openrouter",
+            "thinkingmachines/inkling-2-mini",
+        ),
+        (
+            "claude",
+            {"agent": "openrouter", "model": "thinkingmachines/inkling-2-small"},
+            "openrouter",
+            "thinkingmachines/inkling-2-small",
+        ),
+        ("openrouter", {"agent": "claude", "model": "claude-sonnet-5-5"}, "claude_cli", "claude-sonnet-5-5"),
+        ("claude", {"agent": "claude", "model": "claude-opus-5-5"}, "claude_cli", "claude-opus-5-5"),
+        ("stub", {"agent": "claude", "model": "claude-opus-5-5"}, manager_mod.SCRIPTED, "claude-opus-5-5"),
+    ],
+)
+async def test_post_run_picks_its_own_agent_and_model(
+    config: BackendConfig,
+    monkeypatch: pytest.MonkeyPatch,
+    server_agent: str,
+    body: dict[str, str],
+    backend: str,
+    model: str,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
+    seen: list[tuple[AgentSpec, dict[str, Any]]] = []
+
+    async def fake_drive(self: Any, item: Any, spec: AgentSpec, translator: Any) -> None:
+        seen.append((spec, item.record))
+
+    monkeypatch.setattr(manager_mod.RunManager, "_drive", fake_drive)
+    api = ApiConfig(keepalive_s=0.2, progress_poll_s=0.02, stub_step_s=0.01, run_timeout_s=60)
+    app = create_app(config, api, token=TOKEN, agent=server_agent)  # type: ignore[arg-type]
+    async with TestClient(TestServer(app)) as c:
+        resp = await c.post("/api/runs", json={"prompt": "p", **body}, headers={TOKEN_HEADER: TOKEN})
+        assert resp.status < 300, await resp.text()
+    spec, record = seen[0]
+    assert (spec.backend, spec.model, record["model"]) == (backend, model, model)
+    assert record["agent"] == (server_agent if server_agent == "stub" else body["agent"])
+
+
+async def test_post_run_refuses_an_unknown_agent(config: BackendConfig) -> None:
+    headers = {TOKEN_HEADER: TOKEN}
+    async with await _server(config) as c:
+        resp = await c.post("/api/runs", json={"prompt": "p", "agent": "stub"}, headers=headers)
+        assert resp.status == 400
+        assert "agent must be one of" in (await resp.json())["error"]
+        assert (await (await c.get("/api/runs", headers=headers)).json())["runs"] == []

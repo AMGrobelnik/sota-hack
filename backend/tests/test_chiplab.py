@@ -827,7 +827,7 @@ def test_run_preset_writes_a_dashboard_run(
 def test_run_preset_refuses_other_machines(run_config: Path) -> None:
     base = ["run", "--config", str(run_config), "--preset", "pro", "--prompt", "hi"]
     assert main([*base, "--mode", "on_demand"]) == 2
-    assert main([*base, "--backend", "stub", "--model", "x"]) == 2
+    assert main([*base, "--backend", "stub", "--provider", "tinker"]) == 2  # a provider needs openrouter
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX shebangs")
