@@ -215,9 +215,9 @@ def error_note(c: dict, fam: str) -> str:
     if not h:
         return (f"{fam}: no held-out calibration data for this family in the {c.get('source', 'fit')}; treat the "
                 f"estimate as rough and synthesise before deciding")
-    r2 = f", r2 {h['r2']:.2f}" if h.get("r2") is not None else ""
+    r2 = f", r2 {h['r2']:.3f}" if h.get("r2") is not None else ""
     p90 = f", 90th percentile {h['p90_abs_pct_err']:.0f}%" if h.get("p90_abs_pct_err") is not None else ""
-    return f"{fam}: median error {h['median_abs_pct_err']:.0f}%{p90} on {h['n_heldout']} held-out designs{r2}"
+    return f"{fam}: median error {h['median_abs_pct_err']:.0f}%{p90} on {h['n_heldout']} held-out calibration designs{r2}"
 
 
 def estimate(ir: dict, optimizer: str | None = None) -> dict:
