@@ -76,3 +76,33 @@ transcribe:
   hourly_audio_s: 1800      # audio seconds per rolling hour, then 429
   timeout_s: 30             # per provider call
   silence_rms: 200          # a quieter WAV is silence: empty text, no call
+
+# Chippy, the dashboard's helper agent (POST /api/helper/messages). Keys by
+# variable NAME only. The rungs are walked in order, each provider pinned with
+# fallbacks off; prices are used only when OpenRouter reports no cost.
+helper:
+  enabled: true
+  key_env: OPENROUTER_API_KEY
+  rungs:
+    - model: z-ai/glm-5.3-flash
+      providers: [DigitalOcean, Together]
+      budget_s: 30
+      usd_per_m_in: 0.0399
+      usd_per_m_out: 0.0784
+    - model: deepseek/deepseek-v4.1-flash
+      providers: [CoreWeave, Wafer]
+      budget_s: 25
+      usd_per_m_in: 0.0498
+      usd_per_m_out: 0.1992
+  attempt_timeout_s: 30     # one provider attempt
+  turn_budget_s: 240        # wall clock of one answer
+  max_tool_roundtrips: 8    # then one closing call with tools off
+  max_identical_calls: 3    # the same tool call repeated this often ends the turn
+  max_result_bytes: 4096    # one tool result, as JSON, at most
+  file_window_bytes: 3000   # one read of a file or the report
+  max_text_chars: 4000      # one user message
+  max_body_bytes: 65536     # one request body, view context included
+  history_messages: 24      # kept per conversation, in memory only
+  max_conversations: 200    # oldest dropped past this
+  conversation_usd: 0.05    # spending cap per conversation
+  daily_usd: 0.50           # spending cap per UTC day

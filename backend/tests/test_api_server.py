@@ -103,6 +103,7 @@ async def test_health_needs_no_token(client: TestClient) -> None:
         "version": 1,
         "defaults": {"agent": "stub", "runner": "local"},
         "transcribe": False,
+        "helper": False,
         "providers": [
             {"name": "openrouter", "configured": True, "key_present": False},
             {"name": "tinker", "configured": True, "key_present": False},
