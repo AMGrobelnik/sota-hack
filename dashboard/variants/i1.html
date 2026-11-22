@@ -159,6 +159,8 @@ body.col .main{left:52px}
 .prow .rs{font-size:10px;color:var(--i550);font-weight:400;font-variant-numeric:tabular-nums;white-space:nowrap}
 .prow.on .rs{color:#4f7fe6}
 .prow .ck{display:inline-flex;color:#2563eb}
+.prow.off{color:var(--i550);cursor:not-allowed}.prow.off:hover{background:none}
+.prow .rno{display:block;font-size:11.5px;color:var(--i550);font-weight:400;line-height:1.35;margin-top:1px}
 .seg2{display:flex;border-radius:6px;background:rgb(0 0 0/.04);padding:2px}
 .seg2 button{flex:auto;border-radius:8px;padding:4px 8px;font-size:12px;font-weight:500;color:var(--i550);text-align:center;transition:all .12s}
 .seg2 button:hover{color:var(--i700)}
@@ -1105,8 +1107,8 @@ function evaluate(run, ds) {
 /* ---------------- 5. BRIEF PARSER ----------------
    Plain rules over the text. Every field it cannot find is left empty for the user to fill in. */
 const SIGNALS = [
-  { re: /\b(?:ecg|ekg)\b|electrocardiogra\w*/i, name: "ECG", unit: "lead", count: /\b(single|one|two|three|four|six|twelve|\d+)[- ]?leads?\b/i },
-  { re: /\beeg\b|electroencephalogra\w*/i, name: "EEG", unit: "channel", count: /\b(single|one|two|three|four|eight|\d+)[- ]?(?:channels?|electrodes?)\b/i },
+  { re: /\b(?:ecg|ekg)\b|electrocardiogra\w*/i, name: "ECG", unit: "lead", count: /\b(single|one|two|three|four|six|twelve|\d+)[- ]?(?:(?:ecg|ekg)[- ])?leads?\b/i },
+  { re: /\beeg\b|electroencephalogra\w*/i, name: "EEG", unit: "channel", count: /\b(single|one|two|three|four|eight|\d+)[- ]?(?:eeg[- ])?(?:channels?|electrodes?)\b/i },
   { re: /\bradar\b/i, name: "Radar" },
   { re: /thermal|infra-?red camera|\bir camera\b|thermograph\w*/i, name: "Thermal infrared camera" },
   { re: /\bppg\b|photoplethysmo\w*|pulse oximet\w*/i, name: "PPG" },
@@ -1720,13 +1722,18 @@ function toSpec() {
   SPEC = newSpec(t);
   flowGo(1);
 }
-// the model popover, in the composer-pill pattern: the four models by name, a check on the current one
+// the model popover, in the composer-pill pattern: the four models by name, a check on the current one;
+// with a backend connected, a model whose agent it cannot run is shown disabled with the reason
+const liveDefaults = () => liveOn() ? window.ChipInLive.defaults : null;
 function flowAgentPop(anchor, cur, onPick) {
-  const sel = modelChoice(cur).model;
-  const row = m => { const on = m.id === sel; return `<button class="prow${on ? " on" : ""}" data-m="${esc(m.id)}"><span class="rn">${esc(m.name)}</span>${on ? `<span class="ck">${ck}</span>` : ""}</button>`; };
+  const sel = modelChoice(cur).model, D = liveDefaults();
+  const row = m => {
+    const on = m.id === sel, no = window.ChipInModels.unavailableReason(m, D);
+    return `<button class="prow${on ? " on" : ""}${no ? " off" : ""}" data-m="${esc(m.id)}"${no ? ` disabled aria-disabled="true" title="${esc(no)}"` : ""}><span class="rn">${esc(m.name)}${no ? `<small class="rno">${esc(no)}</small>` : ""}</span>${on ? `<span class="ck">${ck}</span>` : ""}</button>`;
+  };
   const html = `<div class="ph">Model</div>${RUN_MODELS.map(row).join("")}`;
-  const d = openPop(anchor, html, e => { const b = e.target.closest("[data-m]"); if (b) { closePop(); onPick(modelChoice({ model: b.dataset.m })); } }, { width: 220 });
-  if (d) (d.querySelector(".prow.on") || d.querySelector(".prow")).focus();
+  const d = openPop(anchor, html, e => { const b = e.target.closest("[data-m]"); if (b && !b.disabled) { closePop(); onPick(modelChoice({ model: b.dataset.m })); } }, { width: D ? 280 : 220 });
+  if (d) (d.querySelector(".prow.on:not(:disabled)") || d.querySelector(".prow:not(:disabled)")).focus();
 }
 
 // ----- the flow's state: parsed from the brief, every field the user changes kept as they set it -----
@@ -1780,7 +1787,8 @@ function budgetList(n, unit, sigs) {
   const lab = (ch, u) => ({ ch, label: `${ch} ${u}${ch === 1 ? "" : "s"}` });
   if (n) return (n === 1 ? [1] : n === 2 ? [1, 2] : [1, 2, n]).map(ch => lab(ch, unit || "channel"));
   if (sigs && sigs.length && sigs.every(x => !x.unit)) return Array.from({ length: Math.min(sigs.length, 4) }, (_, i) => lab(i + 1, "sensor"));
-  return [1, 2, 4].map(ch => lab(ch, unit || "channel"));
+  const su = (sigs || []).find(x => x.unit);
+  return [1, 2, 4].map(ch => lab(ch, unit || (su ? su.unit : "channel")));
 }
 // a lone sensor kind with no channel count: channel budgets are not modelled for it
 const loneSensor = sigs => !!sigs && sigs.length === 1 && !sigs[0].unit;
@@ -1859,7 +1867,8 @@ function step2(s) {
 const screenOnly = s => taskSet(s.task).has("screening") && !s.targets.some(t => t.metric === "false_alarms_per_hour");
 // Run size applies where Run starts a run with it: any brief when a backend is connected, else only simulated runs
 // (the AF and measured-EEG briefs open their recorded results, which no preset changes)
-const sizeUsable = s => window.ChipInLive?.i1?.state?.().connection === "on" || !hasMeasured(s); // reads the live module's connection state only
+const liveOn = () => window.ChipInLive?.i1?.state?.().connection === "on"; // reads the live module's connection state only
+const sizeUsable = s => liveOn() || !hasMeasured(s);
 function step3(s) {
   const p = PLACES[s.place] || PLACES.ward;
   const rows = s.targets.map((t, i) => tRowHTML(s, t, i, p)).join("");
@@ -1902,6 +1911,10 @@ function step5(s) {
 }
 // [short, full]: the short line, and the full sentence it shows on hover
 function modeNote(s) {
+  // a connected backend runs every brief for real (the live hook in startFromSpec), so no recorded result is replayed
+  if (liveOn()) return s.data === "own" ? ["Files stay here. The real run uses synthetic data.", "Files stay in this browser and are not sent. The backend does not design on attached recordings yet, so the real run uses synthetic data and says so."]
+    : s.data === "public" ? ["Runs for real on your local backend.", "Run starts a real run on your local backend. It uses this set if the backend has it set up, else synthetic data, and the run says which."]
+    : ["Runs for real on your local backend, on synthetic data.", "Run starts a real run on your local backend, on recordings simulated from a small stated model; every number in it is marked synthetic data."];
   if (s.case === "af") return ["AF patch case: Run opens its measured run.", "This brief is the AF patch case, which has a measured run on the PhysioNet/CinC 2017 set; Run opens it with your targets, marked measured."];
   if (s.case === "neonatal-eeg" && MEASURED.eeg) return ["Run opens the measured Helsinki results.", "This case has measured results on the Helsinki set; Run opens them with your answers, marked measured."];
   if (s.data === "own") return ["Files stay in this browser. The run is simulated.", "Files stay in this browser and nothing is uploaded. This demo does not design on attached recordings yet, so the run is simulated and says so."];
@@ -1920,11 +1933,12 @@ function cardHTML(s) {
   const rows = L.map(r => r.k === "Device"
     ? `<div class="gsr"><span class="k">Device</span><div class="v"><div class="gie"><textarea data-sf="device" data-voice rows="1" placeholder="Name the device" aria-label="Device">${esc(s.device)}</textarea></div><div class="gie sm"><textarea data-sf="signal" data-voice rows="1" placeholder="Name the signal or sensors" aria-label="Signal or sensors">${esc(s.signal)}</textarea></div><small>${esc(r.v.split(". ").slice(1).join(". "))}</small></div><button type="button" class="gchg" data-go="1" aria-label="Change the device">Change</button></div>`
     : `<div class="gsr"><span class="k">${r.k}</span><div class="v">${esc(r.v)}</div>${r.go ? `<button type="button" class="gchg" data-go="${r.go}" aria-label="Change ${r.k.toLowerCase()}">Change</button>` : '<span class="gfx">Fixed</span>'}</div>`).join("");
-  const af = s.case === "af" ? `<p class="gfr">${MEASURED.af ? tp("AF patch case: Run replays its real search.", "This brief is the AF patch case: Run replays its real search with your targets.") : tp("AF patch case: Run opens its measured run.", "This brief is the AF patch case: Run opens its measured run with your targets.")}</p>` : "";
+  const noM = window.ChipInModels.unavailableReason(window.ChipInModels.runModel(s.agent && s.agent.model), liveDefaults());
+  const af = s.case === "af" && !liveOn() ? `<p class="gfr">${MEASURED.af ? tp("AF patch case: Run replays its real search.", "This brief is the AF patch case: Run replays its real search with your targets.") : tp("AF patch case: Run opens its measured run.", "This brief is the AF patch case: Run opens its measured run with your targets.")}</p>` : "";
   return `<p class="gfl">Check it, change anything, then run.</p><div class="gsc">${rows}${window.ChipInQuestions?.cardRows(s, flowSave) || "" /* QUESTIONS HOOK: the answers, editable */}</div>
     <div class="gsq">${sizeUsable(s) ? `<div class="gsqi"><span id="gRs">Run size</span><div class="gseg" role="radiogroup" aria-labelledby="gRs">${PRESETS.map(x => `<button type="button" role="radio" aria-checked="${x.n === s.preset}" data-c="preset" data-v="${x.n}">${x.n}</button>`).join("")}</div>
       <span class="gfx" aria-live="polite">${SUBAGENTS[s.preset]} subagents per stage</span></div>` : ""}
-      <div class="gsqi"><span>Model</span>${agentPill(s.agent)}</div></div>${af}`;
+      <div class="gsqi"><span>Model</span>${agentPill(s.agent)}${noM ? `<span class="gfx">${esc(noM)}; pick another</span>` : ""}</div></div>${af}`;
 }
 const bodyHTML = (s, i) => [step1, step2, step3, step4, step5, cardHTML][i](s);
 function footHTML(i) {
@@ -1946,7 +1960,7 @@ function renderSpec() {
   faUse(s);
   $("#demo").textContent = "";
   if (route.step === "more" && window.ChipInQuestions?.render(s, { prog: progHTML, go: flowGo, save: flowSave })) return; /* QUESTIONS HOOK: the extra step */
-  $("#main").innerHTML = `<div class="gf" id="gf"><div class="gfc">${progHTML(i)}<header class="gfh"><p class="gfn">${i < 5 ? `Step ${i + 1} of 5` : "Before you run"}</p><h1 tabindex="-1" id="gfH">${i < 5 ? STEPS[i].h : "Your spec"}</h1></header><div id="gfBody">${bodyHTML(s, i)}</div>${footHTML(i)}</div></div>`;
+  $("#main").innerHTML = `<div class="gf" id="gf"><div class="gfc">${progHTML(i)}<header class="gfh"><p class="gfn">${i < 5 ? `Step ${i + 1} of ${window.ChipInQuestions?.after(s) ? 6 : 5}` : "Before you run"}</p><h1 tabindex="-1" id="gfH">${i < 5 ? STEPS[i].h : "Your spec"}</h1></header><div id="gfBody">${bodyHTML(s, i)}</div>${footHTML(i)}</div></div>`;
   const root = $("#gf");
   // the spec card's name fields wrap: a one-line textarea that grows with its text
   const fitS = () => document.querySelectorAll("#gf textarea[data-sf]").forEach(ta => { ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px"; });

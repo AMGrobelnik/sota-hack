@@ -1249,6 +1249,18 @@
     return DEFAULT_RUN_MODEL;
   }
 
+  /** unavailableReason(m, defaults): why a connected backend cannot run model m
+   *  (a RUN_MODELS entry), or null when it can. defaults is the backend's health
+   *  answer's defaults: a backend that lists run_agents runs only those agents, an
+   *  older one only its own defaults.agent. No backend (null), or the scripted
+   *  stub, calls no model, so every model stays a label there. */
+  function unavailableReason(m, defaults) {
+    if (!m || !defaults || defaults.agent === "stub") return null;
+    var list = Array.isArray(defaults.run_agents) ? defaults.run_agents : defaults.agent ? [defaults.agent] : null;
+    if (!list || list.indexOf(m.agent) >= 0) return null;
+    return m.agent === "openrouter" ? "Not set up on this backend: its OpenRouter agent is not installed" : "Not set up on this backend";
+  }
+
   /** usedModelName(agent, model): the name of the model a run really used. A run
    *  that sent no model ran on its agent's default: claude runs Opus 5.5
    *  (agents.claude_cli.model); any other agent's default is not known here. */
@@ -1267,6 +1279,7 @@
     DEFAULT_RUN_MODEL: DEFAULT_RUN_MODEL,
     runModel: runModel,
     usedModelName: usedModelName,
+    unavailableReason: unavailableReason,
     wilson: wilson,
     confidenceHeadline: confidenceHeadline,
     cannotTellApart: cannotTellApart,

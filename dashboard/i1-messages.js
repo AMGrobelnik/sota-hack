@@ -30,6 +30,9 @@
   var LADDER = [["stage", "Stages", "stages"], ["batch", "Batches", "batches"], ["agent", "Subagents", "subagents"], ["group", "Groups", "groups"], ["item", "Steps", "steps"]];
   var LAB_KEYS = [["gates", "gates"], ["luts_ice40", "LUTs"], ["luts", "LUTs"], ["area_um2", "um2"], ["mismatches", "mismatches"], ["vectors_checked", "vectors"], ["verification_level", "level"], ["depth", "depth"], ["transistors", "transistors"], ["timing_slack_ns", "ns slack"], ["power_uw_at_rate", "uW"], ["cost_eur", "EUR"]];
 
+  // a chip lab call: chiplab run as a command (at the start, after ; && | or a timeout prefix), not a
+  // mention such as "which chiplab python3"
+  var LAB_CALL = /(?:^|[;&|(]\s*|\b(?:Ran|do|then|time|timeout\s+\S+)\s+)chiplab\s+([a-z][a-z0-9-]*)/;
   var esc = function (s) { return (window.ChipInFold ? window.ChipInFold.scrub(String(s == null ? "" : s)) : String(s == null ? "" : s)).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
   var clip = function (s, n) { s = String(s == null ? "" : s); return s.length > n ? s.slice(0, n - 1) + "\u2026" : s; };
   var firstLine = function (s) { var l = String(s == null ? "" : s).split(/\r?\n/).map(function (x) { return x.trim(); }).filter(Boolean)[0] || ""; return clip(l.replace(/^#+\s*/, ""), 240); };
@@ -131,7 +134,7 @@
         else { r.seqs.push(seq); r.last = seq; S.eToRaw[seq] = key; }
         if (ev.name) r.name = ev.name; if (ev.summary) r.call = ev.summary; if (ev.detail) r.detail = ev.detail;
         r.state = ev.state || r.state;
-        if (/\bchiplab\s+[a-z]/.test(r.call || "")) r.kind = "lab";
+        if (LAB_CALL.test(r.call || "")) r.kind = "lab";
         break;
       }
       default: return;
@@ -158,7 +161,7 @@
 
   /* ---------------- deriving the tree ---------------- */
   function rawText(r) { return (r.kind === "lab" ? labName(r) : r.name || "Tool") + ": " + firstLine(r.call); }
-  function labName(r) { var m = /\bchiplab\s+([a-z][a-z0-9-]*)/.exec(r.call || ""); return m ? "chiplab " + m[1] : r.name || "chiplab"; }
+  function labName(r) { var m = LAB_CALL.exec(r.call || ""); return m ? "chiplab " + m[1] : r.name || "chiplab"; }
   function labNumber(r) {
     if (r.kind !== "lab" || !r.detail) return "";
     for (var i = 0; i < LAB_KEYS.length; i++) {
@@ -406,7 +409,7 @@
     setHTML(M, "lad", M.root.querySelector(".cm-ladder"), lad);
     // the run summary, pinned
     var rs = T.N.run.sum, sumHTML;
-    if (rs) sumHTML = '<p class="cm-sl">' + (rs.final ? "Run summary" : "Run summary so far") + srcMark(rs) + '</p><p class="cm-st' + (ui.more ? " cm-all" : "") + '">' + esc(rs.text) + "</p>" + (rs.text.length > 160 ? '<button type="button" class="cm-more" data-act="more" aria-expanded="' + ui.more + '">' + (ui.more ? "Show less" : "Show all") + "</button>" : "");
+    if (rs) sumHTML = '<p class="cm-sl">' + (rs.final ? "Run summary" : "Run summary so far") + srcMark(rs) + '</p><p class="cm-st' + (ui.more ? " cm-all" : "") + '">' + esc(sumText(S, T.N.run)) + "</p>" + (rs.text.length > 160 ? '<button type="button" class="cm-more" data-act="more" aria-expanded="' + ui.more + '">' + (ui.more ? "Show less" : "Show all") + "</button>" : "");
     else if (S.prompt) sumHTML = '<p class="cm-sl">Run summary pending</p><p class="cm-st cm-pend" title="The run summary comes after the first stage closes; this is the brief\'s first line">' + pendDot() + esc(firstLine(S.prompt)) + "</p>";
     else sumHTML = "";
     if (S.limit) sumHTML += '<p class="cm-lim">Summaries stopped at a limit (' + esc(S.limit.reason || "limit") + "); later rows show their own first line.</p>";

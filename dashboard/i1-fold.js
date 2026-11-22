@@ -15,7 +15,12 @@
  *   ChipInFold.subsHTML(f, spec, open), chipHTML(m): the shared panels
  *   ChipInFold.variantHTML(d)      the "Variant of <id>" line for a record with variant_of, else ""
  *   ChipInFold.targetsOf, fmtV, fmtT, meets, passAll, metaOf, dataMark, metricText, sizeOf
- *   ChipInFold.humanKeys(s)        a sentence with any raw metric key in it read as that key's label
+ *   ChipInFold.humanKeys(s)        a sentence with any raw metric key in it read as that key's label,
+ *                                  a ratio named by its metric as a percentage and long floats rounded
+ *   ChipInFold.screenOnly(spec, T) a one-off screening spec with no false-alarm target
+ *   ChipInFold.levelText(l)        the lab's verification level as words ("level 2", "bit-exact simulation")
+ *   ChipInFold.fileView(el, path, text, opts) shows an image as the image (bytes from file?...&raw=1
+ *                                  when the backend serves them) and names a binary file; true when handled
  *
  * Designs: one record per id, as the backend keeps designs.json: a record whose previous_id
  * (prev_id is accepted) names an earlier record takes over that record's place.
@@ -92,13 +97,23 @@
   var ratio = function (k, v) { return RATIO.test(String(k)) && typeof v === "number" && v > 1.5 ? v / 100 : v; };
 
   // what a metric key means: its base metric and the patients it was measured on
-  var BASIS_PRE = [[/^(?:chip_)?(?:val|validation)_/, "validation"], [/^(?:chip_)?(?:heldout|held_out|test)_/, "held-out"], [/^synthetic_/, ""]];
+  var BASIS_PRE = [[/^(?:chip_)?(?:val|validation)_/, "validation"], [/^(?:chip_)?(?:heldout|held_out|test)_/, "held-out"], [/^(?:chip_)?train(?:ing)?_/, "training"], [/^synthetic_/, ""]];
   var BASE_ALIAS = { false_alarms_per_h: "fa_per_hour", false_alarms_per_hour: "fa_per_hour", fa_per_h: "fa_per_hour", gate_equivalents: "ge" };
+  // the same written at the end ("window_sens_test"), a per-window scope, short names and a false-alarm rate per day or night
+  var BASIS_SUF = [[/_(?:test|heldout|held_out)$/, "held-out"], [/_(?:val|validation)$/, "validation"], [/_train(?:ing)?$/, "training"]];
+  var SHORT = { sens: "sensitivity", spec: "specificity", acc: "accuracy" };
   function keyInfo(k) {
-    var s = String(k), basis = null;
-    for (var i = 0; i < BASIS_PRE.length; i++) if (BASIS_PRE[i][0].test(s)) { basis = BASIS_PRE[i][1]; s = s.replace(BASIS_PRE[i][0], ""); break; }
-    return { base: BASE_ALIAS[s] || s, basis: basis };
+    var s = String(k), basis = null, scope = null, per = 1, i;
+    for (i = 0; i < BASIS_PRE.length; i++) if (BASIS_PRE[i][0].test(s)) { basis = BASIS_PRE[i][1]; s = s.replace(BASIS_PRE[i][0], ""); break; }
+    if (basis == null) for (i = 0; i < BASIS_SUF.length; i++) if (BASIS_SUF[i][0].test(s)) { basis = BASIS_SUF[i][1]; s = s.replace(BASIS_SUF[i][0], ""); break; }
+    if (/^window_/.test(s)) { scope = "per window"; s = s.slice(7); }
+    if (SHORT[s]) s = SHORT[s];
+    var pd = /^(?:fa|false_alarms)_per_(day|night)$/.exec(s);
+    if (pd) { per = FAU[pd[1]]; s = "fa_per_hour"; }
+    return { base: BASE_ALIAS[s] || s, basis: basis, scope: scope, per: per };
   }
+  // a key's label: its metric's name, then its scope and its patients ("Sensitivity, per window, held-out")
+  var keyLabel = function (ki) { return MET[ki.base].n + (ki.scope ? ", " + ki.scope : "") + (ki.basis ? ", " + ki.basis : ""); };
   // the chip lab's figures: label and unit
   var LAB = {
     gates: ["Logic gates", "gates"], depth: ["Logic depth", "levels"], transistors: ["Transistors", ""], area_um2: ["Area before layout", "µm²"],
@@ -140,9 +155,9 @@
   // one metric as a person reads it: { label, value }; source: the lab tool that measured it, if any
   function metricText(k, v, unit, spec, source) {
     if (typeof source === "string" && source) return srcText(k, v, unit, spec, source);
-    var ki = keyInfo(k), b = ki.base, bas = ki.basis ? ", " + ki.basis : "";
+    var ki = keyInfo(k), b = ki.base;
     if (num(v) == null) return { label: cap(String(k).replace(/_/g, " ")), value: String(v) };
-    if (MET[b]) return { label: MET[b].n + bas, value: fmtV(b, ratio(b, v), spec) };
+    if (MET[b]) return { label: keyLabel(ki), value: fmtV(b, ratio(b, v) / ki.per, spec) };
     if (LAB[b]) return { label: LAB[b][0], value: numText(v, LAB[b][1]) };
     for (var i = 0; i < CHECKS.length; i++) {
       if (CHECKS[i][1] === b) return { label: CHECKS[i][0] + ", vectors", value: numText(v, "") };
@@ -159,14 +174,71 @@
   // "heldout" as held-out and "fa per hour" written with spaces as false alarms per hour
   function humanKeys(s) {
     return String(s == null ? "" : s).replace(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g, function (k) {
-      var b = keyInfo(k).base;
+      var ki = keyInfo(k), b = ki.base;
       if (!(MET[b] || LAB[b] || OTHER[b] || CHECK_KEYS[b])) return k;
       var l = metricText(k, 0, "", null).label;
-      if (b === "fa_per_hour") l = l.replace(/^False alarms/, "False alarms per hour");
+      if (b === "fa_per_hour") l = l.replace(/^False alarms/, "False alarms per " + (ki.per === 24 ? "day" : ki.per === 12 ? "night" : "hour"));
       return /^[A-Z][a-z]/.test(l) ? l.charAt(0).toLowerCase() + l.slice(1) : l;
     }).replace(/\b(?:fa|false alarms?)[ _]per[ _]h(?:our|r)?\b/gi, function (m) { return /^F[a-z]/.test(m) ? "False alarms per hour" : "false alarms per hour"; })
       .replace(/\b(H|h)eld_?out\b/g, "$1eld-out").replace(/\bHELDOUT\b/g, "HELD-OUT")
-      .replace(/(?<![\w.:])\d+\.\d{5,}(?!\w|\.\d|:\d)/g, function (m) { return Number(m).toFixed(3); });
+      .replace(FRAC_AFTER, function (m, w, mid, v) { return w + mid + pct(v); })
+      .replace(FRAC_BEFORE, function (m, v, sp, w) { return pct(v) + sp + w; })
+      .replace(/(?<![\w.:])\d+\.\d{4,}(?!\w|\.\d|:\d)/g, function (m) { return tidyNum(Number(m)); });
+  }
+  // numbers in a sentence as a person writes them: a ratio named by its metric ("specificity 0.9888",
+  // "0.9871 sens") as a percentage with one decimal, any other long float rounded to its size
+  var FRAC_AFTER = /\b(sensitivity|specificity|accuracy|precision|recall|agreement|sens|spec)((?:,\s*(?:held-out|validation|training|per window))*\s*(?:(?:of|was|is|at|reached|hit|=|:|≈|~)\s*)?(?:about\s+)?)(0?\.\d+|1\.0+|1|0)(?![\d.%]|\s*(?:per\b|\/|gates?\b))/gi;
+  var FRAC_BEFORE = /(?<![\w.])(0?\.\d{2,}|1(?:\.0+)?)(\s+)(sens(?:itivity)?|spec(?:ificity)?)\b(?!\s+(?:targets?|bars?|goals?)\b)/gi;
+  var pct = function (v) { return +(Number(v) * 100).toFixed(1) + "%"; };
+  function tidyNum(v) { var a = Math.abs(v); return String(a >= 100 ? Math.round(v) : a >= 10 ? +v.toFixed(1) : a >= 1 ? +v.toFixed(2) : +v.toPrecision(3)); }
+  // a one-off screening spec with no false-alarm target: judged per recording, never by false alarms over time
+  function screenOnly(spec, T) {
+    var tt = spec && spec.task_types;
+    return Array.isArray(tt) && tt.length === 1 && tt[0] === "screening" && !(T || targetsOf(spec)).some(function (t) { return t.metric === "fa_per_hour"; });
+  }
+  // the lab's verification level: a number reads "level 2", a name ("bit-exact simulation") as itself
+  var levelText = function (l) { return typeof l === "number" || /^\d+$/.test(String(l)) ? "level " + l : String(l); };
+
+  /* ---------- a run file in a viewer: an image as the image, a binary file named, never its bytes as text ---------- */
+  var BIN_KIND = { gds: "a GDS layout file", gdsii: "a GDS layout file", gds2: "a GDS layout file", oas: "an OASIS layout file", oasis: "an OASIS layout file", vcd: "a waveform dump", fst: "a waveform dump",
+    npz: "a NumPy archive", npy: "a NumPy array", pt: "a PyTorch file", pth: "a PyTorch file", pkl: "a Python pickle", onnx: "an ONNX model", h5: "an HDF5 file", zip: "a zip archive", gz: "a compressed file", tar: "a tar archive", pdf: "a PDF", bin: "a binary file" };
+  function fileKind(path) {
+    var x = (/\.([a-z0-9]+)$/i.exec(String(path || "")) || [, ""])[1].toLowerCase();
+    return x === "svg" ? "svg" : /^(png|jpe?g|gif|webp|bmp)$/.test(x) ? "image" : BIN_KIND[x] ? "binary" : "text";
+  }
+  // text that came from bytes which are not UTF-8 (a NUL, or the replacement character the backend put in)
+  var looksBinary = function (t) { t = String(t || "").slice(0, 4096); var n = (t.match(/[\u0000�]/g) || []).length; return n > 8 || (t.length > 0 && n / t.length > 0.02); };
+  var fileNote = function (path, kind) {
+    var name = String(path || "").split("/").pop(), x = (/\.([a-z0-9]+)$/i.exec(name) || [, ""])[1].toLowerCase();
+    return kind === "image" ? name + " is an image. This backend sends run files as text only, so the image cannot be shown here."
+      : name + " is " + (BIN_KIND[x] || "a binary file") + ", not text, so it is not shown here.";
+  };
+  // an image file's bytes, from a backend that serves them (file?path=...&raw=1 answered with an image type); null otherwise
+  function rawImage(base, token, id, path) {
+    if (!base || typeof fetch !== "function") return Promise.resolve(null);
+    return fetch(base + "/api/runs/" + encodeURIComponent(id) + "/file?path=" + encodeURIComponent(path) + "&raw=1", { headers: { "X-ChipIn-Token": token || "" }, cache: "no-store" })
+      .then(function (r) { return r.ok && /^image\//.test(r.headers.get("Content-Type") || "") ? r.blob() : null; })
+      .catch(function () { return null; });
+  }
+  // fills el with the file: path, its text (or null when not read yet), and opts { base, token, id } to fetch an image's bytes;
+  // returns true when it handled the file (an image, an SVG or a binary), false when the text is to be shown as it is
+  function fileView(el, path, text, opts) {
+    var kind = fileKind(path), name = String(path || "").split("/").pop();
+    var note = function (k) { el.innerHTML = '<p class="cf-sub">' + esc(fileNote(path, k)) + "</p>"; };
+    if (kind === "image") {
+      el.innerHTML = '<p class="cf-sub">Opening the image…</p>';
+      rawImage(opts && opts.base, opts && opts.token, opts && opts.id, path).then(function (b) {
+        if (!b) { note("image"); return; }
+        el.innerHTML = '<img alt="' + esc(name) + '" style="display:block;max-width:100%;height:auto;border:1px solid #e3e6ec;border-radius:8px;background:#fff">';
+        el.querySelector("img").src = URL.createObjectURL(b);
+      });
+      return true;
+    }
+    if (kind === "binary") { note("binary"); return true; }
+    if (text == null) return false;
+    if (kind === "svg" && /<svg[\s>]/i.test(text)) { el.innerHTML = '<img alt="' + esc(name) + '" style="display:block;max-width:100%;height:auto;background:#fff">'; el.querySelector("img").src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(text); return true; }
+    if (looksBinary(text)) { note("binary"); return true; }
+    return false;
   }
 
   function dataMark(spec, designs) {
@@ -330,6 +402,7 @@
       var r = f.run; mm = {}; Object.keys(r).forEach(function (k) { if (LAB[keyInfo(k).base] || CHECK_KEYS[k] || OTHER[k]) mm[k] = r[k]; }); uu = f.runUnits;
     }
     var vf = rec && rec.verified && typeof rec.verified === "object" ? rec.verified : {}, T = m.T || targetsOf(m.spec);
+    var noFA = screenOnly(m.spec, T); // a one-off screening test is judged per recording, so no false-alarm rate is shown for it
     var lab = [], seen = {};
     var labV = function (k) { if (k === "gates" && rec && num(rec.gates) != null) return rec.gates; if (k === "depth" && rec && num(rec.depth) != null) return rec.depth; var v = null; Object.keys(mm).forEach(function (x) { if (keyInfo(x).base === k && !keyInfo(x).basis && num(mm[x]) != null) { v = mm[x]; seen[x] = 1; } }); return v; };
     Object.keys(LAB).forEach(function (k) { var v = labV(k); seen[k] = 1; if (v != null) lab.push([LAB[k][0], numText(v, LAB[k][1])]); });
@@ -345,7 +418,7 @@
     });
     var lvl = mm.verification_level != null ? mm.verification_level : vf.level; seen.verification_level = 1;
     var proved = num(mm.formal_proved) != null ? !!mm.formal_proved : typeof vf.proved === "boolean" ? vf.proved : null; seen.formal_proved = 1;
-    if (lvl != null) lab.push(["Verification level", "level " + esc(lvl)]);
+    if (lvl != null) lab.push(["Verification level", esc(levelText(lvl))]);
     // the lab's prove-equivalence proves the gate netlist against the RTL (abc cec); the match to the model
     // rests on the simulated vectors, so it is named as such only when vectors ran with no mismatch
     var simOK = CHECKS.some(function (c, i) { var n = num(mm[c[1]]), x = num(mm[c[2]]); if (i === 0) { if (n == null) n = num(vf.vectors); if (x == null) x = num(vf.mismatches); } return n > 0 && x === 0; });
@@ -355,6 +428,7 @@
     var SORD = ["event_sensitivity", "worst_patient_sensitivity", "fa_per_hour", "auc"], sord = function (k) { var i = SORD.indexOf(k); return i < 0 ? 99 : i; };
     var srcRows = function (sm, tail) {
       Object.keys(sm || {}).sort(function (a, b) { return sord(a) - sord(b) || (a < b ? -1 : 1); }).forEach(function (k) {
+        if (noFA && keyInfo(k).base === "fa_per_hour") return;
         var e = sm[k], t = metricText(k, e.value, e.unit, m.spec, e.source);
         lab.push([t.label + tail, esc(t.value)]);
       });
@@ -367,13 +441,14 @@
     Object.keys(mm).forEach(function (k) {
       if (seen[k]) return;
       var ki = keyInfo(k), v = num(mm[k]);
-      if (v == null) return;
+      if (v == null || (noFA && ki.base === "fa_per_hour")) return;
       if (MET[ki.base]) {
         var b = ki.basis || (rec && rec.basis === "test" ? "held-out" : rec && rec.basis === "validation" ? "validation" : "");
-        put(MET[ki.base].n + (b ? ", " + b : ""), ki.base, v, (/^chip_/.test(k) ? 3 : ki.basis ? 2 : 1), b);
+        // a per-window figure is its own row and is not judged against a per-recording target
+        put(MET[ki.base].n + (ki.scope ? ", " + ki.scope : "") + (b ? ", " + b : ""), ki.scope ? null : ki.base, ki.scope ? fmtV(ki.base, ratio(ki.base, v) / ki.per, m.spec) : ratio(ki.base, v) / ki.per, (/^chip_/.test(k) ? 3 : ki.basis ? 2 : 1), b);
       } else if (!LAB[ki.base] && !CHECK_KEYS[k]) { var mt = metricText(k, v, uu[k], m.spec); put(mt.label, null, mt.value, 1, ""); }
     });
-    if (rec) Object.keys(rec.metrics).forEach(function (k) { var v = num(rec.metrics[k]); if (v == null || !MET[k]) return; var b = rec.basis === "test" ? "held-out" : rec.basis === "validation" ? "validation" : ""; put(MET[k].n + (b ? ", " + b : ""), k, v, 0, b); });
+    if (rec) Object.keys(rec.metrics).forEach(function (k) { var v = num(rec.metrics[k]); if (v == null || !MET[k] || (noFA && k === "fa_per_hour")) return; var b = rec.basis === "test" ? "held-out" : rec.basis === "validation" ? "validation" : ""; put(MET[k].n + (b ? ", " + b : ""), k, v, 0, b); });
     var rank = function (r) { return (r.b === "validation" ? 0 : r.b === "held-out" ? 1 : 2) * 10 + (r.k === "sensitivity" ? 0 : r.k === "fa_per_hour" ? 1 : r.k === "specificity" ? 2 : 3); };
     var ag = order.map(function (k) { return agent[k]; }).sort(function (a, b) { return rank(a) - rank(b); });
     var row = function (r) { return '<div class="irow"><span>' + esc(r[0]) + "</span><b>" + r[1] + "</b></div>"; };
@@ -441,6 +516,6 @@
     version: 1, scrub: scrub, scrubEvent: scrubEvent, create: create, fold: fold, designs: designs, cost: cost, funnel: funnel, heldOut: heldOut,
     subsHTML: subsHTML, wireSubs: wireSubs, chipHTML: chipHTML, variantHTML: variantHTML,
     targetsOf: targetsOf, fmtV: fmtV, fmtT: fmtT, meets: meets, passAll: passAll, metaOf: metaOf, MET: MET, FAU: FAU, faUnit: faUnit,
-    dataMark: dataMark, metricText: metricText, humanKeys: humanKeys, keyInfo: keyInfo, sizeOf: sizeOf, ratio: ratio, normDesign: normDesign
+    dataMark: dataMark, metricText: metricText, humanKeys: humanKeys, screenOnly: screenOnly, levelText: levelText, fileKind: fileKind, fileView: fileView, keyInfo: keyInfo, sizeOf: sizeOf, ratio: ratio, normDesign: normDesign
   };
 })();

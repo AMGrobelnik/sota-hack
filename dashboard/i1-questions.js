@@ -51,6 +51,8 @@
   function after(s) { return offered(s) ? "more" : null; }
   function has(s) { return !!conn() && ready(s); }
 
+  // an option written as a raw key ("missed_event") read as words ("Missed event"); the value sent stays the option
+  var label = function (o) { o = String(o == null ? "" : o); return /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/.test(o) ? o.charAt(0).toUpperCase() + o.slice(1).replace(/_/g, " ") : o; };
   // the answer to one question: what the user set, else its default
   var answerOf = function (s, q) { var a = s.fq.answers || {}; return Object.prototype.hasOwnProperty.call(a, q.id) ? a[q.id] : q["default"]; };
 
@@ -58,7 +60,7 @@
     var cur = answerOf(s, q), ctl;
     if (q.kind === "choice") {
       ctl = '<div class="gch" role="radiogroup" aria-label="' + esc(q.question) + '">' + q.options.map(function (o) {
-        return '<button type="button" role="radio" aria-checked="' + (o === cur) + '" data-fq-q="' + esc(q.id) + '" data-fq-v="' + esc(o) + '"><span>' + esc(o) + "</span></button>";
+        return '<button type="button" role="radio" aria-checked="' + (o === cur) + '" data-fq-q="' + esc(q.id) + '" data-fq-v="' + esc(o) + '"><span>' + esc(label(o)) + "</span></button>";
       }).join("") + "</div>";
     } else {
       ctl = '<div class="gfw"><input class="gfin" data-fq-in="' + esc(q.id) + '" value="' + esc(cur) + '" aria-label="' + esc(q.question) + '" data-voice></div>';
@@ -121,7 +123,7 @@
     var prog = ctx && ctx.prog ? ctx.prog(5) : "";
     here = false;
     var main = $("#main");
-    main.innerHTML = '<div class="gf" id="gf"><div class="gfc">' + prog + '<header class="gfh"><p class="gfn">One more step</p><h1 tabindex="-1" id="gfH">A few more for this device</h1></header><div id="gfBody">' + bodyHTML(s) + '</div><div class="gfa"><button type="button" class="btn s" data-fq-go="prev">' + BACK_ICON + 'Back</button><span class="grow"></span><button type="button" class="btn p" id="gfNext" data-fq-go="next">Review your spec</button></div></div></div>';
+    main.innerHTML = '<div class="gf" id="gf"><div class="gfc">' + prog + '<header class="gfh"><p class="gfn">Step 6 of 6</p><h1 tabindex="-1" id="gfH">A few more for this device</h1></header><div id="gfBody">' + bodyHTML(s) + '</div><div class="gfa"><button type="button" class="btn s" data-fq-go="prev">' + BACK_ICON + 'Back</button><span class="grow"></span><button type="button" class="btn p" id="gfNext" data-fq-go="next">Review your spec</button></div></div></div>';
     var root = $("#gf"), go = ctx && ctx.go;
     root.addEventListener("click", function (e) {
       var g = e.target.closest("[data-go]");
@@ -148,7 +150,7 @@
     if (!has(s)) return "";
     S = s; saveFn = saveIt;
     return s.fq.questions.map(function (q) {
-      return '<div class="gsr fq-row"><span class="k">A few more</span><div class="v"><small class="fq-q">' + esc(q.question) + '</small><div class="gie sm"><textarea data-fq-card="' + esc(q.id) + '" rows="1" aria-label="' + esc(q.question) + '" data-voice>' + esc(answerOf(s, q)) + '</textarea></div></div><button type="button" class="gchg" data-go="more" aria-label="Change: ' + esc(q.question) + '">Change</button></div>';
+      return '<div class="gsr fq-row"><span class="k">A few more</span><div class="v"><small class="fq-q">' + esc(q.question) + '</small><div class="gie sm"><textarea data-fq-card="' + esc(q.id) + '" rows="1" aria-label="' + esc(q.question) + '" data-voice>' + esc(label(answerOf(s, q))) + '</textarea></div></div><button type="button" class="gchg" data-go="more" aria-label="Change: ' + esc(q.question) + '">Change</button></div>';
     }).join("");
   }
 

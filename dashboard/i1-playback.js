@@ -794,6 +794,8 @@
   var PREF_Y = ["sensitivity", "test_accuracy", "accuracy", "specificity", "fa_per_hour", "synthetic_sensitivity_pct", "train_accuracy"];
   var LABEL = { sensitivity: "Sensitivity", specificity: "Specificity", fa_per_hour: "False alarms per hour", test_accuracy: "Test accuracy", train_accuracy: "Train accuracy", accuracy: "Accuracy", power_uw_at_rate: "Power (µW)" };
   var label = function (k) { return LABEL[k] || (k.charAt(0).toUpperCase() + k.slice(1)).replace(/_/g, " "); };
+  // the chart names a false-alarm rate in the run's own unit (per day, night or hour), as the live view does
+  var ylab = function (k, M) { return k === "fa_per_hour" ? "False alarms per " + F.faUnit(M && M.spec) : label(k); };
   var RATIO = /^(?:[a-z0-9]+_)*(?:accuracy|sensitivity|specificity|precision|recall|f1)(?:_(?:test|train|val|heldout|held_out))?$/;
   var isFrac = function (k, pts) { return (RATIO.test(k) || /accuracy|sensitivity|specificity|agreement/.test(k)) && pts.every(function (p) { return p.m[k] == null || p.m[k] <= 1.0001; }); };
   function fmtM(k, v, pts) { if (v == null) return "not reported"; if (isFrac(k, pts || [])) return (v * 100).toFixed(1) + "%"; return Math.abs(v) >= 100 ? fmtN(v) : String(+(+v).toFixed(3)); }
@@ -934,8 +936,10 @@
     var seen = {};
     M.pts.forEach(function (p) { for (var k in p.m) if (!NOT_Y[k] && num(p.m[k]) != null && sizeOf(p) != null) seen[k] = (seen[k] || 0) + 1; });
     var keys = Object.keys(seen);
-    V.yKeys = PREF_Y.filter(function (k) { return seen[k]; }).concat(keys.filter(function (k) { return PREF_Y.indexOf(k) < 0; }).sort());
-    if (V.y && seen[V.y]) return V.y;
+    // a one-off screening test is not judged by false alarms, so their rate is not offered
+    if (F.screenOnly(M.spec, M.T)) keys = keys.filter(function (k) { return F.keyInfo(k).base !== "fa_per_hour"; });
+    V.yKeys = PREF_Y.filter(function (k) { return keys.indexOf(k) >= 0; }).concat(keys.filter(function (k) { return PREF_Y.indexOf(k) < 0; }).sort());
+    if (V.y && V.yKeys.indexOf(V.y) >= 0) return V.y;
     return V.yKeys[0] || null;
   }
   function paintChart(M) {
@@ -945,14 +949,14 @@
     var sig = [W, yk, shown.length, M.chosen && M.chosen.id, shown.map(function (p) { return p.id + ":" + sizeOf(p) + ":" + (yk ? p.m[yk] : ""); }).join(",")].join("|");
     var sel = $("#rvY"), opts = (V.yKeys || []).join(",");
     if (sel.dataset.o !== opts) {
-      sel.dataset.o = opts; sel.innerHTML = (V.yKeys || []).map(function (k) { return '<option value="' + esc(k) + '">' + esc(label(k)) + "</option>"; }).join("");
+      sel.dataset.o = opts; sel.innerHTML = (V.yKeys || []).map(function (k) { return '<option value="' + esc(k) + '">' + esc(ylab(k, M)) + "</option>"; }).join("");
       sel.hidden = !(V.yKeys || []).length; $("#rvChH").textContent = sel.hidden ? "Designs by chip size" : "Designs: chip size against";
     }
     if (yk && sel.value !== yk) sel.value = yk;
     if (V.sig.chart === sig) return; V.sig.chart = sig;
     var dpr = devicePixelRatio || 1; cv.width = W * dpr; cv.height = H * dpr; cv.style.height = H + "px";
     var g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
-    var x0 = 54, x1 = W - 14, y0 = 12, y1 = H - 34;
+    var x0 = 54, x1 = W - 14, y0 = 18, y1 = H - 34;
     g.font = "500 11px Inter, system-ui, sans-serif"; g.fillStyle = "#4a5062"; g.strokeStyle = "rgba(0,0,0,.07)"; g.lineWidth = 1;
     if (!shown.length) {
       g.textAlign = "center"; g.fillText(M.n ? "No design has a size yet at this point in the run." : "Designs appear here as the run finds them.", (x0 + x1) / 2, (y0 + y1) / 2);
@@ -963,9 +967,13 @@
     var a = lx(xmin), b = lx(xmax); if (b - a < 1e-9) { a -= 1; b += 1; } var pad = (b - a) * 0.08; a -= pad; b += pad;
     var X = function (v) { return x0 + (lx(v) - a) / (b - a) * (x1 - x0); };
     var withY = yk ? shown.filter(function (p) { return p.m[yk] != null; }) : [];
-    var ys = withY.map(function (p) { return p.m[yk]; }), frac = yk && isFrac(yk, shown);
-    var c = ys.length ? Math.min.apply(null, ys) : 0, d = ys.length ? Math.max.apply(null, ys) : 1;
-    if (frac) { c = Math.max(0, Math.min(c, 1) - 0.05); d = Math.min(1.0, d + 0.03); }
+    var sc = yk === "fa_per_hour" ? F.FAU[F.faUnit(M.spec)] : 1; // rates are kept per hour, shown in the run's unit
+    var ys = withY.map(function (p) { return p.m[yk] * sc; }), frac = yk && isFrac(yk, shown);
+    // the target on this axis is drawn as the bar, so the range takes it in; little room is left beyond the points and the bar
+    var tg = yk ? (M.T || []).filter(function (t) { return t.metric === yk; })[0] : null, tv = tg && (frac || !F.metaOf(yk).frac) ? tg.value * sc : null;
+    var ext = tv != null ? ys.concat([tv]) : ys;
+    var c = ext.length ? Math.min.apply(null, ext) : 0, d = ext.length ? Math.max.apply(null, ext) : 1;
+    if (frac) { c = Math.max(0, Math.min(c, 1) - 0.02); d = Math.min(1.0, d + 0.02); } else if (ext.length) { var pd = (d - c) * 0.08; c = Math.max(0, c - pd); d += pd; }
     if (d - c < 1e-9) { c -= 0.5; d += 0.5; }
     var Y = function (v) { return y1 - (v - c) / (d - c) * (y1 - y0); };
     // axes
@@ -976,9 +984,15 @@
     var ticks = logx ? [1, 10, 100, 1000, 10000, 100000].filter(function (v) { return lx(v) >= a && lx(v) <= b; }) : niceTicks(a, b);
     ticks.forEach(function (v) { if (v <= 0 && logx) return; g.fillText(fmtN(v), X(v), y1 + 16); });
     g.fillText("Chip size, gates" + (logx ? " (log scale)" : ""), (x0 + x1) / 2, H - 4);
+    // the target on this axis, as the live view draws it: a dashed bar with its value
+    if (tv != null) {
+      var by = Y(tv); g.save(); g.strokeStyle = "#141a2e"; g.setLineDash([6, 4]); g.lineWidth = 1.5; g.beginPath(); g.moveTo(x0, by); g.lineTo(x1, by); g.stroke(); g.restore();
+      var bt = "Your bar: " + F.fmtT(tg, M.spec); g.font = "700 11.5px Inter, system-ui, sans-serif"; g.textAlign = "right"; var bw = g.measureText(bt).width, bly = by - 6 < y0 + 10 ? by + 16 : by - 6;
+      g.fillStyle = "rgb(255 255 255 / .88)"; g.fillRect(x1 - bw - 8, bly - 12, bw + 8, 15); g.fillStyle = "#141a2e"; g.fillText(bt, x1 - 4, bly); g.font = "500 11px Inter, system-ui, sans-serif";
+    }
     // points: solid where the size was measured, hollow where only estimated; the chosen chip ringed
     shown.forEach(function (p) {
-      var x = X(sizeOf(p)), y = yk && p.m[yk] != null ? Y(p.m[yk]) : yk ? y1 - 2 : (y0 + y1) / 2, est = p.gates == null, ch = M.chosen && M.chosen.id === p.id;
+      var x = X(sizeOf(p)), y = yk && p.m[yk] != null ? Y(p.m[yk] * sc) : yk ? y1 - 2 : (y0 + y1) / 2, est = p.gates == null, ch = M.chosen && M.chosen.id === p.id;
       g.beginPath(); g.arc(x, y, ch ? 5.5 : 4.5, 0, Math.PI * 2);
       if (est) { g.strokeStyle = "#6366f1"; g.lineWidth = 1.5; g.stroke(); } else { g.fillStyle = yk && p.m[yk] == null ? "#c3c8d4" : "#6366f1"; g.fill(); }
       if (ch) { g.beginPath(); g.arc(x, y, 9, 0, Math.PI * 2); g.strokeStyle = "#141a2e"; g.lineWidth = 2; g.stroke(); }
@@ -988,7 +1002,7 @@
     var noY = shown.length - withY.length;
     var nEst = shown.filter(function (p) { return p.gates == null; }).length;
     cv.dataset.est = String(nEst);
-    $("#rvLegend").innerHTML = '<span><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="4" fill="#6366f1"/></svg>Size measured by the chip lab</span>' + (nEst ? '<span data-est><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="3.5" fill="none" stroke="#6366f1" stroke-width="1.5"/></svg>Size estimated (' + nEst + ")</span>" : "") + '<span><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="5" fill="none" stroke="#141a2e" stroke-width="2"/></svg>Chosen chip</span>' + (noY && yk ? '<span><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="4" fill="#c3c8d4"/></svg>' + noY + " without " + esc(label(yk).toLowerCase()) + ", on the floor</span>" : "");
+    $("#rvLegend").innerHTML = '<span><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="4" fill="#6366f1"/></svg>Size measured by the chip lab</span>' + (nEst ? '<span data-est><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="3.5" fill="none" stroke="#6366f1" stroke-width="1.5"/></svg>Size estimated (' + nEst + ")</span>" : "") + '<span><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="5" fill="none" stroke="#141a2e" stroke-width="2"/></svg>Chosen chip</span>' + (tv != null ? '<span><svg viewBox="0 0 14 14"><path d="M0 7h14" stroke="#141a2e" stroke-width="1.6" stroke-dasharray="3 2.5"/></svg>Your bar</span>' : "") + (noY && yk ? '<span><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="4" fill="#c3c8d4"/></svg>' + noY + " without " + esc(ylab(yk, M).toLowerCase()) + ", on the floor</span>" : "");
   }
   function paintFiles(M) {
     var el = $("#rvFiles"); if (!el) return;
@@ -1006,7 +1020,10 @@
     var rec = V.rec, show = function (text, note) {
       var s = document.createElement("div"); s.className = "pb-scrim";
       s.innerHTML = '<div class="pb-dlg" role="dialog" aria-modal="true" aria-label="' + esc(path) + '" tabindex="-1" style="width:min(820px,100%)"><header><div style="flex:1"><h2 style="font-size:18px">' + esc(path.split("/").pop()) + '</h2><p>' + esc(path) + (note ? ". " + esc(note) : "") + '</p></div><button class="pb-b" data-x aria-label="Close">' + icon("x", false) + '</button></header><pre class="rv-pre"></pre></div>';
-      $(".rv-pre", s).textContent = text; document.body.appendChild(s); $(".pb-dlg", s).focus();
+      var pre = $(".rv-pre", s), box = document.createElement("div"); pre.parentNode.insertBefore(box, pre);
+      // an image shows as the image, a binary file is named: its bytes never show as text (../i1-fold.js)
+      if (F.fileView(box, path, text, c ? { base: c.base, token: c.token, id: rec.id } : null)) pre.remove(); else { box.remove(); pre.textContent = text; }
+      document.body.appendChild(s); $(".pb-dlg", s).focus();
       s.addEventListener("click", function (e) { if (e.target === s || e.target.closest("[data-x]")) s.remove(); });
       s.addEventListener("keydown", function (e) { if (e.key === "Escape") { e.stopPropagation(); s.remove(); } });
     };

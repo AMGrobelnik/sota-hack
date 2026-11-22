@@ -319,10 +319,11 @@
     var notes = [];
     if (srv === "stub") notes.push("This backend runs the scripted stub: no model was called" + (body.model ? "; " + mod.name + " is recorded as the choice." : "."));
     var btn = $('.gfa [data-a="run"]');
-    // an older backend runs only the agent it was started with; never send a model it cannot run
-    if (srv && srv !== "stub" && srv !== mod.agent && (D.run_agents || []).indexOf(mod.agent) < 0) {
+    // never send a model the backend cannot run: it runs only the agents its health answer lists
+    var no = window.ChipInModels.unavailableReason(mod, C.defaults);
+    if (no) {
       var g0 = $(".gfa");
-      if (g0) { var p0 = $(".lv-runerr", g0) || g0.appendChild(document.createElement("p")); p0.className = "lv-runerr"; p0.textContent = "The run did not start: this backend cannot run " + mod.name + ". Pick another model or update the backend."; }
+      if (g0) { var p0 = $(".lv-runerr", g0) || g0.appendChild(document.createElement("p")); p0.className = "lv-runerr"; p0.textContent = "The run did not start: this backend cannot run " + mod.name + " (" + no.charAt(0).toLowerCase() + no.slice(1) + "). Pick another model."; }
       return true;
     }
     if (btn) { btn.disabled = true; btn.dataset.lvTxt = btn.innerHTML; btn.textContent = "Starting the run…"; }
@@ -558,8 +559,8 @@
     if (!vf && (num(chipM.mismatches) != null || num(chipM.vectors_checked) != null)) vf = { mismatches: num(chipM.mismatches), vectors: num(chipM.vectors_checked), level: chipM.verification_level };
     if (vf || num(chipM.verification_level) != null) {
       var lvl = vf && vf.level != null ? vf.level : chipM.verification_level;
-      out.push('<div class="tile"><div class="tl">Circuit against its model</div><div class="tv">' + (vf && num(vf.mismatches) != null ? fmt(vf.mismatches) + "<small>mismatches</small>" : "level " + esc(lvl)) + '</div><div class="ts">' +
-        (vf && num(vf.vectors) != null ? fmt(vf.vectors) + " vectors" : "") + (lvl != null ? (vf && num(vf.vectors) != null ? ", " : "") + "level " + esc(lvl) : "") + (vf && vf.proved ? ", proved equal" : "") + "</div></div>");
+      out.push('<div class="tile"><div class="tl">Circuit against its model</div><div class="tv">' + (vf && num(vf.mismatches) != null ? fmt(vf.mismatches) + "<small>mismatches</small>" : esc(F.levelText(lvl))) + '</div><div class="ts">' +
+        (vf && num(vf.vectors) != null ? fmt(vf.vectors) + " vectors" : "") + (lvl != null ? (vf && num(vf.vectors) != null ? ", " : "") + esc(F.levelText(lvl)) : "") + (vf && vf.proved ? ", proved equal" : "") + "</div></div>");
     }
     if (!M.T.length && !s) return '<div class="tile empty lv-wide"><div class="tl">Results</div><div class="tv">–</div><div class="ts">' + (M.running ? "Tiles fill in when the run chooses a chip." : "This run chose no chip.") + "</div></div>";
     return out.join("") + (mark ? '<span style="position:absolute;right:12px;top:-9px">' + mark + "</span>" : "");
@@ -610,7 +611,7 @@
     if (num(c.negatives_total)) rows.push(["Negatives correct", fmt(c.negatives_correct || 0) + " of " + fmt(c.negatives_total)]);
     if (num(c.patients) || num(c.hours)) rows.push([d.basis === "validation" ? "Validation set" : d.basis === "test" ? "Held-out test set" : "Scored on", (num(c.patients) ? pl(c.patients, "patient") : "") + (num(c.hours) ? (num(c.patients) ? ", " : "") + (+c.hours.toFixed(2)) + " hours" : "")]);
     var vf = d.verified;
-    rows.push(["Circuit against its model", vf ? (num(vf.vectors) != null ? fmt(vf.vectors) + " vectors, " : "") + (num(vf.mismatches) != null ? fmt(vf.mismatches) + " mismatches" : "") + (vf.level != null ? ", level " + esc(vf.level) : "") + (vf.proved ? ", proved equal" : "") : "not checked yet"]);
+    rows.push(["Circuit against its model", vf ? (num(vf.vectors) != null ? fmt(vf.vectors) + " vectors, " : "") + (num(vf.mismatches) != null ? fmt(vf.mismatches) + " mismatches" : "") + (vf.level != null ? ", " + esc(F.levelText(vf.level)) : "") + (vf.proved ? ", proved equal" : "") : "not checked yet"]);
     var files = chipFiles(M, d.id);
     return "<h2>Design " + esc(d.id) + " " + (s ? '<span class="mk ' + (s.m ? "mea" : "no") + '">' + (s.m ? "size measured" : "size estimated") + "</span>" : "") + (isCh ? '<span class="pf ok">Chosen</span>' : "") + "</h2>" +
       '<p class="is">' + esc(d.data === "synthetic" ? "Scored on synthetic data" : /^public:/.test(d.data || "") ? "Scored on public data: " + d.data.slice(7) : d.data ? String(d.data) : "") + "</p>" + F.variantHTML(d) +
@@ -695,7 +696,19 @@
       var p = ring(M.chosen, 10.5, "#141a2e", 2.2);
       if (p) {
         var txt = "Chosen: " + fmt(sizeOf(M.chosen).g) + " gates"; g.font = font(700, 12); var tw2 = g.measureText(txt).width;
-        var lx = p.x - 16 - tw2, ly = p.y - 18; if (lx < x0 + 4) lx = p.x + 16; lx = Math.max(4, Math.min(lx, Wd - tw2 - 6)); if (ly < y0 + 8) ly = p.y + 28;
+        // the label goes where it covers no other design and stays inside the plot: above or beside the ring, left or right
+        var bxs = tgt ? [{ x: x1 - tw - 8, y: Y(tv) - 19, w: tw + 8, h: 15 }] : [];
+        var hits = function (lx, ly) {
+          var r = { x: lx - 4, y: ly - 14, w: tw2 + 8, h: 19 }, n = 0;
+          if (r.x < x0 || r.x + r.w > x1 + 4 || r.y < 2 || r.y + r.h > y1) n += 100;
+          pts.forEach(function (q) { if (q.d.id !== M.chosen.id && q.x > r.x - 7 && q.x < r.x + r.w + 7 && q.y > r.y - 7 && q.y < r.y + r.h + 7) n += 10; });
+          bxs.forEach(function (b) { if (r.x < b.x + b.w && r.x + r.w > b.x && r.y < b.y + b.h && r.y + r.h > b.y) n += 5; });
+          return n;
+        };
+        var cand = [[p.x - 16 - tw2, p.y - 18], [p.x + 16, p.y - 18], [p.x - 16 - tw2, p.y + 5], [p.x + 16, p.y + 5], [p.x - 16 - tw2, p.y + 28], [p.x + 16, p.y + 28], [p.x - tw2 / 2, p.y + 32], [p.x - tw2 / 2, p.y - 22]];
+        var bestC = cand[0], bestN = Infinity;
+        cand.forEach(function (c) { var n = hits(c[0], c[1]); if (n < bestN) { bestN = n; bestC = c; } });
+        var lx = Math.max(4, Math.min(bestC[0], Wd - tw2 - 6)), ly = bestC[1];
         g.fillStyle = "rgb(255 255 255 / .92)"; g.fillRect(lx - 4, ly - 14, tw2 + 8, 19); g.fillStyle = "#141a2e"; g.textAlign = "left"; g.fillText(txt, lx, ly);
       }
     }
@@ -852,8 +865,12 @@
     document.body.appendChild(drawerEl);
     $(".dh button", drawerEl).onclick = closeDrawer;
     $(".dh button", drawerEl).focus();
+    // an image shows as the image, a binary file is named: its bytes never show as text
+    var vo = { base: C.base, token: C.token, id: V.id };
+    if (F.fileView($("#lvDoc"), path, null, vo)) return;
     L.readFile(V.id, path).then(function (r) {
       var doc = $("#lvDoc"); if (!doc) return;
+      if (F.fileView(doc, path, r.text, vo)) return;
       var t = r.text, html;
       if (/\.md$/i.test(path)) html = '<div class="lv-md lv-doc">' + md(t) + "</div>";
       else if (/\.json$/i.test(path)) { try { html = "<pre>" + esc(JSON.stringify(JSON.parse(t), null, 2)) + "</pre>"; } catch (e) { html = "<pre>" + esc(t) + "</pre>"; } }
