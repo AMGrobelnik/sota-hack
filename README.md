@@ -23,20 +23,10 @@ sensitivity target.
 
 ## How it works
 
-```mermaid
-flowchart LR
-  brief["Brief, typed or spoken"] --> intake["Guided questions:<br/>5 fixed steps, then up to 3<br/>follow-ups from a small model"]
-  intake --> spec["Spec card:<br/>targets, sensors, data"]
-  spec --> orch["Orchestrator agent<br/>on the model picked for the run"]
-  orch --> stages["Seven stages,<br/>subagent batches on five"]
-  stages <--> lab["Chip lab:<br/>command-line tools"]
-  lab --> verify["Verification:<br/>simulation and proof"]
-  verify --> report["Report and chosen chip"]
-  stages -- events --> backend["Backend:<br/>run folder and event log"]
-  backend --> dash["Dashboard:<br/>live view, playback, summaries"]
-  dash -- "your messages steer the run" --> orch
-  helper["Chippy, the helper"] <--> dash
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/flow-system-dark.svg">
+  <img src="docs/img/flow-system-light.svg" width="880" alt="Top-to-bottom flow diagram of the whole system. A brief, typed or spoken, goes to guided questions (5 fixed steps, then up to 3 follow-ups from a small model), which produce a spec card of targets, sensors and data. The spec card goes to the orchestrator agent, on the model picked for the run, which runs the seven stages, with subagent batches on five. The stages work back and forth with the chip lab and its command-line tools. The chip lab leads to verification by simulation and proof, and then to the report and chosen chip. The stages also send events to the backend, which keeps the run folder and event log and feeds the dashboard: live view, playback, summaries. Your messages in the dashboard steer the run back at the orchestrator, and Chippy, the helper, works back and forth with the dashboard.">
+</picture>
 
 1. **Brief and guided questions.** You type or speak a brief. Five fixed
    steps follow: the device, who uses it and where, the targets, the
@@ -62,28 +52,10 @@ flowchart LR
    down to the full text. You can message the agent while it runs. Chippy,
    a separate helper, answers questions about the runs and moves the page.
 
-```mermaid
-flowchart TB
-  subgraph stages["The seven stages of a run"]
-    direction LR
-    s1["1 spec<br/>orchestrator"] --> s2["2 reference<br/>batch"]
-    s2 --> s3["3 propose<br/>batch"]
-    s3 --> s4["4 fine-tune<br/>batch"]
-    s4 --> s5["5 compile<br/>batch"]
-    s5 --> s6["6 verify<br/>batch"]
-    s6 --> s7["7 report<br/>orchestrator"]
-  end
-  stages -. "each batch stage" .-> one
-  subgraph one["Inside one batch stage"]
-    direction LR
-    plan["Orchestrator writes<br/>N strategies"] --> a1["subagent 1"]
-    plan --> a2["subagent 2"]
-    plan --> an["subagent N"]
-    a1 --> merge["Wait for all,<br/>merge on lab numbers"]
-    a2 --> merge
-    an --> merge
-  end
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/flow-stages-dark.svg">
+  <img src="docs/img/flow-stages-light.svg" width="880" alt="Left-to-right flow diagram of the seven stages of a run: 1 spec, by the orchestrator; 2 reference, 3 propose, 4 fine-tune, 5 compile and 6 verify, each a batch; 7 report, by the orchestrator. Below, each batch stage is opened up: the orchestrator writes N strategies, which fan out to subagent 1, subagent 2 and subagent N, and all of them join at one step that waits for all and merges on lab numbers.">
+</picture>
 
 | Stage     | What it produces                                 |
 | --------- | ------------------------------------------------ |
