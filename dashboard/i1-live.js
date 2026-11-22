@@ -85,7 +85,7 @@
 
   /* ---------- connection ---------- */
   // state: off (nothing set up), found (a backend on this origin, no token yet), checking, on, bad
-  var C = { state: "off", base: null, token: null, msg: "", defaults: null, same: false, v: 0 };
+  var C = { state: "off", kind: "", base: null, token: null, msg: "", defaults: null, same: false, v: 0 };
   var REASON = {
     unreachable: "No backend answers at this address. Start it, then test again.",
     "no-token": "The backend is running and needs its token.",
@@ -93,17 +93,20 @@
     "version-mismatch": "This backend speaks another version of the API.",
     unhealthy: "The backend answered but reported a problem."
   };
-  function bump() { C.v++; if (V && V.cfgMounted) paintConfigure(); }
+  function bump() { C.v++; try { if (window.ChipInConn) window.ChipInConn.set(C.state === "on" ? "" : C.kind); } catch (e) { /* banner only */ } if (V && V.cfgMounted) paintConfigure(); }
   function connect(base, token) {
     base = String(base || "").trim().replace(/\/+$/, "");
     if (!/^https?:\/\/[^\s/]+$/.test(base)) { C.state = "bad"; C.msg = "Enter the address as http://127.0.0.1:<port>."; bump(); return Promise.resolve({ ok: false }); }
+    var st = lsGet(K_CONN), stored = !!(st && st.base === base);
     C.state = "checking"; C.base = base; C.token = token || null; C.msg = ""; bump();
     return L.connect({ base: base, token: token || undefined }).then(function (r) {
       try { sessionStorage.removeItem("chipin.token:" + base); } catch (e) { /* the reader's tab copy; ours is in localStorage */ }
       if (r.ok) {
-        C.state = "on"; C.defaults = r.defaults || null; lsSet(K_CONN, { base: base, token: token });
+        C.state = "on"; C.kind = ""; C.defaults = r.defaults || null; lsSet(K_CONN, { base: base, token: token });
         syncList();
       } else {
+        // a stored backend that cannot be used: its link expired (token rejected) or it does not answer
+        C.kind = !stored ? "" : /^(bad-token|http-40[13])$/.test(r.reason) ? "expired" : r.reason === "unreachable" ? "unreachable" : "";
         C.state = r.reason === "no-token" && C.same ? "found" : "bad";
         C.msg = REASON[r.reason] || ("The backend could not be used (" + r.reason + ").");
         // an https page and an http loopback backend: the browser, not the backend, is the usual cause
@@ -132,17 +135,19 @@
     probing = true;
     var ac = typeof AbortController === "function" ? new AbortController() : null, tm = setTimeout(function () { if (ac) ac.abort(); }, 2500);
     fetch(C.base + "/api/health", { cache: "no-store", signal: ac ? ac.signal : undefined }).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); })
-      .then(function () { if (C.lost) { C.lost = false; if (C.state === "bad") connect(C.base, C.token); else bump(); } })
+      .then(function () { if (C.lost || C.kind === "unreachable") { C.lost = false; if (C.state === "bad") connect(C.base, C.token); else bump(); } })
       .catch(function () {
         var was = C.state + C.lost;
         if (!C.lost) { C.lost = true; C.lostAt = Date.now(); }
-        if (C.state === "on") { C.state = "bad"; C.msg = "The backend stopped answering. Runs resume when it is back."; }
+        if (C.state === "on") { C.state = "bad"; C.msg = "The backend stopped answering. Runs resume when it is back."; C.kind = "unreachable"; }
         if (was !== C.state + C.lost) bump();
       })
       .then(function () { clearTimeout(tm); probing = false; });
   }, 3000);
   function init() {
     var saved = lsGet(K_CONN);
+    // a stored backend is checked again whenever the tab comes back to the front
+    document.addEventListener("visibilitychange", function () { var s2 = lsGet(K_CONN); if (document.visibilityState === "visible" && s2 && s2.base && C.state !== "on" && C.state !== "checking") connect(s2.base, s2.token); });
     if (saved && saved.base) { C.same = loopback && saved.base === location.origin; connect(saved.base, saved.token); return; }
     if (loopback) {
       // served by the backend itself? Its health route needs no token.
@@ -1158,7 +1163,7 @@
       $("#lvTok", sec).value = tok || "";
       connect(b, tok);
     };
-    $("#lvForget", sec).onclick = function () { lsSet(K_CONN, null); C.state = "off"; C.token = null; C.msg = ""; C.base = C.same ? location.origin : null; if (C.same) C.state = "found"; paintConfigure(true); bump(); };
+    $("#lvForget", sec).onclick = function () { lsSet(K_CONN, null); C.state = "off"; C.kind = ""; C.token = null; C.msg = ""; C.base = C.same ? location.origin : null; if (C.same) C.state = "found"; paintConfigure(true); bump(); };
   }
   function liveOpen() { return !!(V && V.id && owns()); }
   function connChip() {
@@ -1172,15 +1177,17 @@
   var recHref = function (id, view) { return "#/rec/mac/" + encodeURIComponent(id) + "/" + (view === "chip" ? "chip" : view === "chat" ? "log" : "overview"); };
   function recents() {
     var cur = parse(), s = C.state, recId = (location.hash.match(/^#\/rec\/mac\/([^/?]+)/) || [])[1];
-    var txt = s === "on" ? "Connected to local backend" : s === "checking" ? "Checking the backend" : s === "found" ? "Backend found: add its token" : (liveOpen() || C.lost) && C.base ? "Not connected to the backend" : "Not connected to a backend";
+    var kt = s !== "on" && s !== "checking" && C.kind === "expired" ? "Backend link expired" : s !== "on" && s !== "checking" && C.kind === "unreachable" ? "Backend not reachable" : "";
+    var host = ""; try { host = C.base ? new URL(C.base).hostname : ""; } catch (e) { /* no host to show */ }
+    var txt = kt ? kt : s === "on" ? "Connected to local backend" : s === "checking" ? "Checking the backend" : s === "found" ? "Backend found: add its token" : (liveOpen() || C.lost) && C.base ? "Not connected to the backend" : "Not connected to a backend";
     var rows = shownRuns().slice(0, 8).map(function (r) {
       var g = r.status === "running" ? '<span class="spin"></span>' : r.status === "succeeded" ? I("check", "s12 ok") : r.status === "failed" ? I("x", "s12 lv-bad") : r.status === "stopped" ? I("minus", "s12") : "";
       var on = (cur && cur.id === r.id) || (recId && decodeURIComponent(recId) === r.id);
       return '<a class="rrow lv-rrow' + (on ? " on" : "") + '" href="' + (ended(r.status) ? recHref(r.id, cur && cur.view) : "#/live/" + encodeURIComponent(r.id) + "/" + (cur ? cur.view : "overview")) + '" title="' + esc(r.title + " (run " + r.id + ", " + r.status + ")") + '"><span class="g">' + g + '</span><span class="t">' + esc(r.title || r.id) + "</span></a>";
     }).join("");
-    return '<a class="lv-conn hc" href="#/configure" data-s="' + s + '" title="' + esc(C.msg || (C.base ? C.base : "Set up a backend under Configure")) + '"><i></i><span>' + esc(txt) + "</span></a>" + rows;
+    return '<a class="lv-conn hc" href="#/configure" data-s="' + s + '"' + (kt ? ' data-k="' + C.kind + '"' : "") + ' title="' + esc(kt ? kt + (host ? " (" + host + ")" : "") : C.msg || (C.base ? C.base : "Set up a backend under Configure")) + '"><i></i><span>' + esc(txt) + "</span></a>" + rows;
   }
-  function sig() { var cur = parse(); return C.state + "|" + (cur ? cur.id + cur.view : "") + "|" + shownRuns().map(function (r) { return r.id + r.status + r.title; }).join(","); }
+  function sig() { var cur = parse(); return C.state + C.kind + "|" + (cur ? cur.id + cur.view : "") + "|" + shownRuns().map(function (r) { return r.id + r.status + r.title; }).join(","); }
 
   /* ---------- the "Your spec" card: say where Run goes ---------- */
   function specNote() {
@@ -1198,7 +1205,7 @@
     ".lv-conn{display:flex;align-items:center;gap:7px;margin:0 10px 6px;padding:5px 9px;border-radius:7px;font-size:11.5px;color:var(--i600);text-decoration:none;background:var(--i100);line-height:1.3}",
     ".lv-conn:hover{color:var(--i900)}.lv-conn i,.lv-cs i,.lv-runnote i{width:7px;height:7px;border-radius:50%;background:#9aa0ae;flex:none}",
     ".lv-conn[data-s=on] i,.lv-cs[data-s=on] i,.lv-runnote[data-s=on] i{background:#15803d}.lv-conn[data-s=on]{background:#eef8f2;color:#0b5a3f}",
-    ".lv-conn[data-s=checking] i,.lv-cs[data-s=checking] i{background:#b45309}.lv-conn[data-s=found] i,.lv-cs[data-s=found] i{background:var(--blue7)}",
+    ".lv-conn[data-k]{background:#fdf3e3;color:#7a4208}.lv-conn[data-k] i{background:#b45309}.lv-conn[data-s=checking] i,.lv-cs[data-s=checking] i{background:#b45309}.lv-conn[data-s=found] i,.lv-cs[data-s=found] i{background:var(--blue7)}",
     ".lv-rrow .lv-bad,.lv-bad{color:var(--missed)}.lv-ok{color:var(--okt)}",
     ".mk.lv-live{color:#1e3a8a;background:#e8eefc}",
     ".spill.lv-run{display:inline-flex;align-items:center;gap:6px;background:#eef3fe;color:var(--blue7);box-shadow:inset 0 0 0 1px #d6e1fb}.spill.lv-fail{background:var(--badbg);color:#9f2a20;box-shadow:inset 0 0 0 1px #f3c9c3}",
