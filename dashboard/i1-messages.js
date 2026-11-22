@@ -324,7 +324,7 @@
     root.addEventListener("keydown", function (e) {
       var b = e.target.closest && e.target.closest(".cm-row");
       if (!b || !root.contains(b)) return;
-      var rows = Array.prototype.slice.call(root.querySelectorAll(".cm-list .cm-row")).filter(function (x) { return x.offsetParent !== null; });
+      var rows = Array.prototype.slice.call(root.querySelectorAll(".cm-list .cm-row")).filter(function (x) { return x.offsetParent !== null && x.tabIndex >= 0 && !x.disabled; }); // focusable rows only: a skipped stage or merged row is a plain div
       var i = rows.indexOf(b), go = null;
       if (e.key === "ArrowDown") go = rows[i + 1];
       else if (e.key === "ArrowUp") go = rows[i - 1];
