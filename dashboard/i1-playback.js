@@ -889,7 +889,7 @@
         ["designs", "Designs so far", M.pts.length ? fmtN(M.pts.length) : "–", M.pts.filter(function (p) { return p.gates != null; }).length + " compiled to gates"],
         ["chosen", "Chosen chip", ch ? '<span class="rv-chip" title="' + esc(ch.id) + '">' + esc(ch.id) + "</span>" : "–", ch ? (sizeOf(ch) != null ? (ch.gates == null ? "about " : "") + fmtN(sizeOf(ch)) + " gates" + (ch.gates == null ? ", estimated" : "") : "size not reported") + (yk && ch.m[yk] != null ? ", " + label(yk).toLowerCase() + " " + fmtM(yk, ch.m[yk], M.pts) + basis : "") + missTxt : "not chosen yet"],
         ["tools", "Tool calls", fmtN(st.toolN), fmtN(st.messages) + " messages, " + fmtN(st.artifacts.length) + " files"],
-        ["cost", "Total cost", costTxt, co ? fmtN((co.tokens_in || 0) + (co.tokens_out || 0)) + " tokens" : "reported at the end", csm ? "Agent " + co.usd.toFixed(2) + ", summaries " + csm.toFixed(2) : ""]
+        ["cost", "Cost", costTxt, co ? fmtN((co.tokens_in || 0) + (co.tokens_out || 0)) + " tokens" : "reported at the end", csm ? "Agent " + co.usd.toFixed(2) + ", summaries " + csm.toFixed(2) : ""]
       ];
       $("#rvTiles").innerHTML = tiles.map(function (x) {
         return '<div class="tile' + (x[2] === "–" ? " empty" : "") + '" data-k="' + x[0] + '"' + (x[4] ? ' title="' + esc(x[4]) + '"' : "") + '><div class="tl">' + x[1] + '</div><div class="tv">' + x[2] + '</div><div class="ts">' + x[3] + "</div></div>";
