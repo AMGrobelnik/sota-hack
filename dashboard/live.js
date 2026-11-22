@@ -133,7 +133,10 @@
     conn.base = base;
     conn.token = tok || null;
 
-    return fetch(base + "/api/health", { cache: "no-store" }).then(function (res) {
+    // a stored host that never answers counts as unreachable after 4 s, so the page falls back instead of waiting
+    var ac = typeof AbortController === "function" ? new AbortController() : null;
+    if (ac) setTimeout(function () { ac.abort(); }, 4000);
+    return fetch(base + "/api/health", { cache: "no-store", signal: ac ? ac.signal : undefined }).then(function (res) {
       if (!res.ok) throw new Error("health HTTP " + res.status);
       return res.json();
     }).then(function (health) {

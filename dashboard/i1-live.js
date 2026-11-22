@@ -445,6 +445,8 @@
     document.body.classList.add("inrun");
     var main = $("#main"); if (!main) return false;
     var known = findRun(r.id);
+    // a run the backend lists as ended opens straight in the replay, without replaying its stream here first
+    if (known && ended(known.status) && !W[r.id] && window.ChipInPlayback) { location.replace(location.pathname + location.search + recHref(r.id, r.view)); return true; }
     if (C.state !== "on" && !W[r.id]) {
       main.innerHTML = '<div class="body"><div class="vis lv-empty"><div class="vh"><h2>This run lives on a backend that is not connected</h2><p class="vs">' +
         esc(C.state === "checking" ? "Connecting to the backend…" : C.msg || "Connect a backend under Configure, then open the run again.") + '</p></div><p><a class="qbtn" href="#/configure">Open Configure</a></p></div></div>';
@@ -1205,7 +1207,8 @@
 
   /* ---------- sidebar: the chip and the backend's runs, under Recents ---------- */
   // a finished run is replayed by ../i1-playback.js (#/rec/mac/<id>), with the playback bar; only a running one opens here
-  var ended = function (s) { return s === "succeeded" || s === "failed" || s === "stopped"; };
+  // any final state (interrupted or cancelled by a backend restart included) opens the replay with its bar
+  var ended = function (s) { return !!s && !/^(running|queued|starting|pending|connecting)$/.test(s); };
   var recHref = function (id, view) { return "#/rec/mac/" + encodeURIComponent(id) + "/" + (view === "chip" ? "chip" : view === "chat" ? "log" : "overview"); };
   function recents() {
     var cur = parse(), s = C.state, recId = (location.hash.match(/^#\/rec\/mac\/([^/?]+)/) || [])[1];

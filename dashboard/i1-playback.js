@@ -473,7 +473,9 @@
   function conn() {
     var L = window.ChipInLive, base = null, token = null;
     try { if (L && L.base && L.token) { base = L.base; token = L.token; } } catch (e) { /* older reader */ }
-    if (!token) { try { var s = JSON.parse(localStorage.getItem(K_CONN) || "null"); if (s && s.base && s.token) { base = s.base; token = s.token; } } catch (e) { /* storage off */ } }
+    // on the i1 page its connection decides: a stored link it has not proven (an old token or host) is never asked
+    var managed = !!(L && L.i1 && L.i1.connection);
+    if (!token && !managed) { try { var s = JSON.parse(localStorage.getItem(K_CONN) || "null"); if (s && s.base && s.token) { base = s.base; token = s.token; } } catch (e) { /* storage off */ } }
     if (!token) {
       var api = null; try { api = new URLSearchParams(location.search).get("api"); } catch (e) { /* none */ }
       var loop = /^https?:$/.test(location.protocol) && /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
@@ -494,10 +496,12 @@
   function api(path) {
     var c = conn();
     if (!c) return Promise.reject(new Error("no backend"));
-    return fetch(c.base + path, { headers: { "X-ChipIn-Token": c.token }, cache: "no-store" }).then(function (r) {
+    // a backend that does not answer gives up after 20 s instead of leaving the page on its loading line
+    var ac = typeof AbortController === "function" ? new AbortController() : null, tm = ac ? setTimeout(function () { ac.abort(); }, 20000) : 0;
+    return fetch(c.base + path, { headers: { "X-ChipIn-Token": c.token }, cache: "no-store", signal: ac ? ac.signal : undefined }).then(function (r) {
       if (!r.ok) throw new Error("HTTP " + r.status);
       return r.json();
-    });
+    }).then(function (j) { clearTimeout(tm); return j; }, function (e) { clearTimeout(tm); throw ac && ac.signal.aborted ? new Error("no answer in 20 s") : e; });
   }
   var siteBase = function () { return new URL("../data/runs/", location.href).href; };
   function loadLists() {
