@@ -96,18 +96,23 @@
   }
 
   /* ---------- 1. targets ---------- */
-  function targetsLine(m, rec, T, mark) {
-    var Fd = F(), noFA = Fd.screenOnly(m.spec, T), figs = figures(m.f, m.id, rec), miss = [], pass = [];
+  // the verdict per target on every data basis; the card and ../i1-hoverstrip.js's strip both read it
+  function judge(m, rec, T) {
+    var Fd = F(), noFA = Fd.screenOnly(m.spec, T), figs = figures(m.f, m.id, rec), miss = [], pass = [], missT = [];
     T.forEach(function (t) {
       if (noFA && t.metric === "fa_per_hour") return;
       var list = figs.filter(function (x) { return x.base === t.metric; });
       if (!list.length) return;
       var name = Fd.metaOf(t.metric).n, txt = function (x) { return Fd.fmtV(t.metric, x.v, m.spec) + " " + BASIS(x.b); };
       var bad = list.filter(function (x) { return Fd.meets(t, x.v) === false; }), good = list.filter(function (x) { return Fd.meets(t, x.v) === true; });
-      if (bad.length) miss.push(name + " " + bad.map(txt).join(" and ") + ", against " + Fd.fmtT(t, m.spec));
+      if (bad.length) { miss.push(name + " " + bad.map(txt).join(" and ") + ", against " + Fd.fmtT(t, m.spec)); missT.push({ name: name, figs: bad.map(txt).join(" and "), target: Fd.fmtT(t, m.spec) }); }
       if (good.length) pass.push(name + " " + good.map(txt).join(" and ") + ", target " + Fd.fmtT(t, m.spec));
     });
     var unjudged = T.filter(function (t) { return !(noFA && t.metric === "fa_per_hour") && !figs.some(function (x) { return x.base === t.metric; }); }).map(function (t) { return lc(Fd.metaOf(t.metric).n); });
+    return { miss: miss, pass: pass, missT: missT, unjudged: unjudged };
+  }
+  function targetsLine(m, rec, T, mark) {
+    var j = judge(m, rec, T), miss = j.miss, pass = j.pass, unjudged = j.unjudged;
     if (!miss.length && !pass.length) return "";
     var tag = mark ? " " + mark : "";
     if (miss.length) return '<p class="wc-r miss"><b>It misses ' + (miss.length === 1 ? "a target" : miss.length + " target figures") + ":</b> " + esc(miss.join("; ")) + "." +
@@ -298,5 +303,5 @@
       return "";
     }
   }
-  window.ChipInWhyChip = { html: html };
+  window.ChipInWhyChip = { html: html, kindOf: kindOf, chansOf: chansOf, power: power, cost: cost, gatesOf: gatesOf, verOK: verOK, judge: judge }; // the parts are reused by ../i1-hoverstrip.js
 })();
