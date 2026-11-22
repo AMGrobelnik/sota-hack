@@ -43,6 +43,7 @@ from chipin_backend.llm.presets import expand_preset
 from chipin_backend.llm.providers import ProviderError, resolve_provider
 from chipin_backend.orchestrate import run_agent
 from chipin_backend.runs import JsonlEventSink, RunDir, is_safe_run_id, new_run_id
+from chipin_backend.training import train_available, training_instructions
 
 API_RECORD_FILE = "api.json"
 RAW_EVENTS_FILE = "agent_events.jsonl"
@@ -377,8 +378,10 @@ class RunManager:
 
 
 def standing_instructions(source: Mapping[str, str] | None = None) -> str:
-    """The agent's standing instructions, plus the chip-lab paragraph when an agent can reach the lab."""
+    """The agent's standing instructions, plus the training and chip-lab paragraphs when each is on."""
     text = INSTRUCTIONS_PATH.read_text(encoding="utf-8")
+    if train_available(source):
+        text = f"{text.rstrip()}\n\n{training_instructions()}"
     if chiplab_available(source):
         text = f"{text.rstrip()}\n\n{chiplab_instructions()}"
     return text
