@@ -2,8 +2,8 @@
  * i1-regulation.js: the Regulation panel of the ChipIn i1 dashboard, beside Why this size. Defines window.ChipInRegulation.
  *
  * Two short groups of entries, each from a cited public source: what starts to apply as the battery grows, and what
- * differs between a smaller and a larger chip. Each entry shows its title and to check tag; its rule, why it matters and the source
- * open on expand. Every entry is a point to check with a regulatory specialist; none carries a verdict.
+ * differs between a smaller and a larger chip. Each entry shows its title, its check status, the checked statement and a short
+ * source link; the full rule, why it matters and every source open on expand. None carries a verdict.
  * Above them, the battery class for this chip and the bigger sizes Why this size shows (ChipInWhySize.biggerOf),
  * each from ChipInModels.deviceBudget and batteryClass, the same as Why this size.
  * tick(el, run, v, P, ctx): the same arguments as ChipInWhySize.tick, without the cost drawer.
@@ -36,6 +36,9 @@
     ".rg-e>div a{color:var(--blue7);font-weight:600}",
     ".rg-st{font-size:10.5px;font-weight:600;border-radius:99px;padding:1px 7px;white-space:nowrap;justify-self:end}",
     ".rg-st.chk{color:var(--i600);background:var(--i100)}",
+    ".rg-st.ok{color:#047857;background:#ecfdf5}.rg-st.part{color:#b45309;background:#fffbeb}.rg-st.con{color:#b91c1c;background:#fef2f2}",
+    ".rg-say{grid-column:1/-1;font-size:12px;color:var(--i700);line-height:1.4;padding-left:12px}",
+    ".rg-say a{color:var(--blue7);font-weight:600;white-space:nowrap}",
     ".rg-f{font-size:11.5px;color:var(--i600);margin:8px 0 0;border-top:1px solid var(--hair);padding-top:6px}",
     "@media (max-width:900px){.rg-g{grid-template-columns:1fr}.rg-grp+.rg-grp{margin-top:10px}}",
     "@media (max-width:767px){.ov #regPanel{order:8}.rg{padding:12px 14px 8px}.rg-bat span.b.mid{display:none}}",
@@ -50,38 +53,46 @@
   var SHORT = { "primary coin cell": "coin cell", "rechargeable lithium": "rechargeable", "larger pack or mains": "larger pack" };
   var DOT = { "primary coin cell": "#047857", "rechargeable lithium": "#b45309", "larger pack or mains": "#b91c1c" };
 
-  /* The entries: wording and thresholds as in the cited sources. */
+  /* The entries, as checked on 22 Nov 2026 against the linked sources. st: checked, partly checked, contested or to check.
+   * say: the checked statement shown on the row; cite: the short source link on the row; rule and why open on expand. */
   var BATTERY = [
-    { id: "air", title: "US air limits for lithium batteries",
-      rule: "Lighter shipping rules up to 20 Wh per lithium-ion cell (100 Wh per battery) or 1 g lithium per lithium-metal cell (2 g per battery); above that, full dangerous-goods rules. Every cell or battery type needs UN 38.3 testing.",
-      why: "A larger battery is more likely to pass the Wh or lithium limit, bringing stricter shipping and handling; a new or larger cell is a new type and needs its own UN 38.3 evidence.",
-      src: [["49 CFR 173.185, US DOT PHMSA (Cornell LII copy)", "https://www.law.cornell.edu/cfr/text/49/173.185"]] },
-    { id: "iec62133", title: "Rechargeable lithium cell safety standard",
-      rule: "IEC 62133-2 sets safety requirements and tests for portable sealed rechargeable lithium cells and batteries, with no size threshold.",
-      why: "A design that moves to a larger rechargeable lithium cell would likely need that cell to show it meets this standard.",
-      src: [["IEC 62133-2:2017 with Amendment 1 (2021), IEC", "https://webstore.iec.ch/en/publication/32662"]] },
-    { id: "skin", title: "Skin contact over 30 days",
-      rule: "For devices on intact skin, naming the colour additive is enough for up to 30 days of contact; longer contact counts as long-term and needs more information, including a toxicological risk assessment.",
-      why: "A larger battery that allows longer wear could push a patch past 30 days of contact, which brings more biocompatibility information.",
-      src: [["FDA CDRH webinar transcript on the ISO 10993-1 final guidance, 12 Oct 2023", "https://www.fda.gov/media/173290/download"]] },
-    { id: "emc", title: "EMC testing in each power mode",
-      rule: "FDA recommends testing a device that runs on battery and on mains in both modes; user-handled smart batteries are removed and tested separately for ESD immunity.",
-      why: "A larger-battery design with a smart cell or extra power modes may add EMC test setups.",
-      src: [["Electromagnetic Compatibility (EMC) of Medical Devices, FDA guidance, 6 June 2022", "https://www.fda.gov/media/94758/download"]] },
+    { id: "air", st: "checked", title: "US air limits for lithium batteries",
+      say: "Small-cell exceptions cap lithium-ion at 20 Wh per cell, 100 Wh per battery.", cite: "49 CFR 173.185",
+      rule: "Small-cell exceptions cap lithium-ion at 20 Wh per cell and 100 Wh per battery; lithium-metal limits are by grams of lithium per cell and have changed between editions. The exceptions have conditions. Coin cells are lithium cells: they are not exempt from lithium rules. Checked in outline: read the current eCFR text before quoting thresholds.",
+      why: "A larger battery is more likely to pass these limits. A coin cell does not avoid lithium transport rules.",
+      src: [["49 CFR 173.185, eCFR (current text)", "https://www.ecfr.gov/current/title-49/subtitle-B/chapter-I/subchapter-C/part-173/subpart-E/section-173.185"], ["49 CFR 173.185, Cornell LII copy", "https://www.law.cornell.edu/cfr/text/49/173.185"]] },
+    { id: "iec62133", st: "checked", title: "Lithium cell safety standard",
+      say: "Rechargeable lithium: IEC 62133-2. Primary lithium, such as a coin cell: IEC 60086-4.", cite: "IEC 62133 / IEC 60086-4",
+      rule: "Devices to IEC 60601-1 with rechargeable lithium batteries are expected to meet IEC 62133(-2); non-rechargeable lithium batteries, IEC 60086-4. Checked against test-house and standards-body summaries, not the standard text.",
+      why: "Moving from a coin cell to a rechargeable changes the cell standard and adds charging, reuse and reprocessing to the design.",
+      src: [["Battery testing for medical devices, Intertek (test house)", "https://intertek.com/medical/electrical-testing/battery-testing"], ["UL 62133 family of standards, UL Solutions (test house)", "https://www.ul.com/news/ul-62133-family-standards-batteries"]] },
+    { id: "skin", st: "checked", title: "Skin contact over 30 days",
+      say: "Over 30 days on skin is long-term contact under ISO 10993-1.", cite: "ISO 10993-1, FDA",
+      rule: "ISO 10993-1 durations: limited up to 24 h cumulative, prolonged over 24 h up to 30 days, long-term over 30 days. For intact skin FDA lists cytotoxicity, sensitisation and irritation. A revision changes how cumulative exposure is counted.",
+      why: "A larger battery that allows longer wear could push a patch past 30 days of contact.",
+      src: [["Biocompatibility endpoints by contact duration, FDA", "https://www.fda.gov/medical-devices/biocompatibility-assessment-resource-center/biocompatibility-evaluation-endpoints-contact-duration-periods"]] },
+    { id: "emc", st: "partly checked", title: "EMC testing in each power mode",
+      say: "The EMC test plan must cover charging if the device is used while charging (to confirm with the lab).", cite: "IEC 60601-1-2",
+      rule: "IEC 60601-1-2 (4th ed.) requires an EMC risk assessment covering intended operating conditions; its Annex G lists what a test plan should cover. Test houses recommend testing charging modes. No normative wording that it must be tested while charging was found.",
+      why: "A rechargeable design used while charging may add an EMC test setup.",
+      src: [["IEC 60601 overview, UL (test house)", "https://ul.com/resources/iec-60601-international-product-safety-standards-medical-devices"], ["Medical device EMC testing beyond the standard, Intertek (test house)", "https://www.intertek.com/blog/2026/09-18-going-beyond-medical-device-emc-testing/"]] },
   ];
   var CHIP = [
-    { id: "eu", title: "EU battery removability, wearable exemption",
-      rule: "Portable batteries must be user-replaceable; some wearables too small to swap safely, or relying on a compact sealed enclosure, may allow removal by independent professionals only. Applies from 18 February 2027.",
-      why: "A small sealed patch may qualify for this exemption, while a larger patch with an easy-to-reach cell may have to let users replace the battery.",
-      src: [["Delegated Regulation amending Regulation (EU) 2023/1542, Council document ST 12056/2026", "https://data.consilium.europa.eu/doc/document/ST-12056-2026-INIT/en/pdf"], ["Dates as reported by UL", "https://www.ul.com/news/eu-expands-portable-battery-removability-derogations"]] },
-    { id: "cyber", title: "Cyber device definition, firmware versus logic",
-      rule: "A cyber device has sponsor-authorised software, can connect to the internet and could be vulnerable to cybersecurity threats; FDA counts firmware and programmable logic as software.",
-      why: "A chip with fixed logic and no internet link may face fewer cybersecurity duties than one with updatable firmware, but the guidance does not exempt it.",
-      src: [["21 USC 360n-2 (FD&C Act section 524B), Cornell LII", "https://www.law.cornell.edu/uscode/text/21/360n-2"], ["Cybersecurity in Medical Devices, FDA guidance, 3 Feb 2026", "https://www.fda.gov/media/119933/download"]] },
-    { id: "iec62304", title: "Medical device software life cycle",
-      rule: "IEC 62304 applies to developing and maintaining medical device software, whether it is the device or embedded in it.",
-      why: "A design that runs embedded or updatable firmware is in scope; neither source says a design with no software is out of scope.",
-      src: [["IEC 62304:2006 plus Amendment 1 (2015), IEC", "https://webstore.iec.ch/publication/6792"]] },
+    { id: "eu", st: "checked", title: "EU battery removability",
+      say: "Not a wearable exemption: partial, listed derogations only (Battery Regulation 2023/1542 Art. 11, Delegated Regulation 2026/1770); check whether your device qualifies.", cite: "Delegated Reg. 2026/1770",
+      rule: "From 18 February 2027 portable batteries must be removable and replaceable (Battery Regulation 2023/1542 Art. 11). Medical device derogations are partial and listed, not a general wearable exemption; Delegated Regulation 2026/1770 replaced Art. 11(2), allowing replacement by independent professionals for listed products. Check whether your device qualifies.",
+      why: "A small sealed patch is not exempt for being a wearable; whether users must be able to replace its battery depends on the listed derogations.",
+      src: [["Delegated Regulation (EU) 2026/1770, EUR-Lex", "https://eur-lex.europa.eu/eli/reg_del/2026/1770/oj"], ["Commission guidelines on Art. 11 removability, C/2025/214, EUR-Lex", "https://eur-lex.europa.eu/eli/C/2025/214/oj/eng"], ["Removability guidance summary, Cooley (law firm)", "https://products.cooley.com/2025/02/13/european-commission-publishes-guidance-on-eu-batteries-regulation-removability-requirements/"]] },
+    { id: "cyber", st: "checked", title: "Cyber device definition, firmware versus logic",
+      say: "A cyber device has sponsor software, can connect to the internet and could be vulnerable.", cite: "FD&C Act s.524B",
+      rule: "FD&C Act s.524B: a cyber device (1) includes software validated, installed or authorised by the sponsor, (2) can connect to the internet, (3) could be vulnerable to cybersecurity threats. FDA reads it broadly; final guidance updates June 2025.",
+      why: "A hard-wired detector with no sponsor software and no internet link may fall outside; any radio or app connection likely brings it back in.",
+      src: [["Cybersecurity FAQs (s.524B), FDA", "https://www.fda.gov/medical-devices/digital-health-center-excellence/cybersecurity-medical-devices-frequently-asked-questions-faqs"], ["Cybersecurity guidance notice, Federal Register, 27 June 2025", "https://www.govinfo.gov/content/pkg/FR-2025-06-27/html/2025-11669.htm"]] },
+    { id: "iec62304", st: "contested", title: "Medical device software life cycle",
+      say: "Contested: Team-NB treats HDL as a tool, others say in scope; confirm with your notified body.", cite: "IEC 62304, Team-NB FAQ",
+      rule: "Whether IEC 62304 covers hard-wired logic is contested: the Team-NB FAQ treats HDL used to produce an FPGA as a tool, not a software item; the Johner Institute (consultancy) argues FPGA programming is in scope.",
+      why: "A chip with hard-wired logic may or may not fall under IEC 62304; confirm with your notified body.",
+      src: [["EN 62304 FAQ, Team-NB", "https://www.team-nb.org//wp-content/uploads/2015/05/FAQ_62304_Final_130804.pdf"], ["FPGA under IEC 62304, Johner Institute (consultancy)", "https://www.johner-institut.de/blog/wp-json/wp/v2/posts/13202"]] },
   ];
 
   function final(run, v, P) {
@@ -103,9 +114,13 @@
     return r.estSize ? '<span class="est" title="' + esc(P.sizeTip ? P.sizeTip() : M().describeEstimate("area")) + '">about ' + esc(P.about(r.d.gates)) + "</span>" : esc(P.fmt(r.d.gates));
   }
 
+  var ST = { "checked": ["ok", "Checked against the linked sources, 22 Nov 2026"], "partly checked": ["part", "Partly confirmed by the linked sources"],
+    "contested": ["con", "Sources disagree"], "to check": ["chk", "Not yet checked: to check with a regulatory specialist"] };
+  function link(x, txt) { return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(txt) + "</a>"; }
   function entryHTML(e) {
-    var src = e.src.map(function (x) { return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + "</a>"; }).join(" · ");
-    return '<details class="rg-e"><summary title="' + esc(e.rule) + '"><b>' + esc(e.title) + '</b><span class="rg-st chk" title="To check with a regulatory specialist">to check</span>' +
+    var src = e.src.map(function (x) { return link(x, x[0]); }).join(" · "), st = ST[e.st] || ST["to check"];
+    return '<details class="rg-e"><summary><b>' + esc(e.title) + '</b><span class="rg-st ' + st[0] + '" title="' + esc(st[1]) + '">' + esc(e.st) + "</span>" +
+      '<span class="rg-say">' + esc(e.say) + " " + link(e.src[0], e.cite) + "</span>" +
       "</summary><div>" + '<p class="r">' + esc(e.rule) + "</p>" +
       '<p class="w"><b>Why it matters here:</b> ' + esc(e.why) + "</p>" +
       "<p>Source: " + src + "</p></div></details>";
@@ -121,7 +136,7 @@
     var grp = function (name, c, list) { return '<div class="rg-grp" style="--rg-c:' + c + '"><h3>' + name + "</h3>" + list.map(entryHTML).join("") + "</div>"; };
     return '<div class="rg-h"><h2>Regulation</h2></div>' + (B ? stripHTML(P, B) : "") +
       '<div class="rg-g">' + grp("A larger battery", "#b45309", BATTERY) + grp("Smaller chip against larger chip", "#1d4ed8", CHIP) + "</div>" +
-      '<p class="rg-f">General information from the cited sources, not regulatory advice: check every point with a regulatory specialist.</p>';
+      '<p class="rg-f">Checked on 22 Nov 2026 against the linked sources. General information, not regulatory advice: check every point with a regulatory specialist.</p>';
   }
 
   function tick(el, run, v, P, ctx) {
