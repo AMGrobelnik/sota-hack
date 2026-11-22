@@ -8,6 +8,7 @@ from pathlib import Path
 
 from chiplab.config import oss_bin
 from chiplab.hw.yosys import SIMPLE_GATES, run
+from chiplab.hw.yosys import kill_group as _kill_group  # noqa: F401  (rtlsim imports it from here)
 
 
 def synth_seq_netlist(rtl_files: list[Path], top: str, workdir: Path, timeout: int = 900, blackbox: list[str] | None = None) -> Path:
@@ -24,10 +25,11 @@ def synth_seq_netlist(rtl_files: list[Path], top: str, workdir: Path, timeout: i
 
 def prove_sequential(rtl_files: list[Path], top: str, workdir: Path, gate_verilog: Path | None = None,
                      depth: int = 8, timeout: int = 900, blackbox: list[str] | None = None,
-                     blackbox_sources: list[Path] | None = None) -> dict:
+                     blackbox_sources: list[Path] | None = None, nomatch: list[str] | None = None) -> dict:
     """blackbox: modules treated as uninterpreted on both sides (e.g. the combinational core, which is proven
     separately by the combinational equivalence check). This keeps eqy's job to the clocked wrapper, whose size
-    does not grow with the model, so the proof stays fast for large chips (compositional proof)."""
+    does not grow with the model, so the proof stays fast for large chips (compositional proof).
+    nomatch: gold net names eqy must not use as cut points (combinational wires; registers stay matched)."""
     t0 = time.time()
     wd = Path(workdir); wd.mkdir(parents=True, exist_ok=True)
     gate = Path(gate_verilog) if gate_verilog else synth_seq_netlist(rtl_files, top, wd, timeout, blackbox)
@@ -35,6 +37,7 @@ def prove_sequential(rtl_files: list[Path], top: str, workdir: Path, gate_verilo
     bb = "".join(f"blackbox {m}\n" for m in (blackbox or []))
     # the written gate netlist omits black-boxed module definitions: declare them from their own source (ports only)
     gate_reads = f"read_verilog {gate.resolve()}\n" + "".join(f"read_verilog -lib {Path(f).resolve()}\n" for f in (blackbox_sources or []))
+    match = "".join(["\n[match *]\n"] + [f"gold-nomatch {n}\n" for n in nomatch]) if nomatch else ""
     (wd / "chip.eqy").write_text(f"""[gold]
 {gold_reads}
 {bb}prep -top {top}
@@ -45,20 +48,23 @@ flatten
 {gate_reads}{bb}prep -top {top}
 
 [collect *]
-
+{match}
 [strategy sby]
 use sby
 depth {depth}
 engine smtbmc yices
 """)
     out = wd / "eqy_out"
+    # own process group, killed whole on timeout: eqy's sby/yosys/solver children must not outlive the cap
+    p = subprocess.Popen([oss_bin("eqy"), "-f", "chip.eqy", "-d", str(out), "-j", "4"], cwd=wd,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
     try:
-        p = subprocess.run([oss_bin("eqy"), "-f", "chip.eqy", "-d", str(out), "-j", "4"], cwd=wd,
-                           capture_output=True, text=True, timeout=timeout)
+        stdout, stderr = p.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
+        _kill_group(p)
         return {"proved": None, "method": "eqy", "error": f"timed out after {timeout}s", "seconds": round(time.time() - t0, 1),
                 "blackboxed": blackbox or []}
-    log = p.stdout + p.stderr
+    log = stdout + stderr
     (wd / "eqy.log").write_text(log)
     proved = p.returncode == 0 and "Successfully proved designs equivalent" in log
     failed = "Failed to prove equivalence" in log or "FAIL" in log

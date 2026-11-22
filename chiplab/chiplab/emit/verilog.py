@@ -19,6 +19,7 @@ VERILOG_KEYWORDS = {
     "function", "if", "initial", "inout", "input", "integer", "module", "nand", "negedge", "nor", "not", "or",
     "output", "parameter", "posedge", "reg", "signed", "wire", "xnor", "xor", "localparam", "generate", "genvar",
 }
+MAX_SUM_TERMS = 256   # longest single sum expression emitted; longer matvec rows are split into partial sums
 _OPS = {"gt": ">", "ge": ">=", "lt": "<", "le": "<=", "eq": "==", "ne": "!="}
 
 
@@ -72,6 +73,27 @@ def emit(ir: dict, top: str | None = None, node_impl=None) -> tuple[str, dict]:
         tmp[0] += 1
         return f"{prefix}_t{tmp[0]}"
 
+    def sum_expr(terms: list[tuple[str, str]], bias: int, w: int, ref: str) -> str:
+        """bias +/- every term, modulo 2^w. Up to MAX_SUM_TERMS terms: one expression (the long-standing output).
+        Longer rows (Yosys's parser crashes near 700 terms) become balanced partial-sum wires, summed the same way."""
+        if len(terms) > MAX_SUM_TERMS:
+            k = -(-len(terms) // MAX_SUM_TERMS)
+            subs = []
+            for c in range(k):
+                tn = fresh(ref)
+                decl(tn, w, sum_expr(terms[c * len(terms) // k:(c + 1) * len(terms) // k], 0, w, ref))
+                subs.append(("+", tn))
+            terms = subs
+        parts = [] if bias == 0 else [_lit(bias, w)]
+        for sg, t in terms:
+            if not parts and sg == "+":
+                parts.append(t)
+            elif not parts:
+                parts.append(f"{_lit(0, w)} - {t}")
+            else:
+                parts.append(f"{sg} {t}")
+        return " ".join(parts)
+
     def node_lanes(i: str) -> list[tuple[int, bool]]:
         return [width(l, h) for l, h in R[i]]
 
@@ -113,19 +135,7 @@ def emit(ir: dict, top: str | None = None, node_impl=None) -> tuple[str, dict]:
                         sign = d if wt > 0 else -d
                         t = e if pw == 0 else f"({e} << {pw})"
                         terms.append(("+" if sign > 0 else "-", t))
-                if not terms:
-                    expr = _lit(bias, w)
-                else:
-                    parts = [] if bias == 0 else [_lit(bias, w)]
-                    for k, (sg, t) in enumerate(terms):
-                        if not parts and sg == "+":
-                            parts.append(t)
-                        elif not parts:
-                            parts.append(f"{_lit(0, w)} - {t}")
-                        else:
-                            parts.append(f"{sg} {t}")
-                    expr = " ".join(parts)
-                decl(ref, w, expr)
+                decl(ref, w, sum_expr(terms, bias, w, ref) if terms else _lit(bias, w))
             elif op in ("add", "sub"):
                 a, b = L[nd["a"]], L[nd["b"]]
                 xa = a[j] if len(a) > 1 else a[0]

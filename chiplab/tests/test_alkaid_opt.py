@@ -101,7 +101,7 @@ def test_alkaid_runs_after_torch_is_loaded():
             "torch.ones(4).sum()\n"
             "ir = json.loads(sys.argv[1])\n"
             "t, i = emit_optimized(ir, 'alkaid')\n"
-            "assert i['optimizer']['name'] == 'alkaid' and 'chipin_alk_' in t\n"
+            "assert i['optimizer']['name'] == 'alkaid' and any(n['impl'] == 'alkaid' for n in i['optimizer']['nodes'])\n"
             "print('ok')\n")
     p = subprocess.run([sys.executable, "-c", code, json.dumps(TINY)], capture_output=True, text=True, timeout=600)
     assert p.returncode == 0 and p.stdout.strip().endswith("ok"), (p.returncode, p.stderr[-800:])
@@ -128,3 +128,63 @@ def test_alkaid_never_loaded_into_this_process():
     import sys
     emit_optimized(TINY, "alkaid")
     assert not [m for m in sys.modules if m == "alkaid" or m.startswith("alkaid.")]
+
+
+def _alkaid_template_lines() -> list[str]:
+    """Distinctive lines of alkaid's Verilog templates and of its own Verilog generator, read from the installed
+    package's files (never imported here)."""
+    import importlib.util
+    from pathlib import Path
+    root = Path(importlib.util.find_spec("alkaid").submodule_search_locations[0]) / "codegen" / "rtl" / "verilog"
+    out = []
+    for f in sorted((root / "source").glob("*.v")):
+        for ln in f.read_text().splitlines():
+            ln = ln.strip()
+            if len(ln) > 24 and not ln.startswith("//") and ln not in ("endmodule", "end", "begin"):
+                out.append(ln)
+    assert len(out) > 10, "alkaid's Verilog templates not found"
+    return out + ["Explicit quantization operation will drop bits", "verilator lint_off UNUSEDSIGNAL"]
+
+
+def test_no_alkaid_template_text_in_generated_rtl():
+    """Licence: alkaid is LGPL-3.0; the generated RTL holds only chiplab-written Verilog (graph from alkaid's solver)."""
+    import re
+    ta, ai = emit_optimized(TINY, "alkaid")
+    assert any(n["impl"] == "alkaid" for n in ai["optimizer"]["nodes"]), ai["optimizer"]
+    assert ai["optimizer"]["solver_options"] == {"binary_lut": False}
+    assert "chipin_alk_" not in ta
+    for name in ("binop", "multiplier", "mux", "negative", "shift_adder", "ternary_adder", "timescale"):
+        assert not re.search(rf"\b{name}\b", ta), name
+    hits = [ln for ln in _alkaid_template_lines() if ln in ta]
+    assert not hits, hits[:3]
+
+
+def test_committed_alk_designs_have_no_alkaid_template_text():
+    """The M3 run's committed -alk chips were regenerated with the clean emitter."""
+    from pathlib import Path
+    chips = Path(__file__).resolve().parent.parent.parent / "m3" / "e2e" / "run" / "workspace" / "chips"
+    files = sorted(chips.glob("*-alk/design.v"))
+    if not files:
+        pytest.skip("m3 run outputs not in this checkout")
+    lines = _alkaid_template_lines()
+    for f in files:
+        text = f.read_text()
+        assert "chipin_alk_" not in text and not [ln for ln in lines if ln in text], f.parent.name
+
+
+def test_graph_rtl_rejects_operations_it_does_not_write():
+    """A graph node other than a shifted sum (here a multiplication) raises Unsupported, so the matvec falls back to
+    standard code instead of emitting wrong logic. Plain stand-ins for alkaid's graph, alkaid not imported."""
+    from types import SimpleNamespace as NS
+    from chiplab.emit.optimized import Unsupported, graph_rtl
+    q = NS(kif=(0, 4, 0))
+    ops = [NS(opcode=-1, addr=(), data=(0,), qint=q), NS(opcode=-1, addr=(), data=(1,), qint=q),
+           NS(opcode=7, addr=(0, 1), data=(), qint=NS(kif=(0, 8, 0)))]
+    comb = NS(ops=ops, out_idxs=[2], inp_kifs=np.array([[0, 0], [4, 4], [0, 0]]), out_kifs=np.array([[0], [8], [0]]))
+    with pytest.raises(Unsupported, match="graph operation 7"):
+        graph_rtl(comb, "m")
+    ops[2] = NS(opcode=1, addr=(0, 1), data=(2,), qint=NS(kif=(1, 6, 0)))
+    comb = NS(ops=ops, out_idxs=[2], inp_kifs=np.array([[0, 0], [4, 4], [0, 0]]), out_kifs=np.array([[1], [6], [0]]))
+    text = graph_rtl(comb, "m")
+    assert "module m (" in text and "assign model_out[6:0] = v2;" in text
+    assert "wire [6:0] s2 = {{3{1'b0}}, v0} - {{{1{1'b0}}, v1}, 2'b0};" in text      # v0 - (v1 << 2), 7 bits

@@ -7,6 +7,11 @@ compose(heads, fusion, shared_inputs) returns one chipir/1 document:
     several heads); otherwise each head's ports are renamed "<head>_<port>" (one sensor per head);
   * fusion outputs combine 1-bit head decisions: and (all), or (any), kofn (at least k of n). Built from
     existing ops only: concat -> matvec of ones -> cmp ge k.
+  * score-level fusion combines multi-bit head scores (e.g. the same per-channel model on several channel
+    ports, shared_inputs=False): max (largest score) or sum (total score) over every lane of the inputs,
+    then cmp <rel> t gives a 1-bit decision. Spec {name, op: max|sum, t, rel? (ge), score? (false),
+    inputs}; score=true also exposes the fused score as output "<name>_score". Built from existing ops:
+    concat -> max over one group (max) or matvec of ones (sum) -> cmp.
 
 IO_SPEC documents a chip's interface for the AI scientist:
   {"inputs":  [{"name", "lanes", "bits", "signed"}],
@@ -18,9 +23,11 @@ from __future__ import annotations
 import copy
 
 from chiplab.ir.ranges import ranges
-from chiplab.ir.schema import IRError, validate
+from chiplab.ir.schema import RELS, IRError, validate
 
 IO_SPEC = __doc__
+DECISION_OPS = ("and", "or", "kofn")
+SCORE_OPS = ("max", "sum")
 
 _REF_KEYS = ("src", "other")  # plus a/b for add/sub only ("b" is a bias on matvec)
 
@@ -76,6 +83,9 @@ def compose(heads: dict, fusion: list | None = None, shared_inputs: bool = True,
         R = ranges(validate(doc))
         for f in fusion:
             fn, op, ins = f["name"], f["op"], f["inputs"]
+            if op in SCORE_OPS:
+                _score_fusion(f, out_src, R, nodes, outputs)
+                continue
             srcs = []
             for i in ins:
                 if i not in out_src:
@@ -93,3 +103,31 @@ def compose(heads: dict, fusion: list | None = None, shared_inputs: bool = True,
             nodes.append({"id": base, "op": "cmp", "src": f"{base}_cnt", "rel": "ge", "t": [k]})
             outputs.append({"name": fn, "src": base})
     return validate(doc)
+
+
+def _score_fusion(f: dict, out_src: dict, R: dict, nodes: list, outputs: list) -> None:
+    """max | sum over every lane of the named head outputs, then one threshold compare (1-bit decision)."""
+    fn, op, ins = f["name"], f["op"], f.get("inputs")
+    if not isinstance(ins, list) or not ins:
+        raise IRError(f"fusion {fn}: inputs must be a non-empty list of head outputs")
+    srcs = []
+    for i in ins:
+        if i not in out_src:
+            raise IRError(f"fusion {fn}: unknown head output {i!r}; known: {list(out_src)}")
+        srcs.append(out_src[i])
+    t, rel = f.get("t"), f.get("rel", "ge")
+    if not isinstance(t, int) or isinstance(t, bool):
+        raise IRError(f"fusion {fn}: op {op} needs an integer threshold t")
+    if rel not in RELS:
+        raise IRError(f"fusion {fn}: rel must be one of {RELS}")
+    n = sum(len(R[s]) for s in srcs)
+    base = f"fuse_{fn}"
+    nodes.append({"id": f"{base}_cat", "op": "concat", "srcs": srcs})
+    if op == "max":
+        nodes.append({"id": f"{base}_score", "op": "max", "src": f"{base}_cat", "groups": [list(range(n))]})
+    else:
+        nodes.append({"id": f"{base}_score", "op": "matvec", "src": f"{base}_cat", "W": [[1] * n]})
+    nodes.append({"id": base, "op": "cmp", "src": f"{base}_score", "rel": rel, "t": [t]})
+    outputs.append({"name": fn, "src": base})
+    if f.get("score"):
+        outputs.append({"name": f"{fn}_score", "src": f"{base}_score"})

@@ -109,8 +109,12 @@ def ingest_model(format: str, model: dict | None = None, path: str | None = None
 
 
 @tool("Build ONE chip from several model heads (multi-output, multi-input) with fusion logic between their "
-      "decision outputs: and | or | kofn (k-of-n vote). Heads are design_ids or chipir/1 documents.",
-      {"heads": "dict — head name -> design_id or chipir/1", "fusion": "list — [{name, op: and|or|kofn, k?, inputs: [<head>_<output>]}]",
+      "decision outputs: and | or | kofn (k-of-n vote), or score-level fusion of multi-bit head scores: max | sum "
+      "then a threshold compare (1-bit decision; e.g. one per-channel model on several channel ports, "
+      "shared_inputs=false). Heads are design_ids or chipir/1 documents.",
+      {"heads": "dict — head name -> design_id or chipir/1",
+       "fusion": "list — [{name, op: and|or|kofn, k?, inputs: [<head>_<output>]}] or "
+                 "[{name, op: max|sum, t, rel? (ge), score? (false: also output <name>_score), inputs}]",
        "shared_inputs": "bool — heads read the same input port (true) or each keeps its own port (false)", "name": "str"},
       lane="cpu", cacheable=True)
 def compose_chip(heads: dict, fusion: list | None = None, shared_inputs: bool = True, name: str = "composed") -> dict:
@@ -123,27 +127,56 @@ def compose_chip(heads: dict, fusion: list | None = None, shared_inputs: bool = 
     return {**res, "io_spec": io_spec(ir)}
 
 
+_STREAM_OPTS = {
+    "postproc": "dict — optional on-chip post-processing of the per-frame decision: {output?, lane?, threshold? "
+                "(frame bit = value >= threshold), smooth?: {mode: majority|kofn|average, n, k?, threshold?}, "
+                "min_duration? (frames the condition must last), hold? (frames the alarm stays on)}; alarm on bit 0",
+    "channel_serial": "dict — optional {channels: C, reduce: max|sum, threshold: T, output?, lane?}: each frame is "
+                      "ONE channel's input to ONE per-channel model; decision = reduce(score over C frames) >= T, "
+                      "valid every C frames; outputs decision then acc (one model copy instead of C)",
+}
+
+
 @tool("Wrap a design for streaming hardware: inputs arrive one 15-bit word per strobe (ui_in[7]); outputs on "
       "uo_out[6:0] with valid on uo_out[7]. tt=true gives the Tiny Tapeout top (tt_um_chipin_<id>), else a generic "
-      "top for FPGA boards.", {"design_id": "str", "tt": "bool (true)"}, lane="cpu", cacheable=True)
-def compile_stream(design_id: str, tt: bool = True) -> dict:
+      "top for FPGA boards. Optional postproc (smoothing, k-of-N, duration timer, alarm hold) and channel_serial "
+      "(max or sum over C channels with one model copy) blocks; area=true also reports flip-flops and gates "
+      "(and, with channel_serial, the parallel version with C copies of the core).",
+      {"design_id": "str", "tt": "bool (true)", **_STREAM_OPTS,
+       "area": "bool — synthesise and report flip-flops and gates (false)"}, lane="cpu", cacheable=True)
+def compile_stream(design_id: str, tt: bool = True, postproc: dict | None = None, channel_serial: dict | None = None,
+                   area: bool = False) -> dict:
     from chiplab.emit.stream import emit_stream
     d = _design_dir(design_id)
     ir = json.loads((d / "ir.json").read_text()); info = json.loads((d / "port.json").read_text())
     core_text = (d / "design.v").read_text() if info.get("optimizer") else None   # keep the optimised core
-    text, sinfo = emit_stream(ir, info, tt=tt, core_text=core_text)
+    text, sinfo = emit_stream(ir, info, tt=tt, core_text=core_text, postproc=postproc, channel_serial=channel_serial)
     fn = "stream_tt.v" if tt else "stream.v"
     (d / fn).write_text(text)
     (d / (fn[:-2] + ".json")).write_text(json.dumps(sinfo, default=str))
-    return {"design_id": design_id, "top": sinfo.get("top"), "verilog": str(d / fn), "files": [str(d / fn)],
-            **{k: sinfo.get(k) for k in ("transfers_per_frame", "counter_bits", "truncated", "uo_map")}}
+    out = {"design_id": design_id, "top": sinfo.get("top"), "verilog": str(d / fn), "files": [str(d / fn)],
+           **{k: sinfo.get(k) for k in ("transfers_per_frame", "counter_bits", "truncated", "uo_map")}}
+    if not (postproc or channel_serial):   # the plain wrapper's own flip-flops and sky130 area, apart from the core
+        try:                               # (answer only: the stream files stay byte-identical)
+            from chiplab.ir.estimate import stream_wrapper
+            out.update(stream_wrapper(ir, tt=tt))
+        except (KeyError, ValueError, TypeError):
+            pass
+    if postproc or channel_serial:
+        out.update({k: sinfo.get(k) for k in ("postproc", "channel_serial", "frames_per_decision", "output_fields")})
+    if area:
+        from chiplab.emit.postproc import area_compare
+        out["area"] = area_compare(ir, channel_serial, d / "stream_area", postproc=postproc)
+    return out
 
 
 @tool("Verification level 3: cocotb + Icarus simulation of the streaming wrapper (frames streamed in, outputs "
       "compared with the integer model or with the scientist's expected outputs) plus a Verilator lint.",
       {"design_id": "str", "n": "int — random frames if no vectors (1000)", "vectors": "dict — port -> [[lane ints]] (optional)",
-       "expected": "dict — output -> [[lane ints]] (optional)", "tt": "bool (true)"}, lane="cpu", cacheable=True)
-def rtl_simulate(design_id: str, n: int = 1000, vectors: dict | None = None, expected: dict | None = None, tt: bool = True) -> dict:
+       "expected": "dict — output -> [[lane ints]] (optional)", "tt": "bool (true)", **_STREAM_OPTS},
+      lane="cpu", cacheable=True)
+def rtl_simulate(design_id: str, n: int = 1000, vectors: dict | None = None, expected: dict | None = None, tt: bool = True,
+                 postproc: dict | None = None, channel_serial: dict | None = None) -> dict:
     import numpy as np
     from chiplab.verify.rtlsim import rtl_simulate as _rs
     d = _design_dir(design_id)
@@ -152,7 +185,10 @@ def rtl_simulate(design_id: str, n: int = 1000, vectors: dict | None = None, exp
     E = {k: np.asarray(v, dtype=np.int64) for k, v in expected.items()} if expected else None
     pinfo = json.loads((d / "port.json").read_text())
     core_text = (d / "design.v").read_text() if pinfo.get("optimizer") else None   # simulate the design's own core
-    r = _rs(ir, d / ("rtlsim_tt" if tt else "rtlsim"), X=X, n=n, tt=tt, expected=E, core_text=core_text)
+    ext = {"postproc": postproc, "channel_serial": channel_serial} if (postproc or channel_serial) else {}
+    if ext and E is not None:
+        raise ValueError("expected is not used with postproc/channel_serial (the sequence model gives the answers)")
+    r = _rs(ir, d / ("rtlsim_tt" if tt else "rtlsim"), X=X, n=n, tt=tt, expected=E, core_text=core_text, **ext)
     (d / "rtlsim.json").write_text(json.dumps(r, default=str))
     return {"design_id": design_id, **{k: v for k, v in r.items() if k != "first_mismatches"},
             "first_mismatches": r.get("first_mismatches", [])[:5]}
@@ -160,8 +196,10 @@ def rtl_simulate(design_id: str, n: int = 1000, vectors: dict | None = None, exp
 
 # ------------------------------------------------------------------------------------------------ outputs (data only)
 
-@tool("Manufacturing routes for a design (iCE40 FPGA, Tiny Tapeout sky130/GF180, wafer.space GF180, Pragmatic "
-      "FlexIC): fits or not, cost, deadline, and the basis of each number.", {"design_id": "str"}, lane="inline")
+@tool("Manufacturing routes for a design (iCE40 FPGA, Tiny Tapeout sky130/GF180/IHP, wafer.space GF180 slots, "
+      "ChipFoundry chipIgnite, EUROPRACTICE GF180/IHP, Pragmatic FlexIC): fits or not, cost, deadline, the basis "
+      "of each number, and per figure whether it was read on the vendor's page or is unverified.",
+      {"design_id": "str"}, lane="inline")
 def estimate_cost(design_id: str) -> dict:
     from chiplab.hw.cost import estimate
     d = _design_dir(design_id)
@@ -170,7 +208,9 @@ def estimate_cost(design_id: str) -> dict:
     tt = rd("tt.json").get("tiles_used") if (d / "tt.json").exists() else None
     if isinstance(tt, str) and "x" in tt:  # tile shape "AxB" -> number of tiles
         a, b = tt.lower().split("x"); tt = int(a) * int(b)
-    r = estimate(syn.get("gates"), sky.get("area_um2"), tt, ice.get("luts"))
+    other = {p: rd(f"pdk_{p}.json").get("area_um2") for p in ("gf180", "ihp")}
+    r = estimate(syn.get("gates"), sky.get("area_um2"), tt, ice.get("luts"),
+                 area_by_pdk={p: a for p, a in other.items() if a}, tt_pdk=rd("tt.json").get("pdk") or "sky130A")
     (d / "cost.json").write_text(json.dumps(r))
     return {"design_id": design_id, **r}
 
@@ -573,7 +613,9 @@ def tt_package(design_id: str, harden: bool = False, tiles: str = "auto", pdk: s
     from chiplab.hw.tinytapeout import tt_package as _tt
     from chiplab.tools import TOOLS
     from chiplab.verify.rtlsim import tt_project_test, tt_vectors
+    from chiplab.hw.tt_submit import refuse_lgpl_rtl
     d = _design_dir(design_id)
+    refuse_lgpl_rtl([d / "design.v"])   # Tiny Tapeout is Apache-2.0: no alkaid LGPL helper modules
     ir = json.loads((d / "ir.json").read_text())
     s = TOOLS["compile_stream"]["fn"].__wrapped__(design_id=design_id, tt=True)
     meta = {"title": title or f"chipin.space chip {design_id}", "author": "chipin.space chip lab",
@@ -587,7 +629,7 @@ def tt_package(design_id: str, harden: bool = False, tiles: str = "auto", pdk: s
     r = _tt([d / "stream_tt.v"], s["top"], d / "tt", meta, tiles=tiles, harden=harden, pdk=_PDK_ALIAS.get(pdk, pdk),
             vectors=tt_vectors(ir, vectors), clock_hz=clock_hz, test_py=tt_project_test())
     (d / "tt_package.json").write_text(json.dumps(r, default=str))
-    (d / "tt.json").write_text(json.dumps({"tiles_used": r.get("tiles"), "harden_ok": r.get("harden_ok")}))
+    (d / "tt.json").write_text(json.dumps({"tiles_used": r.get("tiles"), "harden_ok": r.get("harden_ok"), "pdk": r.get("pdk")}))
     return {"design_id": design_id, **{k: r.get(k) for k in ("folder", "top", "tiles", "tile_um", "pdk", "user_config_ok",
             "rtl_test_passed", "harden_ok", "gl_test_passed", "gds", "png", "error", "seconds")},
             "cloud_build": "commit the folder under chiplab/tt_projects/ and run: gh workflow run tt-gds.yaml -f project_dir=<path>",
@@ -598,21 +640,29 @@ def tt_package(design_id: str, harden: bool = False, tiles: str = "auto", pdk: s
       "for clocked designs. Compositional by default: the combinational core is a black box here (prove it with "
       "prove_equivalence), so the proof covers only the clocked wrapper and takes seconds at any model size "
       "(spike: 3 s). whole=true proves the flattened design instead (small chips only, a few hundred gates).",
-      {"design_id": "str", "timeout": "int seconds (600)", "whole": "bool — prove the whole flattened design (false)"},
-      lane="cpu", cacheable=True)
-def prove_sequential(design_id: str, timeout: int = 600, whole: bool = False) -> dict:
+      {"design_id": "str", "timeout": "int seconds (600)", "whole": "bool — prove the whole flattened design (false)",
+       **_STREAM_OPTS}, lane="cpu", cacheable=True)
+def prove_sequential(design_id: str, timeout: int = 600, whole: bool = False, postproc: dict | None = None,
+                     channel_serial: dict | None = None) -> dict:
     from chiplab.tools import TOOLS
     from chiplab.verify.eqy import prove_sequential as _ps
     d = _design_dir(design_id)
-    s = TOOLS["compile_stream"]["fn"].__wrapped__(design_id=design_id, tt=True)
+    ext = {"postproc": postproc, "channel_serial": channel_serial} if (postproc or channel_serial) else {}
+    s = TOOLS["compile_stream"]["fn"].__wrapped__(design_id=design_id, tt=True, **ext)
     pinfo = json.loads((d / "port.json").read_text())
     core = pinfo["top"]
     stub = d / "core_stub.v"   # ports only: the black box's declaration for the gate side
     ports = [f"input wire [{p['lanes'] * p['bits'] - 1}:0] {p['name']}" for p in pinfo["inputs"]] + \
             [f"output wire [{o['lanes'] * o['bits'] - 1}:0] {o['name']}" for o in pinfo["outputs"]]
     stub.write_text(f"(* blackbox *)\nmodule {core} ({', '.join(ports)});\nendmodule\n")
+    nm = {}
+    if ext:   # the blocks' combinational wires are not cut points (registers and core outputs stay matched)
+        from chiplab.emit.postproc import Extension
+        nm = {"nomatch": Extension(pinfo, postproc, channel_serial).wires()}
     r = _ps([d / "stream_tt.v"], s["top"], d / ("eqy_whole" if whole else "eqy"), timeout=timeout,
-            blackbox=None if whole else [core], blackbox_sources=None if whole else [stub])
+            blackbox=None if whole else [core], blackbox_sources=None if whole else [stub], **nm)
+    if ext:
+        r = {**r, **{k: s.get(k) for k in ("postproc", "channel_serial", "frames_per_decision")}}
     (d / "eqy.json").write_text(json.dumps(r, default=str))
     return {"design_id": design_id, **r}
 
