@@ -44,6 +44,8 @@ LLM_CALL_TIMEOUT_S = 600
 LLM_CALL_ATTEMPTS = 5
 #: A ``run()`` with no agent event for this long is stopped and resumed.
 IDLE_TIMEOUT_S = 1800.0
+#: Least seconds between two interim ``cost`` events of one run.
+LIVE_COST_INTERVAL_S = 5.0
 #: Agent steps (model call plus tool calls) per ``run()``.
 MAX_ITERATIONS = 200
 #: The SDK's tool names, by the names a spec may use in ``allowed_tools``.
@@ -268,6 +270,7 @@ class OpenRouterAgentBackend(AgentBackend):
         lock = threading.Lock()
         activity = _Activity()
         final = {"text": ""}
+        live = _LiveCost()
 
         def emit(kind: str, data: dict[str, Any]) -> None:
             with lock:
@@ -285,6 +288,7 @@ class OpenRouterAgentBackend(AgentBackend):
             action = getattr(event, "action", None)
             if type(action).__name__ == "FinishAction":
                 final["text"] = action.message or final["text"]
+            live.after_step(event, emit)
 
         emit("agent_start", {"backend": self.name, "provider": provider.name, "model": model})
         parked = _PARKED.pop(spec.resume_session, None) if spec.resume_session else None
@@ -303,6 +307,7 @@ class OpenRouterAgentBackend(AgentBackend):
                 max_iteration_per_run=MAX_ITERATIONS,
                 visualizer=None,
             )
+        live.conversation, live.before = conversation, before
         route.target = on_event
         self._conversation = conversation
         self._emit = emit
@@ -457,7 +462,9 @@ class OpenRouterAgentBackend(AgentBackend):
         from openhands.sdk import Agent, AgentContext
         from openhands.sdk.llm.fallback_strategy import FallbackStrategy
         from openhands.sdk.tool import Tool
-        from openhands.tools import FileEditorTool, TaskTrackerTool, TerminalTool
+        from openhands.tools import FileEditorTool, TaskTrackerTool
+
+        from chipin_backend.agents.paced_terminal import PACED_TERMINAL
 
         strategy = None
         backup = self.openrouter.fallback_model if provider.name == DEFAULT_PROVIDER else None
@@ -469,11 +476,16 @@ class OpenRouterAgentBackend(AgentBackend):
             ]
         llm = self._build_llm(model, key, provider, usage_id="agent", fallback=strategy)
 
-        classes = {"terminal": TerminalTool, "file_editor": FileEditorTool, "task_tracker": TaskTrackerTool}
+        # The terminal is the SDK's subprocess one fed in small pieces (see paced_terminal).
+        registry = {
+            "terminal": PACED_TERMINAL,
+            "file_editor": FileEditorTool.name,
+            "task_tracker": TaskTrackerTool.name,
+        }
         names = [n for n in TOOL_NAMES if spec.allowed_tools is None or n in spec.allowed_tools]
         names = [n for n in names if n not in (spec.disallowed_tools or [])]
-        terminal_params = {"env": build_agent_env(spec.env), "terminal_type": "subprocess"}
-        tools = [Tool(name=classes[n].name, params=terminal_params if n == "terminal" else {}) for n in names]
+        terminal_params = {"env": build_agent_env(spec.env)}
+        tools = [Tool(name=registry[n], params=terminal_params if n == "terminal" else {}) for n in names]
         kwargs: dict[str, Any] = {"llm": llm, "tools": tools}
         # One context for both: the instructions are appended to OpenHands' own
         # system message (which keeps its tool rules) and the skills are listed in it.
@@ -549,13 +561,7 @@ def _emit_cost(
 
     Returns this run's USD and the conversation's totals (dollars, input, output tokens).
     """
-    metrics = conversation.conversation_stats.get_combined_metrics()
-    tokens = metrics.accumulated_token_usage
-    totals = (
-        float(metrics.accumulated_cost or 0.0),
-        int(tokens.prompt_tokens) if tokens else 0,
-        int(tokens.completion_tokens) if tokens else 0,
-    )
+    totals = _totals(conversation)
     usd, tokens_in, tokens_out = (max(a - b, 0) for a, b in zip(totals, before, strict=True))
     if error:
         emit("error", {"message": error})
@@ -563,10 +569,69 @@ def _emit_cost(
     return float(usd), totals
 
 
+def _totals(conversation: Any) -> tuple[float, int, int]:
+    """The conversation's spend so far: dollars, input tokens, output tokens."""
+    metrics = conversation.conversation_stats.get_combined_metrics()
+    tokens = metrics.accumulated_token_usage
+    return (
+        float(metrics.accumulated_cost or 0.0),
+        int(tokens.prompt_tokens) if tokens else 0,
+        int(tokens.completion_tokens) if tokens else 0,
+    )
+
+
+class _LiveCost:
+    """Emits this run's spend so far while it works, at most every :data:`LIVE_COST_INTERVAL_S`.
+
+    A ``cost`` event's ``usd`` is the agent's spend so far (``api.costs``), so
+    these interim events and the closing one mean the same thing; without them
+    a run shows no cost until its agent ends.
+    """
+
+    def __init__(self) -> None:
+        self.conversation: Any = None
+        self.before: tuple[float, int, int] = (0.0, 0, 0)
+        self._usd = 0.0
+        self._at = 0.0
+
+    def after_step(self, event: Any, emit: Any) -> None:
+        """Called for every SDK event; emits after a model call when the spend went up."""
+        if self.conversation is None or type(event).__name__ not in ("ActionEvent", "MessageEvent"):
+            return
+        now = time.monotonic()
+        if now - self._at < LIVE_COST_INTERVAL_S:
+            return
+        try:
+            totals = _totals(self.conversation)
+        except Exception:
+            logger.exception("openrouter: could not read the live cost")
+            return
+        usd, tokens_in, tokens_out = (max(a - b, 0) for a, b in zip(totals, self.before, strict=True))
+        if usd <= self._usd:
+            return
+        self._usd, self._at = float(usd), now
+        emit("cost", {"usd": float(usd), "input_tokens": int(tokens_in), "output_tokens": int(tokens_out)})
+
+
 async def _run_until_idle(conversation: Any, activity: _Activity, deadline: float | None) -> None:
-    """Run the conversation in a thread; stop it on inactivity or at ``deadline``."""
+    """Run the conversation in a thread; stop it on inactivity, at ``deadline`` or when cancelled.
+
+    Cancelling the await does not stop the SDK's worker thread, so a cancel
+    (a stop, the runner's wall clock) pauses the conversation as well; the
+    pause takes effect after the step in progress. It is requested from its
+    own thread because it waits for the conversation's lock, which a step holds.
+    """
     activity.mark()
     task = asyncio.create_task(asyncio.to_thread(conversation.run))
+    try:
+        await _watch(conversation, task, activity, deadline)
+    except asyncio.CancelledError:
+        threading.Thread(target=conversation.pause, name="openrouter-pause", daemon=True).start()
+        raise
+
+
+async def _watch(conversation: Any, task: Any, activity: _Activity, deadline: float | None) -> None:
+    """Wait for ``task`` (the conversation's run); pause it on inactivity or at ``deadline``."""
     while True:
         now = time.monotonic()
         idle_at = activity.last + IDLE_TIMEOUT_S
