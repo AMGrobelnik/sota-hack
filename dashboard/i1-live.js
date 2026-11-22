@@ -161,6 +161,7 @@
     rec.h = {
       onEvent: function (ev, st) {
         rec.st = st; reduce(x, ev, st);
+        if (window.ChipInMessages) window.ChipInMessages.feed(ev, id); /* MESSAGES HOOK: the message view (../i1-messages.js) reads the same stream */
         if (ev.type === "run.started") { var rr = findRun(id); if (rr && (rr.title === id || !rr.title) && ev.prompt) { rr.title = clip(ev.prompt, 60); rr.brief = ev.prompt; saveRuns(); bump(); } }
         if (ev.type === "run.finished") { rec.open = false; var r = findRun(id); if (r) { r.status = ev.status; saveRuns(); } bump(); }
         else if (!rec.open) { rec.open = true; var f = findRun(id); if (f) { f.status = "running"; saveRuns(); } bump(); } // a follow-up
@@ -449,6 +450,7 @@
     if (r.view === "overview") { body.innerHTML = overviewHTML(); wireOverview(); }
     else if (r.view === "chat") { body.innerHTML = chatHTML(); wireChat(); }
     else body.innerHTML = '<div class="vis" id="lvTab"></div>';
+    if (window.ChipInMessages && (r.view === "overview" || r.view === "chat")) { if (r.view === "overview") $("#lvLog .lv-lh").remove(); window.ChipInMessages.mount(r.view === "chat" ? $("#lvChatFeed") : $("#lvLog .lv-fw"), { runId: r.id, mode: r.view === "chat" ? "page" : "panel", title: r.view === "chat" ? "Messages" : "Agent log", more: r.view === "chat" ? null : "#/live/" + encodeURIComponent(r.id) + "/chat" }); } /* MESSAGES HOOK: messages with levels of summaries, above the message box */
     if (!known) { RUNS.push({ id: r.id, base: C.base, title: r.id, brief: "", status: "running", created: null, server: true }); saveRuns(); }
     update(true);
     return true;
@@ -925,10 +927,12 @@
       $("#lvY").innerHTML = keys.map(function (k) { return '<option value="' + esc(k) + '"' + (k === p ? " selected" : "") + ">" + esc(metaOf(k).n) + (M.T.some(function (t) { return t.metric === k; }) ? "" : " (no target)") + "</option>"; }).join("");
     }
     var feed = $("#lvFeed");
+    if (feed) { /* MESSAGES HOOK: no #lvFeed when ../i1-messages.js draws the log */
     if (paintFeed(M, feed, false, "logN")) { if (V.follow) feed.scrollTop = feed.scrollHeight; else $("#lvJump").hidden = false; }
     if (ch("logn", M.x.items.length + "|" + M.status)) $("#lvLogN").textContent = M.x.items.length ? (M.running ? "live" : M.x.items.length + " entries") : "";
     if (!M.x.items.length && !feed.firstChild) feed.innerHTML = '<p class="lv-wait">' + (M.running || M.status === "connecting" ? "Waiting for the agent's first message." : "Nothing was logged.") + "</p>";
     else if (M.x.items.length) { var w = $(".lv-wait", feed); if (w) w.remove(); }
+    }
     updBox(M, ch);
     var foot = (C.base ? "Live run on " + C.base.replace(/^https?:\/\//, "") + ". " : "") + "Run " + M.id + ".";
     if (ch("foot", foot)) $("#lvFoot").textContent = foot;
@@ -948,6 +952,7 @@
   }
   function updChat(M, ch) {
     var fin = $("#lvChatFin"), feed = $("#lvChatFeed");
+    if (!fin) { updBox(M, ch); return; } /* MESSAGES HOOK: ../i1-messages.js draws the chat */
     if (ch("cnote", M.status)) $("#lvChatNote").textContent = M.running ? "The agent's messages, status lines and tool calls as they arrive. Write below to steer it." : "The run's whole conversation, as it happened. A follow-up continues it with the same agent.";
     if (paintFeed(M, fin, true, "chatN") && V.follow) feed.scrollTop = feed.scrollHeight;
     updBox(M, ch);
