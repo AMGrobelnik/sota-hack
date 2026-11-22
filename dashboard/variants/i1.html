@@ -818,6 +818,7 @@ select.gfin{padding:0 10px}
 <script src="../i1-playback.js"></script>
 <!-- CHIPPY HOOK: the helper panel (corner button, side panel, example prompts, page actions) lives in ../i1-chippy.js -->
 <script src="../i1-chippy.js"></script>
+<script src="../i1-questions.js"></script><!-- QUESTIONS HOOK: follow-up questions from a connected backend, one extra step before the spec card (window.ChipInQuestions) -->
 <script type="module">
 "use strict";
 /* =====================================================================
@@ -1911,7 +1912,7 @@ const Q = (label, why, body) => `<section class="gfq"><h2 class="gl">${label}</h
 const chipsHTML = (name, opts, cur, label, ask) => `<div class="gch${ask ? " ask" : ""}" role="radiogroup" aria-label="${esc(label)}">${opts.map(([k, n, sub]) => `<button type="button" role="radio" aria-checked="${k === cur}" data-c="${name}" data-v="${esc(k)}"><span>${esc(n)}</span>${sub ? `<small>${esc(sub)}</small>` : ""}</button>`).join("")}</div>`;
 const askLine = t => `<p class="gask">${t}</p>`;
 function progHTML(i) {
-  return `<nav class="gfp" aria-label="Steps"><ol>${STEPS.map((x, j) => `<li class="${j < i ? "done" : j === i ? "now" : ""}"><button type="button" data-go="${j + 1}"${j === i ? ' aria-current="step"' : ""} aria-label="Step ${j + 1}: ${x.n}"><span class="gpn">${j + 1}</span><span class="gpl">${x.n}</span></button></li>`).join("")}</ol>${i < 5 ? '<button type="button" class="gskip" data-go="spec">Skip to spec</button>' : ""}</nav>`;
+  return `<nav class="gfp" aria-label="Steps"><ol>${STEPS.map((x, j) => `<li class="${j < i ? "done" : j === i ? "now" : ""}"><button type="button" data-go="${j + 1}"${j === i ? ' aria-current="step"' : ""} aria-label="Step ${j + 1}: ${x.n}"><span class="gpn">${j + 1}</span><span class="gpl">${x.n}</span></button></li>`).join("")}${window.ChipInQuestions?.dot(i, SPEC) || "" /* QUESTIONS HOOK */}</ol>${i < 5 ? '<button type="button" class="gskip" data-go="spec">Skip to spec</button>' : ""}</nav>`;
 }
 const readLine = s => `Device: ${s.device ? `<b>${esc(s.device)}</b>` : '<span class="gmiss">not named in the brief</span>'}. Signal: ${s.signal ? `<b>${esc(s.signal)}</b>` : '<span class="gmiss">not named in the brief</span>'}. Change either on the spec card.`;
 function step1(s) {
@@ -1999,7 +2000,7 @@ function cardHTML(s) {
     ? `<div class="gsr"><span class="k">Device</span><div class="v"><div class="gie"><textarea data-sf="device" data-voice rows="1" placeholder="Name the device" aria-label="Device">${esc(s.device)}</textarea></div><div class="gie sm"><textarea data-sf="signal" data-voice rows="1" placeholder="Name the signal or sensors" aria-label="Signal or sensors">${esc(s.signal)}</textarea></div><small>${esc(r.v.split(". ").slice(1).join(". "))}</small></div><button type="button" class="gchg" data-go="1" aria-label="Change the device">Change</button></div>`
     : `<div class="gsr"><span class="k">${r.k}</span><div class="v">${esc(r.v)}</div>${r.go ? `<button type="button" class="gchg" data-go="${r.go}" aria-label="Change ${r.k.toLowerCase()}">Change</button>` : '<span class="gfx">Fixed</span>'}</div>`).join("");
   const af = s.case === "af" ? `<p class="gfr">${MEASURED.af ? "This brief is the AF patch case: Run replays its real search with your targets." : "This brief is the AF patch case: Run opens its measured run with your targets."}</p>` : "";
-  return `<p class="gfl">Check it, change anything, then run.</p><div class="gsc">${rows}</div>
+  return `<p class="gfl">Check it, change anything, then run.</p><div class="gsc">${rows}${window.ChipInQuestions?.cardRows(s, flowSave) || "" /* QUESTIONS HOOK: the answers, editable */}</div>
     <div class="gsq">${sizeUsable(s) ? `<div class="gsqi"><span id="gRs">Run size</span><div class="gseg" role="radiogroup" aria-labelledby="gRs">${PRESETS.map(x => `<button type="button" role="radio" aria-checked="${x.n === s.preset}" data-c="preset" data-v="${x.n}">${x.n}</button>`).join("")}</div>
       <span class="gfx" aria-live="polite">${SUBAGENTS[s.preset]} subagents per stage</span></div>` : ""}
       <div class="gsqi"><span>Agent and model</span>${agentPill(s.agent)}</div></div>${af}`;
@@ -2023,6 +2024,7 @@ function renderSpec() {
   const st = route.step === "spec" ? "spec" : String(clamp(parseInt(route.step, 10) || 1, 1, 5)), i = st === "spec" ? 5 : +st - 1;
   faUse(s);
   $("#demo").textContent = "";
+  if (route.step === "more" && window.ChipInQuestions?.render(s, { prog: progHTML, go: flowGo, save: flowSave })) return; /* QUESTIONS HOOK: the extra step */
   $("#main").innerHTML = `<div class="gf" id="gf"><div class="gfc">${progHTML(i)}<header class="gfh"><p class="gfn">${i < 5 ? `Step ${i + 1} of 5` : "Before you run"}</p><h1 tabindex="-1" id="gfH">${i < 5 ? STEPS[i].h : "Your spec"}</h1></header><div id="gfBody">${bodyHTML(s, i)}</div>${footHTML(i)}</div></div>`;
   const root = $("#gf");
   // the spec card's name fields wrap: a one-line textarea that grows with its text
@@ -2034,7 +2036,7 @@ function renderSpec() {
   root.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.matches && e.target.matches("textarea[data-sf]")) e.preventDefault(); });
   root.addEventListener("click", e => {
     const g = e.target.closest("[data-go]");
-    if (g) { const v = g.dataset.go; if (v === "prev") { if (i === 0) { startState.text = s.brief; flowSave(); go("#/"); } else flowGo(i); } else if (v === "next") flowGo(i === 4 ? "spec" : i + 2); else flowGo(v); return; }
+    if (g) { const v = g.dataset.go; if (v === "prev") { if (i === 0) { startState.text = s.brief; flowSave(); go("#/"); } else flowGo(i === 5 && window.ChipInQuestions?.has(s) ? "more" : i); } else if (v === "next") flowGo(i === 4 ? (window.ChipInQuestions?.after(s) || "spec") : i + 2); else flowGo(v); return; } /* QUESTIONS HOOK: Next and Back pass the extra step */
     const c = e.target.closest("[data-c]");
     if (c) { pickAnswer(s, c.dataset.c, c.dataset.v); redraw(); return; }
     const tk = e.target.closest("[data-task]");

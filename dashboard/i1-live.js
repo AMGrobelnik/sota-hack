@@ -309,6 +309,8 @@
     var body = { prompt: s.brief, spec: spec };
     if (s.preset) body.preset = String(s.preset).toLowerCase();
     if (body.preset) body.fanout = true; // the spec card promises the preset's subagents per stage
+    var fu = window.ChipInQuestions && window.ChipInQuestions.payload(s); // QUESTIONS HOOK: the follow-up answers (../i1-questions.js)
+    if (fu) body.follow_up = fu;
     var notes = [];
     if (ag.backend && ag.backend !== "auto") {
       body.agent = ag.backend;
