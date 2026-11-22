@@ -15,7 +15,7 @@ Site: <https://chipin.space>
 | ----------- | -------------------------------------------- |
 | `backend/`  | runs the agents, records runs, serves the UI |
 | `chiplab/`  | the chip lab: model in, verified chip out    |
-| `m3/`       | lab runs and evidence from a second machine  |
+| `m3/`       | lab speed, install, proof and layout checks  |
 | `context/`  | the team's working notes                     |
 | `.github/`  | lab tests and the Tiny Tapeout build         |
 
@@ -113,8 +113,8 @@ A run has seven stages, each reported as started, done or skipped.
 1. **spec**: the brief becomes targets, constraints and the data to use.
 2. **reference**: baseline models to compare against.
 3. **propose**: candidate design families for the chip.
-4. **fine-tune**: training settings; with no fine-tuning tool yet, the
-   agent marks it skipped unless it trains a small model itself.
+4. **fine-tune**: training settings; the agent trains the models itself
+   if the server has a Python that can train, otherwise it is skipped.
 5. **compile**: the lab turns each model into logic gates.
 6. **verify**: the lab checks the gates against the model.
 7. **report**: the chosen chip, its numbers and where it fails.
