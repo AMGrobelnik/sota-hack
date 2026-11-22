@@ -18,6 +18,8 @@ Routes::
     POST /api/runs/{id}/stop         -> 202
     GET  /api/runs/{id}/files        -> {"files": [{"path", "size"}]} the agent's working folder
     GET  /api/runs/{id}/file?path=workspace/report.md   -> the file as UTF-8 text
+    GET  /api/history                -> {"runs": [...]} picker facts per run, newest first
+    GET  /api/runs/{id}/history?from=<seq>&limit=<n>   -> every event, or one page of them
     POST /api/transcribe?lang=en     -> {"text", "model", "audio_seconds", "latency_ms"}
 
 A preflight from a public page to this loopback server (Chrome's Private
@@ -39,6 +41,7 @@ from loguru import logger
 
 from chipin_backend.api.config import ApiConfig
 from chipin_backend.api.events import public_text
+from chipin_backend.api.history import MAX_PAGE, history_page, run_facts
 from chipin_backend.api.manager import ApiAgent, ApiRunner, RequestError, RunManager
 from chipin_backend.api.transcribe import CONTEXT_HEADER, add_transcribe_route, transcribe_ready
 from chipin_backend.config import BackendConfig
@@ -144,6 +147,33 @@ async def create_run(request: web.Request) -> web.Response:
 async def list_runs(request: web.Request) -> web.Response:
     """Every run, newest first."""
     return _json({"runs": request.app[MANAGER].listing()})
+
+
+async def list_history(request: web.Request) -> web.Response:
+    """Every run with what a playback picker shows, newest first."""
+    manager = request.app[MANAGER]
+    items = sorted(manager.runs.values(), key=lambda r: (r.record.get("started_at", ""), r.id), reverse=True)
+    return _json({"runs": [run_facts(item.record, item.log.since(1)) for item in items]})
+
+
+def _whole(request: web.Request, name: str, default: int | None) -> int | None:
+    raw = request.query.get(name)
+    if raw is None:
+        return default
+    if not raw.isdigit():
+        raise RequestError(f"{name} must be a whole number")
+    return int(raw)
+
+
+async def get_history(request: web.Request) -> web.Response:
+    """A run's events with their times: all of them, or ``limit`` from ``from`` (a page)."""
+    item = request.app[MANAGER].get(request.match_info["run_id"])
+    start = max(_whole(request, "from", 1) or 1, 1)
+    limit = _whole(request, "limit", None)
+    if limit is not None and not 1 <= limit <= MAX_PAGE:
+        raise RequestError(f"limit must be between 1 and {MAX_PAGE}")
+    page = history_page(item.log.since(1), start=start, limit=limit)
+    return _json({"id": item.id, "state": item.record.get("status"), **page})
 
 
 async def get_run(request: web.Request) -> web.Response:
@@ -316,6 +346,8 @@ def create_app(
     app.router.add_post("/api/runs/{run_id}/stop", stop_run)
     app.router.add_get("/api/runs/{run_id}/files", list_files)
     app.router.add_get("/api/runs/{run_id}/file", read_file)
+    app.router.add_get("/api/history", list_history)
+    app.router.add_get("/api/runs/{run_id}/history", get_history)
     add_transcribe_route(app, api.transcribe)
     if frontend is not None:
         app[FRONTEND] = frontend.resolve()
