@@ -20,7 +20,7 @@ Pages that only want the count can stop after `waitlist.js`.
 <p class="wl" data-waitlist-wrap hidden><span data-waitlist-count></span></p>
 ```
 
-Shows "1,284 people on the waitlist". The wrapper starts `hidden` and is shown once a number
+Shows "30 people on the waitlist". The wrapper starts `hidden` and is shown once a number
 is known (never shown for 0). Style the wrapper however the page needs.
 
 ## Map
@@ -29,7 +29,7 @@ is known (never shown for 0). Style the wrapper however the page needs.
 <div data-waitlist-map></div>
 ```
 
-Filled with an inline SVG (width 100 percent, height follows) and the legend "People from 24
+Filled with an inline SVG (width 100 percent, height follows) and the legend "People from 9
 countries". Give the div the width you want (for example a max-width container); it redraws
 when that width changes. Any number of maps and count lines per page.
 
