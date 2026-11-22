@@ -35,6 +35,7 @@ from chipin_backend.api.events import API_EVENTS_FILE, EventLog
 from chipin_backend.api.progress import PROGRESS_FILE, ProgressTailer, write_helper
 from chipin_backend.api.scripted import NAME as SCRIPTED
 from chipin_backend.api.scripted import STEP_ENV, register
+from chipin_backend.api.summaries import RunSummaries, attach, load_level_settings
 from chipin_backend.api.translate import Translator, clip
 from chipin_backend.chiplab import chiplab_available, chiplab_instructions
 from chipin_backend.compute.base import Runner
@@ -111,6 +112,7 @@ class ApiRun:
     inner: asyncio.Task[AgentResult] | None = None
     stopping: bool = False
     stop_reason: str = "stopped by the user"
+    levels: RunSummaries | None = None  # levels of summaries (api/summaries.py)
 
     @property
     def id(self) -> str:
@@ -158,6 +160,8 @@ class RunManager:
         self.runs: dict[str, ApiRun] = {}
         self.summary = summary
         self.instructions = standing_instructions()
+        self.levels = load_level_settings()
+        self.closing = False
 
     @property
     def runs_dir(self) -> Path:
@@ -244,6 +248,7 @@ class RunManager:
             timeout_s=self.api.run_timeout_s,
             env={STEP_ENV: str(self.api.stub_step_s)} if self.agent == "stub" else {},
         )
+        item.levels = attach(log, run.path, self.levels) if self.summary else None
         log.append("run.started", prompt=prompt, agent=self.agent, runner=self.runner)
         self.runs[item.id] = item
         item.task = asyncio.create_task(self._drive(item, spec, translator), name=f"run-{item.id}")
@@ -323,6 +328,11 @@ class RunManager:
                 if rel.lower() in {"report.md", "report.html"}:
                     self._artifact(tailer, rel, "report")
             cost = translator.cost
+            if item.levels is not None:
+                try:
+                    await item.levels.finish(status, timeout=0 if self.closing else None)
+                except Exception:  # summaries never fail a run
+                    logger.exception("run {}: closing summaries failed", item.id)
             emit_evidence(item.run.path, item.log.append)
             item.log.append("run.finished", status=status, summary=summary, bullets=bullets)
             item.record.update(
@@ -371,6 +381,7 @@ class RunManager:
 
     async def shutdown(self) -> None:
         """Stop every running agent and wait for its ``run.finished``."""
+        self.closing = True
         live = self.running()
         for item in live:
             await self.stop(item.id, "stopped because the server on this Mac was shut down")

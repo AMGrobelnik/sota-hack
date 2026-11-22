@@ -9,6 +9,7 @@ Examples::
     chipin-backend ask --model cheap "Name one low-power EEG seizure feature"
     chipin-backend serve --agent stub
     chipin-backend evidence 20261122-001507-0ef5bb --json
+    chipin-backend summarise 20261122-001507-0ef5bb --items
     chipin-backend skill export <project>/.claude/skills
 
 ``python -m chipin_backend`` is the same command.
@@ -32,6 +33,7 @@ from chipin_backend.agents.types import AgentSpec, utc_now
 from chipin_backend.api.cli import add_serve_parser, run_serve
 from chipin_backend.api.config import Preset, load_api_config
 from chipin_backend.api.manager import ApiAgent, RequestError, RunManager
+from chipin_backend.api.summaries import ModelSummariser, load_level_settings, outline, summarise_folder
 from chipin_backend.chiplab import SKILL_NAME, TOOLS_REFERENCE, chiplab_available, write_skill
 from chipin_backend.config import BackendConfig, ComputeTier, RunMode, load_config
 from chipin_backend.evidence import build_evidence, render_markdown
@@ -99,6 +101,15 @@ def _parser() -> argparse.ArgumentParser:
     )
     evidence.add_argument("run", help="a run id under the runs folder, or a run folder")
     evidence.add_argument("--json", action="store_true", help="print JSON instead of markdown")
+    summ = sub.add_parser(
+        "summarise",
+        parents=[common],
+        help="write every level of summaries for a recorded run into its summaries.jsonl",
+    )
+    summ.add_argument("run", help="a run id under the runs folder, or a run folder")
+    summ.add_argument("--items", action="store_true", help="show the item lines in the outline too")
+    summ.add_argument("--no-model", action="store_true", help="own first lines only: no model calls")
+    summ.add_argument("--max-usd", type=float, default=None, help="model spend cap (default: summaries.yaml)")
     add_serve_parser(sub, common)
     skill = sub.add_parser("skill", parents=[common], help="the chip-lab agent skill")
     skill_sub = skill.add_subparsers(dest="skill_command", required=True)
@@ -142,6 +153,10 @@ def _main(argv: list[str] | None) -> int:
         return run_serve(args, config)
     if args.command == "evidence":
         return _evidence(config, args.run, as_json=args.json)
+    if args.command == "summarise":
+        return asyncio.run(
+            _summarise(config, args.run, items=args.items, no_model=args.no_model, max_usd=args.max_usd)
+        )
     if args.command == "skill":
         return _skill_export(args.folder)
     if args.command == "ask":
@@ -180,19 +195,59 @@ def _main(argv: list[str] | None) -> int:
     return 1 if result.failed else 0
 
 
-def _evidence(config: BackendConfig, run: str, *, as_json: bool) -> int:
-    """``evidence``: compute it, write ``evidence.json`` and ``evidence.md`` into the run, print one."""
+def _run_folder(config: BackendConfig, run: str) -> Path | None:
+    """``run`` as a folder, or as a run id under the runs folder; ``None`` (logged) if neither."""
     folder = Path(run).expanduser()
-    if not folder.is_dir():
-        if not is_safe_run_id(run):
-            logger.error("no run folder {}", run)
-            return 2
-        folder = config.resolved_runs_dir() / run
+    if folder.is_dir():
+        return folder
+    if not is_safe_run_id(run):
+        logger.error("no run folder {}", run)
+        return None
+    folder = config.resolved_runs_dir() / run
     if not folder.is_dir():
         logger.error("no run folder {} (nor {} under {})", run, run, config.resolved_runs_dir())
+        return None
+    return folder
+
+
+def _evidence(config: BackendConfig, run: str, *, as_json: bool) -> int:
+    """``evidence``: compute it, write ``evidence.json`` and ``evidence.md`` into the run, print one."""
+    folder = _run_folder(config, run)
+    if folder is None:
         return 2
     evidence = build_evidence(folder)
     print(json.dumps(evidence, indent=2, ensure_ascii=False) if as_json else render_markdown(evidence))
+    return 0
+
+
+class _NoModel:
+    """``summarise --no-model``: every line is its own first line."""
+
+    def unavailable(self) -> str:
+        return "--no-model"
+
+    async def __call__(self, *, system: str, prompt: str, max_tokens: int) -> Any:
+        raise RuntimeError("no model calls")
+
+
+async def _summarise(
+    config: BackendConfig, run: str, *, items: bool, no_model: bool, max_usd: float | None = None
+) -> int:
+    """``summarise``: replay the run's events into every level; print the outline, then the stats."""
+    folder = _run_folder(config, run)
+    if folder is None:
+        return 2
+    settings = load_level_settings()
+    if max_usd is not None:
+        settings = settings.model_copy(update={"max_usd_per_run": max_usd})
+    summariser = _NoModel() if no_model else ModelSummariser(settings)
+    try:
+        summaries, stats = await summarise_folder(folder, settings, summariser)
+    except FileNotFoundError as exc:
+        logger.error("{}", exc)
+        return 2
+    print(outline(summaries, items=items))
+    print(json.dumps({"summaries": len(summaries), **stats}, indent=2))
     return 0
 
 

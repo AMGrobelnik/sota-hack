@@ -14,6 +14,7 @@ Routes::
     GET  /api/runs/{id}
     GET  /api/runs/{id}/events?token=...&from=<seq>   (text/event-stream)
     GET  /api/runs/{id}/evidence     -> the run's evidence (409 while it runs)
+    GET  /api/runs/{id}/summaries    -> {"summaries": [...]} levels of summaries so far
     POST /api/runs/{id}/messages     -> 202
     POST /api/runs/{id}/stop         -> 202
     GET  /api/runs/{id}/files        -> {"files": [{"path", "size"}]} the agent's working folder
@@ -39,6 +40,7 @@ from loguru import logger
 
 from chipin_backend.api.config import ApiConfig
 from chipin_backend.api.manager import ApiAgent, ApiRunner, RequestError, RunManager
+from chipin_backend.api.summaries import SUMMARIES_FILE, read_jsonl
 from chipin_backend.api.transcribe import CONTEXT_HEADER, add_transcribe_route, transcribe_ready
 from chipin_backend.config import BackendConfig
 from chipin_backend.evidence import build_evidence
@@ -161,6 +163,12 @@ async def get_evidence(request: web.Request) -> web.Response:
         logger.exception("run {}: evidence not computed", item.id)
         return _error(f"the evidence could not be computed ({type(exc).__name__})", 500)
     return _json(evidence)
+
+
+async def get_summaries(request: web.Request) -> web.Response:
+    """Every summary written so far (live, or by ``chipin-backend summarise``), oldest first."""
+    item = request.app[MANAGER].get(request.match_info["run_id"])
+    return _json({"summaries": await asyncio.to_thread(read_jsonl, item.run.path / SUMMARIES_FILE)})
 
 
 async def post_message(request: web.Request) -> web.Response:
@@ -299,6 +307,7 @@ def create_app(
     app.router.add_get("/api/runs/{run_id}", get_run)
     app.router.add_get("/api/runs/{run_id}/events", stream_events)
     app.router.add_get("/api/runs/{run_id}/evidence", get_evidence)
+    app.router.add_get("/api/runs/{run_id}/summaries", get_summaries)
     app.router.add_post("/api/runs/{run_id}/messages", post_message)
     app.router.add_post("/api/runs/{run_id}/stop", stop_run)
     app.router.add_get("/api/runs/{run_id}/files", list_files)
