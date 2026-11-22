@@ -961,11 +961,13 @@ Point the backend at a lab install (in the environment, `backend/.env` or
   `PATH`; the two lab variables pass through the allowlist unchanged.
 - When the lab is on, the agent also gets `CHIPIN_PROGRESS_CHIP=1`, which
   tells the lab that `./progress` takes `--chip` and `chosen`. The lab
-  itself reports its metrics without `--chip`: before each tool about one
-  design it writes a status line naming that design, and the progress
-  tailer tags the tool's metrics (gates, depth, LUTs, area, verification
-  and the rest) with it, for the orchestrator and subagents alike. A lab
-  metric about no one design (a batch count) stays untagged.
+  then sends every figure of one chip (gates, depth, LUTs, area,
+  verification and the rest) with `--chip <design_id>`. For a lab that
+  sends no `--chip`, the progress tailer tags those figures with the design
+  named by the lab's status line before the tool, for the orchestrator and
+  subagents alike. A lab metric about no one design stays untagged: the run
+  counters `candidates`, `vectors_checked` and `mismatches` (totals over
+  every chip of the run) and the event scores of `score-events`.
 - The evidence step (`evidence.json`) describes the chip of the run's last
   `chosen` event. Only a run without one gets an inferred chip, with
   `chip_inferred: true` and `chip_selected_by` saying how it was picked.
@@ -973,15 +975,18 @@ Point the backend at a lab install (in the environment, `backend/.env` or
   instructions are as before. A `CHIPIN_CHIPLAB_BIN` with no executable
   `chiplab` in it logs one warning and leaves the lab off.
 - Check it: `chiplab doctor` run inside the agent's environment must say
-  ok. The lab's `chiplab doctor --agent-env` checks only the default
-  install.
+  ok. The lab's `chiplab doctor --agent-env` checks the same allowlist,
+  keeping `CHIPLAB_CONFIG` and `CHIPLAB_USER_DIR` and putting
+  `CHIPIN_CHIPLAB_BIN` on `PATH` when they are set.
 
 What the agent can do with it: when the lab is on, the agent gets the
 chip-lab skill (below) and the standing instructions get a short paragraph
 (`api/chiplab.md`) naming the skill, the required `chip-report` call and a
 fallback. The agent calls `chiplab <tool> --json '{...}'` from its working
 folder: compile (`ingest-model` or `compile-ir`, `synthesize`,
-`count-luts`, `map-to-process`), verify (`simulate`, `prove-equivalence`,
+`count-luts`, `map-to-process`, and `compose-chip` and `compile-stream`
+with its alarm smoothing), scoring detections at the event level
+(`score-events`), verify (`simulate`, `prove-equivalence`,
 `rtl-simulate`, `verification-level`) and the chip part of report
 (`layout`, `timing-power`, `tt-package`, `bitstream`, `estimate-cost`,
 and always `chip-report` on the one chosen chip before report is done). It marks the compile and verify stages itself, or passes
