@@ -573,7 +573,9 @@ def tt_package(design_id: str, harden: bool = False, tiles: str = "auto", pdk: s
     from chiplab.hw.tinytapeout import tt_package as _tt
     from chiplab.tools import TOOLS
     from chiplab.verify.rtlsim import tt_project_test, tt_vectors
+    from chiplab.hw.tt_submit import refuse_lgpl_rtl
     d = _design_dir(design_id)
+    refuse_lgpl_rtl([d / "design.v"])   # Tiny Tapeout is Apache-2.0: no alkaid LGPL helper modules
     ir = json.loads((d / "ir.json").read_text())
     s = TOOLS["compile_stream"]["fn"].__wrapped__(design_id=design_id, tt=True)
     meta = {"title": title or f"chipin.space chip {design_id}", "author": "chipin.space chip lab",
