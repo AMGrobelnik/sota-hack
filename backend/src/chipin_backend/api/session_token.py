@@ -5,6 +5,9 @@ restart issued a new one, an open page would get 401 and could not resume the
 run it was showing. So the token lives in ``TOKEN_FILE`` inside the server's
 runs folder (which is never committed), readable by the owner only, and the
 next start reuses it. ``serve --new-token`` rotates it.
+
+``CHIPIN_SESSION_TOKEN`` in the environment fixes the token instead (a public
+demo page ships it): the saved file is then neither read nor written.
 """
 
 from __future__ import annotations
@@ -20,6 +23,18 @@ from loguru import logger
 TOKEN_FILE = ".session-token"
 OWNER_ONLY = 0o600
 _TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{24,128}$")
+TOKEN_ENV = "CHIPIN_SESSION_TOKEN"
+_FIXED_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{16,128}$")
+
+
+def fixed_token() -> str | None:
+    """The token set in ``TOKEN_ENV``, or None when unset; ValueError when malformed."""
+    value = os.environ.get(TOKEN_ENV, "").strip()
+    if not value:
+        return None
+    if not _FIXED_TOKEN_RE.fullmatch(value):
+        raise ValueError(f"{TOKEN_ENV} must be 16 to 128 characters of A-Z, a-z, 0-9, _ or -")
+    return value
 
 
 def new_token() -> str:
@@ -64,7 +79,14 @@ def _write(path: Path, token: str) -> None:
 
 
 def load_or_create_token(runs_dir: Path, *, rotate: bool = False) -> str:
-    """The saved token for ``runs_dir``, or a new one saved there (always new when ``rotate``)."""
+    """The fixed token, else the saved one for ``runs_dir``, else a new one saved there.
+
+    ``rotate`` always issues a new saved token, unless a fixed token is set.
+    """
+    fixed = fixed_token()
+    if fixed is not None:
+        logger.info("using the fixed session token from {}", TOKEN_ENV)
+        return fixed
     path = token_path(runs_dir)
     if not rotate:
         saved = _read(path)
@@ -77,4 +99,12 @@ def load_or_create_token(runs_dir: Path, *, rotate: bool = False) -> str:
     return token
 
 
-__all__ = ["OWNER_ONLY", "TOKEN_FILE", "load_or_create_token", "new_token", "token_path"]
+__all__ = [
+    "OWNER_ONLY",
+    "TOKEN_ENV",
+    "TOKEN_FILE",
+    "fixed_token",
+    "load_or_create_token",
+    "new_token",
+    "token_path",
+]

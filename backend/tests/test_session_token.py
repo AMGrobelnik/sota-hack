@@ -5,7 +5,15 @@ from __future__ import annotations
 import stat
 from pathlib import Path
 
-from chipin_backend.api.session_token import OWNER_ONLY, TOKEN_FILE, load_or_create_token, token_path
+import pytest
+
+from chipin_backend.api.session_token import (
+    OWNER_ONLY,
+    TOKEN_ENV,
+    TOKEN_FILE,
+    load_or_create_token,
+    token_path,
+)
 from chipin_backend.cli import _parser
 
 
@@ -65,6 +73,24 @@ def test_the_token_is_never_logged(tmp_path: Path, capfd) -> None:  # type: igno
         logger.remove(sink)
     text = "".join(lines) + "".join(capfd.readouterr())
     assert lines and first not in text and rotated not in text
+
+
+def test_a_fixed_token_wins_and_leaves_the_file_alone(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    saved = load_or_create_token(tmp_path)
+    monkeypatch.setenv(TOKEN_ENV, "public-demo-token-1")
+    assert load_or_create_token(tmp_path) == "public-demo-token-1"
+    assert load_or_create_token(tmp_path, rotate=True) == "public-demo-token-1"
+    assert token_path(tmp_path).read_text(encoding="utf-8").strip() == saved
+    monkeypatch.delenv(TOKEN_ENV)
+    assert load_or_create_token(tmp_path) == saved
+
+
+def test_a_malformed_fixed_token_is_refused(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    for bad in ("short", "has spaces in the middle", "x" * 129):
+        monkeypatch.setenv(TOKEN_ENV, bad)
+        with pytest.raises(ValueError, match=TOKEN_ENV):
+            load_or_create_token(tmp_path)
+    assert not token_path(tmp_path).exists()
 
 
 def test_serve_has_new_token_flag() -> None:
