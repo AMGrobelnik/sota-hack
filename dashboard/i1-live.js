@@ -23,6 +23,8 @@
  * The server address and token are kept in this browser's localStorage only (never in the URL or
  * the page). A page served by the backend itself finds it on its own origin and asks only for the
  * token, or takes it once from a #token=... fragment, which is removed from the address at once.
+ * A browser with nothing stored (any visitor of the public page) uses the public backend (PUBLIC
+ * below); a stored link wins, and one that is refused or silent falls back to the public backend.
  *
  * What a run sends: POST /api/runs { prompt, preset, agent, model, spec }: agent and model from the
  * chosen one of the four models (RUN_MODELS in chipin-models.js). spec follows the
@@ -85,7 +87,10 @@
 
   /* ---------- connection ---------- */
   // state: off (nothing set up), found (a backend on this origin, no token yet), checking, on, bad
-  var C = { state: "off", kind: "", base: null, token: null, msg: "", defaults: null, same: false, v: 0 };
+  var C = { state: "off", kind: "", base: null, token: null, msg: "", defaults: null, same: false, pub: false, v: 0 };
+  // the default backend for a browser with no link stored; the token is deliberately public (anyone may run), fine to commit
+  var PUBLIC = { base: "https://api.chipin.space", token: "chipin-public-demo" };
+  var hostOf = function () { return C.pub ? "the live backend" : C.base ? C.base.replace(/^https?:\/\//, "") : ""; };
   var REASON = {
     unreachable: "No backend answers at this address. Start it, then test again.",
     "no-token": "The backend is running and needs its token.",
@@ -94,16 +99,21 @@
     unhealthy: "The backend answered but reported a problem."
   };
   function bump() { C.v++; try { if (window.ChipInConn) window.ChipInConn.set(C.state === "on" ? "" : C.kind); } catch (e) { /* banner only */ } if (V && V.cfgMounted) paintConfigure(); }
-  function connect(base, token) {
+  // pub: the default public backend (never stored, no banner); hold: a failure is left for the caller to show
+  function connect(base, token, pub, hold) {
     base = String(base || "").trim().replace(/\/+$/, "");
-    if (!/^https?:\/\/[^\s/]+$/.test(base)) { C.state = "bad"; C.msg = "Enter the address as http://127.0.0.1:<port>."; bump(); return Promise.resolve({ ok: false }); }
-    var st = lsGet(K_CONN), stored = !!(st && st.base === base);
-    C.state = "checking"; C.base = base; C.token = token || null; C.msg = ""; bump();
+    if (!/^https?:\/\/[^\s/]+$/.test(base)) { C.state = "bad"; C.pub = false; C.msg = "Enter the address as http://127.0.0.1:<port>."; bump(); return Promise.resolve({ ok: false }); }
+    var st = lsGet(K_CONN), stored = !pub && !!(st && st.base === base);
+    C.state = "checking"; C.pub = !!pub; C.kind = ""; C.base = base; C.token = token || null; C.msg = ""; bump();
     return L.connect({ base: base, token: token || undefined }).then(function (r) {
       try { sessionStorage.removeItem("chipin.token:" + base); } catch (e) { /* the reader's tab copy; ours is in localStorage */ }
       if (r.ok) {
-        C.state = "on"; C.kind = ""; C.defaults = r.defaults || null; lsSet(K_CONN, { base: base, token: token });
+        C.state = "on"; C.kind = ""; C.defaults = r.defaults || null;
+        if (!pub) lsSet(K_CONN, { base: base, token: token });
         syncList();
+      } else if (pub) {
+        // the public backend is off or refuses the token: a calm "offline" chip, examples only, no banner
+        C.state = "off"; C.kind = ""; C.msg = "";
       } else {
         // a stored backend that cannot be used: its link expired (token rejected) or it does not answer
         C.kind = !stored ? "" : /^(bad-token|http-40[13])$/.test(r.reason) ? "expired" : r.reason === "unreachable" ? "unreachable" : "";
@@ -113,9 +123,24 @@
         if (r.reason === "unreachable" && location.protocol === "https:" && /^http:/.test(base)) C.msg = "This https page may not reach a backend on your computer: Chrome asks first for local network access (allow it, then test again) and Safari blocks it. Or open the dashboard from the backend itself: " + base + "/dashboard/variants/i1.html with the token the backend printed.";
         if (r.reason === "unreachable" && !token) C.state = "off";
       }
-      bump();
+      if (r.ok || !hold) bump();
       return r;
     });
+  }
+  function connectPublic() { return connect(PUBLIC.base, PUBLIC.token, true); }
+  // a link-stored backend wins; one that refuses its token or does not answer falls back to the public
+  // default, and its banner shows only when the default fails too
+  function connectStored(saved) {
+    return connect(saved.base, saved.token, false, true).then(function (r) {
+      if (r.ok || !/^(bad-token|http-40[13]|unreachable)$/.test(r.reason || "")) { if (!r.ok) bump(); return r; }
+      var kind = C.kind, msg = C.msg;
+      return connectPublic().then(function (p) { if (!p.ok && kind) { C.kind = kind; C.msg = msg; bump(); } return p; });
+    });
+  }
+  function boot() {
+    var saved = lsGet(K_CONN);
+    if (saved && saved.base && saved.base !== PUBLIC.base) { C.same = loopback && saved.base === location.origin; return connectStored(saved); }
+    return connectPublic();
   }
   // voice.js asks the reader for the token; answer from here so no tab copy has to be kept
   try { Object.defineProperty(L, "token", { configurable: true, get: function () { return C.state === "on" ? C.token : null; } }); } catch (e) { /* older reader */ }
@@ -135,26 +160,25 @@
     probing = true;
     var ac = typeof AbortController === "function" ? new AbortController() : null, tm = setTimeout(function () { if (ac) ac.abort(); }, 2500);
     fetch(C.base + "/api/health", { cache: "no-store", signal: ac ? ac.signal : undefined }).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); })
-      .then(function () { if (C.lost || C.kind === "unreachable") { C.lost = false; if (C.state === "bad") connect(C.base, C.token); else bump(); } })
+      .then(function () { if (C.lost || C.kind === "unreachable") { C.lost = false; if (C.state === "bad") connect(C.base, C.token, C.pub); else bump(); } })
       .catch(function () {
         var was = C.state + C.lost;
         if (!C.lost) { C.lost = true; C.lostAt = Date.now(); }
-        if (C.state === "on") { C.state = "bad"; C.msg = "The backend stopped answering. Runs resume when it is back."; C.kind = "unreachable"; }
+        if (C.state === "on") { C.state = "bad"; C.msg = "The backend stopped answering. Runs resume when it is back."; C.kind = C.pub ? "" : "unreachable"; }
         if (was !== C.state + C.lost) bump();
       })
       .then(function () { clearTimeout(tm); probing = false; });
   }, 3000);
   function init() {
     var saved = lsGet(K_CONN);
-    // a stored backend is checked again whenever the tab comes back to the front
-    document.addEventListener("visibilitychange", function () { var s2 = lsGet(K_CONN); if (document.visibilityState === "visible" && s2 && s2.base && C.state !== "on" && C.state !== "checking") connect(s2.base, s2.token); });
-    if (saved && saved.base) { C.same = loopback && saved.base === location.origin; connect(saved.base, saved.token); return; }
-    if (loopback) {
-      // served by the backend itself? Its health route needs no token.
-      fetch(location.origin + "/api/health", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (h) {
-        if (h && h.ok === true && h.version === 1) { C.same = true; C.base = location.origin; C.state = "found"; C.msg = REASON["no-token"]; C.defaults = h.defaults || null; bump(); }
-      }).catch(function () { /* a plain static server: examples only */ });
-    }
+    // the backend is checked again whenever the tab comes back to the front
+    document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible" && C.state !== "on" && C.state !== "checking" && C.state !== "found") boot(); });
+    if ((saved && saved.base) || !loopback) { boot(); return; }
+    // served by the backend itself? Its health route needs no token. A plain static server: the public default.
+    fetch(location.origin + "/api/health", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (h) {
+      if (h && h.ok === true && h.version === 1) { C.same = true; C.base = location.origin; C.state = "found"; C.msg = REASON["no-token"]; C.defaults = h.defaults || null; bump(); }
+      else connectPublic();
+    }).catch(function () { connectPublic(); });
   }
 
   /* ---------- the backend's runs ---------- */
@@ -310,7 +334,7 @@
   function start(s, done) {
     if (!s || !s.brief) return false;
     if (C.state !== "on") {
-      note(C.state === "bad" ? "The backend is not answering, so this is an example run on demo data." : "No backend is connected, so this is an example run on demo data.");
+      note(C.pub ? "Live runs are offline right now, so this is an example run on demo data." : C.state === "bad" ? "The backend is not answering, so this is an example run on demo data." : "No backend is connected, so this is an example run on demo data.");
       return false;
     }
     var spec = buildSpec(s), mod = window.ChipInModels.runModel(s.agent && s.agent.model), D = C.defaults || {}, srv = D.agent;
@@ -339,7 +363,7 @@
     }) : null;
     if (stg) stg.tick(1);
     fetch(C.base + "/api/runs", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json", "X-ChipIn-Token": C.token || "" }, body: JSON.stringify(body) })
-      .then(function (res) { return res.json().catch(function () { return {}; }).then(function (j) { if (!res.ok) throw new Error(j.error || "the backend answered HTTP " + res.status); return j; }); })
+      .then(function (res) { return res.json().catch(function () { return {}; }).then(function (j) { if (!res.ok) { var er = new Error(j.error || "the backend answered HTTP " + res.status); er.status = res.status; throw er; } return j; }); })
       .then(function (j) {
         RUNS.unshift({ id: j.id, base: C.base, title: s.device ? clip(cap(s.device), 60) : clip(s.brief, 60), brief: s.brief, spec: spec, preset: body.preset || null, agent: srv === "stub" ? "stub" : mod.agent, model: srv === "stub" ? null : mod.id, notes: notes, created: new Date().toISOString(), status: "running" });
         saveRuns(); bump();
@@ -351,7 +375,7 @@
         if (stg) stg.close();
         if (btn && btn.isConnected) { btn.disabled = false; btn.innerHTML = btn.dataset.lvTxt || "Run"; }
         var g = $(".gfa");
-        if (g) { var p = $(".lv-runerr", g) || g.appendChild(document.createElement("p")); p.className = "lv-runerr"; p.textContent = "The run did not start: " + (e && e.message ? e.message : "the backend did not answer") + "."; }
+        if (g) { var p = $(".lv-runerr", g) || g.appendChild(document.createElement("p")); p.className = "lv-runerr"; p.textContent = e && e.status === 429 ? "Two runs are already in progress. Try again in a few minutes." : "The run did not start: " + (e && e.message ? e.message : "the backend did not answer") + "."; }
       });
     return true;
   }
@@ -963,7 +987,7 @@
     else if (M.x.items.length) { var w = $(".lv-wait", feed); if (w) w.remove(); }
     }
     updBox(M, ch);
-    var foot = (C.base ? "Live run on " + C.base.replace(/^https?:\/\//, "") + ". " : "") + "Run " + M.id + ".";
+    var foot = (C.base ? "Live run on " + hostOf() + ". " : "") + "Run " + M.id + ".";
     if (ch("foot", foot)) $("#lvFoot").textContent = foot;
     drawChart();
   }
@@ -1120,14 +1144,14 @@
     return '<div class="srcp srcpage"><div class="vh"><h2>Sources</h2><p class="vs">Where this run\'s numbers come from: the spec you gave, the backend that ran it and the files it wrote.</p></div>' +
       "<h4>Your spec" + (M.x.spec ? ", as the backend holds it" : M.r.spec ? ", as sent with the run" : "") + "</h4>" + (M.spec ? specRows(M.spec).map(function (r) { return '<div class="kv"><span>' + esc(r[0]) + "</span><span>" + esc(r[1]) + "</span></div>"; }).join("") : '<p class="sk">No spec arrived for this run.</p>') +
       (M.r.brief || (M.spec && M.spec.brief) ? '<h4>The brief</h4><p class="sk">' + esc(M.r.brief || M.spec.brief) + "</p>" : "") +
-      "<h4>The run</h4>" + '<div class="kv"><span>Run</span><span>' + esc(M.id) + '</span></div><div class="kv"><span>Backend</span><span>' + esc(C.base || "not connected") + (C.defaults && C.defaults.agent ? ", " + esc(AGN[C.defaults.agent] || C.defaults.agent) + " agent" : "") + "</span></div>" +
+      "<h4>The run</h4>" + '<div class="kv"><span>Run</span><span>' + esc(M.id) + '</span></div><div class="kv"><span>Backend</span><span>' + esc(hostOf() || "not connected") + (C.defaults && C.defaults.agent ? ", " + esc(AGN[C.defaults.agent] || C.defaults.agent) + " agent" : "") + "</span></div>" +
       (notes ? '<ul class="sk">' + notes + "</ul>" : "") +
       (evRows ? "<h4>Run evidence</h4>" + evRows : "") +
       (artifacts(M).length ? "<h4>Files</h4>" + filesBlock(M, function () { return true; }, "Everything the agent reported writing") : "") + "</div>";
   }
   function settingsModal(M) {
     var bg = document.createElement("div"); bg.className = "mbg";
-    var rows = [["Run", M.id], ["Backend", C.base || "not connected"], ["Preset", M.r.preset ? (cap(M.r.preset) === "Pro" ? "Large" : cap(M.r.preset)) : "the backend's default"], ["Model", usedModel(M)]].concat(specRows(M.spec));
+    var rows = [["Run", M.id], ["Backend", hostOf() || "not connected"], ["Preset", M.r.preset ? (cap(M.r.preset) === "Pro" ? "Large" : cap(M.r.preset)) : "the backend's default"], ["Model", usedModel(M)]].concat(specRows(M.spec));
     bg.innerHTML = '<div class="modal" role="dialog" aria-label="Run settings"><button class="mx" aria-label="Close">' + I("x", "s16") + '</button><h3>Run settings</h3><p style="margin:0 0 10px">Sent with the run when it started.</p>' +
       rows.map(function (r) { return '<div class="kv"><span>' + esc(r[0]) + "</span><span>" + esc(r[1]) + "</span></div>"; }).join("") + ((M.r.notes || []).length ? '<p class="lv-mute">' + esc(M.r.notes.join(" ")) + "</p>" : "") + "</div>";
     bg.onclick = function (e) { if (e.target === bg || e.target.closest(".mx")) bg.remove(); };
@@ -1156,10 +1180,10 @@
     var sec = $("#lvCfg"); if (!sec) { if (V) V.cfgMounted = false; return; }
     var chip = connChip();
     if (!full && $("#lvCfgState", sec)) { $("#lvCfgState", sec).innerHTML = chip; var tb = $("#lvTest", sec); if (tb) tb.disabled = C.state === "checking"; return; }
-    var saved = lsGet(K_CONN) || {}, base = C.base || saved.base || (loopback ? location.origin : "");
+    var saved = lsGet(K_CONN) || {}, base = (C.pub ? "" : C.base) || saved.base || (loopback ? location.origin : "");
     sec.innerHTML = '<h2 class="lv-ch">Backend</h2><p class="lead2" data-tip="Runs started here go to a ChipIn backend on your computer. Without one, runs are examples on demo data. The address and token stay in this browser.">Your local ChipIn backend. Without one, runs are demo examples.</p>' +
       '<div class="cpanel"><div class="crow2"><div class="l"><b>Server address</b><span>' + (C.same ? "This page is served by the backend itself." : "The address the backend printed when it started.") + '</span></div><input class="fin2 lv-in" id="lvBase" value="' + esc(base) + '" placeholder="http://127.0.0.1:port" spellcheck="false" autocomplete="off" aria-label="Server address"></div>' +
-      '<div class="crow2"><div class="l"><b>Token</b><span data-tip="From the link the backend printed; paste the whole link or just the token.">Paste the backend\'s link or just its token.</span></div><input class="fin2 lv-in" id="lvTok" type="password" value="' + esc(C.token || saved.token || "") + '" placeholder="Token" spellcheck="false" autocomplete="off" aria-label="Token"></div>' +
+      '<div class="crow2"><div class="l"><b>Token</b><span data-tip="From the link the backend printed; paste the whole link or just the token.">Paste the backend\'s link or just its token.</span></div><input class="fin2 lv-in" id="lvTok" type="password" value="' + esc((C.pub ? "" : C.token) || saved.token || "") + '" placeholder="Token" spellcheck="false" autocomplete="off" aria-label="Token"></div>' +
       '<div class="crow2"><div class="l" id="lvCfgState">' + chip + '</div><button class="btn s" id="lvForget">Forget</button><button class="btn p" id="lvTest">Test</button></div></div>';
     $("#lvTest", sec).onclick = function () {
       var raw = $("#lvTok", sec).value.trim(), tok = L.tokenFromLink(raw) || raw || null, b = $("#lvBase", sec).value.trim();
@@ -1167,11 +1191,11 @@
       $("#lvTok", sec).value = tok || "";
       connect(b, tok);
     };
-    $("#lvForget", sec).onclick = function () { lsSet(K_CONN, null); C.state = "off"; C.kind = ""; C.token = null; C.msg = ""; C.base = C.same ? location.origin : null; if (C.same) C.state = "found"; paintConfigure(true); bump(); };
+    $("#lvForget", sec).onclick = function () { lsSet(K_CONN, null); C.state = "off"; C.kind = ""; C.token = null; C.msg = ""; C.base = C.same ? location.origin : null; if (C.same) C.state = "found"; paintConfigure(true); bump(); if (!C.same) connectPublic(); };
   }
   function liveOpen() { return !!(V && V.id && owns()); }
   function connChip() {
-    var s = C.state, t = s === "on" ? "Connected to local backend" + (C.defaults && C.defaults.agent ? ", " + (AGN[C.defaults.agent] || C.defaults.agent) + " agent" : "") : s === "checking" ? "Checking the backend…" : s === "found" ? "Backend found on this page's address: add its token" : s === "bad" ? (liveOpen() || C.lost ? "Not connected to the backend" : "Not connected: runs are examples") : "Not connected: runs are examples";
+    var s = C.state, t = C.pub && s !== "checking" ? (s === "on" ? "Live: real runs" : "Live runs offline: examples only") : s === "on" ? "Connected to local backend" + (C.defaults && C.defaults.agent ? ", " + (AGN[C.defaults.agent] || C.defaults.agent) + " agent" : "") : s === "checking" ? "Checking the backend…" : s === "found" ? "Backend found on this page's address: add its token" : s === "bad" ? (liveOpen() || C.lost ? "Not connected to the backend" : "Not connected: runs are examples") : "Not connected: runs are examples";
     return '<span class="lv-cs" data-s="' + s + '"><i></i><b>' + esc(t) + "</b></span>" + (C.msg && s !== "on" ? '<span class="lv-cm2">' + esc(C.msg) + "</span>" : "");
   }
 
@@ -1182,14 +1206,14 @@
   function recents() {
     var cur = parse(), s = C.state, recId = (location.hash.match(/^#\/rec\/mac\/([^/?]+)/) || [])[1];
     var kt = s !== "on" && s !== "checking" && C.kind === "expired" ? "Backend link expired" : s !== "on" && s !== "checking" && C.kind === "unreachable" ? "Backend not reachable" : "";
-    var host = ""; try { host = C.base ? new URL(C.base).hostname : ""; } catch (e) { /* no host to show */ }
-    var txt = kt ? kt : s === "on" ? "Connected to local backend" : s === "checking" ? "Checking the backend" : s === "found" ? "Backend found: add its token" : (liveOpen() || C.lost) && C.base ? "Not connected to the backend" : "Not connected to a backend";
+    var host = ""; try { host = C.base && !C.pub ? new URL(C.base).hostname : ""; } catch (e) { /* no host to show */ }
+    var txt = kt ? kt : C.pub && s === "on" ? "Live: real runs" : C.pub && s !== "checking" && !((liveOpen() || C.lost) && s === "bad") ? "Live runs offline: examples only" : s === "on" ? "Connected to local backend" : s === "checking" ? "Checking the backend" : s === "found" ? "Backend found: add its token" : (liveOpen() || C.lost) && C.base ? "Not connected to the backend" : "Not connected to a backend";
     var rows = shownRuns().slice(0, 8).map(function (r) {
       var g = r.status === "running" ? '<span class="spin"></span>' : r.status === "succeeded" ? I("check", "s12 ok") : r.status === "failed" ? I("x", "s12 lv-bad") : r.status === "stopped" ? I("minus", "s12") : "";
       var on = (cur && cur.id === r.id) || (recId && decodeURIComponent(recId) === r.id);
       return '<a class="rrow lv-rrow' + (on ? " on" : "") + '" href="' + (ended(r.status) ? recHref(r.id, cur && cur.view) : "#/live/" + encodeURIComponent(r.id) + "/" + (cur ? cur.view : "overview")) + '" title="' + esc(r.title + " (run " + r.id + ", " + r.status + ")") + '"><span class="g">' + g + '</span><span class="t">' + esc(r.title || r.id) + "</span></a>";
     }).join("");
-    return '<a class="lv-conn hc" href="#/configure" data-s="' + s + '"' + (kt ? ' data-k="' + C.kind + '"' : "") + ' title="' + esc(kt ? kt + (host ? " (" + host + ")" : "") : C.msg || (host ? host : "Set up a backend under Configure")) + '"><i></i><span>' + esc(txt) + "</span></a>" + rows;
+    return '<a class="lv-conn hc" href="#/configure" data-s="' + s + '"' + (kt ? ' data-k="' + C.kind + '"' : "") + ' title="' + esc(kt ? kt + (host ? " (" + host + ")" : "") : C.msg || (host ? host : C.pub ? (s === "on" ? "Runs started here run for real" : "Runs started here are examples on demo data") : "Set up a backend under Configure")) + '"><i></i><span>' + esc(txt) + "</span></a>" + rows;
   }
   function sig() { var cur = parse(); return C.state + C.kind + "|" + (cur ? cur.id + cur.view : "") + "|" + shownRuns().map(function (r) { return r.id + r.status + r.title; }).join(","); }
 
@@ -1197,10 +1221,10 @@
   function specNote() {
     if (location.hash !== "#/new/spec") return;
     var b = $('.gfa [data-a="run"]'); if (!b) return;
-    var t = C.state === "on" ? "Runs on your local backend" : "Example run on demo data: no backend connected";
+    var t = C.state === "on" ? (C.pub ? "Runs for real on the live backend" : "Runs on your local backend") : C.pub ? "Example run on demo data: live runs offline" : "Example run on demo data: no backend connected";
     var n = $(".lv-runnote", b.parentNode);
     if (!n) { n = document.createElement("span"); n.className = "lv-runnote"; b.parentNode.insertBefore(n, b); }
-    if (n.dataset.s !== C.state) { n.dataset.s = C.state; n.innerHTML = "<i></i>" + esc(t); }
+    if (n.dataset.s !== C.state || n.dataset.p !== String(C.pub)) { n.dataset.s = C.state; n.dataset.p = String(C.pub); n.innerHTML = "<i></i>" + esc(t); }
   }
 
   /* ---------- styles: the page's tokens, a few additions ---------- */
