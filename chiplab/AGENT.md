@@ -548,12 +548,12 @@ chiplab ingest-model --json "{\"format\": \"intnn\", \"model\": $(cat fixtures/s
 
 ### `compose-chip`
 
-Build ONE chip from several model heads (multi-output, multi-input) with fusion logic between their decision outputs: and | or | kofn (k-of-n vote). Heads are design_ids or chipir/1 documents.
+Build ONE chip from several model heads (multi-output, multi-input) with fusion logic between their decision outputs: and | or | kofn (k-of-n vote), or score-level fusion of multi-bit head scores: max | sum then a threshold compare (1-bit decision; e.g. one per-channel model on several channel ports, shared_inputs=false). Heads are design_ids or chipir/1 documents.
 
 - Python: `lab.compose_chip(heads: dict, fusion: list | None = None, shared_inputs: bool = True, name: str = composed) -> dict`
 - Lane: cpu; cached: True
   - `heads`: dict — head name -> design_id or chipir/1
-  - `fusion`: list — [{name, op: and|or|kofn, k?, inputs: [<head>_<output>]}]
+  - `fusion`: list — [{name, op: and|or|kofn, k?, inputs: [<head>_<output>]}] or [{name, op: max|sum, t, rel? (ge), score? (false: also output <name>_score), inputs}]
   - `shared_inputs`: bool — heads read the same input port (true) or each keeps its own port (false)
   - `name`: str
 
@@ -717,7 +717,7 @@ chiplab rtl-simulate --json '{"design_id": "765fa47586bd", "n": 300}'
 
 ### `estimate-cost`
 
-Manufacturing routes for a design (iCE40 FPGA, Tiny Tapeout sky130/GF180, wafer.space GF180, Pragmatic FlexIC): fits or not, cost, deadline, and the basis of each number.
+Manufacturing routes for a design (iCE40 FPGA, Tiny Tapeout sky130/GF180/IHP, wafer.space GF180 slots, ChipFoundry chipIgnite, EUROPRACTICE GF180/IHP, Pragmatic FlexIC): fits or not, cost, deadline, the basis of each number, and per figure whether it was read on the vendor's page or is unverified.
 
 - Python: `lab.estimate_cost(design_id: str) -> dict`
 - Lane: inline; cached: False

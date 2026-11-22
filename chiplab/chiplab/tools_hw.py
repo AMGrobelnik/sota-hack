@@ -109,8 +109,12 @@ def ingest_model(format: str, model: dict | None = None, path: str | None = None
 
 
 @tool("Build ONE chip from several model heads (multi-output, multi-input) with fusion logic between their "
-      "decision outputs: and | or | kofn (k-of-n vote). Heads are design_ids or chipir/1 documents.",
-      {"heads": "dict — head name -> design_id or chipir/1", "fusion": "list — [{name, op: and|or|kofn, k?, inputs: [<head>_<output>]}]",
+      "decision outputs: and | or | kofn (k-of-n vote), or score-level fusion of multi-bit head scores: max | sum "
+      "then a threshold compare (1-bit decision; e.g. one per-channel model on several channel ports, "
+      "shared_inputs=false). Heads are design_ids or chipir/1 documents.",
+      {"heads": "dict — head name -> design_id or chipir/1",
+       "fusion": "list — [{name, op: and|or|kofn, k?, inputs: [<head>_<output>]}] or "
+                 "[{name, op: max|sum, t, rel? (ge), score? (false: also output <name>_score), inputs}]",
        "shared_inputs": "bool — heads read the same input port (true) or each keeps its own port (false)", "name": "str"},
       lane="cpu", cacheable=True)
 def compose_chip(heads: dict, fusion: list | None = None, shared_inputs: bool = True, name: str = "composed") -> dict:
@@ -160,8 +164,10 @@ def rtl_simulate(design_id: str, n: int = 1000, vectors: dict | None = None, exp
 
 # ------------------------------------------------------------------------------------------------ outputs (data only)
 
-@tool("Manufacturing routes for a design (iCE40 FPGA, Tiny Tapeout sky130/GF180, wafer.space GF180, Pragmatic "
-      "FlexIC): fits or not, cost, deadline, and the basis of each number.", {"design_id": "str"}, lane="inline")
+@tool("Manufacturing routes for a design (iCE40 FPGA, Tiny Tapeout sky130/GF180/IHP, wafer.space GF180 slots, "
+      "ChipFoundry chipIgnite, EUROPRACTICE GF180/IHP, Pragmatic FlexIC): fits or not, cost, deadline, the basis "
+      "of each number, and per figure whether it was read on the vendor's page or is unverified.",
+      {"design_id": "str"}, lane="inline")
 def estimate_cost(design_id: str) -> dict:
     from chiplab.hw.cost import estimate
     d = _design_dir(design_id)
@@ -170,7 +176,9 @@ def estimate_cost(design_id: str) -> dict:
     tt = rd("tt.json").get("tiles_used") if (d / "tt.json").exists() else None
     if isinstance(tt, str) and "x" in tt:  # tile shape "AxB" -> number of tiles
         a, b = tt.lower().split("x"); tt = int(a) * int(b)
-    r = estimate(syn.get("gates"), sky.get("area_um2"), tt, ice.get("luts"))
+    other = {p: rd(f"pdk_{p}.json").get("area_um2") for p in ("gf180", "ihp")}
+    r = estimate(syn.get("gates"), sky.get("area_um2"), tt, ice.get("luts"),
+                 area_by_pdk={p: a for p, a in other.items() if a}, tt_pdk=rd("tt.json").get("pdk") or "sky130A")
     (d / "cost.json").write_text(json.dumps(r))
     return {"design_id": design_id, **r}
 
@@ -573,7 +581,9 @@ def tt_package(design_id: str, harden: bool = False, tiles: str = "auto", pdk: s
     from chiplab.hw.tinytapeout import tt_package as _tt
     from chiplab.tools import TOOLS
     from chiplab.verify.rtlsim import tt_project_test, tt_vectors
+    from chiplab.hw.tt_submit import refuse_lgpl_rtl
     d = _design_dir(design_id)
+    refuse_lgpl_rtl([d / "design.v"])   # Tiny Tapeout is Apache-2.0: no alkaid LGPL helper modules
     ir = json.loads((d / "ir.json").read_text())
     s = TOOLS["compile_stream"]["fn"].__wrapped__(design_id=design_id, tt=True)
     meta = {"title": title or f"chipin.space chip {design_id}", "author": "chipin.space chip lab",
@@ -587,7 +597,7 @@ def tt_package(design_id: str, harden: bool = False, tiles: str = "auto", pdk: s
     r = _tt([d / "stream_tt.v"], s["top"], d / "tt", meta, tiles=tiles, harden=harden, pdk=_PDK_ALIAS.get(pdk, pdk),
             vectors=tt_vectors(ir, vectors), clock_hz=clock_hz, test_py=tt_project_test())
     (d / "tt_package.json").write_text(json.dumps(r, default=str))
-    (d / "tt.json").write_text(json.dumps({"tiles_used": r.get("tiles"), "harden_ok": r.get("harden_ok")}))
+    (d / "tt.json").write_text(json.dumps({"tiles_used": r.get("tiles"), "harden_ok": r.get("harden_ok"), "pdk": r.get("pdk")}))
     return {"design_id": design_id, **{k: r.get(k) for k in ("folder", "top", "tiles", "tile_um", "pdk", "user_config_ok",
             "rtl_test_passed", "harden_ok", "gl_test_passed", "gds", "png", "error", "seconds")},
             "cloud_build": "commit the folder under chiplab/tt_projects/ and run: gh workflow run tt-gds.yaml -f project_dir=<path>",
