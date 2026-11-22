@@ -24,10 +24,10 @@
  * the page). A page served by the backend itself finds it on its own origin and asks only for the
  * token, or takes it once from a #token=... fragment, which is removed from the address at once.
  *
- * What a run sends: POST /api/runs { prompt, preset, agent?, model?, spec, answers: { spec } }.
- * spec follows the dashboard contract (brief, device, signal, detect, task_types, patient_group,
- * place, fa_unit, targets, primary, constraints, data). answers.spec repeats it because today's
- * backend passes answers into the agent's brief and ignores keys it does not know.
+ * What a run sends: POST /api/runs { prompt, preset, agent?, model?, spec }. spec follows the
+ * dashboard contract (brief, device, signal, detect, task_types, patient_group, place, fa_unit,
+ * targets, primary, constraints, data); the backend checks it, saves it as workspace/spec.json and
+ * puts it on run.started.
  * What a run reads: the event stream (run.started, stage, status, message, tool, metric, artifact,
  * chosen, cost, error, evidence, run.finished, design, subagent.started, subagent.finished,
  * stage.merged), GET /api/runs, GET /api/runs/{id}/files and /file (spec.json, the report and other
@@ -48,6 +48,8 @@
   var tsMs = function (ts) { var t = Date.parse(ts || ""); return isNaN(t) ? null : t; };
   var num = function (v) { return typeof v === "number" && isFinite(v) ? v : null; };
   var bytes = function (n) { return n == null ? "" : n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(n < 10240 ? 1 : 0) + " KB" : (n / 1048576).toFixed(1) + " MB"; };
+  var pl = function (n, w) { return n + " " + w + (n === 1 ? "" : "s"); };
+  var dur = function (h) { return h >= 1 ? +h.toFixed(1) + " h" : +(h * 60).toFixed(1) + " min"; };
   var andList = function (a) { return a.length < 2 ? (a[0] || "") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1]; };
   var SVG = {
     check: '<path d="M20 6 9 17l-5-5"/>', x: '<path d="M18 6 6 18M6 6l12 12"/>', file: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/>',
@@ -101,6 +103,8 @@
       } else {
         C.state = r.reason === "no-token" && C.same ? "found" : "bad";
         C.msg = REASON[r.reason] || ("The backend could not be used (" + r.reason + ").");
+        // an https page and an http loopback backend: the browser, not the backend, is the usual cause
+        if (r.reason === "unreachable" && location.protocol === "https:" && /^http:/.test(base)) C.msg = "This https page may not reach a backend on your computer: Chrome asks first for local network access (allow it, then test again) and Safari blocks it. Or open the dashboard from the backend itself: " + base + "/dashboard/variants/i1.html with the token the backend printed.";
         if (r.reason === "unreachable" && !token) C.state = "off";
       }
       bump();
@@ -215,9 +219,11 @@
       case "design": {
         var d = normDesign(ev.design || ev.record);
         if (!d) break;
-        if (d.prev_id && d.prev_id !== d.id && x.designs[d.prev_id]) { delete x.designs[d.prev_id]; x.order = x.order.filter(function (i) { return i !== d.prev_id; }); if (V && V.sel === d.prev_id) V.sel = d.id; }
-        var isNew = !x.designs[d.id];
-        if (isNew) x.order.push(d.id);
+        // previous_id (the backend's name) moves an earlier record to the lab's design id
+        var prev = d.previous_id || d.prev_id, at = -1;
+        if (prev && prev !== d.id && x.designs[prev]) { at = x.order.indexOf(prev); delete x.designs[prev]; x.order = x.order.filter(function (i) { return i !== prev; }); if (V && V.sel === prev) V.sel = d.id; }
+        var isNew = !x.designs[d.id] && at < 0;
+        if (!x.designs[d.id]) { if (at >= 0) x.order.splice(at, 0, d.id); else x.order.push(d.id); }
         x.designs[d.id] = d;
         push(x, { k: "design", id: d.id, d: d, isNew: isNew }, ev);
         break;
@@ -317,14 +323,17 @@
     var pl = PLACE[s.place] || [null, "hour"], per = FAU[pl[1]], k = s.cons || {};
     var targets = (s.targets || []).filter(function (t) { return t && num(t.value) != null && MKEY[t.metric]; }).map(function (t) {
       var m = MKEY[t.metric], fa = m === "fa_per_hour";
-      return { metric: m, op: t.op === "<=" ? "at_most" : "at_least", value: r6(fa ? t.value * per : t.value), unit: fa ? "per " + pl[1] : "fraction" };
+      // the flow keeps rates per hour; the spec states them in the user's unit, rounded as typed
+      return { metric: m, op: t.op === "<=" ? "at_most" : "at_least", value: fa ? +(t.value * per).toFixed(4) : r6(t.value), unit: fa ? "per " + pl[1] : "fraction" };
     });
     var mode = { sim: "simulate", public: "public", own: "own" }[s.data] || "simulate";
+    // "find the best" with a brief that names one channel has a single budget: the card says so, so does the spec
+    var one = k.findBest && s.chans === 1, best = !!k.findBest && !one;
     return {
       brief: s.brief || "", device: s.device || null, signal: s.signal || null, detect: s.detect || null,
       task_types: TASK[s.task] || [], patient_group: s.group || null, place: pl[0], fa_unit: pl[1], targets: targets,
       primary: MKEY[s.primary] && targets.some(function (t) { return t.metric === MKEY[s.primary]; }) ? MKEY[s.primary] : targets[0] ? targets[0].metric : null,
-      constraints: { channels: k.findBest ? null : num(k.channels), find_best: !!k.findBest, battery_hours: num(k.batN) != null ? k.batN * (k.batU === "days" ? 24 : 1) : null, reusable: typeof k.reusable === "boolean" ? k.reusable : null },
+      constraints: { channels: best ? null : one ? 1 : num(k.channels), find_best: best, battery_hours: num(k.batN) != null ? k.batN * (k.batU === "days" ? 24 : 1) : null, reusable: typeof k.reusable === "boolean" ? k.reusable : null },
       data: { mode: mode, dataset: mode === "public" ? (s.ds || null) : null }
     };
   }
@@ -336,7 +345,7 @@
       return false;
     }
     var spec = buildSpec(s), ag = s.agent || {}, srv = C.defaults && C.defaults.agent;
-    var body = { prompt: s.brief, spec: spec, answers: { spec: spec } };
+    var body = { prompt: s.brief, spec: spec };
     if (s.preset) body.preset = String(s.preset).toLowerCase();
     var notes = [];
     if (ag.backend && ag.backend !== "auto") {
@@ -530,7 +539,7 @@
     else if (c) {
       var miss = M.T.filter(function (t) { return meets(t, val(c, t.metric)) === false; }).map(function (t) { return metaOf(t.metric).n.toLowerCase(); });
       var hit = M.T.filter(function (t) { return meets(t, val(c, t.metric)) === true; }).map(function (t) { return metaOf(t.metric).n.toLowerCase(); });
-      h1 = !M.T.length ? "The chosen chip: " + sizeTxt(c) + "." : !miss.length && hit.length === M.T.length ? "The chosen chip clears every target: " + sizeTxt(c) + ", " + esc(budgetName(c).toLowerCase()) + "." :
+      h1 = !M.T.length ? "The chosen chip: " + sizeTxt(c) + "." : !miss.length && hit.length === M.T.length ? "The chosen chip clears every target: " + sizeTxt(c) + ", " + esc(budgetName(c)) + "." :
         "The chosen chip, " + sizeTxt(c) + ", misses your " + andList(miss) + " target" + (miss.length === 1 ? "" : "s") + (hit.length ? " and clears " + andList(hit) : "") + ".";
     } else if (M.chosenId) h1 = "Chip " + esc(M.chosenId) + " is chosen; its design record has not arrived.";
     else if (M.designs.length) h1 = M.designs.length + " design" + (M.designs.length === 1 ? "" : "s") + " scored" + (M.running ? " so far; none chosen yet." : "; none chosen.");
@@ -547,7 +556,7 @@
 
   function tilesHTML(M) {
     var d = M.chosen, out = [], lab = d ? "chosen chip" : "", mark = dataMark(M.spec, M.designs);
-    var scope = function (x) { var c = x.counts || {}; return (x.basis === "test" ? "test set" : x.basis === "validation" ? "validation set" : "") + (num(c.patients) ? ", " + c.patients + " patients pooled" : ""); };
+    var scope = function (x) { var c = x.counts || {}; return (x.basis === "test" ? "test set" : x.basis === "validation" ? "validation set" : "") + (num(c.patients) ? ", " + pl(c.patients, "patient") + (c.patients === 1 ? "" : " pooled") : ""); };
     M.T.forEach(function (t) {
       var v = d ? val(d, t.metric) : null, w = d && t.metric === "sensitivity" ? worstOf(d) : null;
       var big = v == null ? "–" : metaOf(t.metric).frac ? (v * 100).toFixed(1) + "<small>%</small>" : t.metric === "fa_per_hour" ? fmtV(t.metric, v, M.spec).replace(/ per (\w+)$/, "<small>per $1</small>") : esc(String(+v.toFixed(4)));
@@ -597,7 +606,7 @@
     var props, cand = num(M.st.runMetrics.candidates);
     var n = M.designs.length, scored = M.designs.filter(function (d) { return Object.keys(d.metrics).some(function (k) { return num(d.metrics[k]) != null; }); }).length;
     var compiled = M.designs.filter(function (d) { return num(d.gates) > 0; }).length;
-    var verified = M.designs.filter(function (d) { return d.verified && num(d.verified.mismatches) === 0; }).length;
+    var verified = M.designs.filter(function (d) { return d.verified && typeof d.verified === "object"; }).length;
     var clear = M.designs.filter(function (d) { return passAll(M.T, d); }).length;
     props = Math.max(n, cand || 0);
     return { proposed: props, scored: scored, compiled: compiled, verified: verified, clear: clear, chosen: M.chosenId ? 1 : 0 };
@@ -606,7 +615,7 @@
     var f = funnel(M), cur = null;
     STAGES.forEach(function (n) { var s = M.st.stages[n]; if (s && s.state === "started") cur = n; });
     var nowK = !M.running ? null : cur === "propose" ? "proposed" : cur === "reference" || cur === "finetune" ? "scored" : cur === "compile" ? "compiled" : cur === "verify" ? "verified" : null;
-    var S = [["proposed", "Proposed"], ["scored", "Scored"], ["compiled", "Compiled to gates"], ["verified", "Verified bit-exact"], ["clear", "Clear your targets"], ["chosen", "Chosen"]];
+    var S = [["proposed", "Proposed"], ["scored", "Scored"], ["compiled", "Compiled to gates"], ["verified", "Verified against the model"], ["clear", "Clear your targets"], ["chosen", "Chosen"]];
     if (!M.T.length) S = S.filter(function (s) { return s[0] !== "clear"; });
     return S.map(function (s) { return '<div class="fs' + (s[0] === nowK ? " now" : "") + (s[0] === "chosen" ? " last" : "") + (!f[s[0]] ? " mute" : "") + '"><div class="fn">' + fmt(f[s[0]]) + '</div><div class="fl">' + s[1] + "</div></div>"; }).join("");
   }
@@ -633,7 +642,7 @@
     });
     if (num(c.events_total)) rows.push(["Events caught", fmt(c.events_caught || 0) + " of " + fmt(c.events_total)]);
     if (num(c.negatives_total)) rows.push(["Negatives correct", fmt(c.negatives_correct || 0) + " of " + fmt(c.negatives_total)]);
-    if (num(c.patients) || num(c.hours)) rows.push(["Held out", (num(c.patients) ? c.patients + " patients" : "") + (num(c.hours) ? (num(c.patients) ? ", " : "") + (+c.hours.toFixed(2)) + " hours" : "")]);
+    if (num(c.patients) || num(c.hours)) rows.push(["Held out", (num(c.patients) ? pl(c.patients, "patient") : "") + (num(c.hours) ? (num(c.patients) ? ", " : "") + (+c.hours.toFixed(2)) + " hours" : "")]);
     var vf = d.verified;
     rows.push(["Circuit against its model", vf ? (num(vf.vectors) != null ? fmt(vf.vectors) + " vectors, " : "") + (num(vf.mismatches) != null ? fmt(vf.mismatches) + " mismatches" : "") + (vf.level != null ? ", level " + esc(vf.level) : "") + (vf.proved ? ", proved equal" : "") : "not checked yet"]);
     var files = chipFiles(M, d.id);
@@ -816,7 +825,8 @@
     var seen = {}, out = [];
     M.st.artifacts.slice().reverse().forEach(function (a) { if (a.path && !seen[a.path]) { seen[a.path] = 1; out.push(a); } });
     out.reverse();
-    return out.sort(function (a, b) { var ra = a.kind === "report" ? 0 : a.kind === "chip" ? 1 : 2, rb = b.kind === "report" ? 0 : b.kind === "chip" ? 1 : 2; return ra - rb; });
+    var rank = function (a) { return a.kind === "report" ? (a.path === "workspace/report.md" ? 0 : 1) : a.kind === "chip" ? 2 : 3; };
+    return out.sort(function (a, b) { return rank(a) - rank(b); });
   }
   function refreshSizes(M) {
     var x = M.x, n = M.st.artifacts.length;
@@ -830,11 +840,13 @@
       }
     }).catch(function () { x.filesN = -1; });
   }
+  // a chip lab chip report is named by its chip, so it is not mistaken for the run's report
+  var fname = function (a) { var m = /\/chips\/([^/]+)\/report\.md$/.exec(a.path || ""); return m ? "Chip report, " + m[1] : a.name; };
   function filesHTML(M) {
     var list = artifacts(M), sz = M.x.files || {};
     if (!list.length) return '<div class="lv-fh"><h2>Files</h2></div><p class="lv-mute lv-pad">' + (M.running ? "Files appear here as the agent writes them." : "This run wrote no files it reported.") + "</p>";
     var rep = list.filter(function (a) { return a.kind === "report"; }), other = list.filter(function (a) { return a.kind !== "report"; });
-    var row = function (a) { return '<li><span class="lv-fn">' + I("file", "s14") + "<b>" + esc(a.name) + '</b><span class="lv-fp">' + esc(a.path.replace(/^workspace\//, "")) + "</span></span><span class=\"lv-fs\">" + esc(bytes(sz[a.path])) + '</span><button class="qbtn" data-open="' + esc(a.path) + '">' + (a.kind === "report" ? "Read" : "Open") + "</button></li>"; };
+    var row = function (a) { return '<li><span class="lv-fn">' + I("file", "s14") + "<b>" + esc(fname(a)) + '</b><span class="lv-fp">' + esc(a.path.replace(/^workspace\//, "")) + "</span></span><span class=\"lv-fs\">" + esc(bytes(sz[a.path])) + '</span><button class="qbtn" data-open="' + esc(a.path) + '">' + (a.kind === "report" ? "Read" : "Open") + "</button></li>"; };
     return '<div class="lv-fh"><h2>Files</h2><span class="lv-mute">' + list.length + " from this run" + "</span></div>" + (rep.length ? '<ul class="lv-fl lv-rep">' + rep.map(row).join("") + "</ul>" : "") +
       (other.length ? '<details class="lv-more"' + (other.length <= 4 ? " open" : "") + "><summary>" + other.length + " other file" + (other.length === 1 ? "" : "s") + '</summary><ul class="lv-fl">' + other.map(row).join("") + "</ul></details>" : "");
   }
@@ -1048,7 +1060,7 @@
   function filesBlock(M, pred, title) {
     var list = artifacts(M).filter(pred); if (!list.length) return "";
     var sz = M.x.files || {};
-    return '<div class="stage"><h3 class="lv-h3">' + esc(title) + '</h3><ul class="lv-fl">' + list.map(function (a) { return '<li><span class="lv-fn">' + I("file", "s14") + "<b>" + esc(a.name) + '</b><span class="lv-fp">' + esc(a.path.replace(/^workspace\//, "")) + '</span></span><span class="lv-fs">' + esc(bytes(sz[a.path])) + '</span><button class="qbtn" data-open="' + esc(a.path) + '">Open</button></li>'; }).join("") + "</ul></div>";
+    return '<div class="stage"><h3 class="lv-h3">' + esc(title) + '</h3><ul class="lv-fl">' + list.map(function (a) { return '<li><span class="lv-fn">' + I("file", "s14") + "<b>" + esc(fname(a)) + '</b><span class="lv-fp">' + esc(a.path.replace(/^workspace\//, "")) + '</span></span><span class="lv-fs">' + esc(bytes(sz[a.path])) + '</span><button class="qbtn" data-open="' + esc(a.path) + '">Open</button></li>'; }).join("") + "</ul></div>";
   }
   function patientsHTML(M) {
     var withPP = M.designs.filter(function (d) { return d.per_patient.length; });
@@ -1061,20 +1073,32 @@
     var fa = rows.some(function (p) { return num(p.false_alarms) != null; });
     var bars = rows.map(function (p) {
       var r = p.total ? p.caught / p.total : 0, ok = t ? r >= t.value - 1e-12 : true;
-      return '<div class="lv-pr"><span class="lv-pid">' + esc(p.id) + '</span><span class="lv-pb"><i style="width:' + (r * 100).toFixed(1) + "%;background:" + (ok ? "var(--caught)" : "var(--missed)") + '"></i>' + (t ? '<s style="left:' + (t.value * 100).toFixed(1) + '%"></s>' : "") + '</span><span class="lv-pv">' + p.caught + " of " + p.total + " caught, " + (r * 100).toFixed(1) + "%</span>" + (fa ? '<span class="lv-pf">' + (num(p.false_alarms) != null ? p.false_alarms + " false alarm" + (p.false_alarms === 1 ? "" : "s") + (num(p.hours) ? " in " + (+(p.hours * 60).toFixed(1)) + " min" : "") : "") + "</span>" : "") + "</div>";
+      return '<div class="lv-pr"><span class="lv-pid">' + esc(p.id) + '</span><span class="lv-pb"><i style="width:' + (r * 100).toFixed(1) + "%;background:" + (ok ? "var(--caught)" : "var(--missed)") + '"></i>' + (t ? '<s style="left:' + (t.value * 100).toFixed(1) + '%"></s>' : "") + '</span><span class="lv-pv">' + p.caught + " of " + p.total + " caught, " + (r * 100).toFixed(1) + "%</span>" + (fa ? '<span class="lv-pf">' + (num(p.false_alarms) != null ? p.false_alarms + " false alarm" + (p.false_alarms === 1 ? "" : "s") + (num(p.hours) ? " in " + dur(p.hours) : "") : "") + "</span>" : "") + "</div>";
     }).join("");
     return '<div class="vh"><p class="lv-k">Design ' + esc(d.id) + (d.id === M.chosenId ? ", the chosen chip" : "") + " " + dataMark(M.spec, [d]) + "</p><h2>Worst patient: " + esc(w.id) + ", " + (wr == null ? "no events" : (wr * 100).toFixed(1) + "% caught") + '</h2><p class="vs">' +
-      "One bar per held-out patient, worst first" + (d.basis ? ", on the " + esc(d.basis) + " set" : "") + "." + (t ? " The line is your bar, " + esc(fmtT(t, M.spec)) + "; " + below + " of " + rows.length + " patients fall below it." : "") + "</p></div>" + picks +
+      "One bar per held-out patient, worst first" + (d.basis ? ", on the " + esc(d.basis) + " set" : "") + "." + (t ? " The line is your bar, " + esc(fmtT(t, M.spec)) + "; " + below + " of " + pl(rows.length, "patient") + (below === 1 ? " falls" : " fall") + " below it." : "") + "</p></div>" + picks +
       '<div class="stage lv-pp">' + bars + "</div>";
   }
   function chipHTML(M) {
     var id = M.chosenId || (selected(M) && selected(M).id);
     if (!id) return '<div class="vh"><h2>The chip</h2><p class="vs">' + (M.running ? "No chip yet. The chosen chip's measured figures appear here once the chip lab reports them." : "This run chose no chip.") + "</p></div>";
-    var CM = chipMetrics(M, id), m = CM.m, u = CM.u, ks = Object.keys(m);
+    var CM = chipMetrics(M, id), m = CM.m, u = CM.u, ks = Object.keys(m), rec = null;
+    M.designs.forEach(function (d) { if (d.id === id) rec = d; });
+    if (rec && CM.untagged) {
+      // untagged lab metrics are the last chip the lab touched, not necessarily this one: use the design record
+      var vf = rec.verified || {};
+      m = {}; u = {};
+      if (num(rec.gates) != null) { m.gates = rec.gates; u.gates = "gates"; }
+      if (num(rec.depth) != null) { m.depth = rec.depth; u.depth = "levels"; }
+      if (num(vf.vectors) != null) { m.vectors_checked = vf.vectors; u.vectors_checked = "vectors"; }
+      if (num(vf.mismatches) != null) m.mismatches = vf.mismatches;
+      if (vf.level != null) m.verification_level = String(vf.level) + (vf.proved ? ", proved equal" : "");
+      ks = Object.keys(m);
+    }
     var NAMES = { gates: "Logic gates", depth: "Logic depth", transistors: "Transistors", luts_xc7: "LUTs (Xilinx 7-series)", luts_ice40: "LUTs (iCE40)", area_um2: "Area before layout", ge: "Gate equivalents", tt_tiles: "Tiny Tapeout tiles", cost_eur: "Tiny Tapeout price", verification_level: "Verification level", vectors_checked: "Vectors checked", mismatches: "Mismatches against the model" };
     if (CM.untagged) ks = ks.filter(function (k) { return NAMES[k]; });
     var rows = ks.map(function (k) { var v = m[k]; return '<div class="irow"><span>' + esc(NAMES[k] || k) + "</span><b>" + esc(typeof v === "number" ? (Math.abs(v) >= 100 ? fmt(v) : +v.toFixed(3)) : v) + (u[k] ? " " + esc(u[k]) : "") + "</b></div>"; }).join("");
-    return '<div class="vh"><p class="lv-k">Chip ' + esc(id) + (id === M.chosenId ? ", chosen" : "") + '</p><h2>What the chip lab measured</h2><p class="vs">' + (CM.untagged ? "Each figure is a metric reported during the run. The backend sent them without a chip id, so they are shown for the chosen chip." : "Each figure is a metric the lab reported for this chip during the run.") + "</p></div>" +
+    return '<div class="vh"><p class="lv-k">Chip ' + esc(id) + (id === M.chosenId ? ", chosen" : "") + '</p><h2>What the chip lab measured</h2><p class="vs">' + (rec && CM.untagged ? "From this chip's design record, as the agent reported it from the chip lab. The lab's other figures (area, transistors, LUTs) arrived without a chip id, so they are in the chip report, not here." : CM.untagged ? "Each figure is a metric reported during the run. The backend sent them without a chip id, so they are shown for the chosen chip." : "Each figure is a metric the lab reported for this chip during the run.") + "</p></div>" +
       (rows ? '<div class="stage lv-chipm">' + rows + "</div>" : '<div class="stage"><p class="lv-mute">The lab has not reported figures for this chip yet.</p></div>') +
       filesBlock(M, function (a) { return a.path.indexOf("/chips/" + id + "/") >= 0 || a.kind === "chip"; }, "Chip files");
   }
@@ -1234,7 +1258,7 @@
     ".lv-pv,.lv-pf{color:var(--i700);font-variant-numeric:tabular-nums}.lv-pf{color:var(--falsea-t)}",
     ".lv-chipm{padding:6px 16px 10px;max-width:560px}",
     ".lv-doc{font-size:14px;line-height:1.6}.lv-doc h3{font-family:var(--serif);font-weight:400;font-size:22px;margin:14px 0 6px}.lv-doc h4{font-size:15px;margin:16px 0 6px}",
-    ".lv-tw{overflow:auto;margin:8px 0}.lv-md table{border-collapse:collapse;font-size:12.5px}.lv-md th,.lv-md td{border-bottom:1px solid var(--hair);padding:5px 8px;text-align:left;vertical-align:top}.lv-md th{font-weight:600;color:var(--i700)}",
+    ".lv-tw{overflow:auto;margin:8px 0}.lv-md table{border-collapse:collapse;font-size:12.5px}.lv-md th,.lv-md td{border-bottom:1px solid var(--hair);padding:5px 8px;text-align:left;vertical-align:top}.lv-md th{font-weight:600;color:var(--i700);white-space:nowrap}",
     ".lv-drawer{width:min(640px,100%)}.lv-drawer pre{font-family:var(--mono);font-size:11.5px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--i100);border-radius:8px;padding:10px}",
     ".lv-cfg{margin-top:28px}.lv-ch{font-family:var(--serif);font-weight:400;font-size:22px;margin:0}.lv-cfg .lead2{margin:6px 0 14px}",
     ".lv-in{max-width:320px}.lv-cs{display:inline-flex;align-items:center;gap:8px}.lv-cs b{font-size:13.5px;font-weight:600}.lv-cm2{display:block;font-size:12.5px;color:var(--i600);margin-top:3px}",
@@ -1284,7 +1308,11 @@
     sig: sig,
     buildSpec: buildSpec,
     exampleBox: exampleBox,
-    state: function () { return { connection: C.state, base: C.base, message: C.msg, runs: RUNS.map(function (r) { return { id: r.id, status: r.status, title: r.title }; }) }; }
+    state: function () {
+      // chart: the points the open run's chart drew (id, gates, measured, the plotted metric and its value)
+      var chart = V && V.pts && V.id && W[V.id] ? V.pts.map(function (p) { var s = sizeOf(p.d), k = primaryOf(modelOf(V.id)); return { id: p.d.id, budget: budgetName(p.d), gates: s.g, measured: s.m, metric: k, value: val(p.d, k) }; }) : null;
+      return { connection: C.state, base: C.base, message: C.msg, runs: RUNS.map(function (r) { return { id: r.id, status: r.status, title: r.title }; }), chart: chart };
+    }
   };
   init();
 })();
