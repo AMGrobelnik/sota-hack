@@ -53,7 +53,8 @@ scoring step adds it, it is used as an unmodified package under that licence.
 
 ## Generated RTL
 
-RTL from the default emitter contains no third-party code. RTL from `optimizer: alkaid` made before the clean
-emitter carries copies of alkaid's LGPL-3.0 Verilog helper modules (`chipin_alk_*`); `tt_package`, `tt_readiness`
-and `tt_export` refuse such RTL for Tiny Tapeout, which requires Apache-2.0. Once the clean emitter lands,
-generated RTL contains no third-party code.
+Generated RTL contains no third-party code. With `optimizer: alkaid`, alkaid's solver only picks the shared
+shift-add graph; the Verilog for it is written by the chip lab (`chiplab/emit/optimized.py`), and no alkaid
+template is copied (a test checks this). RTL made by older lab versions carries copies of alkaid's LGPL-3.0 Verilog
+helper modules (`chipin_alk_*`); `tt_package`, `tt_readiness` and `tt_export` refuse such RTL for Tiny Tapeout,
+which requires Apache-2.0: regenerate it.
