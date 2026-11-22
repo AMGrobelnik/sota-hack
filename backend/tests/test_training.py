@@ -84,7 +84,7 @@ def test_instructions_carry_the_training_paragraph_only_when_set(tmp_path: Path)
         '"synthetic data"',
         "never clinical evidence",
         "ingest-model",
-        "./progress metric synthetic_sensitivity_pct",
+        "./progress metric synthetic_sensitivity 0.925",
         "./progress metric synthetic_false_alarms_per_h",
         "patients_pass",
         "patients_total",

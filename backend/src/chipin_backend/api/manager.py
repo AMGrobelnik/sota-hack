@@ -30,8 +30,16 @@ from typing import Any, Literal
 from loguru import logger
 
 from chipin_backend.agents.types import AgentResult, AgentSpec, EventSink, utc_now
-from chipin_backend.api.config import ApiConfig, Preset
+from chipin_backend.api.config import ApiAgent, ApiConfig, Preset
 from chipin_backend.api.events import API_EVENTS_FILE, EventLog
+from chipin_backend.api.fanout import (
+    Fanout,
+    FanoutPlan,
+    Orchestrator,
+    orchestrator_instructions,
+    plan_fanout,
+    subagent_instructions,
+)
 from chipin_backend.api.progress import PROGRESS_FILE, ProgressTailer, write_helper
 from chipin_backend.api.scripted import NAME as SCRIPTED
 from chipin_backend.api.scripted import STEP_ENV, register
@@ -51,7 +59,6 @@ API_RECORD_FILE = "api.json"
 RAW_EVENTS_FILE = "agent_events.jsonl"
 INSTRUCTIONS_PATH = Path(__file__).with_name("instructions.md")
 
-ApiAgent = Literal["claude", "stub", "openrouter"]
 ApiRunner = Literal["local"]
 ApiStatus = Literal["running", "succeeded", "failed", "stopped"]
 #: Contract agent name -> backend registry name.
@@ -68,6 +75,12 @@ USER_MESSAGE_PROMPT = (
     "A message from the user arrived while you work:\n\n{text}\n\n"
     "Answer it in one or two sentences and adjust the plan if it asks you to. Then carry on "
     "with the remaining stages, reporting each with ./progress, until report.md is written."
+)
+#: Added to the first prompt when fan-out is on.
+ORCHESTRATOR_NUDGE = (
+    "You are this run's orchestrator: do each of reference, propose, finetune, compile and verify "
+    "as one batch of {width} subagents with different strategies (./subagent start, all before "
+    "you wait), wait for them, merge the best (./subagent merge), then move on."
 )
 
 
@@ -111,6 +124,8 @@ class ApiRun:
     inner: asyncio.Task[AgentResult] | None = None
     stopping: bool = False
     stop_reason: str = "stopped by the user"
+    #: The run's subagents when fan-out is on.
+    fanout: Fanout | None = None
 
     @property
     def id(self) -> str:
@@ -125,9 +140,13 @@ class ApiRun:
     def detail_view(self) -> dict[str, Any]:
         """The run object of ``GET /api/runs/{id}``."""
         view = self.summary_view()
-        for key in ("summary", "bullets", "cost"):
+        for key in ("summary", "bullets", "cost", "fanout", "merges"):
             if self.record.get(key) is not None:
                 view[key] = self.record[key]
+        if self.fanout is not None:
+            view["subagents"] = self.fanout.views()
+        elif self.record.get("subagents") is not None:
+            view["subagents"] = self.record["subagents"]
         return view
 
     def save(self) -> None:
@@ -158,6 +177,7 @@ class RunManager:
         self.runs: dict[str, ApiRun] = {}
         self.summary = summary
         self.instructions = standing_instructions()
+        self.subagent_instructions = subagent_standing_instructions()
 
     @property
     def runs_dir(self) -> Path:
@@ -209,6 +229,18 @@ class RunManager:
         """Validate a ``POST /api/runs`` body, make the run folder and start the agent."""
         prompt, preset, machine, answers, files = _validate(body, self.api)
         provider, model = self._provider_choice(body)
+        effort = self.api.presets[preset] if preset else None
+        try:
+            plan = plan_fanout(
+                body.get("fanout"),
+                self.api.fanout,
+                orchestrator=Orchestrator(self.agent, model, provider, effort),
+                preset=preset,
+                config=self.config,
+                agents=AGENT_BACKENDS,
+            )
+        except ValueError as exc:
+            raise RequestError(str(exc)) from None
         if len(self.running()) >= self.config.compute.max_concurrent_agents:
             raise RequestError("too many runs in progress; stop one first", status=429)
         run = ApiRunDir.create(self.runs_dir, new_run_id())
@@ -231,18 +263,28 @@ class RunManager:
         if self.agent == "openrouter":
             record["provider"] = provider
             record["model"] = model
+        elif model is not None:
+            record["model"] = model
         item = ApiRun(run, record, log)
+        stub_env = {STEP_ENV: str(self.api.stub_step_s)}
+        instructions = self.instructions
+        first = _first_prompt(prompt)
+        if plan is not None:
+            item.fanout = self._fanout(item, plan, stub_env)
+            record["fanout"] = plan.view()
+            instructions = f"{instructions.rstrip()}\n\n{orchestrator_instructions(plan)}"
+            first += f" {ORCHESTRATOR_NUDGE.format(width=plan.width)}"
         item.save()
         spec = AgentSpec(
             name="chipin",
-            prompts=[_first_prompt(prompt)],
+            prompts=[first],
             backend=AGENT_BACKENDS[self.agent],  # type: ignore[arg-type]
             model=model,
             provider=provider,
-            effort=self.api.presets[preset] if preset else None,
-            system_prompt=self.instructions,
+            effort=effort,
+            system_prompt=instructions,
             timeout_s=self.api.run_timeout_s,
-            env={STEP_ENV: str(self.api.stub_step_s)} if self.agent == "stub" else {},
+            env=stub_env if self.agent == "stub" else {},
         )
         log.append("run.started", prompt=prompt, agent=self.agent, runner=self.runner)
         self.runs[item.id] = item
@@ -250,17 +292,49 @@ class RunManager:
         logger.info("run {} started: agent={} runner={} preset={}", item.id, self.agent, self.runner, preset)
         return item
 
+    def _fanout(self, item: ApiRun, plan: FanoutPlan, stub_env: dict[str, str]) -> Fanout:
+        """The run's :class:`Fanout`, with ``./subagent`` written into the workspace."""
+
+        def on_change() -> None:
+            if item.fanout is None:
+                return
+            item.record["subagents"] = item.fanout.views()
+            if item.fanout.merges:
+                item.record["merges"] = list(item.fanout.merges)
+            item.save()
+            if item.fanout.subagents and item.run.record_path.is_file():
+                item.run.update_record(
+                    subagents=item.fanout.views(), subagent_cost_usd=item.fanout.cost()["usd"]
+                )
+
+        fanout = Fanout(
+            plan,
+            run=item.run,
+            log=item.log,
+            config=self.config,
+            mode=RUNNER_MODES[self.runner],
+            backends=AGENT_BACKENDS,
+            instructions=self.subagent_instructions,
+            stub_env=stub_env,
+            on_change=on_change,
+        )
+        fanout.install()
+        return fanout
+
     def _provider_choice(self, body: dict[str, Any]) -> tuple[str | None, str | None]:
         """The body's ``provider`` and ``model``, checked before a run folder is made.
 
         Only the ``openrouter`` agent takes a provider; an unknown or unconfigured one,
         or one whose key is not set, is a 400 that names the problem (never a key).
+        The ``claude`` agent takes a model only (a Claude model id or alias).
         """
         provider, model = body.get("provider"), body.get("model")
         if provider is None and model is None:
             return None, None
         if not all(v is None or (isinstance(v, str) and v.strip()) for v in (provider, model)):
             raise RequestError("provider and model must be non-empty strings")
+        if self.agent == "claude" and provider is None:
+            return None, model.strip()
         if self.agent != "openrouter":
             raise RequestError("provider and model need the server started with --agent openrouter")
         try:
@@ -277,8 +351,15 @@ class RunManager:
         ``run_agent`` owns ``run.json`` (status, timings, costs, ``stopped`` on
         cancellation) and closes the runner; this adds the dashboard's view.
         """
-        tailer = ProgressTailer(item.run.path / PROGRESS_FILE, item.log, item.run.path, item.run.workspace)
+        tailer = ProgressTailer(
+            item.run.path / PROGRESS_FILE,
+            item.log,
+            item.run.path,
+            item.run.workspace,
+            on_stage=item.fanout.stage_marked if item.fanout else None,
+        )
         follow = asyncio.create_task(tailer.follow(self.api.progress_poll_s))
+        requests = asyncio.create_task(item.fanout.follow(self.api.progress_poll_s)) if item.fanout else None
         status: ApiStatus = "failed"
         summary: str | None = None
         bullets: str | None = None
@@ -323,6 +404,10 @@ class RunManager:
                 if rel.lower() in {"report.md", "report.html"}:
                     self._artifact(tailer, rel, "report")
             cost = translator.cost
+            if item.fanout is not None:
+                if requests is not None:
+                    requests.cancel()
+                cost = await self._close_fanout(item, cost)
             emit_evidence(item.run.path, item.log.append)
             item.log.append("run.finished", status=status, summary=summary, bullets=bullets)
             item.record.update(
@@ -330,6 +415,22 @@ class RunManager:
             )
             item.save()
             logger.info("run {} {}", item.id, status)
+
+    @staticmethod
+    async def _close_fanout(item: ApiRun, cost: dict[str, Any] | None) -> dict[str, Any] | None:
+        """Stop the run's subagents and close the merged stages left open; the run's cost with
+        theirs added (one ``cost`` event)."""
+        assert item.fanout is not None
+        await item.fanout.close()
+        item.fanout.close_merged()
+        if not item.fanout.subagents:
+            return cost
+        own = cost or {"usd": 0.0, "tokens_in": 0, "tokens_out": 0}
+        theirs = item.fanout.cost()
+        total = {key: (own.get(key) or 0) + theirs[key] for key in ("usd", "tokens_in", "tokens_out")}
+        total["subagents_usd"] = theirs["usd"]
+        item.log.append("cost", **total)
+        return total
 
     @staticmethod
     def _artifact(tailer: ProgressTailer, rel: str, kind: str) -> None:
@@ -383,11 +484,24 @@ class RunManager:
 def standing_instructions(source: Mapping[str, str] | None = None) -> str:
     """The agent's standing instructions, plus the training and chip-lab paragraphs when each is on."""
     text = INSTRUCTIONS_PATH.read_text(encoding="utf-8")
-    if train_available(source):
-        text = f"{text.rstrip()}\n\n{training_instructions()}"
-    if chiplab_available(source):
-        text = f"{text.rstrip()}\n\n{chiplab_instructions()}"
+    for paragraph in _paragraphs(source):
+        text = f"{text.rstrip()}\n\n{paragraph}"
     return text
+
+
+def subagent_standing_instructions(source: Mapping[str, str] | None = None) -> str:
+    """A fan-out subagent's standing instructions: its own, plus the same paragraphs as the orchestrator's."""
+    return subagent_instructions(*_paragraphs(source))
+
+
+def _paragraphs(source: Mapping[str, str] | None) -> list[str]:
+    """The training and chip-lab paragraphs, each when it is on for an agent started from ``source``."""
+    paragraphs = []
+    if train_available(source):
+        paragraphs.append(training_instructions())
+    if chiplab_available(source):
+        paragraphs.append(chiplab_instructions())
+    return paragraphs
 
 
 def _bullets(result: AgentResult) -> str | None:
@@ -471,4 +585,5 @@ __all__ = [
     "RequestError",
     "RunManager",
     "standing_instructions",
+    "subagent_standing_instructions",
 ]

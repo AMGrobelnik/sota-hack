@@ -41,7 +41,7 @@ class LocalRunner(Runner):
         workdir = spec.workdir or run.workspace
         workdir.mkdir(parents=True, exist_ok=True)
         backend = backend_for(spec.backend, self.config.agents, self.config.providers)
-        if workdir.resolve().is_relative_to(run.path.resolve()):
+        if workdir.resolve().is_relative_to(run.owned_path.resolve()):
             await asyncio.to_thread(install_skill, workdir, backend.name)
         else:
             logger.info("agent {}: working folder outside the run folder; no chip-lab skill", spec.name)

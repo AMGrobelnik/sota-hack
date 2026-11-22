@@ -6,6 +6,7 @@ Examples::
     chipin-backend run --backend stub --prompt "hello"
     chipin-backend run --config config/example.yaml --prompt-file examples/seizure_eeg_prompt.md
     chipin-backend run --preset pro --prompt-file examples/seizure_eeg_prompt.md
+    chipin-backend run --preset lite --fanout --prompt "..."     # 3 subagents per stage batch
     chipin-backend ask --model cheap "Name one low-power EEG seizure feature"
     chipin-backend serve --agent stub
     chipin-backend evidence 20261122-001507-0ef5bb --json
@@ -87,6 +88,29 @@ def _parser() -> argparse.ArgumentParser:
         help="run it as the dashboard does, on this Mac: standing instructions, ./progress, "
         "contract events.jsonl; the prompts are joined into one brief",
     )
+    run.add_argument(
+        "--fanout",
+        type=int,
+        nargs="?",
+        const=0,
+        default=None,
+        metavar="WIDTH",
+        help="the agent orchestrates one batch of parallel subagents per stage; WIDTH subagents "
+        "per batch, or the preset's batch size when left out (implies the dashboard run of --preset)",
+    )
+    run.add_argument(
+        "--subagent-agent",
+        choices=["claude", "openrouter", "stub"],
+        default=None,
+        help="the subagents' harness (default: the orchestrator's)",
+    )
+    run.add_argument("--subagent-model", default=None, help="the subagents' model id or preset")
+    run.add_argument(
+        "--subagent-max-usd",
+        type=float,
+        default=None,
+        help="lower the subagents' API-model spending limit for this run (USD)",
+    )
     ask = sub.add_parser("ask", parents=[common], help="one OpenRouter chat call; prints the answer")
     ask.add_argument("question")
     ask.add_argument("--model", default=None, help="preset name or model id of the provider")
@@ -153,8 +177,11 @@ def _main(argv: list[str] | None) -> int:
         logger.error("give at least one --prompt or --prompt-file")
         return 2
     backend = args.backend
-    if args.preset is not None:
+    if args.preset is not None or args.fanout is not None:
         return asyncio.run(_dashboard_run(config, args, prompts))
+    if any(v is not None for v in (args.subagent_agent, args.subagent_model, args.subagent_max_usd)):
+        logger.error("--subagent-agent, --subagent-model and --subagent-max-usd need --fanout")
+        return 2
     if args.provider is not None:
         if backend not in (None, "openrouter"):
             logger.error("--provider needs the openrouter backend, not {}", backend)
@@ -240,6 +267,21 @@ async def _dashboard_run(config: BackendConfig, args: argparse.Namespace, prompt
         api = api.model_copy(update={"run_timeout_s": args.timeout})
     body: dict[str, Any] = {"prompt": "\n\n".join(prompts), "preset": args.preset}
     body.update({k: v for k, v in (("provider", args.provider), ("model", args.model)) if v is not None})
+    if args.fanout is not None:
+        sub = {
+            k: v for k, v in (("agent", args.subagent_agent), ("model", args.subagent_model)) if v is not None
+        }
+        fanout: dict[str, Any] = {"enabled": True}
+        if args.fanout:
+            fanout["width"] = args.fanout
+        if args.subagent_max_usd is not None:
+            fanout["max_usd"] = args.subagent_max_usd
+        if sub:
+            fanout["subagent"] = sub
+        body["fanout"] = fanout
+    elif any(v is not None for v in (args.subagent_agent, args.subagent_model, args.subagent_max_usd)):
+        logger.error("--subagent-agent, --subagent-model and --subagent-max-usd need --fanout")
+        return 2
     manager = RunManager(config, api, agent=agent, summary=not args.no_summary)
     try:
         item = manager.start(body)
