@@ -37,9 +37,9 @@ No recording, feature or excerpt is stored in this repository. `scripts/download
   levels. They are trained with the integer arithmetic in the loop, and every figure is computed from the
   exact chipir/1 document the lab compiles.
 - Event scoring: consensus runs closer than 10 s are merged, and events under 10 s are not scored. An event
-  is caught when the alarm is on between its onset and its end plus 30 s. Alarm runs closer than 60 s are
-  merged; a merged alarm touching no seizure is one false alarm. Worst-baby sensitivity counts held-out
-  babies with at least 2 events.
+  is caught when the alarm is on between its onset and its end plus 30 s. Alarm time outside every seizure
+  (onset to end plus 30 s) is merged across gaps under 60 s and counts one false alarm per started 60 s, so
+  an alarm that stays on keeps counting. Worst-baby sensitivity counts held-out babies with at least 2 events.
 - Gates come from the lab's synthesis of the classifier only; the feature front end is not counted.
 
 ## Run

@@ -6,8 +6,9 @@ Rules (stated in README.md and in the published notes):
 - decision k is made at the end of its window, time t = k + WIN_S seconds;
 - an event [on, off) is caught when any positive decision falls in [on, off + MARGIN_S];
   delay = first such decision time minus onset;
-- alarms: runs of positive decisions, merged when the gap between them is under REFRACTORY_S;
-  an alarm that overlaps no [on, off + MARGIN_S] of any labelled run is one false alarm.
+- false alarms: positive decisions outside every labelled run's [on, off + MARGIN_S] form runs; runs closer than
+  REFRACTORY_S are merged, and each merged run counts one false alarm per started REFRACTORY_S seconds (a
+  continuous alarm re-fires every minute), so a detector that simply stays on is charged for it.
 """
 from __future__ import annotations
 
@@ -65,11 +66,13 @@ def score_baby(dec: np.ndarray, cons: np.ndarray) -> BabyScore:
         if hit.size:
             caught += 1
             delays.append(float(hit[0] - on))
-    alarms = merge([(int(t[s]), int(t[e - 1]) + 1) for s, e in runs(dec)], REFRACTORY_S)
+    zone = np.zeros(len(dec), dtype=bool)
+    for on, off in allr:
+        zone |= (t >= on) & (t <= off + MARGIN_S)
+    out = dec.astype(bool) & ~zone
     fa = 0
-    for a0, a1 in alarms:
-        if not any(a0 <= off + MARGIN_S and a1 > on for on, off in allr):
-            fa += 1
+    for a0, a1 in merge([(int(t[s]), int(t[e - 1]) + 1) for s, e in runs(out)], REFRACTORY_S):
+        fa += -(-(a1 - a0) // REFRACTORY_S)
     return BabyScore(caught, len(ev), fa, len(dec) / 3600.0, delays)
 
 

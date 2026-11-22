@@ -183,8 +183,9 @@ def build(stage_dir: Path, out: Path, verify_path: Path | None) -> None:
             "Label rule: a second is seizure when at least 2 of the 3 experts marked it. Consensus runs closer than "
             f"{S.MERGE_GAP_S} s are one event; events shorter than {S.MIN_EVENT_S} s are not scored (alarms over them do not count as false).",
             f"Event matching: an event is caught when the design's alarm is on at any decision between its onset and "
-            f"its end plus {S.MARGIN_S} s. Decisions come every second at the end of an 8 s window. Alarm runs closer than "
-            f"{S.REFRACTORY_S} s are merged; a merged alarm that touches no seizure (plus margin) is one false alarm.",
+            f"its end plus {S.MARGIN_S} s. Decisions come every second at the end of an 8 s window. False alarms: alarm "
+            f"time outside every seizure (onset to end plus {S.MARGIN_S} s), with runs closer than {S.REFRACTORY_S} s "
+            f"merged, counts one false alarm per started {S.REFRACTORY_S} s, so an alarm that stays on keeps counting.",
             f"Worst-baby sensitivity is the lowest per-baby share of events caught among held-out babies with at least "
             f"{min_ev} events: {eligible} of {len(test_ev)} held-out babies qualify, with event counts "
             f"{sorted([n for n in test_ev if n >= min_ev])}. With so few babies it rests on one baby's count.",
