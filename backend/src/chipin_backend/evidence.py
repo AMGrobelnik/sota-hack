@@ -1,12 +1,14 @@
 """Run evidence: three measurements computed only from a finished run's own files.
 
-A. Number tracing: every number the final report states, in one of three
-   classes that are never added together: traced (value and meaning agree
-   with a machine-produced source in the run folder: a ``metric`` event, a
-   model file's stored parameter count, or a numeric field of a file the chip
-   lab wrote), value found but meaning not confirmed (for a human to check),
-   or untraced; plus excluded (dates, versions, list numbers, ...). An
-   untraced number is not called wrong: it only has no machine source.
+A. Number check: every number the final report states, in one of three
+   classes that are never added together: source found (a machine-produced
+   source in the run folder, a ``metric`` event, a model file's stored
+   parameter count or a numeric field of a file the chip lab wrote, holds
+   this value in this unit), value found with the unit or meaning unclear
+   (for a human to check), or no source; plus excluded (dates, versions,
+   list numbers, ...). A number with no source is not called wrong: it only
+   has no machine source. Which design, stage or quantity a sentence gives
+   a number is not checked (see ``LIMITS``).
 B. Weight bytes per decision: the bytes of trained weights a software
    implementation of the selected chip's model reads for one decision (one
    width rule for every design), and the memory cells (and flip-flops) in the
@@ -38,7 +40,7 @@ from loguru import logger
 EVIDENCE_JSON = "evidence.json"
 EVIDENCE_MD = "evidence.md"
 EVENTS_FILE = "events.jsonl"
-#: An integer at or below this (absolute) is traced only when its words share a term with the source key.
+#: An integer at or below this (absolute) has a source only when its words share a term with the source key.
 SMALL_INT_MAX = 10
 #: Source files larger than this are not read.
 MAX_SOURCE_BYTES = 5_000_000
@@ -189,19 +191,26 @@ _STRUCTURAL_WORDS = frozenset(
 _LOOP_SIZE_KEYS = frozenset({"vectors", "n_vectors", "num_vectors", "vector_count"})
 
 #: The three classes of a reported number (never added together), plus excluded.
-TRACED = "traced"
-VALUE_ONLY = "value_found_meaning_not_confirmed"
-UNTRACED = "untraced"
+SOURCE_FOUND = "source_found"
+VALUE_UNCLEAR = "value_found_unclear"
+NO_SOURCE = "no_source"
 EXCLUDED = "excluded"
 CLASS_NAMES = {
-    TRACED: "traced (value and meaning agree)",
-    VALUE_ONLY: "value found, meaning not confirmed",
-    UNTRACED: "untraced",
+    SOURCE_FOUND: "source found",
+    VALUE_UNCLEAR: "value found, unit or meaning unclear",
+    NO_SOURCE: "no source",
     EXCLUDED: "excluded",
 }
+#: What the number check establishes: one fixed paragraph, the same in the markdown, the JSON and the README.
+LIMITS = (
+    'A "no source" number means nothing the tools measured in this run has this value: treat it as '
+    'unsupported until shown otherwise. "Source found" means a machine-produced source in this run holds '
+    "this value in this unit. It does not establish which design, stage or quantity the sentence gives "
+    "the value to, nor relations between numbers, nor negations. The check reads only the run folder."
+)
 _PREFIX = {"p": 1e-12, "n": 1e-9, "u": 1e-6, "µ": 1e-6, "m": 1e-3, "": 1.0, "k": 1e3, "M": 1e6, "G": 1e9}
 _BASES = ("Hz", "W", "J", "s", "m2", "m²", "m", "V")
-#: Spelled-out units (``microwatts``, ``nanosecond``, ...) and their symbols; bare "seconds" stays a noun.
+#: Spelled-out units (``microwatts``, ``nanosecond``, ``seconds``, ...) and their symbols.
 _UNIT_WORDS = {
     f"{word_prefix}{word}{plural}": f"{symbol_prefix}{symbol}"
     for word_prefix, symbol_prefix in (
@@ -216,7 +225,13 @@ _UNIT_WORDS = {
     )
     for word, symbol in (("watt", "W"), ("joule", "J"), ("second", "s"), ("hertz", "Hz"), ("volt", "V"))
     for plural in (("",) if word == "hertz" else ("", "s"))
-    if word_prefix or word != "second"
+}
+#: Time words and their scale in seconds (a rate in words is separate: see ``_RATE``).
+_TIME_WORDS = {
+    **dict.fromkeys(("sec", "secs"), 1.0),
+    **dict.fromkeys(("minute", "minutes", "min", "mins"), 60.0),
+    **dict.fromkeys(("hour", "hours", "hr", "hrs", "h"), 3600.0),
+    **dict.fromkeys(("day", "days"), 86400.0),
 }
 #: A rate written in words (``per hour``, ``decision/s``): the unit's factor in hertz.
 _RATE_UNITS = {"/s": 1.0, "/min": 1 / 60, "/h": 1 / 3600, "/day": 1 / 86400}
@@ -238,7 +253,7 @@ _COUNT_UNITS = (
 )
 _UNIT = re.compile(
     rf"^(?:%|x|\u00d7|[kMGK]|(?:[pnuµ\u03bcmkMG]?(?:Hz|W|J|s|m2|m²|m|V))|{_COUNT_UNITS}"
-    rf"|(?i:{'|'.join(sorted(_UNIT_WORDS, key=len, reverse=True))}))$"
+    rf"|(?i:{'|'.join(sorted({*_UNIT_WORDS, *_TIME_WORDS}, key=len, reverse=True))}))$"
 )
 _RANGE_UNIT = re.compile(r"^\s*[-–]\s*\d[\d.,]*\s*([^\s.,;:)*|]+)")  # noqa: RUF001
 _NUMBER = re.compile(r"(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?(?:[eE]([-+]?\d+))?")
@@ -299,6 +314,8 @@ def _unit_scale(unit: str | None) -> tuple[str, float] | None:
         return None
     if unit in _RATE_UNITS:
         return "Hz", _RATE_UNITS[unit]
+    if unit.lower() in _TIME_WORDS:
+        return "s", _TIME_WORDS[unit.lower()]
     unit = _UNIT_WORDS.get(unit.lower(), unit).replace("μ", "µ")
     unit = unit.replace("um", "µm") if unit.startswith("um") else unit
     for base in _BASES:
@@ -613,6 +630,8 @@ def _source(
         kinds = {k for k in kinds if not k.startswith("unit:")} | {f"unit:{scaled[0]}"}
     elif not kinds and (unit_kind := _noun_kind(unit)):
         kinds = {unit_kind}
+    if unit is None and "seconds" in kinds:  # wall, elapsed, duration, ...: a time in seconds
+        unit, kinds = "s", {*kinds, "unit:s"}
     percent = unit == "%" or bool(terms & _PERCENT_WORDS)
     ratio = not percent and scaled is None and bool(terms & _RATIO_WORDS) and 0 <= value <= 1
     if percent or ratio:
@@ -746,9 +765,9 @@ def _is_small_int(claim: Claim) -> bool:
 def classify_claim(claim: Claim, sources: list[Source]) -> tuple[str, list[Source], str | None]:
     """``(class, sources in rank order, reason)`` for one report number.
 
-    Traced needs the value and the meaning to agree: the noun or unit next to the number agrees
-    with the source's kind, or (with no such noun) the number's words share a whole non-generic
-    word with the source key. A value-only match is never traced. A structural field (line count,
+    A source is found when the value and unit match and the noun or unit next to the number
+    agrees with the source's kind, or (with no such noun) the number's words share a whole
+    non-generic word with the source key. A value-only match is unclear. A structural field (line count,
     byte size, tool duration, seed, ...) is a source only when the claim's words name it.
     """
     gaps = {id(s): gap for s in sources if (gap := _match(claim, s)) is not None}
@@ -757,10 +776,10 @@ def classify_claim(claim: Claim, sources: list[Source]) -> tuple[str, list[Sourc
 
     def settle(agree: list[Source], declared_reason: str) -> tuple[str, list[Source], str | None] | None:
         if full := [s for s in agree if s.confirmed and not gaps[id(s)]]:
-            return TRACED, rank(full), None
+            return SOURCE_FOUND, rank(full), None
         if agree:
             first = rank(agree)[0]
-            return VALUE_ONLY, rank(agree), gaps[id(first)] or declared_reason
+            return VALUE_UNCLEAR, rank(agree), gaps[id(first)] or declared_reason
         return None
 
     def rank(pool: list[Source]) -> list[Source]:
@@ -780,15 +799,15 @@ def classify_claim(claim: Claim, sources: list[Source]) -> tuple[str, list[Sourc
         reason = f"no source with this value is a {claim.noun_word}"
         if hits:
             reason += f"; the value appears only as a different quantity ({rank(hits)[0].label})"
-        return UNTRACED, [], reason
+        return NO_SOURCE, [], reason
     keyed = [s for s in named if _shared_words(claim, s)]
     if settled := settle(keyed, "the only source sharing a word is a declared figure"):
         return settled
     if named and _is_small_int(claim):
-        return UNTRACED, [], "small integer, and no source with this value shares a word"
+        return NO_SOURCE, [], "small integer, and no source with this value shares a word"
     if named:
-        return VALUE_ONLY, rank(named), "the value matches but no word ties the number to the source"
-    return UNTRACED, [], None
+        return VALUE_UNCLEAR, rank(named), "the value matches but no word ties the number to the source"
+    return NO_SOURCE, [], None
 
 
 def trace_numbers(run: Path, events: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -798,9 +817,10 @@ def trace_numbers(run: Path, events: list[dict[str, Any]] | None = None) -> dict
     result: dict[str, Any] = {
         "report": _rel(run, report) if report else None,
         "classes": dict(CLASS_NAMES),
-        TRACED: 0,
-        VALUE_ONLY: 0,
-        UNTRACED: 0,
+        "limits": LIMITS,
+        NO_SOURCE: 0,
+        VALUE_UNCLEAR: 0,
+        SOURCE_FOUND: 0,
         EXCLUDED: 0,
         "numbers": [],
     }
@@ -1298,7 +1318,7 @@ def evidence_summary(evidence: dict[str, Any]) -> dict[str, Any]:
     software = weights.get("software") or {}
     chip = weights.get("chip_netlist") or {}
     return {
-        "numbers": {k: numbers.get(k) for k in (TRACED, VALUE_ONLY, UNTRACED, EXCLUDED)},
+        "numbers": {k: numbers.get(k) for k in (NO_SOURCE, VALUE_UNCLEAR, SOURCE_FOUND, EXCLUDED)},
         "weights": {
             "chip": weights.get("chip"),
             "software_bytes_per_decision": software.get("bytes_per_decision"),
@@ -1325,9 +1345,9 @@ def emit_evidence(run: Path, append: Callable[..., Any]) -> None:
 
 
 def number_summary(numbers: dict[str, Any]) -> str:
-    """The one-line count of each class of report number (never summed)."""
+    """The one-line count of each class of report number (never summed), the findings first."""
     line = "; ".join(
-        f"{CLASS_NAMES[k]}: {numbers.get(k, 0)}" for k in (TRACED, VALUE_ONLY, UNTRACED, EXCLUDED)
+        f"{CLASS_NAMES[k]}: {numbers.get(k, 0)}" for k in (NO_SOURCE, VALUE_UNCLEAR, SOURCE_FOUND, EXCLUDED)
     )
     return line[0].upper() + line[1:] + "."
 
@@ -1341,19 +1361,18 @@ def render_markdown(evidence: dict[str, Any]) -> str:
         f"Run state when measured: {evidence['run_state']}.",
         "",
     ]
-    out += ["## A. Number tracing", ""]
+    out += ["## A. Number check", ""]
     if numbers.get("report") is None:
         out += [numbers.get("note", "no report"), ""]
     else:
         out += [
             f"Report: `{numbers['report']}`. {number_summary(numbers)}",
-            "The classes are separate counts and are never added together. A number under "
-            f'"{CLASS_NAMES[VALUE_ONLY]}" has a matching value but nothing ties its meaning to the '
-            "source: a human should check it. An untraced number is not wrong: it has no machine "
-            "source in this run folder.",
+            "The classes are separate counts and are never added together.",
+            "",
+            LIMITS,
             "",
         ]
-        for kind in (TRACED, VALUE_ONLY, UNTRACED, EXCLUDED):
+        for kind in (NO_SOURCE, VALUE_UNCLEAR, SOURCE_FOUND, EXCLUDED):
             entries = [e for e in numbers["numbers"] if e["class"] == kind]
             out += [f"### {CLASS_NAMES[kind][0].upper()}{CLASS_NAMES[kind][1:]}: {len(entries)}", ""]
             for entry in entries:
@@ -1418,6 +1437,7 @@ __all__ = [
     "CLASS_NAMES",
     "EVIDENCE_JSON",
     "EVIDENCE_MD",
+    "LIMITS",
     "build_evidence",
     "classify_claim",
     "emit_evidence",

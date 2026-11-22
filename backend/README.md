@@ -312,35 +312,44 @@ dashboard run the backend computes it once and emits one `evidence` event
 with the three summaries, just before `run.finished`; a failure there is
 logged and never fails the run.
 
-- **Number tracing.** Every number in `workspace/report.md` lands in one
-  of three classes, never added together: *traced (value and meaning
-  agree)*, *value found, meaning not confirmed* (for a human to check)
-  and *untraced*; plus *excluded* (dates, times, numbering, versions, file
-  names, ids, code blocks, numbers quoted from the prompt). Sources are
-  `metric` events, the stored weight count of each model file, and the
-  numeric fields of files the chip lab wrote. The value must round to the
-  digits shown. When both the number and the source carry a unit, they
-  must agree after both are converted to the base unit (20 ms is not
-  20 ns; a rate in words is in hertz, so 1 per minute is not 1 Hz);
-  when only one carries a unit, the meaning is not confirmed. Spelled-out
-  units (microwatts, nanoseconds, picojoules), both micro signs, and
-  "k" or "thousand" after a number are read as scales. A negative
-  source (a timing slack) traces only to a negative number or a sentence
-  of shortfall ("misses by", "short by", "negative slack", "late");
-  a sentence of a margin met ("to spare", "positive slack") does not
-  trace, and one with neither is not confirmed. A width in bits about
-  weights traces only to a weight width, not a port width. The meaning
-  agrees when the unit
-  or noun next to the number matches the source through a small synonym
+- **Number check.** Every number in `workspace/report.md` lands in one
+  of three classes, never added together: *no source*, *value found,
+  unit or meaning unclear* (for a human to check) and *source found*
+  (a machine-produced source in this run holds this value in this unit);
+  plus *excluded* (dates, times, numbering, versions, file names, ids,
+  code blocks, numbers quoted from the prompt). The output lists the no
+  source numbers first, then the unclear ones, then the source found
+  ones with the named source (a path or an event sequence number). JSON
+  keys: `no_source`, `value_found_unclear`, `source_found`, `excluded`,
+  and a `limits` string. What the check establishes, word for word:
+
+  > A "no source" number means nothing the tools measured in this run has this value: treat it as unsupported until shown otherwise. "Source found" means a machine-produced source in this run holds this value in this unit. It does not establish which design, stage or quantity the sentence gives the value to, nor relations between numbers, nor negations. The check reads only the run folder.
+
+  Sources are `metric` events, the stored weight count of each model
+  file, and the numeric fields of files the chip lab wrote. The value
+  must round to the digits shown. When both the number and the source
+  carry a unit, they must agree after both are converted to the base
+  unit (20 ms is not 20 ns; a rate in words is in hertz, so 1 per minute
+  is not 1 Hz; minutes, hours and days, and the noun seconds after a
+  number, are time units with their scale, so 1.35 seconds is not
+  1.35 ns); when only one carries a unit, the unit is unclear.
+  Spelled-out units (microwatts, nanoseconds, picojoules), both micro
+  signs, and "k" or "thousand" after a number are read as scales. A
+  negative source (a timing slack) matches only a negative number or a
+  sentence of shortfall ("misses by", "short by", "negative slack",
+  "late"); a sentence of a margin met ("to spare", "positive slack")
+  does not match, and one with neither is unclear. A width in bits about
+  weights matches only a weight width, not a port width. The unit or
+  noun next to the number must match the source through a small synonym
   table (gates/cells, ns/slack/period, uW/power, um2/area, levels/depth,
-  parameters/params, ...), or, with no such noun, when the number's words
-  share a whole non-generic word with the source key's last segment. A
-  percent matches only a percentage or a 0-to-1 ratio. A noun that agrees
-  with no source leaves the number untraced. Structural fields (line
-  counts, sizes, tool durations, seeds, indices) count only when the claim
-  names them. An untraced number is not called wrong; a traced one is not
-  proved used correctly. Metric events can also come from the agent's own
-  `./progress metric` calls, and lab answers echo the agent's inputs.
+  parameters/params, ...), or, with no such noun, the number's words
+  must share a whole non-generic word with the source key's last
+  segment. A percent matches only a percentage or a 0-to-1 ratio. A noun
+  that agrees with no source leaves the number with no source.
+  Structural fields (line counts, sizes, tool durations, seeds, indices)
+  count only when the claim names them. Metric events can also come from
+  the agent's own `./progress metric` calls, and lab answers echo the
+  agent's inputs.
 - **Weight bytes per decision.** For one chip, named in the output with
   the reason it was picked (the one the report names most; otherwise the
   first laid-out design with weights): the bytes of weights software must

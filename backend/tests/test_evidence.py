@@ -1,4 +1,4 @@
-"""Run evidence on small synthetic run folders: number tracing, weight bytes, stage timings, wiring."""
+"""Run evidence on small synthetic run folders: number check, weight bytes, stage timings, wiring."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from chipin_backend.config import BackendConfig
 from chipin_backend.evidence import (
     EVIDENCE_JSON,
     EVIDENCE_MD,
+    LIMITS,
     build_evidence,
     emit_evidence,
     evidence_summary,
@@ -68,10 +69,10 @@ def _by_text(result: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {entry["text"]: entry for entry in result["numbers"]}
 
 
-# ---- A. number tracing ----
+# ---- A. number check ----
 
 
-def test_numbers_traced_through_formatting(tmp_path: Path) -> None:
+def test_numbers_found_through_formatting(tmp_path: Path) -> None:
     events = [
         _event(1, 0, "run.started", prompt="A seizure alarm"),
         _metric(2, 1, "gates", 2367, "gates"),
@@ -88,23 +89,23 @@ def test_numbers_traced_through_formatting(tmp_path: Path) -> None:
     found = _by_text(trace_numbers(run))
 
     assert found["2,367 gates"]["source"].startswith("metric gates = 2367")
-    assert found["2.4k"]["class"] == "traced"
+    assert found["2.4k"]["class"] == "source_found"
     assert found["20,043 µm²"]["source"].startswith("metric area_um2")
     assert found["49.9 nW"]["source"].startswith("metric power_uw_at_rate")
     assert found["456 pJ"]["source"] == "workspace/lab/d1.tp.json: metrics.energy_per_decision_pj = 456.106"
     assert found["85.4%"]["source"].startswith("metric pass_fraction")
-    assert all(entry["class"] == "traced" for entry in found.values())
+    assert all(entry["class"] == "source_found" for entry in found.values())
 
 
-def test_a_planted_number_is_untraced_not_wrong(tmp_path: Path) -> None:
+def test_a_planted_number_has_no_source_not_wrong(tmp_path: Path) -> None:
     run = _run(tmp_path, [_metric(1, 0, "gates", 2367, "gates")], "It has 2367 gates and lasts 731 days.\n")
     result = trace_numbers(run)
     found = _by_text(result)
-    assert found["731"]["status"] == "untraced" and "source" not in found["731"]
-    assert (result["traced"], result["untraced"]) == (1, 1)
+    assert found["731 days"]["class"] == "no_source" and "source" not in found["731 days"]
+    assert (result["source_found"], result["no_source"]) == (1, 1)
     md = build_evidence(run)["numbers"]
-    assert md["untraced"] == 1
-    assert "not wrong" in (run / EVIDENCE_MD).read_text()
+    assert md["no_source"] == 1
+    assert "unsupported until shown otherwise" in (run / EVIDENCE_MD).read_text()
 
 
 def test_non_claims_are_excluded(tmp_path: Path) -> None:
@@ -135,7 +136,7 @@ def test_non_claims_are_excluded(tmp_path: Path) -> None:
     assert reasons["chip_67301286c5e3.gds"] == "identifier or file name"
     assert reasons["256 Hz"] == "quoted from the prompt"
     assert reasons["4096"] == "code block"
-    assert result["traced"] == result["untraced"] == result["value_found_meaning_not_confirmed"] == 0
+    assert result["source_found"] == result["no_source"] == result["value_found_unclear"] == 0
 
 
 def test_small_integers_need_a_matching_key(tmp_path: Path) -> None:
@@ -143,9 +144,9 @@ def test_small_integers_need_a_matching_key(tmp_path: Path) -> None:
     report = "It fits in 2 tiles with 0 mismatches.\nWe tried 2 ideas.\n"
     result = trace_numbers(_run(tmp_path, events, report))
     statuses = [(e["line"], e["text"], e["class"]) for e in result["numbers"]]
-    assert statuses == [(1, "2 tiles", "traced"), (1, "0", "traced"), (2, "2", "untraced")]
+    assert statuses == [(1, "2 tiles", "source_found"), (1, "0", "source_found"), (2, "2", "no_source")]
     assert "small integer" in result["numbers"][2]["reason"]
-    assert result["untraced"] == 1 and result["value_found_meaning_not_confirmed"] == 0
+    assert result["no_source"] == 1 and result["value_found_unclear"] == 0
 
 
 def _lab(design: str, **fields: Any) -> dict[str, Any]:
@@ -157,12 +158,12 @@ def test_a_percent_matches_only_a_percentage_or_ratio(tmp_path: Path) -> None:
     events = [_metric(1, 0, "alkaid_cost", 40)]
     files = {"workspace/lab/d1.tp.json": _lab("d1", seconds=93.4, cost=40)}
     found = _by_text(trace_numbers(_run(tmp_path / "a", events, report, files)))
-    assert (found["93%"]["class"], found["40%"]["class"]) == ("untraced", "untraced")
+    assert (found["93%"]["class"], found["40%"]["class"]) == ("no_source", "no_source")
 
     ratios = [_metric(1, 0, "sensitivity", 0.93), _metric(2, 0, "pass_fraction", 0.4)]
     found = _by_text(trace_numbers(_run(tmp_path / "b", ratios, report)))
-    assert found["93%"]["class"] == "traced" and found["93%"]["source"].startswith("metric sensitivity")
-    assert found["40%"]["class"] == "value_found_meaning_not_confirmed"  # a ratio, but of what?
+    assert found["93%"]["class"] == "source_found" and found["93%"]["source"].startswith("metric sensitivity")
+    assert found["40%"]["class"] == "value_found_unclear"  # a ratio, but of what?
 
 
 def test_structural_fields_are_sources_only_when_named(tmp_path: Path) -> None:
@@ -173,9 +174,13 @@ def test_structural_fields_are_sources_only_when_named(tmp_path: Path) -> None:
     )
     numbers = trace_numbers(_run(tmp_path, [], report, files))["numbers"]
     by_line = {(e["line"], e["text"]): e for e in numbers}
-    assert by_line[(1, "41")]["class"] == "untraced"
-    assert by_line[(2, "41")]["class"] == "traced" and by_line[(2, "41")]["source"].endswith("lines = 41")
-    assert by_line[(2, "17")]["class"] == "traced" and by_line[(2, "17")]["source"].endswith("seed = 17")
+    assert by_line[(1, "41")]["class"] == "no_source"
+    assert by_line[(2, "41")]["class"] == "source_found" and by_line[(2, "41")]["source"].endswith(
+        "lines = 41"
+    )
+    assert by_line[(2, "17")]["class"] == "source_found" and by_line[(2, "17")]["source"].endswith(
+        "seed = 17"
+    )
 
 
 def test_a_counted_noun_must_agree_with_the_source(tmp_path: Path) -> None:
@@ -183,9 +188,9 @@ def test_a_counted_noun_must_agree_with_the_source(tmp_path: Path) -> None:
     report = "We screened 1,356 patients.\nDesign C has 1,356 gates.\n"
     found = _by_text(trace_numbers(_run(tmp_path, events, report)))
     patients = found["1,356 patients"]
-    assert patients["class"] == "untraced" and "source" not in patients
+    assert patients["class"] == "no_source" and "source" not in patients
     assert "patients" in patients["reason"] and "metric gates = 1356" in patients["reason"]
-    assert found["1,356 gates"]["class"] == "traced"
+    assert found["1,356 gates"]["class"] == "source_found"
 
 
 def test_parameter_counts_trace_to_model_files(tmp_path: Path) -> None:
@@ -204,12 +209,12 @@ def test_parameter_counts_trace_to_model_files(tmp_path: Path) -> None:
     }
     report = "Parameter counts are 15 and 11.\nB stores 24 parameters.\n"
     found = _by_text(trace_numbers(_run(tmp_path, [], report, files)))
-    assert found["15"]["class"] == "traced"
+    assert found["15"]["class"] == "source_found"
     assert found["15"]["source"].startswith("workspace/designs/A.ir.json (model A): 15 stored weight values")
     assert "meta.params declares the same" in found["15"]["source"]
-    assert found["11"]["class"] == "value_found_meaning_not_confirmed"
+    assert found["11"]["class"] == "value_found_unclear"
     assert "declares 11, but the arrays store 24" in found["11"]["source"]
-    assert found["24"]["class"] == "traced" and found["24"]["source"].startswith(
+    assert found["24"]["class"] == "source_found" and found["24"]["source"].startswith(
         "workspace/designs/B.ir.json"
     )
 
@@ -220,14 +225,17 @@ def test_the_classes_are_separate_everywhere(tmp_path: Path) -> None:
     run = _run(tmp_path, events, report)
     evidence = build_evidence(run)
     numbers = evidence["numbers"]
-    counts = {k: numbers[k] for k in ("traced", "value_found_meaning_not_confirmed", "untraced", "excluded")}
-    assert counts == {"traced": 1, "value_found_meaning_not_confirmed": 1, "untraced": 1, "excluded": 0}
-    assert numbers["classes"]["traced"] == "traced (value and meaning agree)"
+    counts = {k: numbers[k] for k in ("source_found", "value_found_unclear", "no_source", "excluded")}
+    assert counts == {"source_found": 1, "value_found_unclear": 1, "no_source": 1, "excluded": 0}
+    assert numbers["classes"]["source_found"] == "source found"
+    assert numbers["limits"] == LIMITS
     assert evidence_summary(evidence)["numbers"] == counts
     md = (run / EVIDENCE_MD).read_text()
-    summary = "Traced (value and meaning agree): 1; value found, meaning not confirmed: 1; untraced: 1"
+    summary = "No source: 1; value found, unit or meaning unclear: 1; source found: 1"
     assert f"{summary}; excluded: 0." in md
-    assert "### Value found, meaning not confirmed: 1" in md and "never added together" in md
+    assert LIMITS in md and "never added together" in md
+    order = [md.index(f"### {h}") for h in ("No source", "Value found, unit", "Source found", "Excluded")]
+    assert order == sorted(order)
 
 
 def _classes(
@@ -245,18 +253,39 @@ def test_a_unit_scale_must_agree_after_conversion(tmp_path: Path) -> None:
         "All three miss the clock by under 1.4 ps, 1.4 s or 1.4 ns.\n"
     )
     found = _classes(tmp_path, events, report, files)
-    assert {k: v for k, v in found.items() if v == "traced"} == dict.fromkeys(
-        ["20 ns", "49.9 nW", "0.05 µW", "1.4 ns"], "traced"
+    assert {k: v for k, v in found.items() if v == "source_found"} == dict.fromkeys(
+        ["20 ns", "49.9 nW", "0.05 µW", "1.4 ns"], "source_found"
     )
-    assert {found[k] for k in ("20 ms", "20 us", "0.05 mW", "0.05 W", "1.4 ps", "1.4 s")} == {"untraced"}
+    assert {found[k] for k in ("20 ms", "20 us", "0.05 mW", "0.05 W", "1.4 ps", "1.4 s")} == {"no_source"}
+
+
+def test_time_words_carry_their_scale(tmp_path: Path) -> None:
+    files = {"workspace/lab/d.tp.json": _lab("d", clock_period_ns=1.35, wall_s=198.9)}
+    report = (
+        "The clock period is 1.35 seconds.\n"
+        "It ran 198.9 minutes, 198.9 hours, 198.9 days, 198.9 min, 198.9 h and 198.9 hr.\n"
+        "The clock period is 1.35 ns and it ran 198.9 seconds or 198.9 s.\n"
+    )
+    found = _classes(tmp_path, [], report, files)
+    refused = (
+        "1.35 seconds",
+        "198.9 minutes",
+        "198.9 hours",
+        "198.9 days",
+        "198.9 min",
+        "198.9 h",
+        "198.9 hr",
+    )
+    assert {found[k] for k in refused} == {"no_source"}
+    assert found["1.35 ns"] == "source_found" and found["198.9 seconds"] == "source_found"
 
 
 def test_a_unit_on_one_side_only_leaves_the_meaning_unconfirmed(tmp_path: Path) -> None:
     files = {"workspace/lab/d.tp.json": _lab("d", power=0.04986)}
     found = _classes(tmp_path / "a", [], "The chip draws 0.05 µW in power.\n", files)
-    assert found == {"0.05 µW": "value_found_meaning_not_confirmed"}
+    assert found == {"0.05 µW": "value_found_unclear"}
     found = _classes(tmp_path / "b", [_metric(1, 0, "leakage_uw", 0.049)], "Leakage power is 0.049.\n")
-    assert found == {"0.049": "value_found_meaning_not_confirmed"}
+    assert found == {"0.049": "value_found_unclear"}
 
 
 def test_a_rate_must_agree_in_hertz(tmp_path: Path) -> None:
@@ -264,12 +293,12 @@ def test_a_rate_must_agree_in_hertz(tmp_path: Path) -> None:
     report = "It makes 1 decision per second.\nIt makes 1 decision per minute.\nOr 1 decision per hour.\n"
     found = _classes(tmp_path / "a", [], report, files)
     assert found == {
-        "1 decision per second": "traced",
-        "1 decision per minute": "untraced",
-        "1 decision per hour": "untraced",
+        "1 decision per second": "source_found",
+        "1 decision per minute": "no_source",
+        "1 decision per hour": "no_source",
     }
     found = _classes(tmp_path / "b", [], "At 1 decision/s, or 1 Hz.\n", files)
-    assert found == {"1 decision/s": "traced", "1 Hz": "traced"}
+    assert found == {"1 decision/s": "source_found", "1 Hz": "source_found"}
 
 
 def test_a_negative_source_needs_a_shortfall(tmp_path: Path) -> None:
@@ -284,27 +313,27 @@ def test_a_negative_source_needs_a_shortfall(tmp_path: Path) -> None:
     )
     numbers = trace_numbers(_run(tmp_path, [], report, files))["numbers"]
     assert [e["class"] for e in numbers] == [
-        "traced",
-        "traced",
-        "traced",
-        "untraced",
-        "untraced",
-        "value_found_meaning_not_confirmed",
+        "source_found",
+        "source_found",
+        "source_found",
+        "no_source",
+        "no_source",
+        "value_found_unclear",
     ]
     assert "no shortfall" in numbers[-1]["reason"]
     positive = {"workspace/lab/d.tp.json": _lab("d", clock_period_ns=20)}
-    assert _classes(tmp_path / "b", [], "The clock period is -20 ns.\n", positive) == {"20 ns": "untraced"}
+    assert _classes(tmp_path / "b", [], "The clock period is -20 ns.\n", positive) == {"20 ns": "no_source"}
 
 
 def test_a_weight_width_traces_only_to_a_weight_width(tmp_path: Path) -> None:
     port = {"workspace/lab/B.compile.json": _lab("B", ports={"inputs": [{"name": "x", "bits": 5}]})}
     report = "Weights are stored at 5 bits.\nThe input port is 5 bits.\n"
     numbers = trace_numbers(_run(tmp_path / "a", [], report, port))["numbers"]
-    assert [e["class"] for e in numbers] == ["value_found_meaning_not_confirmed", "traced"]
+    assert [e["class"] for e in numbers] == ["value_found_unclear", "source_found"]
     assert "weight width" in numbers[0]["reason"]
     weights = {"workspace/lab/B.compile.json": _lab("B", weight_bits=5)}
     found = _classes(tmp_path / "b", [], "Weights are stored at 5 bits.\n", weights)
-    assert found == {"5 bits": "traced"}
+    assert found == {"5 bits": "source_found"}
 
 
 def test_unit_spellings_and_scale_words(tmp_path: Path) -> None:
@@ -321,7 +350,7 @@ def test_unit_spellings_and_scale_words(tmp_path: Path) -> None:
     )
     found = _classes(tmp_path, events, report)
     assert set(found) >= {"0.0269 microwatts", "0.0269 μW", "3.5 nanoseconds", "2.6 thousand gates"}
-    assert set(found.values()) == {"traced"}
+    assert set(found.values()) == {"source_found"}
 
 
 def _sweep_fixture(root: Path) -> tuple[Path, str]:
@@ -340,7 +369,7 @@ def _sweep_fixture(root: Path) -> tuple[Path, str]:
     return _run(root, [*events, _metric(999, 0, "gates", 2367, "gates")], base, files), base
 
 
-def test_no_bare_number_with_a_neutral_noun_is_traced(tmp_path: Path) -> None:
+def test_no_bare_number_with_a_neutral_noun_has_a_source(tmp_path: Path) -> None:
     run, base = _sweep_fixture(tmp_path)
     report, first_new = run / "workspace" / "report.md", len(base.splitlines()) + 1
     traced = []
@@ -348,7 +377,7 @@ def test_no_bare_number_with_a_neutral_noun_is_traced(tmp_path: Path) -> None:
         report.write_text(f"{base}\nWe counted {n} of the widgets.\n", encoding="utf-8")
         planted = [e for e in trace_numbers(run)["numbers"] if e["line"] >= first_new]
         assert [e["text"] for e in planted] == [str(n)]
-        traced += [n for e in planted if e["class"] == "traced"]
+        traced += [n for e in planted if e["class"] == "source_found"]
     assert traced == []
 
 
@@ -509,7 +538,7 @@ def test_cli_prints_and_writes_the_evidence(tmp_path: Path, capsys: pytest.Captu
 
     assert cli.main(["evidence", "--config", str(config), str(run), "--json"]) == 0
     printed = json.loads(capsys.readouterr().out)
-    assert printed["numbers"]["traced"] == 1 and printed["run_finished"] is True
+    assert printed["numbers"]["source_found"] == 1 and printed["run_finished"] is True
     assert json.loads((run / EVIDENCE_JSON).read_text()) == printed
 
     assert cli.main(["evidence", "--config", str(config), run.name]) == 0
@@ -565,8 +594,8 @@ async def test_api_route_and_the_evidence_event(client: TestClient, config: Back
     types = [json.loads(line)["type"] for line in lines]
     assert types[-2:] == ["evidence", "run.finished"]
     event = json.loads(lines[-2])
-    assert set(event) >= {"numbers", "weights", "stages"} and event["numbers"]["traced"] is not None
-    assert set(event["numbers"]) == {"traced", "value_found_meaning_not_confirmed", "untraced", "excluded"}
+    assert set(event) >= {"numbers", "weights", "stages"} and event["numbers"]["source_found"] is not None
+    assert set(event["numbers"]) == {"source_found", "value_found_unclear", "no_source", "excluded"}
     assert (config.resolved_runs_dir() / run_id / EVIDENCE_JSON).is_file()
 
     resp = await client.get(f"/api/runs/{run_id}/evidence", headers={TOKEN_HEADER: TOKEN})
