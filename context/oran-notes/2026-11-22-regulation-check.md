@@ -1,0 +1,24 @@
+# Regulation panel: points checked, 22 Nov 2026
+
+Checks of the seven "to check" items in the dashboard's Regulation panel (AF run). One
+search pass each; sources are statutes, regulator pages and standards bodies where found,
+otherwise test houses and law firms (marked). General information, not regulatory advice.
+
+| Panel item | What the source says | Status | Source |
+|---|---|---|---|
+| US air limits for lithium batteries | 49 CFR 173.185: small-cell exceptions cap lithium-ion at 20 Wh per cell and 100 Wh per battery; lithium-metal limits are by grams of lithium per cell and have changed between editions; the exceptions have conditions (e.g. a four-cell / two-battery exception does not apply to button cells installed in equipment, per a PHMSA interpretation). Coin cells are lithium cells: they are not exempt from lithium rules as such | Confirmed in outline; read the current eCFR text before quoting thresholds | https://www.ecfr.gov/current/title-49/subtitle-B/chapter-I/subchapter-C/part-173/subpart-E/section-173.185 ; https://www.law.cornell.edu/cfr/text/49/173.185 |
+| Rechargeable lithium cell safety standard | Devices to IEC 60601-1 with rechargeable lithium batteries are expected to meet IEC 62133(-2); non-rechargeable lithium: IEC 60086-4 (clause 15.4.3.4) | Confirmed (test-house and standards-body summaries, not the standard text) | https://intertek.com/medical/electrical-testing/battery-testing ; https://www.ul.com/news/ul-62133-family-standards-batteries |
+| Skin contact over 30 days | ISO 10993-1 durations: limited up to 24 h cumulative, prolonged over 24 h up to 30 days, long-term over 30 days. Intact-skin endpoints listed by FDA: cytotoxicity, sensitisation, irritation. A revision changes how cumulative exposure is counted (minimal contact can default to one day) | Confirmed | https://www.fda.gov/medical-devices/biocompatibility-assessment-resource-center/biocompatibility-evaluation-endpoints-contact-duration-periods |
+| EMC testing in each power mode | IEC 60601-1-2 (4th ed.) requires an EMC risk assessment covering intended operating conditions, and Annex G lists what a test plan should cover; test houses recommend testing charging modes. No normative "must test while charging" wording found | Partly confirmed: say "EMC test plan must cover charging if used while charging (to confirm with the lab)" | https://ul.com/resources/iec-60601-international-product-safety-standards-medical-devices ; https://www.intertek.com/blog/2026/09-18-going-beyond-medical-device-emc-testing/ |
+| EU battery removability, wearable exemption | EU Battery Regulation 2023/1542 Art. 11: portable batteries removable and replaceable from 18 Feb 2027. Medical device derogations are partial and specific (e.g. imaging, radiotherapy, IVD; implantables more fully); Delegated Regulation (EU) 2026/1770 replaced Art. 11(2) to allow replacement by independent professionals for listed products; Art. 11(3) covers continuity of power. A general "wearable exemption" was NOT confirmed | Correct the panel: no blanket wearable exemption; check whether the device falls in a listed derogation | https://eur-lex.europa.eu/eli/reg_del/2026/1770/oj ; https://eur-lex.europa.eu/eli/C/2025/214/oj/eng ; https://products.cooley.com/2025/02/13/european-commission-publishes-guidance-on-eu-batteries-regulation-removability-requirements/ (law firm) |
+| Cyber device definition, firmware versus logic | FD&C Act s.524B: a cyber device (1) includes software validated, installed or authorised by the sponsor, (2) can connect to the internet, (3) could be vulnerable. FDA reads it broadly; final "Select Updates" guidance June 2025 | Confirmed. A hard-wired detector with no sponsor software and no internet connection may fall outside; any radio or app connection likely brings it back in | https://www.fda.gov/medical-devices/digital-health-center-excellence/cybersecurity-medical-devices-frequently-asked-questions-faqs ; https://www.govinfo.gov/content/pkg/FR-2025-06-27/html/2025-11669.htm |
+| Medical device software life cycle | IEC 62304 scope for hard-wired logic is contested: Team-NB FAQ treats HDL used to produce an FPGA as a tool, not a software item; Johner Institute argues FPGA programming is in scope | Confirmed as an open question: say "may or may not fall under IEC 62304; confirm with the notified body" | https://www.team-nb.org//wp-content/uploads/2015/05/FAQ_62304_Final_130804.pdf ; https://www.johner-institut.de/blog/wp-json/wp/v2/posts/13202 (consultancy) |
+
+## Corrections for the dashboard
+
+1. EU battery removability: replace "wearable exemption" with "partial, listed derogations
+   only; check whether yours qualifies".
+2. Coin cells: never imply they avoid lithium transport rules; the difference from a
+   rechargeable is IEC 62133 (rechargeable safety) versus IEC 60086-4 (primary lithium),
+   charging, reuse and reprocessing.
+3. Keep "general information, not regulatory advice".
