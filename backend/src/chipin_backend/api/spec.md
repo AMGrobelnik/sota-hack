@@ -18,7 +18,7 @@ first message, and `spec.json` in your working folder. It is the user's decision
 
 **Design records (the user's chart is drawn from these).** For EVERY candidate design you score, not only
 the winner, report one record with `./progress design <file.json>` (a file in your working folder holding one
-JSON object) or `./progress design '<json object>'`. The helper checks it and answers `ok`, or exit status 2
+JSON object, or a JSON list of up to 40 records filed together) or `./progress design '<json object>'`. The helper checks it and answers `ok`, or exit status 2
 with the reason: fix the record and send it again. Fields:
 
 - `id` (your name for the design; once the lab has compiled it, the lab's `design_id`, with `previous_id` set

@@ -27,6 +27,18 @@ Rules:
   invented progress. An accuracy-like figure
   (accuracy, sensitivity, specificity, a pass rate) is a fraction between
   0 and 1 with no unit, never a percentage.
+- **Every candidate you score goes on the user's chart, not only your
+  best.** After each batch of candidates is trained and scored, get a gate
+  estimate for every scored one (the chip lab's estimate-batch), then file
+  a design record for each of them at once with ONE call,
+  `./progress design candidates.json`: a file holding a JSON list of
+  records, each with its validation metrics, `"basis": "validation"`,
+  `"gates": null`, its `gates_est` from that estimate and a `note` that says
+  "estimated, not compiled". File the ones that miss a target too. At most
+  40 records per batch: when a batch has more candidates, file a spread
+  across the size range plus the best at each size. Only values you
+  computed or the lab returned, never interpolated ones. A design that is
+  compiled or verified keeps its fuller record under the lab's design id.
 - Do not mark stages and do not name the chosen chip: in your folder
   `./progress stage` and `./progress chosen` are refused, and where the
   chip-lab paragraph below says to mark stages or call chip-report, leave

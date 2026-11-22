@@ -37,7 +37,10 @@ For each of reference, propose, finetune, compile and verify, in order:
    `spec.md` or a kept design's files), the tools to use, and the exact
    result to return (design ids, the lab's numbers, file paths). A subagent
    works in `agents/<id>/` inside your folder and cannot see this
-   conversation, so put everything it needs in the brief.
+   conversation, so put everything it needs in the brief. A subagent
+   that trains or scores candidates files a design record for EVERY
+   candidate it scores (estimated gates, up to 40 per batch), not only its
+   best; ask for that in the brief so the user's chart fills as it goes.
 3. Wait for all of them: `./subagent wait --stage <stage>`. It returns
    after {wait_s} seconds at most; call it again while it says some are
    still running.
