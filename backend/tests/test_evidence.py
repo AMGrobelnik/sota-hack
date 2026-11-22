@@ -97,6 +97,41 @@ def test_numbers_found_through_formatting(tmp_path: Path) -> None:
     assert all(entry["class"] == "source_found" for entry in found.values())
 
 
+@pytest.mark.parametrize(
+    ("target", "picked"),
+    [
+        (None, "agent"),
+        ({"metric": "sensitivity", "op": "at_least", "value": 0.8, "unit": None}, "agent"),
+        ({"metric": "fa_per_hour", "op": "at_most", "value": 1.0, "unit": "/h"}, "agent"),
+        ({"metric": "event_sensitivity", "op": "at_least", "value": 0.8, "unit": None}, "lab"),
+        ({"metric": "sensitivity", "op": "at_least", "value": 0.8, "unit": "events"}, "lab"),
+    ],
+)
+def test_the_labs_event_figure_is_preferred_only_for_an_event_level_target(
+    tmp_path: Path, target: dict[str, Any] | None, picked: str
+) -> None:
+    """Both figures stay sources, told apart by ``source``; only an event-level target moves the ranking."""
+    events = [
+        _event(1, 0, "metric", key="event_sensitivity", value=0.875, chip="c1"),
+        _event(
+            2,
+            1,
+            "metric",
+            key="event_sensitivity",
+            value=0.875,
+            unit="fraction",
+            chip="c1",
+            source="score-events",
+        ),
+    ]
+    files = {"workspace/spec.json": {"targets": [target]}} if target else {}
+    entry = _by_text(check_numbers(_run(tmp_path, events, "Event sensitivity is 87.5%.\n", files)))["87.5%"]
+    assert entry["class"] == "source_found" and entry["other_matches"] == 1
+    lab = "metric event_sensitivity = 0.875 (events.jsonl seq 2, chip c1, source score-events)"
+    agent = "metric event_sensitivity = 0.875 (events.jsonl seq 1, chip c1)"
+    assert entry["source"] == (lab if picked == "lab" else agent)
+
+
 def test_a_planted_number_has_no_source_not_wrong(tmp_path: Path) -> None:
     run = _run(tmp_path, [_metric(1, 0, "gates", 2367, "gates")], "It has 2367 gates and lasts 731 days.\n")
     result = check_numbers(run)

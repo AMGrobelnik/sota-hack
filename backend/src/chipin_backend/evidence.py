@@ -389,6 +389,8 @@ class Source:
     ratio: bool = False
     structural: bool = False
     reproduced: bool = True
+    #: The lab tool a ``metric`` event names as its ``source`` (``score-events``); None: the agent's own.
+    origin: str | None = None
 
 
 def _word_around(line: str, start: int, end: int) -> tuple[int, int]:
@@ -696,8 +698,12 @@ def collect_sources(run: Path, events: list[dict[str, Any]]) -> list[Source]:
         if event.get("type") != "metric" or isinstance(value, bool) or not isinstance(value, int | float):
             continue
         key, unit = str(event.get("key")), event.get("unit") or _key_unit(str(event.get("key")))
-        label = f"metric {key} = {value} (events.jsonl seq {event.get('seq')})"
-        sources.append(_source(label, key, float(value), unit, from_event=True, check_structure=False))
+        origin = str(event["source"]) if event.get("source") else None
+        where = "".join(f", {k} {event[k]}" for k in ("chip", "source") if event.get(k))
+        label = f"metric {key} = {value} (events.jsonl seq {event.get('seq')}{where})"
+        source = _source(label, key, float(value), unit, from_event=True, check_structure=False)
+        source.origin = origin
+        sources.append(source)
     sources += _model_sources(run)
     for path in lab_files(run):
         rel = _rel(run, path)
@@ -763,13 +769,35 @@ def _is_small_int(claim: Claim) -> bool:
     return claim.resolution >= 0.5 and claim.value.is_integer() and abs(claim.value) <= SMALL_INT_MAX
 
 
-def classify_claim(claim: Claim, sources: list[Source]) -> tuple[str, list[Source], str | None]:
+def event_level_keys(run: Path) -> frozenset[str]:
+    """Metric keys of the spec's event-level targets: a target whose metric or unit names events.
+
+    For such a target the lab's ``score-events`` figure (a ``metric`` event with that ``source``)
+    ranks first among equally worded sources; for any other target the ranking is unchanged.
+    """
+    spec = _load_json(_workspace(run) / "spec.json")
+    targets = spec.get("targets") if isinstance(spec, dict) else None
+    keys: set[str] = set()
+    for target in targets if isinstance(targets, list) else []:
+        if not isinstance(target, dict) or not isinstance(target.get("metric"), str):
+            continue
+        metric, unit = target["metric"], str(target.get("unit") or "")
+        if "event" in metric.lower() or "event" in unit.lower():
+            keys |= {metric, metric if metric.startswith("event_") else f"event_{metric}"}
+    return frozenset(keys)
+
+
+def classify_claim(
+    claim: Claim, sources: list[Source], prefer: frozenset[str] = frozenset()
+) -> tuple[str, list[Source], str | None]:
     """``(class, sources in rank order, reason)`` for one report number.
 
     A source is found when the value and unit match and the noun or unit next to the number
     agrees with the source's kind, or (with no such noun) the number's words share a whole
     non-generic word with the source key. A value-only match is unclear. A structural field (line count,
     byte size, tool duration, seed, ...) is a source only when the claim's words name it.
+    ``prefer``: keys whose lab-tool figure (``origin``) ranks before other equally worded
+    sources (:func:`event_level_keys`); the class never depends on it.
     """
     gaps = {id(s): gap for s in sources if (gap := _match(claim, s)) is not None}
     hits = [s for s in sources if id(s) in gaps]
@@ -788,6 +816,7 @@ def classify_claim(claim: Claim, sources: list[Source]) -> tuple[str, list[Sourc
             pool,
             key=lambda s: (
                 -len(_shared_words(claim, s)),
+                not (s.origin is not None and s.key in prefer),
                 not s.from_event,
                 abs(abs(s.value) - abs(claim.value)),
             ),
@@ -829,6 +858,7 @@ def check_numbers(run: Path, events: list[dict[str, Any]] | None = None) -> dict
         result["note"] = "no final report (workspace/report.md) in the run folder"
         return result
     sources = collect_sources(run, events)
+    prefer = event_level_keys(run)
     result["sources"] = {
         "metric_events": sum(s.from_event for s in sources),
         "model_parameter_counts": sum(s.key.endswith("_parameters") for s in sources),
@@ -840,7 +870,7 @@ def check_numbers(run: Path, events: list[dict[str, Any]] | None = None) -> dict
         if claim.excluded:
             kind, ranked, reason = EXCLUDED, [], claim.excluded
         else:
-            kind, ranked, reason = classify_claim(claim, sources)
+            kind, ranked, reason = classify_claim(claim, sources, prefer)
         entry["class"] = kind
         entry["status"] = CLASS_NAMES[kind]
         if reason:

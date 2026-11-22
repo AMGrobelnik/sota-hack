@@ -394,6 +394,7 @@ no unit; runs recorded before this rule are left as they are. `run.finished` car
 `bullets`. `./progress metric <key> <number> [unit] --chip <design_id>`
 (the flag after the number or the unit) adds `chip` to the metric event,
 naming the design the number measures; without it the event is as before.
+A lab `score-events` figure also carries `source` (see "Chip lab").
 `./progress chosen <design_id>` writes a `chosen` event with `chip`, the
 run's chosen chip; a later one replaces an earlier one. Presets map to agent effort: `lite`, `pro`, `max`, `ultra`;
 with fan-out on they also set the subagents per stage batch (see "Fan-out").
@@ -985,7 +986,14 @@ Point the backend at a lab install (in the environment, `backend/.env` or
   named by the lab's status line before the tool, for the orchestrator and
   subagents alike. A lab metric about no one design stays untagged: the run
   counters `candidates`, `vectors_checked` and `mismatches` (totals over
-  every chip of the run) and the event scores of `score-events`.
+  every chip of the run) and the event scores of a `score-events` call
+  without a `design_id`. The skill tells the agent to pass the chip's id
+  whenever it scores one chip; those scores then carry that chip.
+- Every `score-events` figure (its keys in their lab units, such as
+  `fa_per_hour` in `FA/h`) gets `source: "score-events"`, so it sits beside
+  the agent's own figure of the same key instead of replacing it. Evidence
+  ranks the lab's figure first only for a spec target whose metric or unit
+  names events (`event_sensitivity`, `events/h`); otherwise it ranks as before.
 - The evidence step (`evidence.json`) describes the chip of the run's last
   `chosen` event. Only a run without one gets an inferred chip, with
   `chip_inferred: true` and `chip_selected_by` saying how it was picked.

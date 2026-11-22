@@ -13,7 +13,8 @@ The helper appends one JSON line per call to the run's ``progress.jsonl``::
 :class:`ProgressTailer` reads new lines from that file and writes ``stage``,
 ``metric``, ``chosen``, ``status``, ``artifact`` and ``design`` events. A metric's
 optional ``chip`` names the design it measures (for the chip lab's own untagged
-metrics, the design its latest status line names; see :data:`LAB_DESIGN_METRICS`);
+metrics, the design its latest status line names; see :data:`LAB_DESIGN_METRICS`); the
+lab's ``score-events`` figures also carry ``source`` (see :data:`LAB_EVENT_METRICS`);
 ``chosen`` names the run's chosen chip, and a later one replaces an earlier one. A
 malformed line is skipped with a warning; the helper itself rejects bad arguments with exit status 2,
 so the agent learns at once.
@@ -49,7 +50,7 @@ STAGE_STATES = ("started", "done", "skipped")
 #: <design_id>", its ``VERB`` table), then that tool's metrics. These are the lab's metric
 #: keys about one design and the unit it always sends with each (its ``METRIC_KEYS`` less
 #: the run counters ``candidates``, ``vectors_checked`` and ``mismatches``, which count over
-#: the whole run, and the event scores of ``score-events``, which name no design). An
+#: the whole run, and the event scores of ``score-events``, see :data:`LAB_EVENT_METRICS`). An
 #: untagged metric with such a key and unit takes the design of the lab's latest status
 #: line; a lab status line about no one design (a batch, an import) clears it, so a metric
 #: about no design stays untagged. The agent's own status lines change nothing.
@@ -70,6 +71,18 @@ LAB_DESIGN_METRICS: dict[str, str] = {
     "leakage_uw": "uW",
     "power_uw_at_rate": "uW",
 }
+#: The event scores the lab's ``score-events`` sends (with ``progress_metrics: true``), with
+#: their units. Given a ``design_id`` it tags them ``--chip <design_id>``; without one they stay
+#: untagged (a status line never tags them). A metric with such a key and unit gets
+#: ``source: "score-events"``, so the lab's event-level figure never passes for the agent's own
+#: figure of the same key (which the agent sends in the spec's unit, e.g. ``/h``).
+LAB_EVENT_METRICS: dict[str, str] = {
+    "event_sensitivity": "fraction",
+    "fa_per_hour": "FA/h",
+    "worst_patient_sensitivity": "fraction",
+    "auc": "AUC",
+}
+SCORE_EVENTS_SOURCE = "score-events"
 #: The lab's status lines (its ``VERB`` table, after "ChipIn is" or "ChipIn <went wrong> while").
 _LAB_LEAD = r"^ChipIn (?:is|(?:found a problem|ran out of time|hit an error|stopped) while) "
 _LAB_DESIGN = re.compile(
@@ -339,7 +352,9 @@ class ProgressTailer:
                 chip = _chip(chip)
             elif key in LAB_DESIGN_METRICS and item.get("unit") == LAB_DESIGN_METRICS[key]:
                 chip = self.lab_design
-            self.log.append("metric", key=key, value=value, unit=item.get("unit"), chip=chip)
+            from_lab = key in LAB_EVENT_METRICS and item.get("unit") == LAB_EVENT_METRICS[key]
+            source = SCORE_EVENTS_SOURCE if from_lab else None
+            self.log.append("metric", key=key, value=value, unit=item.get("unit"), chip=chip, source=source)
         elif kind == "chosen":
             self.log.append("chosen", chip=_chip(item["chip"]))
         elif kind == "status":

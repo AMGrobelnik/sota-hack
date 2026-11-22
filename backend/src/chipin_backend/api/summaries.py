@@ -781,7 +781,8 @@ def _own_line(event: Mapping[str, Any]) -> str:
     if kind == "metric":
         unit = f" {event['unit']}" if event.get("unit") else ""
         chip = f" for {event['chip']}" if event.get("chip") else ""
-        return clip(f"Measured {event.get('key')} = {event.get('value')}{unit}{chip}", 120)
+        source = f" by {event['source']}" if event.get("source") else ""
+        return clip(f"Measured {event.get('key')} = {event.get('value')}{unit}{chip}{source}", 120)
     if kind == "artifact":
         return clip(f"Saved {event.get('kind') or 'file'} {event.get('path') or event.get('name')}", 120)
     if kind == "chosen":

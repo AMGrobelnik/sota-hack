@@ -254,10 +254,13 @@ def designs_of(run: RunFolder, events: list[dict[str, Any]]) -> list[dict[str, A
     for e in events:
         if e.get("type") == "metric" and e.get("chip") and isinstance(e.get("value"), int | float):
             key = str(e.get("key"))
-            tagged.setdefault(str(e["chip"]), {})[key] = {
+            # a lab tool's figure (``source``) sits beside the agent's own figure of the same key
+            name = f"{key} ({e['source']})" if e.get("source") else key
+            tagged.setdefault(str(e["chip"]), {})[name] = {
                 "value": e["value"],
                 "unit": e.get("unit"),
                 "basis": metric_basis(key, simulated),
+                **({"source": e["source"]} if e.get("source") else {}),
             }
     out: list[dict[str, Any]] = []
     if listed:

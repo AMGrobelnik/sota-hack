@@ -30,8 +30,9 @@ from chipin_backend.agents.claude_cli import build_argv, plugin_dirs, transcript
 from chipin_backend.agents.env import build_agent_env
 from chipin_backend.api.config import ApiConfig
 from chipin_backend.api.events import EventLog
+from chipin_backend.api.helper_tools import RunFolder, designs_of
 from chipin_backend.api.manager import ApiAgent, RunManager, standing_instructions
-from chipin_backend.api.progress import LAB_DESIGN_METRICS, ProgressTailer, write_helper
+from chipin_backend.api.progress import LAB_DESIGN_METRICS, LAB_EVENT_METRICS, ProgressTailer, write_helper
 from chipin_backend.api.server import TOKEN_HEADER, create_app
 from chipin_backend.chiplab import (
     CHIPLAB_BIN_ENV,
@@ -102,8 +103,8 @@ LAB_VALUES: dict[str, int | float] = {
     "worst_patient_sensitivity": 0.5,
     "auc": 0.93,
 }
-#: The lab's metrics about no one design: the run counters (summed over every chip of the
-#: run) and the event scores of score-events (which takes no design id).
+#: The lab's metrics the fake lab sends untagged: the run counters (summed over every chip of
+#: the run) and the event scores of score-events (tagged only when given a design id).
 BATCH_METRICS = {
     "candidates",
     "vectors_checked",
@@ -206,6 +207,7 @@ def _expected_lab_events() -> list[dict[str, Any]]:
     events += [
         {"type": "metric", "key": k, "value": v, "unit": LAB_METRIC_UNITS[k]}
         | ({} if k in BATCH_METRICS else {"chip": DESIGN})
+        | ({"source": "score-events"} if k in LAB_EVENT_METRICS else {})
         for k, v in LAB_VALUES.items()
     ]
     events += [
@@ -284,6 +286,7 @@ def test_instructions_carry_the_lab_paragraph_only_when_the_lab_is_on(tmp_path: 
     for phrase in ("skill named `chiplab`", "compile stage", "chiplab agent-doc", "references/tools.md"):
         assert phrase in paragraph
     assert REQUIRED_CHIP_REPORT in " ".join(on.split())
+    assert '`score-events`, pass that chip\'s id as `"design_id"`' in " ".join(paragraph.split())
     assert "chip-report" not in off and "chiplab" not in off
     # The detail moved into the skill.
     body = _skill_md()
@@ -653,6 +656,49 @@ async def test_lab_metrics_take_the_design_its_status_line_names(tmp_path: Path)
     ]
 
 
+async def test_score_events_figures_keep_their_chip_and_name_the_lab(tmp_path: Path) -> None:
+    """score-events with a design id tags its figures; both kinds carry source; the agent's do not."""
+    lines = [
+        {"type": "status", "text": "ChipIn is synthesising chip aaa111"},
+        # score-events given design_id: the lab sends --chip
+        {"type": "metric", "key": "fa_per_hour", "value": 0.25, "unit": "FA/h", "chip": "aaa111"},
+        {"type": "metric", "key": "event_sensitivity", "value": 0.875, "unit": "fraction", "chip": "aaa111"},
+        # the agent's own figure of the same key, in the spec's unit
+        {"type": "metric", "key": "fa_per_hour", "value": 0.4, "unit": "/h", "chip": "aaa111"},
+        # score-events without a design id: untagged even after a lab status line
+        {"type": "metric", "key": "fa_per_hour", "value": 0.3, "unit": "FA/h"},
+        {"type": "metric", "key": "auc", "value": 0.9, "unit": "AUC"},
+    ]
+    progress_file = tmp_path / "progress.jsonl"
+    progress_file.write_text("".join(json.dumps(line) + "\n" for line in lines))
+    log = EventLog(tmp_path / "events.jsonl", "r1", asyncio.get_running_loop())
+    ProgressTailer(progress_file, log, tmp_path, tmp_path).drain()
+    got = [
+        (e["key"], e["value"], e.get("chip"), e.get("source")) for e in log.since(1) if e["type"] == "metric"
+    ]
+    assert got == [
+        ("fa_per_hour", 0.25, "aaa111", "score-events"),
+        ("event_sensitivity", 0.875, "aaa111", "score-events"),
+        ("fa_per_hour", 0.4, "aaa111", None),
+        ("fa_per_hour", 0.3, None, "score-events"),
+        ("auc", 0.9, None, "score-events"),
+    ]
+    # the dashboard assistant's per-chip view keeps both figures of the chip, told apart
+    metrics = designs_of(RunFolder(tmp_path), log.since(1))[0]["metric_events"]
+    assert metrics["fa_per_hour"]["value"] == 0.4 and "source" not in metrics["fa_per_hour"]
+    assert metrics["fa_per_hour (score-events)"] | {"basis": None} == {
+        "value": 0.25,
+        "unit": "FA/h",
+        "basis": None,
+        "source": "score-events",
+    }
+
+
+def test_lab_event_metrics_are_the_lab_event_keys() -> None:
+    assert {k: LAB_METRIC_UNITS[k] for k in LAB_EVENT_METRICS} == LAB_EVENT_METRICS
+    assert set(LAB_EVENT_METRICS) | {"candidates", "vectors_checked", "mismatches"} == BATCH_METRICS
+
+
 async def test_lab_metrics_from_a_subagent_folder_carry_the_design(tmp_path: Path) -> None:
     """A subagent runs the lab from the orchestrator's folder; its lines reach its own file, tagged."""
     run_path = tmp_path / "run"
@@ -840,6 +886,10 @@ def test_skill_contents(tmp_path: Path) -> None:
         assert phrase in flat
     assert "--chip <design_id>" in flat and "./progress chosen <design_id>" in flat
     assert "references/tools.md" in flat and "chiplab agent-doc" in flat
+    # score-events of one chip carries its id; the lab's events reference is named
+    scoring = flat[flat.index("**scoring detections**") : flat.index("**report**")]
+    assert 'pass that chip\'s id as `"design_id"`' in scoring and '"progress_metrics": true' in scoring
+    assert "`chiplab agent-doc --events`" in flat
     # Both harnesses run inline ``!`cmd` `` in a skill body; this one has none.
     assert "!`" not in body
     tools = (dest / TOOLS_REFERENCE).read_text(encoding="utf-8")

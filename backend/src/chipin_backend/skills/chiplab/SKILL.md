@@ -45,7 +45,12 @@ last three:
 - **scoring detections** (whenever you have per-recording decisions or
   scores and labels, from your model or the chip): `score-events` gives
   event-level sensitivity, false alarms per hour, per-patient figures and
-  confidence intervals; its numbers are about your detections, not one chip.
+  confidence intervals. Whenever the detections are one chip's (its model's
+  or its gates' decisions), pass that chip's id as `"design_id"` in the same
+  call, with `"progress_metrics": true`, so its event scores are filed under
+  that chip; leave `design_id` out only for detections of no one chip. The
+  lab marks these figures as its own, so they never replace a figure you
+  report yourself.
 - **report**: `layout` / `timing-power` (pass `decision_rate_hz` = how often
   the chip decides, for the battery-relevant power), `tt-package`,
   `bitstream`, `estimate-cost`, and `chip-report`.
@@ -64,7 +69,8 @@ Before you mark report done, call `chiplab chip-report --json '{"design_id": "<t
   tool fails, mark the stage skipped with the reason instead of done:
   `./progress stage verify skipped "<reason>"`.
 - A number you measured yourself about one design:
-  `./progress metric <key> <number> [unit] --chip <design_id>`.
+  `./progress metric <key> <number> [unit] --chip <design_id>`. Give your
+  own false-alarm rate in the spec's unit (`/h`), not the lab's `FA/h`.
 - The run's chosen chip: `./progress chosen <design_id>` (a later call
   replaces an earlier one).
 
@@ -76,3 +82,5 @@ Before you mark report done, call `chiplab chip-report --json '{"design_id": "<t
   line names the lab version. Read only the tool sections you need.
 - If `references/tools.md` is missing, ask the lab itself: `chiplab agent-doc`
   (the full reference), `chiplab list-tools`, `chiplab describe <tool>`.
+- What each tool sends to the dashboard (events, metric keys and units,
+  chip ids): `chiplab agent-doc --events`.
