@@ -130,6 +130,8 @@ def test_package_tiles_apply_only_to_their_pdk():
     r = estimate(area_um2=30_000.0, tt_tiles=4, tt_pdk="gf180mcuD")
     assert _route(r, "tt_gf180")["tiles"] == 4
     assert _route(r, "tt_sky130")["tiles"] == 3
+    via_map = _route(estimate(area_by_pdk={"sky130": 30_000.0}), "tt_sky130")
+    assert via_map["tiles"] == 3 and via_map["basis"].startswith("tiles estimated from sky130 synthesis area")
     legacy = estimate(area_um2=30_000.0, tt_tiles=4)                  # old call: package was sky130
     assert _route(legacy, "tt_sky130")["tiles"] == 4
     assert _route(legacy, "tt_sky130")["basis"] == "tiles from the Tiny Tapeout package"

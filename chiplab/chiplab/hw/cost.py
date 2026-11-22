@@ -156,7 +156,8 @@ def estimate(gates: int | None = None, area_um2: float | None = None, tt_tiles: 
             else:
                 tiles = tt_tiles_for(area, pdk) if area else None
                 if pdk == "sky130A":   # unchanged wording: the dashboard and reports show it
-                    basis = ("tiles estimated from sky130 synthesis area at 60% utilisation" if area_um2 else
+                    mapped = area_um2 or (area_by_pdk or {}).get("sky130")
+                    basis = ("tiles estimated from sky130 synthesis area at 60% utilisation" if mapped else
                              f"tiles estimated from the gate count ({SKY130_UM2_PER_GATE} um2 per gate on sky130, "
                              "60% utilisation; no sky130 cell mapping on this machine)")
                 else:
