@@ -699,6 +699,8 @@ def _validate(
     if not isinstance(prompt, str) or not prompt.strip():
         raise RequestError("prompt must be a non-empty string")
     preset = body.get("preset")
+    if preset is None:
+        preset = api.default_preset
     if preset is not None and preset not in api.presets:
         raise RequestError(f"preset must be one of {sorted(api.presets)}")
     machine = str(body.get("machine") or "").strip().lower()

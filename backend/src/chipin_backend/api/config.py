@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from chipin_backend.api.helper import HelperConfig
 from chipin_backend.api.questions import QuestionsConfig
 from chipin_backend.api.transcribe import TranscribeConfig
-from chipin_backend.config import Effort
+from chipin_backend.config import Effort, deep_merge
 
 API_CONFIG_PATH = Path(__file__).with_name("api.yaml")
 
@@ -35,13 +35,15 @@ class SubagentConfig(BaseModel):
     openrouter_model: str | None = None
     provider: str | None = None  # openrouter harness only; None = openrouter
     effort: Effort | None = None  # None = the orchestrator's
-    #: Wall clock per subagent: one value for every run, or ``None`` for the
+    #: Hard wall clock per subagent: one value for every run, or ``None`` for the
     #: preset's entry in ``timeouts`` (``default_timeout_s`` without a preset).
+    #: A subagent still running then is stopped with its process tree, and the
+    #: orchestrator gets its partial result marked ``timed out``.
     timeout_s: int | None = Field(default=None, ge=1)
     timeouts: dict[Preset, int] = Field(
-        default_factory=lambda: {"lite": 600, "pro": 1200, "max": 1500, "ultra": 1800}
+        default_factory=lambda: {"lite": 600, "pro": 600, "max": 600, "ultra": 600}
     )
-    default_timeout_s: int = Field(default=1200, ge=1)
+    default_timeout_s: int = Field(default=600, ge=1)
 
 
 class FanoutConfig(BaseModel):
@@ -58,12 +60,17 @@ class FanoutConfig(BaseModel):
 
     enabled: bool = False
     width: int | None = Field(default=None, ge=1)
-    #: ``max`` was not named by the owner: 15 is an assumption to confirm.
-    widths: dict[Preset, int] = Field(default_factory=lambda: {"lite": 3, "pro": 10, "max": 15, "ultra": 20})
+    #: Subagents per stage batch: the preset's total spread over the five batch stages.
+    widths: dict[Preset, int] = Field(default_factory=lambda: {"lite": 1, "pro": 3, "max": 10, "ultra": 20})
     default_width: int = Field(default=3, ge=1)
+    #: Subagents a run of the preset may start in all, retries included (the run
+    #: size: Lite 5, Pro 15, Max 50). A preset not listed gets five batches plus
+    #: ``spare_starts``; so does a request that names its own ``width``.
+    totals: dict[Preset, int] = Field(default_factory=lambda: {"lite": 5, "pro": 15, "max": 50})
     #: Subagents running at once; ``None`` = the batch size (a whole batch at once).
     max_parallel: int | None = Field(default=None, ge=1)
-    #: Subagents per run; ``None`` = five batches plus ``spare_starts``.
+    #: Subagents per run for every run; ``None`` = the preset's ``totals`` entry,
+    #: else five batches plus ``spare_starts``.
     max_total: int | None = Field(default=None, ge=1)
     #: Starts beyond the five batches, for retries; ``None`` = a fifth of the batch, at least 2.
     spare_starts: int | None = Field(default=None, ge=0)
@@ -90,6 +97,8 @@ class ApiConfig(BaseModel):
     presets: dict[Preset, Effort] = Field(
         default_factory=lambda: {"lite": "low", "pro": "high", "max": "xhigh", "ultra": "max"}
     )
+    #: The run size of a request that names none (the page shows ``pro`` as Large).
+    default_preset: Preset | None = "pro"
     transcribe: TranscribeConfig = Field(default_factory=TranscribeConfig)
     fanout: FanoutConfig = Field(default_factory=FanoutConfig)
     #: Browser origins that may call the API; ``:*`` at the end allows any port.
@@ -107,15 +116,16 @@ class ApiConfig(BaseModel):
     questions: QuestionsConfig = Field(default_factory=QuestionsConfig)
 
 
-def load_api_config(path: Path = API_CONFIG_PATH) -> ApiConfig:
-    """Load and validate ``api.yaml``; ``ValueError`` on invalid YAML."""
+def load_api_config(path: Path = API_CONFIG_PATH, *, overlay: dict[str, Any] | None = None) -> ApiConfig:
+    """Load and validate ``api.yaml`` with ``overlay`` (the backend config's ``api:``
+    section) deep-merged on top; ``ValueError`` on invalid YAML."""
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError as exc:
         raise ValueError(f"invalid YAML in {path}: {exc}") from exc
     if not isinstance(data, dict):
         raise ValueError(f"{path} must hold a mapping at the top level")
-    return ApiConfig.model_validate(data)
+    return ApiConfig.model_validate(deep_merge(data, overlay or {}))
 
 
 __all__ = [

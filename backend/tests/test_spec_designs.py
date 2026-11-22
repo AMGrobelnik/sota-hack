@@ -28,7 +28,7 @@ from chipin_backend.api.manager import (
     standing_instructions,
     subagent_standing_instructions,
 )
-from chipin_backend.api.progress import ProgressTailer, write_helper
+from chipin_backend.api.progress import MAX_DESIGNS_PER_CALL, ProgressTailer, write_helper
 from chipin_backend.api.server import TOKEN_HEADER, create_app, origin_allowed
 from chipin_backend.api.spec import SpecError, parse_spec, spec_instructions
 from chipin_backend.cli import _parser, main
@@ -290,6 +290,55 @@ async def test_helper_and_tailer_upsert_designs(tmp_path: Path) -> None:
     assert [d["id"] for d in stored] == ["lab-7", "own-b"], "the compiled record took over own-a's place"
     assert stored[0]["gates"] == 1450 and stored[0]["verified"]["vectors"] == 256
     assert stored[0]["revision"] == 3 and stored[0]["ts"]
+
+
+async def test_a_list_of_estimated_candidates_lands_in_designs_json(tmp_path: Path) -> None:
+    """One ``./progress design list.json`` call files every scored candidate of a batch, misses
+    included, as estimated (hollow on the chart: ``gates`` null, ``gates_est`` set); a list
+    over the cap or with one bad record files nothing."""
+    run_path = tmp_path / "run"
+    workspace = run_path / "workspace"
+    workspace.mkdir(parents=True)
+    progress = run_path / "progress.jsonl"
+    write_helper(workspace, progress, subagent=True)
+    log = EventLog(run_path / "events.jsonl", "r1", asyncio.get_running_loop())
+    tailer = ProgressTailer(progress, log, run_path, workspace)
+
+    def candidate(i: int, sens: float) -> dict[str, Any]:
+        return {
+            "id": f"mlp-h{i}",
+            "label": f"MLP, {i} hidden",
+            "budget": {"channels": 1, "name": "1 lead"},
+            "gates": None,
+            "gates_est": 120 * i,
+            "depth": None,
+            "metrics": {"sensitivity": sens, "specificity": 0.9, "fa_per_hour": 1.5},
+            "basis": "validation",
+            "verified": None,
+            "data": "synthetic",
+            "note": "estimated, not compiled; synthetic data",
+        }
+
+    batch = [candidate(i, s) for i, s in ((2, 0.62), (4, 0.81), (8, 0.93))]  # 0.62 misses the target
+    (workspace / "candidates.json").write_text(json.dumps(batch))
+    done = _helper(workspace, "design", "candidates.json")
+    assert done.returncode == 0 and done.stdout.strip() == "ok, 3 design records"
+    too_many = [candidate(i, 0.9) for i in range(1, MAX_DESIGNS_PER_CALL + 2)]
+    (workspace / "many.json").write_text(json.dumps(too_many))
+    over = _helper(workspace, "design", "many.json")
+    assert over.returncode == 2 and f"1 to {MAX_DESIGNS_PER_CALL} records" in over.stderr
+    (workspace / "bad.json").write_text(json.dumps([candidate(16, 0.9), {**candidate(32, 0.9), "gates": -1}]))
+    bad = _helper(workspace, "design", "bad.json")
+    assert bad.returncode == 2 and "(item 1)" in bad.stderr
+    tailer.drain()
+
+    stored = json.loads((run_path / DESIGNS_FILE).read_text())["designs"]
+    assert [d["id"] for d in stored] == ["mlp-h2", "mlp-h4", "mlp-h8"]
+    for d, want in zip(stored, batch, strict=True):
+        assert d["gates"] is None and d["gates_est"] == want["gates_est"] > 0
+        assert d["metrics"] == want["metrics"] and d["basis"] == "validation"
+        assert d["budget"] == {"channels": 1, "name": "1 lead"} and "not compiled" in d["note"]
+    assert len([e for e in log.since(1) if e["type"] == "design"]) == 3
 
 
 # ---- a spec-driven run through the server ----

@@ -29,7 +29,7 @@ import math
 import re
 import stat
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +43,32 @@ PROGRESS_FILE = "progress.jsonl"
 HELPER_NAME = "progress"
 ARTIFACT_KINDS = ("file", "report", "chip")
 STAGE_STATES = ("started", "done", "skipped")
+#: Design records one ``./progress design <list.json>`` call may file.
+MAX_DESIGNS_PER_CALL = 40
+#: Set in a subagent's environment: when its time limit ends (Unix seconds), and the limit itself.
+DEADLINE_ENV = "CHIPIN_DEADLINE"
+LIMIT_ENV = "CHIPIN_TIME_LIMIT_S"
+
+
+def limit_words(seconds: float) -> str:
+    """A time limit in plain words: ``10 minutes``, ``1 minute 30 seconds``, ``4 seconds``."""
+    whole = max(0, int(seconds))
+    minutes, rest = divmod(whole, 60)
+    parts = [f"{n} {unit}{'' if n == 1 else 's'}" for n, unit in ((minutes, "minute"), (rest, "second")) if n]
+    return " ".join(parts) or "0 seconds"
+
+
+def time_left_line(env: Mapping[str, str], now: float) -> str:
+    """``./progress``'s line on the time a subagent has left; empty without a limit."""
+    try:
+        deadline, limit = float(env.get("CHIPIN_DEADLINE", "")), float(env.get("CHIPIN_TIME_LIMIT_S", ""))
+    except ValueError:
+        return ""
+    return (
+        f"time left: {limit_words(deadline - now)} of your {limit_words(limit)} limit; "
+        "at the limit you are stopped, so report your result before it"
+    )
+
 
 #: The chip lab reports through this helper by itself. With ``CHIPIN_PROGRESS_CHIP=1`` it adds
 #: ``--chip <design_id>`` to every figure of one chip; an older lab sends none. Before a tool
@@ -106,16 +132,22 @@ usage:
   ./progress status "<one present-tense line>"
   ./progress artifact <path in this folder> [{kinds}]
   ./progress design <design.json | '{{json object}}'>
+  ./progress design <designs.json>   (a list of up to {max_bulk} records, filed together)
+  ./progress time    (a subagent: the time left of its limit)
 """
 from __future__ import annotations
-import json, math, sys
+import json, math, os, sys, time
 from datetime import datetime, timezone
 
 OUT = {out!r}
 STAGES = {stages_t!r}
 KINDS = {kinds_t!r}
+MAX_BULK = {max_bulk}
+lines = []
 
 {validator}
+
+{time_left}
 
 
 def fail(msg):
@@ -179,21 +211,36 @@ elif cmd == "artifact":
     line.update(path=rest[0], kind=rest[1] if len(rest) == 2 else "file")
 elif cmd == "design":
     if len(rest) != 1:
-        fail("design needs one JSON object, or the path of a .json file holding one")
+        fail("design needs one JSON object, or the path of a .json file holding one or a list")
     try:
         if rest[0].lstrip().startswith("{{"):
             record = json.loads(rest[0])
         else:
             with open(rest[0], encoding="utf-8") as handle:
                 record = json.load(handle)
-        line.update(validate_design(record))
     except (OSError, ValueError) as exc:
         fail("design record refused: " + str(exc))
+    records = record if isinstance(record, list) else [record]
+    if not records or len(records) > MAX_BULK:
+        fail("a list of design records must hold 1 to %d records; file a spread across the "
+             "size range plus the best per size" % MAX_BULK)
+    lines = []
+    for i, one in enumerate(records):
+        try:
+            lines.append(dict(line, **validate_design(one)))
+        except ValueError as exc:
+            fail("design record refused" + (" (item %d)" % i if len(records) > 1 else "") + ": " + str(exc))
+elif cmd == "time":
+    print(time_left_line(os.environ, time.time()) or "no time limit is set here")
+    sys.exit(0)
 else:
     fail("unknown command " + repr(cmd))
 with open(OUT, "a", encoding="utf-8") as handle:
-    handle.write(json.dumps(line) + "\\n")
-print("ok")
+    for one in lines or [line]:
+        handle.write(json.dumps(one) + "\\n")
+print("ok" if len(lines or [line]) == 1 else "ok, %d design records" % len(lines))
+if cmd == "status" and time_left_line(os.environ, time.time()):
+    print(time_left_line(os.environ, time.time()))
 '''
 
 
@@ -242,7 +289,9 @@ def write_helper(
         stages_t=STAGES,
         kinds="|".join(ARTIFACT_KINDS),
         kinds_t=ARTIFACT_KINDS,
+        max_bulk=MAX_DESIGNS_PER_CALL,
         validator=inspect.getsource(validate_design),
+        time_left=inspect.getsource(limit_words) + "\n\n" + inspect.getsource(time_left_line),
     )
     if subagent:
         source = source.replace(_DISPATCH, _SUBAGENT_REFUSAL + _DISPATCH, 1)
@@ -393,4 +442,15 @@ def _chip(value: object) -> str:
     return clip(value.strip(), 200)
 
 
-__all__ = ["ARTIFACT_KINDS", "HELPER_NAME", "PROGRESS_FILE", "ProgressTailer", "write_helper"]
+__all__ = [
+    "ARTIFACT_KINDS",
+    "DEADLINE_ENV",
+    "HELPER_NAME",
+    "LIMIT_ENV",
+    "MAX_DESIGNS_PER_CALL",
+    "PROGRESS_FILE",
+    "ProgressTailer",
+    "limit_words",
+    "time_left_line",
+    "write_helper",
+]
