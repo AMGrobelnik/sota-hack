@@ -243,6 +243,10 @@
     "  body.drawer .chp-btn,body.drawer .chp-hello{display:none}",
     // the New run questions screen keeps its answer box low: the avatar would sit on its Send button
     "  body:has(.main .iq) .chp-btn,body:has(.main .iq) .chp-hello{display:none}",
+    // reading down the page: the avatar slides out of the content's way (wireAway) and comes back on any scroll up
+    "  .chp-btn{transition:box-shadow .15s,border-color .15s,transform .2s var(--ease,ease),opacity .2s}",
+    "  body.chp-away:not(.chp-open) .chp-btn{transform:translateY(calc(100% + 24px));opacity:0;pointer-events:none}",
+    "  body.chp-away .chp-hello{visibility:hidden}",
     "  .chp-p{top:auto;left:0;right:0;bottom:0;width:auto;max-width:none;min-height:0;max-height:none;height:min(78vh,680px);border:0;border-radius:16px 16px 0 0;box-shadow:0 -10px 40px rgb(14 21 48/.16);padding-bottom:env(safe-area-inset-bottom,0px);animation:chpUp .2s var(--ease,ease)}",
     "  .chp-scrim{display:block;position:fixed;inset:0;z-index:59;background:rgb(20 20 40/.14)}",
     // a file was opened by Chippy: the sheet shrinks to a bar under the drawer that keeps the line and its Undo
@@ -275,6 +279,22 @@
     document.body.appendChild(b);
     UI.btn = b;
     hello();
+    wireAway();
+  }
+  // on a phone the avatar would sit on whatever row is passing under it: it steps away while the page scrolls down,
+  // and returns on a scroll up, at the top or the end of the page, and on a new page, so it stays one swipe away
+  function wireAway() {
+    var mq = matchMedia("(max-width:767px)"), last = new WeakMap(), cls = document.body.classList;
+    document.addEventListener("scroll", function (e) {
+      var t = e.target;
+      if (!t || t.nodeType !== 1 || !t.closest(".main")) return;
+      var y = t.scrollTop, p = last.get(t); last.set(t, y);
+      if (!mq.matches) { cls.remove("chp-away"); return; }
+      if (p == null || Math.abs(y - p) < 3) return;
+      var edge = y < 24 || y + t.clientHeight >= t.scrollHeight - 4;
+      cls.toggle("chp-away", y > p && !edge);
+    }, true);
+    addEventListener("hashchange", function () { cls.remove("chp-away"); });
   }
   // the first page load of a session: a short "Ask Chippy" beside the avatar that fades out by itself
   function hello() {

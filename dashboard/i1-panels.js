@@ -374,7 +374,7 @@
     var rows = rowsFor(ctx);
     var unit = unitWord(ctx);
     var d = ctx.chosen || ctx.selected;
-    var gatesTxt = d && d.gates > 0 ? fmtInt(d.gates) + " gates " + (d.source === "measured" ? '<span class="mk mea">gates measured</span>' : '<span class="mk sim">gates simulated</span>') : "2,500 gates (the model's default; no chip chosen yet)";
+    var gatesTxt = d && d.gates > 0 ? fmtInt(d.gates) + " gates " + (d.source === "measured" ? '<span class="mk mea">measured</span>' : '<span class="mk sim">simulated</span>') : "2,500 gates (the model's default; no chip chosen yet)";
     var maxShare = 0;
     rows.forEach(function (r) {
       if (r.chip_share > maxShare) maxShare = r.chip_share;

@@ -94,7 +94,7 @@
   function biggerOf(run, v, P, d) {
     if (run.case === "af") {
       var F = P.MEASURED.af, out = [];
-      if (F && F.bestD && F.bestD.gates > d.gates) out.push({ d: F.bestD, note: "best on validation, too large to compile", estSize: true });
+      if (F && F.bestD && F.bestD.gates > d.gates) out.push({ d: F.bestD, note: "best on validation window F1, not compiled", estSize: true });
       var big = (v.vis || []).filter(function (x) { return x.gates > d.gates; }).reduce(function (a, x) { return !a || x.gates > a.gates ? x : a; }, null);
       if (big && (!out.length || big.gates > out[0].d.gates * 1.05)) out.push({ d: big, note: "largest candidate", estSize: true });
       return out;
@@ -180,10 +180,33 @@
     if (!ver || !(ver.windows > 0) || ver.identical !== ver.windows) return "";
     var lim = null;
     (F.path || []).forEach(function (p) { var m = /(\d+)-minute limit/.exec(p.text || ""); if (m && !lim) lim = m[1]; });
-    var synth = B.synth === "not finished" ? "synthesis did not finish" + (lim ? " in the " + lim + "-minute limit" : "") + ", so it was never compiled or checked." : "it was never compiled or checked.";
+    // the size cap as the run's own path states it (H x L <= N), and whether this design was over it
+    var cap = null;
+    (F.path || []).forEach(function (p) { var m = /H x L <= (\d+)/.exec(p.text || ""); if (m && !cap) cap = m[1]; });
+    var over = B.under === false && B.hl > 0;
+    var why = [];
+    if (over) why.push("it is over the search's size cap (H x L = " + fmtInt(B.hl) + (cap ? ", against at most " + cap : "") + ")");
+    if (B.synth === "not finished") why.push("synthesis did not finish" + (lim ? " in the " + lim + "-minute limit" : ""));
     var big = '<span class="est" title="' + esc(P.sizeTip ? P.sizeTip() : M().describeEstimate("area")) + '">' + P.about(B.gates) + "</span>";
     return "<p><b>Why not the " + big + "-gate design?</b> " + P.fmt(d.gates) + " is the best design that was actually compiled and verified. " +
-      "The " + big + "-gate design is the best on validation, but its size is an estimate: " + synth + "</p>";
+      "The " + big + "-gate design is the best on validation window F1, but it was never compiled or checked" + (why.length ? ": " + why.join(", and ") : "") + ". Its size is an estimate.</p>";
+  }
+  // the best-scoring verified design larger than the chosen chip, when it beats it on the run's own metric
+  function betterBig(run, v, P, d) {
+    if (run.case === "af" || !v.ev.chosen || !P.MET[run.primary]) return null;
+    var key = run.primary, rr = P.mFile(run) ? Object.assign({}, run, { judge: "pooled" }) : run, mine = P.metricOf(rr, d, key).v;
+    if (mine == null) return null;
+    var best = null, bv = null;
+    (v.vis || []).forEach(function (x) {
+      if (x === d || x.role === "baseline" || !(x.gates > d.gates) || !x.verified || x.verified.mismatches !== 0 || (run.gateBudget && x.gates > run.gateBudget)) return;
+      var m = P.metricOf(rr, x, key).v;
+      if (m == null || !better(P, key, m, mine)) return;
+      if (!best || better(P, key, m, bv)) { best = x; bv = m; }
+    });
+    if (!best) return null;
+    var fld = P.metricOf(rr, d, key).f;
+    var name = (P.MET[key].short || P.MET[key].name) + (fld && /_worst$/.test(fld) ? ", worst " + P.caseOf(run).who : fld ? ", " + P.caseOf(run).whoP + " pooled" : "");
+    return { d: best, v: bv, mine: mine, name: name, key: key };
   }
   function better(P, key, a, b) { return P.MET[key] && P.MET[key].up === false ? a < b - 1e-9 : a > b + 1e-9; }
   // true when no other verified design within the gate budget scores better than the chosen one
@@ -204,12 +227,21 @@
   function whyHTML(run, v, P, ctx, d, rows) {
     var wn = whyNot(run, P, d), out = wn;
     var holds = ruleHolds(run, v, P, d);
-    if (holds) out += "<p><b>Rule:</b> the most accurate design that is verified and within your budget.</p>";
+    var bb = holds ? null : betterBig(run, v, P, d);
+    if (holds && run.case === "af") out += "<p><b>Rule:</b> the highest validation window F1 under the size cap, then compiled and checked bit for bit.</p>";
+    else if (holds) out += "<p><b>Rule:</b> the most accurate design that is verified and within your budget.</p>";
+    else if (run.case !== "af" && v.ev.chosen) out += "<p><b>Rule:</b> this run picks the smallest chip that clears all your targets.</p>";
+    if (bb) {
+      var dc = costOf(ctx, bb.d).model.unit_cost - costOf(ctx, d).model.unit_cost;
+      var at = Math.abs(dc) < 0.005 ? "at the same unit cost (estimated)" : "for about " + money(dc) + (dc > 0 ? " more" : " less") + " per unit (estimated)";
+      var nm = /^[A-Z][a-z]/.test(bb.name) ? bb.name.charAt(0).toLowerCase() + bb.name.slice(1) : bb.name;
+      out += "<p>A larger verified design, " + P.fmt(bb.d.gates) + " gates, scores higher on " + esc(nm) + ": " + esc(P.fmtVal(bb.key, bb.v)) + " against " + esc(P.fmtVal(bb.key, bb.mine)) + " for this chip, " + at + ". If you want more margin, you can choose it.</p>";
+    }
     // going bigger is nearly free only while the largest design here is still pad-limited in the cost model
     var top = rows.length ? rows[rows.length - 1].d : null, flat = top ? costOf(ctx, top).model.pad_limited && costOf(ctx, d).model.pad_limited : false;
     var verBig = rows.some(function (r) { return r.d.verified && r.d.verified.mismatches === 0; });
     if (flat && (holds || wn)) out += "<p>At this scale going bigger is nearly free: if " + (wn ? "the" : "a") + " larger design compiles and verifies, choose it.</p>";
-    else if (flat && verBig) out += "<p>At this scale going bigger is nearly free: the larger verified designs here cost the same per unit " + EST_MK + ".</p>";
+    else if (flat && verBig && !bb) out += "<p>At this scale going bigger is nearly free: the larger verified designs here cost the same per unit (estimated).</p>";
     out += '<p class="q">Chip size only matters when it is a real limit: fitting beside other circuits, running on harvested energy, or holding a larger model.</p>';
     return '<div class="ws-why">' + out + "</div>";
   }
@@ -222,7 +254,7 @@
     return { more: b.more, html: '<div class="ws-h"><h2>Why this size</h2></div>' +
       '<p class="ws-lede">' + ledeText(run, v, P, ctx, d, rows) + "</p>" + whyHTML(run, v, P, ctx, d, rows) + cost +
       '<div class="ws-g ' + (cost ? "one" : "two") + '">' + (cost ? "" : costHTML(run, v, P, ctx, d, rows)) + b.html + "</div>" +
-      '<p class="ws-p" title="General information to check with a regulatory specialist">Regulatory points to check: <button type="button" class="ws-lk" data-ws-reg>the Regulation panel</button>.</p>' };
+      '<p class="ws-p" title="General information to check with a regulatory specialist">Regulatory points, checked: <button type="button" class="ws-lk" data-ws-reg>the Regulation panel</button>.</p>' };
   }
 
   function tick(el, run, v, P, ctx, openCost) {

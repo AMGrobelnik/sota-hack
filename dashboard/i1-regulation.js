@@ -41,7 +41,7 @@
     ".rg-say a{color:var(--blue7);font-weight:600;white-space:nowrap}",
     ".rg-f{font-size:11.5px;color:var(--i600);margin:8px 0 0;border-top:1px solid var(--hair);padding-top:6px}",
     "@media (max-width:900px){.rg-g{grid-template-columns:1fr}.rg-grp+.rg-grp{margin-top:10px}}",
-    "@media (max-width:767px){.ov #regPanel{order:8}.rg{padding:12px 14px 8px}.rg-bat span.b.mid{display:none}}",
+    "@media (max-width:767px){.ov #regPanel{order:8}.rg{padding:12px 14px 8px}}",
   ].join("\n");
   function css() {
     if (document.getElementById("rg-styles")) return;
@@ -92,7 +92,7 @@
       say: "Contested: Team-NB treats HDL as a tool, others say in scope; confirm with your notified body.", cite: "IEC 62304, Team-NB FAQ",
       rule: "Whether IEC 62304 covers hard-wired logic is contested: the Team-NB FAQ treats HDL used to produce an FPGA as a tool, not a software item; the Johner Institute (consultancy) argues FPGA programming is in scope.",
       why: "A chip with hard-wired logic may or may not fall under IEC 62304; confirm with your notified body.",
-      src: [["EN 62304 FAQ, Team-NB", "https://www.team-nb.org//wp-content/uploads/2015/05/FAQ_62304_Final_130804.pdf"], ["FPGA under IEC 62304, Johner Institute (consultancy)", "https://www.johner-institut.de/blog/wp-json/wp/v2/posts/13202"]] },
+      src: [["EN 62304 FAQ, Team-NB", "https://www.team-nb.org//wp-content/uploads/2015/05/FAQ_62304_Final_130804.pdf"], ["FPGA under IEC 62304, Johner Institute (consultancy, in German)", "https://www.johner-institut.de/blog/iec-62304-medizinische-software/fpga/"]] },
   ];
 
   function final(run, v, P) {
@@ -126,9 +126,9 @@
       "<p>Source: " + src + "</p></div></details>";
   }
   function stripHTML(P, B) {
-    // a phone keeps this chip and the largest, as the cost by size view does (its middle columns hide)
-    return '<div class="rg-bat">' + B.map(function (b, i) {
-      return '<span class="b' + (b.me ? " me" : i < B.length - 1 ? " mid" : "") + '"><i style="background:' + DOT[b.cls] + '"></i><span>' + (b.me ? "this chip, " : "") + sizeText(P, b) + " gates: " +
+    // every size Why this size names, on a phone too: the chips wrap
+    return '<div class="rg-bat">' + B.map(function (b) {
+      return '<span class="b' + (b.me ? " me" : "") + '"><i style="background:' + DOT[b.cls] + '"></i><span>' + (b.me ? "this chip, " : "") + sizeText(P, b) + " gates: " +
         est(SHORT[b.cls], "battery_class") + "</span></span>";
     }).join("") + '<span class="mk no">estimated</span></div>';
   }
