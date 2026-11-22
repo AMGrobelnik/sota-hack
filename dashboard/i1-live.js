@@ -49,7 +49,7 @@
   var clamp = function (x, a, b) { return Math.max(a, Math.min(b, x)); };
   var cap = function (s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; };
   // a live run's size as the page names it: Pro · 15 agents (subagents per run, set by the preset)
-  var SIZE_AGENTS = { lite: 5, pro: 15, max: 30 };
+  var SIZE_AGENTS = { lite: 5, pro: 15, max: 50 };
   var runSize = function (M) { var n = SIZE_AGENTS[String(M.r.preset).toLowerCase()]; return cap(M.r.preset) + (n ? " · " + n + " agents" : ""); };
   var clip = function (s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
   var clock = function (s) { s = Math.max(0, Math.floor(s)); var h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = String(s % 60).padStart(2, "0"); return h ? h + ":" + String(m).padStart(2, "0") + ":" + x : m + ":" + x; };
@@ -345,7 +345,7 @@
     // a backend that lists run_agents takes a run's own agent and model; an older one only a model for its own agent
     if (!srv || srv === mod.agent || Array.isArray(D.run_agents)) { body.agent = mod.agent; body.model = mod.id; }
     if (s.preset) body.preset = String(s.preset).toLowerCase();
-    // the preset alone sets the run's subagents (lite 5, pro 15, max 30 in total); a width would override it
+    // the preset alone sets the run's subagents (lite 5, pro 15, max 50 in total); a width would override it
     if (body.preset) body.fanout = true;
     var fu = window.ChipInQuestions && window.ChipInQuestions.payload(s); // QUESTIONS HOOK: the follow-up answers (../i1-questions.js)
     if (fu) body.follow_up = fu;
