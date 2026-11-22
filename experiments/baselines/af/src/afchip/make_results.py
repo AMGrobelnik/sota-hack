@@ -73,7 +73,7 @@ def _chip(d: Path) -> dict | None:
     ps = r.get("prove_seq", {})
     out["formal_sequential"] = {"proved": ps.get("proved"), "scope": ps.get("scope"), "status": ps.get("status")}
     rs = r.get("rtl_sim", {})
-    out["rtl_sim"] = {k: rs.get(k) for k in ("status", "n", "mismatches", "lint", "verification_level") if k in rs}
+    out["rtl_sim"] = {k: rs.get(k) for k in ("status", "passed", "vectors", "mismatches", "verification_level") if k in rs} | {"lint_ok": (rs.get("lint") or {}).get("ok")}
     out["ice40_luts"] = r.get("bitstream", {}).get("metrics", {}).get("luts")
     out["verification_level"] = r.get("vlevel", {}).get("level", r.get("vlevel", {}).get("verification_level"))
     return out
