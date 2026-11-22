@@ -192,13 +192,11 @@ def translate_event(event: Any, agent: str) -> list[AgentEvent]:
             out.append(AgentEvent("text", agent, {"text": thought}))
         action = getattr(event, "action", None)
         args: dict[str, Any] = action.model_dump(exclude={"kind"}) if action is not None else {}
-        out.append(
-            AgentEvent(
-                "tool_call",
-                agent,
-                {"tool": event.tool_name, "input": args, "call_id": event.tool_call_id},
-            )
-        )
+        call: dict[str, Any] = {"tool": event.tool_name, "input": args, "call_id": event.tool_call_id}
+        summary = getattr(event, "summary", None)  # the model's own ~10-word gist of the action
+        if isinstance(summary, str) and summary.strip():
+            call["description"] = summary.strip()
+        out.append(AgentEvent("tool_call", agent, call))
     elif kind == "ObservationEvent":
         obs = event.observation
         output = getattr(obs, "text", "") or str(obs)

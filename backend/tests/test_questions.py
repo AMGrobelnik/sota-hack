@@ -364,8 +364,11 @@ def test_the_prompt_names_what_to_ask_and_what_to_skip() -> None:
     from chipin_backend.api.questions import system_prompt
 
     text = system_prompt(QuestionsConfig())
-    for needle in ("how fast the chip must alert", "sampling rate", "drops out", "regulatory class"):
+    for needle in ("sampling rate", "drops out", "regulatory class", "names its unit"):
         assert needle in text
+    good = text.split("Good topics", 1)[1].split("Never ask about", 1)[0]
+    for handled in ("alert", "noise", "mistake"):
+        assert handled not in good  # the page sets these as assumptions
 
 
 # ---- the answers on the run ----

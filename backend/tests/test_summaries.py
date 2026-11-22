@@ -802,3 +802,28 @@ def test_cli_summarise_writes_an_export_s_message_lines(tmp_path: Path) -> None:
     data = json.loads(out.read_text(encoding="utf-8"))
     assert data["run_id"] == "r1" and len(data["messages"]) == 4
     assert {m["source"] for m in data["messages"].values()} <= {"fallback", "verbatim"}
+
+
+async def test_a_tool_row_shows_its_line_and_an_old_record_gets_one_from_its_command() -> None:
+    s = Script()
+    s.stage("propose", "started")
+    s.add(
+        "tool",
+        call_id="n",
+        name="Bash",
+        summary="Ran cd /a/b/runs/x/workspace && make",
+        line="Build",
+        state="started",
+    )
+    s.add(
+        "tool",
+        call_id="n",
+        name="Bash",
+        summary="Ran cd /a/b/runs/x/workspace && make",
+        line="Build",
+        state="done",
+    )
+    s.tool("Ran cd /a/b/runs/20261122/workspace/agents/a1; cat ../../agents/a3/rule.py; ls dat…")
+    s.tool("Read brief.md", name="Read")
+    items = [x for x in await run_replay(s) if x.get("level") == "item"]
+    assert [x["text"] for x in items] == ["Build", "Ran cat a3/rule.py (+1 more)", "Read brief.md"]
