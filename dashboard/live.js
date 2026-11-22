@@ -200,7 +200,9 @@
     STAGES.forEach(function (n) { stages[n] = { state: "pending", round: null, reason: null, at: null }; });
     return {
       status: "connecting", stages: stages, round: null, statusLine: "", messages: [], tools: [],
-      items: [], metrics: {}, metricUnits: {}, artifacts: [], cost: null, errors: [], finished: null,
+      items: [], metrics: {}, metricUnits: {}, artifacts: [],
+      runMetrics: {}, runMetricUnits: {}, metricsByChip: {}, metricUnitsByChip: {},
+      chosenChip: null, shownChip: null, lastMetricChip: null, cost: null, errors: [], finished: null,
       lastSeq: 0, startedAt: null, finishedAt: null,
     };
   }
@@ -209,6 +211,20 @@
     var fn = handlers[name];
     if (typeof fn !== "function") return;
     try { fn(arg, state); } catch (e) { setTimeout(function () { throw e; }); }
+  }
+
+  // st.metrics is one consistent view: run-level metrics plus ONE chip's
+  // metrics, the chosen chip, else the chip of the latest chip-tagged metric.
+  // With no chip-tagged event at all it is the last value per key, as before.
+  function showMetrics(st) {
+    var chip = st.chosenChip || st.lastMetricChip || null;
+    st.shownChip = chip;
+    [["metrics", "runMetrics", "metricsByChip"], ["metricUnits", "runMetricUnits", "metricUnitsByChip"]].forEach(function (p) {
+      var view = st[p[0]], own = (chip && st[p[2]][chip]) || {}, k;
+      for (k in view) delete view[k];
+      for (k in st[p[1]]) view[k] = st[p[1]][k];
+      for (k in own) view[k] = own[k];
+    });
   }
 
   // Apply one event to the derived state; returns [handlerName, argument] or null.
@@ -253,10 +269,22 @@
         if (ev.state === "done" || ev.state === "failed") t.finished_at = ev.ts;
         return ["onTool", t];
       }
-      case "metric":
-        st.metrics[ev.key] = ev.value;
-        if (ev.unit) st.metricUnits[ev.key] = ev.unit;
+      case "metric": {
+        var chip = typeof ev.chip === "string" && ev.chip ? ev.chip : null;
+        var vals = st.runMetrics, units = st.runMetricUnits;
+        if (chip) {
+          st.lastMetricChip = chip;
+          vals = st.metricsByChip[chip] || (st.metricsByChip[chip] = {});
+          units = st.metricUnitsByChip[chip] || (st.metricUnitsByChip[chip] = {});
+        }
+        vals[ev.key] = ev.value;
+        if (ev.unit) units[ev.key] = ev.unit;
+        showMetrics(st);
         return ["onMetric", { key: ev.key, value: ev.value, unit: ev.unit }];
+      }
+      case "chosen":
+        if (typeof ev.chip === "string" && ev.chip) { st.chosenChip = ev.chip; showMetrics(st); }
+        return null;
       case "artifact": {
         var a = { name: ev.name, kind: ev.kind, path: ev.path };
         st.artifacts.push(a);
