@@ -38,6 +38,9 @@ the shell. The dashboard the user watches is drawn from these calls only:
   `./progress metric gates 2330`, `./progress metric candidates 3`,
   `./progress metric round 2`, `./progress metric patients_pass 41`,
   `./progress metric patients_total 48` (an optional unit may follow);
+  report every accuracy-like figure (accuracy, sensitivity, specificity,
+  a pass rate) as a fraction between 0 and 1 with no unit, never as a
+  percentage: `./progress metric sensitivity 0.925`;
 - whenever what you are doing changes, one present-tense line:
   `./progress status "ChipIn is wiring the weights into gates"`;
 - for every file the user should open:

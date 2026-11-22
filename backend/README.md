@@ -25,6 +25,13 @@ Built and proven by a real run on a Mac:
 - The `local` runner, and `flex` (the same, on a team Mac).
 - The local API server (`serve`) for the dashboards: see
   "Local API for the dashboards".
+- Fan-out stage batches: one real Lite run (a Claude orchestrator, three
+  Claude subagents per batch, chip lab on) ran all five batches with the
+  three subagents of each running at once, merged each batch and ended
+  with a verified chip. Two more runs put the subagents on OpenRouter for
+  the propose and compile batches: on `deepseek/deepseek-v4-flash-0731`
+  they ran in parallel and produced the chosen chip; on
+  `openai/gpt-oss-20b` they ran in parallel but got stuck on the tools.
 
 Built and tested, dry run only:
 
@@ -202,6 +209,7 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 | `POST /api/transcribe`         | one spoken phrase to text    |
 | `run.started`                  | prompt, agent, runner        |
 | `stage`                        | `name`, `state`, `reason`    |
+| `stage.merged`                 | fan-out: a batch's merge     |
 | `status`                       | one "ChipIn is ..." line     |
 | `message`                      | agent or user text           |
 | `tool`                         | a tool call, started or done |
@@ -216,13 +224,18 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 Stages, in order: `spec`, `reference`, `propose`, `finetune`, `compile`,
 `verify`, `report`. Each is `started`, `done` or `skipped`; a skipped stage
 carries a short reason. The agent reports them with `./progress` in its
-working folder. `run.finished` carries the agent's last message as
+working folder. With fan-out on, the backend may close a merged stage the
+agent left open (see "Fan-out"); that `done` carries
+`"closed_by": "backend"`. Accuracy-like metrics (accuracy, sensitivity,
+specificity, pass rates) are asked for as a fraction between 0 and 1 with
+no unit; runs recorded before this rule are left as they are. `run.finished` carries the agent's last message as
 `summary` and, when OpenRouter wrote one, the three-bullet run summary as
 `bullets`. `./progress metric <key> <number> [unit] --chip <design_id>`
 (the flag after the number or the unit) adds `chip` to the metric event,
 naming the design the number measures; without it the event is as before.
 `./progress chosen <design_id>` writes a `chosen` event with `chip`, the
-run's chosen chip; a later one replaces an earlier one. Presets map to agent effort: `lite`, `pro`, `max`, `ultra`.
+run's chosen chip; a later one replaces an earlier one. Presets map to agent effort: `lite`, `pro`, `max`, `ultra`;
+with fan-out on they also set the subagents per stage batch (see "Fan-out").
 A run cut short ends `stopped`, its summary saying whether the user
 stopped it or the server was shut down.
 
@@ -280,8 +293,9 @@ What "delivered" means per harness:
 
 The files routes cover the agent's working folder only. Paths are
 run-folder paths such as `workspace/report.md`, the same as an `artifact`
-event's `path`; the `progress` helper and hidden files are not listed, a
-path outside `workspace/` is refused (400), and a file over
+event's `path`; the `progress` and `subagent` helpers and hidden files
+are neither listed nor served (404), a path outside `workspace/` is
+refused (400), and a file over
 `file_max_bytes` (512 KB) is cut, marked with `X-ChipIn-Truncated: true`.
 The brief's `files` entries carry `name`, `size` and an optional `header`
 line (up to 1,000 characters), and `answers` is any JSON object; the
@@ -302,7 +316,7 @@ line, without the server: the same instructions, `./progress` helper and
 joined into one brief.
 
 Both agents get the same standing instructions (`api/instructions.md`,
-plus the chip-lab paragraph when the lab is on): `claude` as a tagged
+plus the training and chip-lab paragraphs when each is on): `claude` as a tagged
 system prompt ahead of its first prompt, `openrouter` appended to the
 OpenHands system message (`AgentContext.system_message_suffix`), which
 keeps OpenHands' own tool rules. `run.json` records them under
@@ -312,6 +326,171 @@ keeps OpenHands' own tool rules. `run.json` records them under
 chipin-backend run --preset pro --env-file <keys> \
     --prompt-file examples/seizure_eeg_prompt.md --prompt-file <more brief>
 ```
+
+## Fan-out: stage batches of parallel subagents
+
+Off by default. With fan-out on, the run's agent is an orchestrator. Spec
+and report are its own. Each of the other five stages (reference,
+propose, finetune, compile, verify) is ONE BATCH: the orchestrator writes
+down as many different strategies as the batch size, starts one subagent
+per strategy, all at once, waits for all of them, merges the best results
+into the stage's result and records the merge, and only then moves on.
+Every subagent is the same four layers as the orchestrator (a model, a
+harness, its own prompt, the chip lab), usually on a smaller model.
+
+The preset is the run-size control: it sets the effort and the number of
+subagents in each stage batch.
+
+| Preset  | Effort | Batch size | Per run | Each   |
+| ------- | ------ | ---------- | ------- | ------ |
+| `lite`  | low    | 3          | 17      | 10 min |
+| `pro`   | high   | 10         | 52      | 20 min |
+| `max`   | xhigh  | 15 (a)     | 78      | 25 min |
+| `ultra` | max    | 20         | 104     | 30 min |
+
+(a) The owner did not name a batch size for `max`; 15 is an assumption to
+confirm. A run with no preset gets 3. "Per run" is five batches plus a few
+spare starts for retries; "Each" is the wall-clock limit per subagent.
+
+Models: when the request leaves them on automatic, the orchestrator runs
+the large Claude model (`agents.claude_cli.model`, `claude-opus-5-5`) and
+its subagents the smaller one (`fanout.subagent.model`,
+`claude-sonnet-5-5`), both on the `claude` harness. A request may name
+either: `model` for the orchestrator, `fanout.subagent.model` for the
+subagents, or put the subagents on the other harness
+(`fanout.subagent.agent: "openrouter"`, a small OpenRouter model).
+
+```bash
+chipin-backend run --preset lite --fanout --prompt "..."     # 3 per stage batch
+chipin-backend run --preset lite --fanout --subagent-agent openrouter \
+    --subagent-model openai/gpt-oss-20b --subagent-max-usd 0.2 --prompt "..."
+```
+
+`POST /api/runs` takes the same as an optional object: `"fanout": true`
+(the preset's batch size), or `{"width": 3, "max_usd": 0.2, "subagent":
+{"agent": "openrouter", "model": "inkling-mini"}}` (any field turns it on;
+`max_usd` may only lower the limit). `GET /api/runs/{id}` then shows
+`fanout` (batch size, batch stages, limits, the orchestrator's and the
+subagents' harness, model and effort), `subagents` (each one's id, name,
+stage, strategy, harness, model, state, seconds, cost, result and folder)
+and `merges` (one per merged batch).
+
+The helper. The orchestrator's folder gets `./subagent` next to
+`./progress`:
+
+```text
+./subagent start <stage> "<brief>" [--name <label>] [--agent <harness>] [--model <id>]
+./subagent wait <id> [<id> ...] | --stage <stage> | --all [--timeout <s>]
+./subagent merge <stage> --kept <id>[,<id> ...] --why "<one line>"
+./subagent list
+```
+
+`start` prints the new id (`a1`, `a2`, ...) and returns; the brief's first
+line is the subagent's strategy. `wait` returns when they have finished or
+after `wait_timeout_s` (100 s, under the agents' 2-minute command limit)
+and prints each one's state (`done`, `failed`, `timed out`, `stopped`),
+result and folder; it says plainly when some are still running. `merge`
+writes the batch's `stage.merged` event; it is refused while a subagent of
+that stage is still running, for a stage with no batch, for an id outside
+the batch and for a stage already merged (`--kept none` when nothing is
+worth keeping). Subagents of a stage started after its merge (a retry
+batch) are merged on their own, with a second `stage.merged`. Like `./progress`, the helper only writes a request line
+(`subagents.jsonl`) and reads `subagents.json`; the backend starts each
+subagent through the same runner and agent backends as the run's own
+agent, with the same environment allowlist and chip-lab settings, keys
+never written into a folder. A subagent works in `workspace/agents/<id>/`
+with its own `./progress` (which refuses `stage` and `chosen`), its own
+instructions (`api/subagent.md`, plus the training and chip-lab paragraphs
+when each is on, delivered as the orchestrator's are), the chip-lab skill
+installed in its folder exactly as for the orchestrator (when the lab is
+on) and its brief in `brief.md`; its last message is saved there as
+`subagent-result.md`. Its raw events and progress lines are under
+`subagents/<id>/` in the run folder. A subagent has no `./subagent` and
+the helper refuses to run inside one. A subagent may still work from the
+orchestrator's folder, where the lab tools find the orchestrator's
+`./progress`; with fan-out on, that helper passes any call made from a
+subagent's environment to the subagent's own helper, so the lines carry
+the subagent's id and it cannot mark the orchestrator's stages.
+
+The instructions. With fan-out on, the orchestrator's standing
+instructions get `api/orchestrator.md`: it is the orchestrator; spec and
+report are its alone; at each batch stage it writes down that many
+different strategies in `decisions.md` (examples per stage: baseline
+families at reference, design families at propose, training settings at
+finetune, designs and compile choices at compile, designs and checks at
+verify, each verified by a subagent that did not build it), starts the
+whole batch before waiting, waits, merges on the lab's numbers against the
+user's targets, records the merge, marks the stage done and carries the
+merged result on; it never does a batch's work itself. A subagent gets
+`api/subagent.md`: it is one of a batch trying different strategies for
+one stage; it does exactly its strategy, never invents a measurement and
+returns the short result asked for.
+
+Stages left open. An orchestrator may merge a batch and move on without
+marking the stage done. The backend then closes it itself, with an
+ordinary `stage` event (`state: done`, `closed_by: backend`), when a later
+stage is marked started (the `done` comes first) or when the run ends. A
+stage is closed only if the orchestrator marked it started, recorded a
+merge for it and never marked it done or skipped; while a batch of it is
+still queued, running or not yet merged (a retry batch), a later stage
+does not close it; the merge of that batch, or the run's end, does. A
+`done` or `skipped` from the orchestrator itself is left as it is.
+
+The events. Everything a subagent causes (`status`, `tool`, `metric` with
+its optional `chip`, `artifact`, `message`, `cost`) lands in the run's own
+`events.jsonl` and stream with `"agent": "<id>"`; the orchestrator's events
+carry no such field, so old readers and old runs are unchanged. A
+subagent's failure is not an `error` of the run and does not block the
+merge. Three new events:
+
+| Event               | Fields                                    |
+| ------------------- | ----------------------------------------- |
+| `subagent.started`  | `id`, `name`, `stage`, `strategy`, ...    |
+| `subagent.finished` | `id`, `stage`, `state`, `seconds`, ...    |
+| `stage.merged`      | `stage`, `started`, `ids`, `kept`, ...    |
+
+`subagent.started` also carries `harness`, `model` and `brief` (cut to 200
+characters); `subagent.finished` carries `cost`, `result` and `error`.
+`stage.merged` also carries `done` (how many ended `done`), `why` and
+`seconds` (first start to last finish of the batch). A subagent's artifact
+paths are run-folder paths such as `workspace/agents/a1/note.md`, served
+by the files routes like any other. When subagents ran, a last `cost`
+event (no `agent`) carries the run's total with `subagents_usd`;
+`api.json`'s `cost` is that total, and `run.json` lists the subagents
+(`subagents`, `subagent_cost_usd`).
+
+The settings (`fanout` in `src/chipin_backend/api/api.yaml`):
+
+| Setting                     | Default                  |
+| --------------------------- | ------------------------ |
+| `enabled`                   | false                    |
+| `width`                     | null: the preset's       |
+| `widths`                    | 3 / 10 / 15 / 20         |
+| `default_width`             | 3                        |
+| `max_parallel`              | null: the batch size     |
+| `max_total`                 | null: 5 x width + spare  |
+| `spare_starts`              | null: width / 5, min 2   |
+| `usd_per_subagent`          | 0.05                     |
+| `max_usd`                   | null: 0.05 x max_total   |
+| `wait_timeout_s`            | 100                      |
+| `subagent.agent`            | null: the orchestrator's |
+| `subagent.model`            | `claude-sonnet-5-5`      |
+| `subagent.openrouter_model` | null: harness default    |
+| `subagent.effort`           | null: the preset's       |
+| `subagent.timeout_s`        | null: per preset         |
+| `subagent.timeouts`         | 600 / 1200 / 1500 / 1800 |
+
+The limits. The whole batch runs at once; a start beyond `max_parallel`
+is accepted and queued until a running subagent finishes. A start beyond
+`max_total`, or on the `openrouter` harness once the run's subagents have
+spent `max_usd` on API models, is refused: the helper prints why and exits
+1 (the orchestrator is told to carry on with what it has). A subagent past
+its time limit ends `timed out`. When the run ends or is stopped, every
+subagent still queued or running is stopped first, its processes with it;
+their `subagent.finished` events come before `run.finished`. Spend is
+counted when a subagent ends, so subagents already running can carry the
+total a little past `max_usd`. With fan-out off nothing changes: no
+helper, no extra instructions, no new events or fields.
 
 ## Chip lab
 
@@ -372,8 +551,10 @@ the skill is installed without it, the agent is told to run
 `chiplab agent-doc`, and a warning is logged.
 
 When the lab is on, the runner installs the skill into each run's
-working folder before the agent starts; nothing is written outside the
-run folder, and with the lab off nothing is installed.
+working folder before the agent starts, and into each fan-out subagent's
+folder (`workspace/agents/<id>/`, same paths below) before it starts;
+nothing is written outside the run folder, and with the lab off nothing
+is installed.
 
 | Harness      | Installed at                        | How it loads   |
 | ------------ | ----------------------------------- | -------------- |
@@ -434,7 +615,8 @@ reference and finetune stages are skipped. Name a Python that can train
   sensitivity and false alarms per hour on held-out patients only, per
   patient and pooled, labelled "synthetic data"; hand the trained weights
   to the lab with `ingest-model`. The pooled figures of the chosen design
-  arrive as the metrics `synthetic_sensitivity_pct` and
+  arrive as the metrics `synthetic_sensitivity` (a fraction between 0
+  and 1; runs before this rule used `synthetic_sensitivity_pct`) and
   `synthetic_false_alarms_per_h`, with `patients_pass` / `patients_total`.
 - Unset, or not an executable file (one warning in the log), training is
   off: the environment and instructions are as before, and the agent

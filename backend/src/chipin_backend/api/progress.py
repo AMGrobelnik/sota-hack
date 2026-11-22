@@ -24,6 +24,7 @@ import json
 import math
 import stat
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -110,8 +111,10 @@ elif cmd == "status":
         fail("status needs a line of text")
     line["text"] = " ".join(rest)
 elif cmd == "artifact":
-    if len(rest) not in (1, 2) or (len(rest) == 2 and rest[1] not in KINDS):
+    if len(rest) not in (1, 2):
         fail("artifact needs a path and optionally a kind")
+    if len(rest) == 2 and rest[1] not in KINDS:
+        fail("unknown artifact kind " + repr(rest[1]) + "; use one of {kinds}")
     line.update(path=rest[0], kind=rest[1] if len(rest) == 2 else "file")
 else:
     fail("unknown command " + repr(cmd))
@@ -127,8 +130,39 @@ def _interpreter() -> str:
     return exe if exe and " " not in exe else "/usr/bin/env python3"
 
 
-def write_helper(workspace: Path, progress_file: Path) -> Path:
-    """Write the executable ``progress`` helper into ``workspace``; returns its path."""
+#: Added to a subagent's helper: the orchestrator owns the stages and the chosen chip.
+_SUBAGENT_REFUSAL = """\
+if cmd in ("stage", "chosen"):
+    sys.stderr.write("progress: a subagent does not mark stages or the chosen chip; "
+                     "the orchestrator does. Report your numbers with metric ... --chip <design_id>.\\n")
+    sys.exit(2)
+"""
+_DISPATCH = 'line = {"ts": datetime.now(timezone.utc).isoformat(), "type": cmd}\n'
+#: Added to a fan-out orchestrator's helper: a subagent that calls it (a lab tool run from the
+#: orchestrator's folder finds it in its working folder) is passed to the subagent's own helper,
+#: so its lines carry its id and it cannot mark the orchestrator's stages.
+_REDIRECT = """\
+import os
+_sub = os.environ.get("CHIPIN_SUBAGENT_ID", "")
+if _sub:
+    _own = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agents", _sub, "progress")
+    if _sub[:1] == "a" and _sub[1:].isdigit() and os.path.isfile(_own):
+        os.execv(_own, [_own] + sys.argv[1:])
+    sys.stderr.write("progress: a subagent reports through its own ./progress\\n")
+    sys.exit(2)
+"""
+_ARGS = "a = sys.argv[1:]\n"
+
+
+def write_helper(
+    workspace: Path, progress_file: Path, *, subagent: bool = False, orchestrator: bool = False
+) -> Path:
+    """Write the executable ``progress`` helper into ``workspace``; returns its path.
+
+    ``subagent``: the helper refuses ``stage`` and ``chosen`` (exit 2).
+    ``orchestrator`` (fan-out on): a call from a subagent's environment goes to
+    that subagent's own helper.
+    """
     source = _HELPER.format(
         out=str(progress_file),
         stages="|".join(STAGES),
@@ -136,6 +170,10 @@ def write_helper(workspace: Path, progress_file: Path) -> Path:
         kinds="|".join(ARTIFACT_KINDS),
         kinds_t=ARTIFACT_KINDS,
     )
+    if subagent:
+        source = source.replace(_DISPATCH, _SUBAGENT_REFUSAL + _DISPATCH, 1)
+    if orchestrator:
+        source = source.replace(_ARGS, _REDIRECT + _ARGS, 1)
     helper = workspace / HELPER_NAME
     helper.write_text(f"#!{_interpreter()}\n{source}", encoding="utf-8")
     helper.chmod(helper.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
@@ -145,11 +183,24 @@ def write_helper(workspace: Path, progress_file: Path) -> Path:
 class ProgressTailer:
     """Turns new lines of ``progress.jsonl`` into contract events."""
 
-    def __init__(self, path: Path, log: EventLog, run_path: Path, workspace: Path) -> None:
+    def __init__(
+        self,
+        path: Path,
+        log: EventLog,
+        run_path: Path,
+        workspace: Path,
+        *,
+        marks: bool = True,
+        on_stage: Callable[[str, str], None] | None = None,
+    ) -> None:
         self.path = path
         self.log = log
         self.run_path = run_path
         self.workspace = workspace
+        #: False for a subagent: ``stage`` and ``chosen`` lines are skipped.
+        self.marks = marks
+        #: Called with ``(stage, state)`` before each ``stage`` event (fan-out closes merged stages).
+        self.on_stage = on_stage
         self._offset = 0
         self.artifacts: set[str] = set()
 
@@ -193,6 +244,8 @@ class ProgressTailer:
 
     def _emit(self, item: dict[str, Any]) -> None:
         kind = item.get("type")
+        if kind in ("stage", "chosen") and not self.marks:
+            raise ValueError(f"a subagent does not mark {kind}")
         if kind == "stage":
             if item["name"] not in STAGES or item["state"] not in STAGE_STATES:
                 raise ValueError("unknown stage or state")
@@ -200,6 +253,8 @@ class ProgressTailer:
             if item["state"] == "skipped" and not reason:
                 raise ValueError("a skipped stage needs a reason")
             round_ = item.get("round")
+            if self.on_stage is not None:
+                self.on_stage(item["name"], item["state"])
             self.log.append(
                 "stage",
                 name=item["name"],

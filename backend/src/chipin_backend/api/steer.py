@@ -325,7 +325,7 @@ async def _drive_follow_up(
 
     st = steering_of(item)
     translator = Translator(
-        item.log, JsonlEventSink(item.run.events_path), item.run.workspace, start_text=None
+        item.log, JsonlEventSink(item.run.events_path), item.run.workspace, start_status=None
     )
     run = ApiRunDir(item.run.path, sink=st.sink(translator, item.log))
     tailer = ProgressTailer(item.run.path / PROGRESS_FILE, item.log, item.run.path, item.run.workspace)

@@ -97,13 +97,18 @@ class Translator:
         raw: JsonlEventSink,
         workdir: Path | None = None,
         *,
-        start_text: str | None = READING_BRIEF,
+        start_status: str | None = READING_BRIEF,
+        errors: bool = True,
     ) -> None:
         self.log = log
         self.raw = raw
         self.workdir = workdir
-        #: The status line for the agent's start; ``None`` for none (a follow-up says its own).
-        self.start_text = start_text
+        #: The status line written when the agent starts (``None``: none).
+        self.start_status = start_status
+        #: False: the agent's errors are kept (``error_text``) but not written
+        #: as ``error`` events; a subagent's failure is not the run's.
+        self.errors = errors
+        self.error_text: str | None = None
         self._lock = threading.Lock()
         self._calls: dict[str, tuple[str, str]] = {}  # call_id -> (tool name, summary)
         self._hidden: set[str] = set()
@@ -143,10 +148,12 @@ class Translator:
         elif kind == "status" and data.get("message"):
             self.log.append("status", text=clip(data["message"], 200))
         elif kind == "error":
-            self.error_emitted = True
-            self.log.append("error", message=str(data.get("message", "the agent failed")))
-        elif kind == "agent_start" and self.start_text:
-            self.log.append("status", text=self.start_text)
+            self.error_text = str(data.get("message", "the agent failed"))
+            if self.errors:
+                self.error_emitted = True
+                self.log.append("error", message=self.error_text)
+        elif kind == "agent_start" and self.start_status:
+            self.log.append("status", text=self.start_status)
 
     def _tool_call(self, data: dict[str, Any]) -> None:
         tool = str(data.get("tool", ""))

@@ -288,8 +288,10 @@ class OpenRouterAgentBackend(AgentBackend):
 
         emit("agent_start", {"backend": self.name, "provider": provider.name, "model": model})
         parked = _PARKED.pop(spec.resume_session, None) if spec.resume_session else None
+        before = (0.0, 0, 0)  # what a continued conversation had already run up
         if parked is not None:
             conversation, route = parked
+            before = parked_usd(conversation)
         else:
             route = _Route()
             agent = self._build_agent(spec, model, key, provider)
@@ -340,35 +342,20 @@ class OpenRouterAgentBackend(AgentBackend):
                 await self._turn(conversation, fix, spec, activity, deadline, emit)
         except (_AgentFailedError, TimeoutError) as err:
             error = str(err)
+        except asyncio.CancelledError:
+            # Cancelled from outside (the runner's wall clock, a stop): the
+            # money is spent all the same, so report it before going.
+            _emit_cost(conversation, emit, before=before)
+            raise
         finally:
             self._mailbox.close()
 
-        metrics = conversation.conversation_stats.get_combined_metrics()
-        tokens = metrics.accumulated_token_usage
-        totals = (
-            float(metrics.accumulated_cost or 0.0),
-            int(tokens.prompt_tokens) if tokens else 0,
-            int(tokens.completion_tokens) if tokens else 0,
-        )
-        usd, tokens_in, tokens_out = totals
-        if parked is not None:  # the metrics are the conversation's; this run's share is the rest
-            before = parked_usd(conversation)
-            usd, tokens_in, tokens_out = (max(a - b, 0) for a, b in zip(totals, before, strict=True))
+        usd, totals = _emit_cost(conversation, emit, error=error, before=before)
         route.target = None
         if error is None:
             self._park(conversation, route, totals)
         await self.close()
         duration = time.monotonic() - started
-        if error:
-            emit("error", {"message": error})
-        emit(
-            "cost",
-            {
-                "usd": float(usd),
-                "input_tokens": int(tokens_in),
-                "output_tokens": int(tokens_out),
-            },
-        )
         emit("agent_end", {"failed": error is not None, "duration_s": duration})
         return AgentResult(
             agent=spec.name,
@@ -548,6 +535,32 @@ class _AgentFailedError(Exception):
 
 class _DeadlineError(TimeoutError):
     """The agent's whole time budget is spent."""
+
+
+def _emit_cost(
+    conversation: Any,
+    emit: Any,
+    *,
+    error: str | None = None,
+    before: tuple[float, int, int] = (0.0, 0, 0),
+) -> tuple[float, tuple[float, int, int]]:
+    """Emit the ``error`` (if any) and this run's ``cost``: the conversation's totals
+    less ``before`` (what a continued conversation had already run up).
+
+    Returns this run's USD and the conversation's totals (dollars, input, output tokens).
+    """
+    metrics = conversation.conversation_stats.get_combined_metrics()
+    tokens = metrics.accumulated_token_usage
+    totals = (
+        float(metrics.accumulated_cost or 0.0),
+        int(tokens.prompt_tokens) if tokens else 0,
+        int(tokens.completion_tokens) if tokens else 0,
+    )
+    usd, tokens_in, tokens_out = (max(a - b, 0) for a, b in zip(totals, before, strict=True))
+    if error:
+        emit("error", {"message": error})
+    emit("cost", {"usd": float(usd), "input_tokens": int(tokens_in), "output_tokens": int(tokens_out)})
+    return float(usd), totals
 
 
 async def _run_until_idle(conversation: Any, activity: _Activity, deadline: float | None) -> None:
