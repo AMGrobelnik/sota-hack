@@ -123,7 +123,7 @@
     var verdict;
     if (!T.length) verdict = '<span class="pf na">No targets set</span>';
     else if (pass) verdict = '<span class="pf ok">Passes all your targets</span>' + (onB(rec && rec.basis) ? " <small>" + onB(rec.basis) + "</small>" : "");
-    else if (miss.length) verdict = '<span class="pf no">' + (miss.length === 1 ? "Misses a target" : "Misses " + miss.length + " targets") + "</span> " + miss.map(function (x) { return esc(x.name + " " + x.figs) + " <small>against " + esc(x.target) + "</small>"; }).join("; ");
+    else if (miss.length) verdict = '<span class="pf no">' + (miss.length === 1 ? "Misses a target" : "Misses " + miss.length + " targets") + '</span> <span style="white-space:normal;min-width:0">' + miss.map(function (x) { return esc(x.name + " " + x.figs) + " <small>against " + esc(x.target) + "</small>"; }).join("; ") + "</span>"; // wraps inside its tile
     else verdict = '<span class="pf na">Not measured</span> <small>no figure for ' + esc(J.unjudged.join(", ")) + "</small>";
     cells.push(cell("Your targets", verdict, "tg"));
     // cost and battery: the Why this chip card's ChipInModels path, only for a compiled chip the battery model covers
