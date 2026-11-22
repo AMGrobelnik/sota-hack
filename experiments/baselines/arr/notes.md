@@ -2,14 +2,23 @@
 
 ## Verdict
 
-Not reached. On the baseline's own published split (round 18, test patients
-107, 213, 209) the best chip found detects 2063 of 3129 abnormal beats with 1
-false alarm in 5320 normal beats. The baseline detects 2147 with 9. Our
-specificity is higher (0.9998 against 0.9983) and our chip is much smaller
-(304 sky130 gate-equivalents, combinational, against 2549 NAND2-equivalents),
-but our sensitivity is lower (0.6593 against 0.6862). Over all 50 of the
-baseline's rounds no design beats the baseline's own released per-round runs.
-On the standard DS1/DS2 split no design reaches the 1,267-parameter CNN.
+Not reached. No fair comparison in which the approach matches or beats this
+baseline has been shown.
+
+Clean result (design chosen on validation): the validation-chosen design Q4
+(boosted trees, 48 rounds, finer thermometer) detects 1549 of 3129 abnormal
+beats (0.4951) with 1 false alarm in 5320 normal beats on the baseline's
+published split (round 18, test patients 107, 213, 209). The baseline detects
+2147 with 9.
+
+Design E2 (2063 of 3129 = 0.6593, 1 false alarm) was chosen by looking at the
+round-18 TEST sensitivity, so it is a selected result on the test patients and
+not a clean one. Its sensitivity on that split is below the baseline's 0.6862,
+its specificity is higher (0.9998 against 0.9983), and its sky130 size of 304
+gate-equivalents is indicative only (see the size caveat under Differences,
+item 6). Over all 50 of the baseline's rounds no design beats the baseline's
+own released per-round runs. On the standard DS1/DS2 split no design reaches
+the 1,267-parameter CNN.
 
 ## Baselines, read at the primary sources
 
@@ -74,7 +83,11 @@ Differences:
    the original Pan-Tompkins integer low-pass and high-pass at 360 Hz. We
    tried three variants (with the 21-sample delay removed, without, and a
    zero-phase Butterworth) and picked by mean validation sensitivity on six
-   rounds, never on test (filter_check.py). The Butterworth scored highest on
+   rounds, never on test (filter_check.py). Those six rounds are 0, 5, 10, 18,
+   25 and 40. Disclosure: the validation sets of rounds 10 and 25 contain
+   round-18 test patients (round 10: 213 and 209; round 25: 107, 213 and 209;
+   round 0 has 213 and round 40 has 209), so the filter choice saw some of the
+   round-18 test patients, as validation data of other rounds. The Butterworth scored highest on
    validation but contradicts the paper's description (integer additions and
    shifts), so we kept the Pan-Tompkins form without delay removal. Our bits
    may still differ from the baseline's.
@@ -99,7 +112,12 @@ Differences:
    area divided by the NAND2 cell area (gate-equivalents). The baseline's
    NAND2-equivalents come from the Pragmatic FlexIC library. Both are
    area / NAND2, but the libraries differ (resistive-load n-type against
-   CMOS), so the ratio is indicative only.
+   CMOS). 304 gate-equivalents in an open CMOS library against 2,549
+   NAND2-equivalents in a flexible-electronics library is not a like-for-like
+   size comparison, so word any size ratio as indicative only. The baseline
+   count includes its serial-input registers and counters; E2 is
+   combinational and needs the RR intervals and a running mean computed
+   before the chip; with its streaming wrapper it is about 544 by estimate.
 
 ## The designs (all integer, every weight a constant in the logic)
 
@@ -111,9 +129,11 @@ Linear models: L1 logistic regression, top-k weights rounded to integers on
 the same q rule. RR tests: 64 x RR_prev <= round(64 g) x RR_mean on a fixed
 grid of g.
 
-Chosen design E2 (tree, depth 4, round 18): it flags a beat when all four
-hold: RR_prev / RR_mean > 0.9 (64 x prev > 58 x mean), sample 127 >= 2/8 of
-the beat's range, sample 149 < 3/8, sample 114 < 4/8. Inputs: 3 one-bit
+Design E2 (tree, depth 4, round 18; chosen by looking at round-18 test
+sensitivity, see the verdict): it flags a beat when all four hold:
+RR_prev / RR_mean > 0.90625 (64 x prev > 58 x mean), sample 127 >= 2/8 of
+the beat's range, sample 149 < 3/8, sample 114 at or above 4/8 (checked
+against models/fold18_E2_tree_d4.chipir.json). Inputs: 3 one-bit
 inputs plus 3 x 11-bit RR values. It finds 2058 of patient 107's 2135 paced
 and ventricular beats and almost nothing else (0 of 384 in 209, 5 of 610 in
 213). It is a paced-beat detector, which is what the round's positives are
@@ -141,6 +161,10 @@ detect nothing. Wilson intervals, per-patient counts, gf180 and IHP numbers
 are in results.json. E2: sensitivity 2063/3129 = 0.6593 [0.6425, 0.6757],
 specificity 5319/5320 = 0.9998 [0.9989, 1.0].
 
+Selection note: E2 was picked after seeing round-18 test sensitivity; Q4,
+chosen on validation, is the clean result: 1549/3129 = 0.4951, 1 false
+alarm in 5320.
+
 Non-headline rule, reported because it would change the verdict: with the
 validation threshold at specificity 0.99, E2 flags 2213 of 3129 (0.7073) with
 10 false alarms (specificity 0.99812). That beats 2147 and 9 on this round,
@@ -155,7 +179,8 @@ E2 has specificity of at least 0.998 in 42 of 50 rounds (the baseline's runs:
 4 of 41). Head-to-head with the baseline's released runs (higher sensitivity
 and no lower specificity in the same round): 0 of 41 for E2, 1 of 41 for Q4.
 The worst subjects are S-rich patients: 209 (0 of 4992 pooled for most
-designs), 118 and 220.
+designs), 118 and 220. For E2 itself the worst subject pooled over the 50
+rounds is 118 (0 of 896), not 209.
 
 ## Float references (not chips, 6 rounds)
 
@@ -171,7 +196,9 @@ Standard AAMI labels, paced records excluded, thresholds fixed on DS1 only
 (record-grouped 5-fold CV inside DS1 picks the false-positive rate that
 maximises F1). Our extraction drops the first two and the last annotation
 of each record, so DS2 has 44218 N, 1836 S, 3219 V (paper: 44259, 1837, 3221).
-Best V: boosted trees DS_D, sensitivity 2854/3219 = 0.8866 [0.8752, 0.8971],
+The two best designs below were chosen on DS2 results (best V and best S
+by DS2 sensitivity), so they are selected on the test side; only their
+thresholds were fixed on DS1. Best V: boosted trees DS_D, sensitivity 2854/3219 = 0.8866 [0.8752, 0.8971],
 PPV 2854/2933 = 0.9731. Best S: DS_B tree, 1370/1836 = 0.7462 at PPV 0.2703;
 DS_C linear 868/1836 = 0.4728 at PPV 0.6147. The CNN's 95.00 / 95.63 (V) and
 81.60 / 82.68 (S) are not reached. Chip sizes (V plus S heads, sky130 GE):
