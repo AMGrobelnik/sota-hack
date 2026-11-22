@@ -156,10 +156,13 @@ sensitivity target.
 | verify    | gates checked against the model                   |
 | report    | the chosen design, its numbers and where it fails |
 
-**Run sizes on `main`.** The run size sets the subagents in each stage
-batch: 3 for Lite, 10 for Pro and 15 for Max (`backend/README.md`,
-"Fan-out"). The live dashboard labels the sizes 5, 15 and 50 agents; on
-`main` the backend runs the batch sizes above.
+**Run sizes.** On `main` the run size sets the subagents in each of the
+five stage batches: 3 for Lite, 10 for Pro and 15 for Max (`fanout.widths`
+in `backend/src/chipin_backend/api/api.yaml`), with a cap of 17, 52 or 78
+starts a run. The live dashboard labels the sizes 5, 15 and 50 agents,
+meaning subagents a run, but sends only the size name, so a backend on
+`main` runs the batch sizes above. Pull request #40, not merged, would make
+the backend match the labels.
 
 **Models.** The dashboard offers four: Opus 5.5 (the default), Sonnet 5.5,
 Inkling 2 Mini and Inkling 2 Small. Each run sends the agent and model
@@ -197,6 +200,9 @@ log in once with `claude`). It calls a paid model. From `backend/`:
 uv run chipin-backend serve --site "$SITE" --env-file PATH_TO_KEYS_FILE
 ```
 
+`SITE` is the site folder from the quick start; in a new terminal set it
+again first, for example `SITE=/path/to/sota-hack-site`.
+
 Keys are read by name from the environment, `backend/.env` or
 `--env-file`, and never printed.
 
@@ -211,13 +217,22 @@ agent also needs `uv sync --extra dev --extra openhands` and `tmux` on
 `PATH`; without them `GET /api/health` lists it as unavailable and a run
 that names it is refused.
 
-The chip lab is optional. Its installer (`chiplab/README.md`, section 2)
-checks out branch `ant/chip-lab`, writes `~/.config/chiplab/config.json`
-and `~/.local/bin/chiplab`, and fetches yosys, iverilog, verilator and the
-sky130 PDK (Docker only for layout); `chiplab doctor` lists anything
-missing. To keep it out of your home folder, set `CHIPIN_CHIPLAB_BIN`,
-`CHIPLAB_CONFIG` and `CHIPLAB_USER_DIR` (`backend/README.md`, "Chip lab").
-The backend turns the lab on whenever `chiplab` is on the agent's `PATH`.
+The chip lab is optional. `main` carries it in `chiplab/`; the quick start
+in `chiplab/README.md` (section 2) checks out branch `ant/chip-lab`, which
+holds a newer lab with the same `scripts/install.sh`, and runs that
+installer. The installer always writes the launcher `~/.local/bin/chiplab`,
+installs uv into `~/.local/bin` if uv is missing, and on macOS runs
+`brew install libomp cairo` for any of the two not yet installed. It puts
+OSS CAD Suite (yosys, iverilog, verilator), three PDKs (sky130, gf180mcu,
+ihp-sg13g2) and the Tiny Tapeout tools under `~/.chiplab`, or under
+`CHIPLAB_USER_DIR` if set, and pulls the LibreLane Docker image (layout,
+timing and power) when Docker is running. It writes its settings to
+`~/.config/chiplab/config.json`, or to `CHIPLAB_CONFIG` if set. The two
+variables move only the tools and the settings file; the launcher, uv, the
+Homebrew packages, uv's cache and the Docker image stay where they are.
+`chiplab doctor` lists anything missing. The backend turns the lab on
+whenever `chiplab` is on the agent's `PATH`, or in the folder named by
+`CHIPIN_CHIPLAB_BIN` (`backend/README.md`, "Chip lab").
 Without a Python that can train, the agent skips the fine-tune stage and
 says why.
 
@@ -268,7 +283,7 @@ Every figure below comes from the file named by its letter.
   `experiments/baselines/af/`.
 - D: `dashboard/data/neonatal-eeg.json` (`gh-pages`).
 - E: `dashboard/data/runs/index.json` (`gh-pages`).
-- G: `how-it-works/variants/y1.html` (`gh-pages`).
+- F: `how-it-works/variants/y1.html` (`gh-pages`).
 
 **Training throughput.** 1,625.5 candidates a minute in one batch of 256,
 against 27.6 one at a time on the same GPU (about 59 times), where one at
@@ -280,8 +295,8 @@ to the RTL, and the model match is checked in software (A, section 4).
 
 **Design time, different scopes.** Teams without large design staffs
 typically see hardware design cycles of 12 to 36 months (OpenROAD paper,
-2019, as cited in G). The five recorded runs went from a brief to verified
-logic gates in 4 to 32 minutes, on synthetic data (E, G). The runs include
+2019, as cited in F). The five recorded runs went from a brief to verified
+logic gates in 4 to 32 minutes, on synthetic data (E, F). The runs include
 no layout signoff, fabrication or approval, so the two are not the same
 job.
 
@@ -304,7 +319,7 @@ job.
 - **Neonatal EEG is a feasibility result.** Every design misses every
   event in at least one held-out baby. It uses one hospital's recordings
   (D).
-- **The recorded agent runs use synthetic data** (E, G).
+- **The recorded agent runs use synthetic data** (E, F).
 - **Two other baselines were not reached:** apnea and heartbeat
   classification (`experiments/README.md`).
 - **Not clinically validated.** Nothing here is clinical evidence or

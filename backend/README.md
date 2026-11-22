@@ -28,9 +28,10 @@ Built and proven by a real run on a Mac:
 - Fan-out stage batches: one real Lite run (a Claude orchestrator, three
   Claude subagents per batch, chip lab on) ran all five batches with the
   three subagents of each running at once, merged each batch and ended
-  with a verified chip. Two more runs put the subagents on OpenRouter for
-  the propose and compile batches: on `deepseek/deepseek-v4-flash-0731`
-  they ran in parallel and produced the chosen chip; on
+  with a chip design compiled and verified in software. Two more runs put
+  the subagents on OpenRouter for the propose and compile batches: on
+  `deepseek/deepseek-v4-flash-0731` they ran in parallel and produced the
+  chosen design; on
   `openai/gpt-oss-20b` they ran in parallel but got stuck on the tools.
 
 Built and tested, dry run only:
@@ -190,7 +191,7 @@ line down to the full message or tool call. `api/summaries.py`, settings in
 | `run`   | the run                       | the stage lines     |
 
 - An item is an agent message, a tool call with its result (one item for
-  both), a metric, an artifact, a chosen chip or an error. Tool rows
+  both), a metric, an artifact, a chosen design or an error. Tool rows
   (`Ran python train.py`), saved-file rows, metric, chosen and error rows
   keep their own words and never call the model; so does a message of up
   to 135 characters. Only a longer message goes to the model.
@@ -354,7 +355,7 @@ uv run chipin-backend serve --site <site checkout> --env-file <keys file>
    lost, paste the printed link under Configure, Backend, Token, then Test.
 2. Type a brief and press Chip in. Answer the questions (who and where,
    the targets, battery and cost, and the data, where Synthetic data means
-   simulated recordings), pick Lite under Run size on the "Your spec" card
+   generated recordings), pick Lite under Run size on the "Your spec" card
    and press Run.
 3. The run opens at `#/live/<run id>/overview`: stages, the agent's log,
    designs on the chart as their records arrive (hollow while the size is
@@ -418,13 +419,15 @@ agent left open (see "Fan-out"); that `done` carries
 specificity, pass rates) are asked for as a fraction between 0 and 1 with
 no unit; runs recorded before this rule are left as they are.
 `run.finished` carries the agent's last message as `summary` and, when
-OpenRouter wrote one, the three-bullet run summary as `bullets`. `./progress metric <key> <number> [unit] --chip <design_id>`
+OpenRouter wrote one, the three-bullet run summary as `bullets`.
+`./progress metric <key> <number> [unit] --chip <design_id>`
 (the flag after the number or the unit) adds `chip` to the metric event,
 naming the design the number measures; without it the event is as before.
 A lab `score-events` figure also carries `source` (see "Chip lab").
 `./progress chosen <design_id>` writes a `chosen` event with `chip`, the
-run's chosen chip; a later one replaces an earlier one. Presets map to
-agent effort: `lite`, `pro`, `max`, `ultra`; with fan-out on they also set the subagents per stage batch (see "Fan-out").
+run's chosen design; a later one replaces an earlier one. Presets map to
+agent effort: `lite`, `pro`, `max`, `ultra`; with fan-out on they also set
+the subagents per stage batch (see "Fan-out").
 A run cut short ends `stopped`, its summary saying whether the user
 stopped it or the server was shut down.
 
@@ -523,7 +526,7 @@ files, the ones the page needs first:
 
 1. the run's top-level records and reports, in this order: `report`,
    `final_record`, `designs`, `spec`, then summaries;
-2. the chosen chip's files (`workspace/chips/<chosen>/`, from the latest
+2. the chosen design's files (`workspace/chips/<chosen>/`, from the latest
    `chosen` event);
 3. everything else.
 
@@ -538,7 +541,8 @@ dashboards put their assumptions there as `answers.assumptions`.
 What is real today: the Claude agent runs on this Mac, works through the
 brief, writes files and a report, reports stages, messages, tools and cost,
 and takes messages and stop requests while it runs. With the chip lab
-installed (see "Chip lab") it compiles and verifies real chips. What is not:
+installed (see "Chip lab") it compiles chip designs to logic gates and
+verifies them in software; no chip is built. What is not:
 there is no fine-tuning tool yet, so an agent marks that stage skipped
 unless it trains a small model itself; attached files reach the agent as
 names and header lines only; runs on rented machines are not offered by
@@ -582,8 +586,8 @@ subagents in each stage batch.
 | `max`   | xhigh  | 15 (a)     | 78      | 25 min |
 | `ultra` | max    | 20         | 104     | 30 min |
 
-(a) The owner did not name a batch size for `max`; 15 is an assumption to
-confirm. A run with no preset gets 3. "Per run" is five batches plus a few
+(a) `fanout.widths.max` in `api/api.yaml` is 15 on `main`. A run with no
+preset gets 3. "Per run" is five batches plus a few
 spare starts for retries; "Each" is the wall-clock limit per subagent.
 
 Models: when the request leaves them on automatic, the orchestrator runs
@@ -630,9 +634,9 @@ that stage is still running, for a stage with no batch, for an id outside
 the batch and for a stage already merged (`--kept none` when nothing is
 worth keeping). Subagents of a stage started after its merge (a retry
 batch) are merged on their own, with a second `stage.merged`. Like
-`./progress`, the helper only writes a request line (`subagents.jsonl`) and reads `subagents.json`; the backend starts each
-subagent through the same runner and agent backends as the run's own
-agent, with the same environment allowlist and chip-lab settings, keys
+`./progress`, the helper only writes a request line (`subagents.jsonl`)
+and reads `subagents.json`; the backend starts each subagent through the
+same runner and agent backends as the run's own agent, with the same environment allowlist and chip-lab settings, keys
 never written into a folder. A subagent works in `workspace/agents/<id>/`
 with its own `./progress` (which refuses `stage` and `chosen`), its own
 instructions (`api/subagent.md`, plus the training and chip-lab paragraphs
@@ -734,7 +738,7 @@ A dashboard plays an old run back from its events (`api/history.py`).
 - `GET /api/history`: every run, newest first, with what a picker shows:
   `id`, `title` (the brief's first line), `prompt`, `started_at`,
   `finished_at`, `duration_s` (first to last event), `state`, `preset`,
-  `agent`, `chosen` (the latest chosen chip), `counts` (events, designs,
+  `agent`, `chosen` (the latest chosen design), `counts` (events, designs,
   stages done, messages, tools, artifacts, metrics, subagents), `cost_usd`.
 - `GET /api/runs/{id}/history`: all of a run's events with their `seq` and
   `ts` in one response. `?from=<seq>&limit=<n>` (n up to 5,000) gives one
@@ -905,7 +909,7 @@ Each question has `id`, `question` (one sentence), `why` (one line),
 
 - The token header is required, like every other route.
 - The server adds a digest of past runs from its own runs folder: each
-  run's title and chosen chip, newest first, at most `max_past_runs`
+  run's title and chosen design, newest first, at most `max_past_runs`
   lines and `digest_max_chars` characters, scrubbed
   (`chipin_backend/scrub.py`) and with secrets redacted. Nothing else
   of a past run is sent.
@@ -944,7 +948,7 @@ The answers travel with the run: `POST /api/runs` takes
 
 Chippy is the dashboard's guide to the product and its results. It reads
 the runs on this server and the product's own explanations, answers
-questions, and moves the page. It is not the agent that designs chips: that
+questions, and moves the page. It is not the agent that makes chip designs: that
 agent is reached through the run's own chat box.
 
 Code: `api/helper.py` (routes, turn loop, limits), `api/helper_tools.py`
@@ -1044,9 +1048,10 @@ of the site on `gh-pages`.
 ## Chip lab
 
 The chip lab (`chiplab/` in this repo, newest version on the `ant/chip-lab`
-branch, guide `chiplab/docs/CHIPIN_INTEGRATION.md`) turns a trained model into a
-verified, measured chip. The backend only lets the agent reach it; the lab
-reports its own status lines, metrics and chip files through `./progress`.
+branch, guide `chiplab/docs/CHIPIN_INTEGRATION.md`) compiles a trained model
+into a gate-level chip design, verified and measured in software; it builds
+no hardware. The backend only lets the agent reach it; the lab
+reports its own status lines, metrics and design files through `./progress`.
 
 Point the backend at a lab install (in the environment, `backend/.env` or
 `--env-file`; paths, not secrets):
@@ -1058,7 +1063,8 @@ Point the backend at a lab install (in the environment, `backend/.env` or
 | `CHIPLAB_USER_DIR`   | the lab's tool folder, passed as is     |
 
 - The lab's default install (`scripts/install.sh`) needs none of them:
-  it writes `~/.config/chiplab/config.json` and `~/.local/bin/chiplab`, and
+  it writes `~/.chiplab`, `~/.config/chiplab/config.json` and
+  `~/.local/bin/chiplab`, and
   the lab is on whenever `chiplab` is on the agent's `PATH`.
 - An install elsewhere: set `CHIPIN_CHIPLAB_BIN` to the launcher's folder
   (or the lab's `.venv/bin`), and `CHIPLAB_CONFIG` / `CHIPLAB_USER_DIR` to
@@ -1066,22 +1072,22 @@ Point the backend at a lab install (in the environment, `backend/.env` or
   `PATH`; the two lab variables pass through the allowlist unchanged.
 - When the lab is on, the agent also gets `CHIPIN_PROGRESS_CHIP=1`, which
   tells the lab that `./progress` takes `--chip` and `chosen`. The lab
-  then sends every figure of one chip (gates, depth, LUTs, area,
+  then sends every figure of one design (gates, depth, LUTs, area,
   verification and the rest) with `--chip <design_id>`. For a lab that
   sends no `--chip`, the progress tailer tags those figures with the design
   named by the lab's status line before the tool, for the orchestrator and
   subagents alike. A lab metric about no one design stays untagged: the run
   counters `candidates`, `vectors_checked` and `mismatches` (totals over
-  every chip of the run) and the event scores of a `score-events` call
-  without a `design_id`. The skill tells the agent to pass the chip's id
-  whenever it scores one chip; those scores then carry that chip.
+  every design of the run) and the event scores of a `score-events` call
+  without a `design_id`. The skill tells the agent to pass the design's id
+  whenever it scores one design; those scores then carry that design.
 - Every `score-events` figure (its keys in their lab units, such as
   `fa_per_hour` in `FA/h`) gets `source: "score-events"`, so it sits beside
   the agent's own figure of the same key instead of replacing it. Evidence
   ranks the lab's figure first only for a spec target whose metric or unit
   names events (`event_sensitivity`, `events/h`); otherwise it ranks as before.
-- The evidence step (`evidence.json`) describes the chip of the run's last
-  `chosen` event. Only a run without one gets an inferred chip, with
+- The evidence step (`evidence.json`) describes the design of the run's last
+  `chosen` event. Only a run without one gets an inferred design, with
   `chip_inferred: true` and `chip_selected_by` saying how it was picked.
 - With none of this the lab is off: the agent's environment and
   instructions are as before. A `CHIPIN_CHIPLAB_BIN` with no executable
@@ -1178,7 +1184,7 @@ reference and finetune stages are skipped. Name a Python that can train
   `ingest-model` formats.
 - When it is set, the standing instructions get the training paragraph
   (`api/training.md`): run training and data scripts with
-  `"$CHIPIN_TRAIN_PYTHON"`; with no recordings attached, simulate them and
+  `"$CHIPIN_TRAIN_PYTHON"`; with no recordings attached, generate synthetic ones and
   write the assumptions down; split by patient before training; score
   sensitivity and false alarms per hour on held-out patients only, per
   patient and pooled, labelled "synthetic data"; hand the trained weights
@@ -1250,14 +1256,14 @@ logged and never fails the run.
   count only when the claim names them. Metric events can also come from
   the agent's own `./progress metric` calls, and lab answers echo the
   agent's inputs.
-- **Weight bytes per decision.** For one chip, named in the output with
+- **Weight bytes per decision.** For one design, named in the output with
   the reason it was picked (the one the report names most; otherwise the
   first laid-out design with weights): the bytes of weights software must
   read for one decision, by one rule for every design (each stored array
   in the smallest machine integer type, float32 for decimals; and,
   separately, packed at the fewest bits), the stored value count and the
   declared parameter count where they differ, and the memory cells and
-  flip-flops in the chip's netlist (`net.json`, else `gates.v`). No memory
+  flip-flops in the design's netlist (`net.json`, else `gates.v`). No memory
   cells means 0 weight bytes fetched: the weights are constants in the
   logic. A memory is reported with its bits, never 0. It claims nothing
   about energy or speed.
