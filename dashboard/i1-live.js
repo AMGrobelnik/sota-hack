@@ -887,7 +887,7 @@
     var lost = $("#lvLost"); lost.hidden = !M.gone;
     var lt = M.running ? "Connection to the backend was lost; the run may still be going on that computer. Retrying..." : "Connection to the backend was lost. This page shows what had arrived; files and follow-ups need the backend. Retrying...";
     if (lost.textContent !== lt) lost.textContent = lt;
-    var co = F.cost(x.f), cost = co && num(co.usd) != null ? "$" + co.usd.toFixed(2) + " agent cost" + (num(co.summaries_usd) > 0 ? ", $" + co.summaries_usd.toFixed(2) + " summaries" : "") : ""; if (ch("cost", cost)) { $("#lvCost").textContent = cost; $("#lvCost").title = co ? fmt(co.tokens_in || 0) + " tokens in, " + fmt(co.tokens_out || 0) + " out" : ""; }
+    var co = F.cost(x.f), sm = co && num(co.summaries_usd) > 0 ? co.summaries_usd : 0, cost = co && num(co.usd) != null ? "Total cost: $" + (co.usd + sm).toFixed(2) : ""; if (ch("cost", cost)) { $("#lvCost").textContent = cost; $("#lvCost").title = co ? (sm ? "Agent " + co.usd.toFixed(2) + ", summaries " + sm.toFixed(2) + "; " : "") + fmt(co.tokens_in || 0) + " tokens in, " + fmt(co.tokens_out || 0) + " out" : ""; }
     var cm = $("#lvCostM"); if (cm && cm.textContent !== cost) cm.textContent = cost; // the same figure, under the headline on phones
     var bt = M.running || M.status === "connecting" ? "Live run" : "Finished run"; if (ch("badge", bt)) { $("#lvBadge").textContent = bt; $("#lvBadge").className = "mk topbadge " + (bt === "Live run" ? "lv-live" : "no"); setDemo(bt); }
     var setT = (M.r.preset ? "Run size: " + cap(M.r.preset) + " · " : "") + "Model: " + usedModel(M); if (ch("set", setT)) $("#lvSetT").textContent = setT;

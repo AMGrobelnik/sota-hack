@@ -878,7 +878,7 @@
       var ol = $("#rvStages"), cur = $("[aria-current]", ol);
       if (cur && ol.scrollWidth > ol.clientWidth) ol.scrollLeft = cur.offsetLeft - (ol.clientWidth - cur.offsetWidth) / 2;
     });
-    var co = F.cost(M.f), costTxt = co && num(co.usd) != null ? "$" + co.usd.toFixed(2) : "–";
+    var co = F.cost(M.f), csm = co && num(co.summaries_usd) > 0 ? co.summaries_usd : 0, costTxt = co && num(co.usd) != null ? "$" + (co.usd + csm).toFixed(2) : "–";
     var live = !!rec.running;
     once("tiles", [M.pts.length, st.chosen, M.chosen && sizeOf(M.chosen), st.messages, st.toolN, st.artifacts.length, costTxt, live, heldText(M)].join("|"), function () {
       var ch = M.chosen, yk = pickY(M), mark = F.dataMark(M.spec, M.pts.map(function (p) { return p.d || {}; }));
@@ -889,10 +889,10 @@
         ["designs", "Designs so far", M.pts.length ? fmtN(M.pts.length) : "–", M.pts.filter(function (p) { return p.gates != null; }).length + " compiled to gates"],
         ["chosen", "Chosen chip", ch ? '<span class="rv-chip" title="' + esc(ch.id) + '">' + esc(ch.id) + "</span>" : "–", ch ? (sizeOf(ch) != null ? (ch.gates == null ? "about " : "") + fmtN(sizeOf(ch)) + " gates" + (ch.gates == null ? ", estimated" : "") : "size not reported") + (yk && ch.m[yk] != null ? ", " + label(yk).toLowerCase() + " " + fmtM(yk, ch.m[yk], M.pts) + basis : "") + missTxt : "not chosen yet"],
         ["tools", "Tool calls", fmtN(st.toolN), fmtN(st.messages) + " messages, " + fmtN(st.artifacts.length) + " files"],
-        ["cost", "Agent cost", costTxt, co ? fmtN((co.tokens_in || 0) + (co.tokens_out || 0)) + " tokens" : "reported at the end"]
+        ["cost", "Total cost", costTxt, co ? fmtN((co.tokens_in || 0) + (co.tokens_out || 0)) + " tokens" : "reported at the end", csm ? "Agent " + co.usd.toFixed(2) + ", summaries " + csm.toFixed(2) : ""]
       ];
       $("#rvTiles").innerHTML = tiles.map(function (x) {
-        return '<div class="tile' + (x[2] === "–" ? " empty" : "") + '" data-k="' + x[0] + '"><div class="tl">' + x[1] + '</div><div class="tv">' + x[2] + '</div><div class="ts">' + x[3] + "</div></div>";
+        return '<div class="tile' + (x[2] === "–" ? " empty" : "") + '" data-k="' + x[0] + '"' + (x[4] ? ' title="' + esc(x[4]) + '"' : "") + '><div class="tl">' + x[1] + '</div><div class="tv">' + x[2] + '</div><div class="ts">' + x[3] + "</div></div>";
       }).join("") + '<span style="position:absolute;right:12px;top:-9px;display:flex;gap:6px">' + mark + (live ? '<span class="mk sim">live</span>' : '<span class="mk mea">recorded</span>') + "</span>";
       $("#rvTiles").style.position = "relative";
       $("#rvTiles").dataset.designs = String(M.pts.length); $("#rvTiles").dataset.chosen = st.chosen || ""; $("#rvTiles").dataset.cost = co && num(co.usd) != null ? co.usd.toFixed(2) : "";
