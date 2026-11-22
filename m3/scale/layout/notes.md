@@ -79,10 +79,17 @@ pinned 8).
   stop it. LibreLane lost its container during step 41 (antenna repair),
   before detailed routing, after 1 h 39 min. Peak container memory was
   2.6 GiB.
-- Estimates from the last completed step (global-route parasitics):
-  slack 25.6 ns at 50 ns, so about 41 MHz; leakage 0.68 µW; vectorless
-  energy per decision about 113 nJ; power at 1 Hz about 0.79 µW; 3,543
-  nets over the antenna limit before repair.
+- Placement-stage estimates (taken at step 37, before global routing;
+  the values are identical in steps 37 to 40): slack 25.6 ns at 50 ns,
+  so about 41 MHz, a single-clock-period estimate (1 / (50 ns minus
+  slack)); leakage 0.68 µW; vectorless energy per decision about 113 nJ,
+  which is (internal plus switching power) times the clock period, with
+  default toggle rates and one decision per clock period (2.2587 W times
+  50 ns = 112.9 nJ); power at 1 Hz about 0.79 µW, which is leakage plus
+  113 nJ times 1 Hz.
+- Global-routing figures: 3,543 nets over the antenna limit before
+  repair, 29.8 m of wire length, routing usage 83.03 % with overflow
+  407,192 (met1 93.03 %, met2 93.33 %).
 - No GDS, no detailed routing, no timing-power result. There was no
   second attempt at 12 %: the VM was down, and less than an hour was left
   before the 12:40 deadline.
