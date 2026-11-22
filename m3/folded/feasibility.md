@@ -24,6 +24,8 @@ Tags: **M** = measured here (file in `results/`), **S** = from a named source, *
   - Stored: 0.42 generic gates per ternary weight, 0.82 per 4-bit weight (M).
   - Wired, ballpark given with the task (S): 6 to 7 per ternary weight, 29 per 4-bit weight.
   - Wired, the lab's own chip of one wide neuron (M): 11.8 per ternary weight, 35 per 4-bit weight.
+  - Wired, measured by the scale study at 30k weights (M, section 3): 13.62 per ternary weight
+    (8.03 optimised), 38.22 per 4-bit weight (21.04 optimised).
 - **Area at 30k weights (M + A).** The folded engine needs 0.17 to 0.23 mm² on sky130 and 0.53 to 0.74
   mm² on gf180, after layout. Fully wired needs 4.9 to 14 mm² on sky130 and 16 to 47 mm² on gf180. That is
   29 to 66 times more.
@@ -107,6 +109,8 @@ How to read the columns:
 
 ## 3. Fully wired cost per weight
 
+### Earlier estimate: ballpark and one wired neuron
+
 The scale package's results (`lab/scale`, `m3/scale/results.json`) were not on origin when this was
 written. Two references are used instead:
 
@@ -130,6 +134,50 @@ written. Two references are used instead:
 - **ROM against wired, per weight, in generic gates:**
   - ternary: 0.42 against 6.5 (ballpark), 15 times less; against 11.8 (measured), 28 times less;
   - 4-bit: 0.82 against 29 (ballpark), 35 times less; against 35 (measured), 43 times less.
+
+### Against the scale study's measured wired cost (M)
+
+Added after the scale study landed. Gates per weight are copied from `m3/scale/RESULTS.md` (table
+"Per design", column G/w) and `m3/scale/results.json` (`designs[].gates_per_weight`, `gates`,
+`area_um2`). "Optimised" is that study's `optimizer=alkaid` emitter. Its models are multi-layer
+per-channel EEG models, not this section's single neuron; its 30k model has 29,966 weights against
+the 29,568 assumed in section 5.
+
+| weights | emitter | 1k | 5k | 10k | 30k | 30k gates |
+|---|---|---:|---:|---:|---:|---:|
+| ternary | default | 8.16 | 10.53 | 12.57 | 13.62 | 408,000 |
+| ternary | optimised | 6.49 | 7.15 | 7.79 | 8.03 | 240,751 |
+| 4-bit | default | 34.89 | 35.53 | 38.2 | 38.22 | 1,145,201 |
+| 4-bit | optimised | 22.4 | 21.64 | 21.94 | 21.04 | 630,518 |
+
+Ratios at 30k. Gates: measured wired gates per weight over this study's ROM gates per weight (0.42
+ternary, 0.82 4-bit; section 2). Area: the scale study's synthesis area at 30k (`area_um2`, sky130 and
+gf180) divided by 0.6 utilisation, over the folded layout area of section 5 (`results/estimate.json`,
+`layout_um2`, P = 1 and P = 4).
+
+| weights | emitter | gates ratio | wired layout mm² | area ratio |
+|---|---|---:|---:|---:|
+| ternary | default | 32 | 4.77 sky, 16.9 gf | 28 to 32 |
+| ternary | optimised | 19 | 2.88 sky, 9.01 gf | 16 to 17 |
+| 4-bit | default | 47 | 13.7 sky, 45.5 gf | 59 to 63 |
+| 4-bit | optimised | 26 | 7.69 sky, 24.1 gf | 33 to 34 |
+
+Inputs to the area ratios: wired synthesis areas 2,859,525 and 10,109,023 µm² (ternary default,
+sky130 and gf180), 1,730,049 and 5,403,537 (ternary optimised), 8,220,092 and 27,318,957 (4-bit
+default), 4,614,492 and 14,486,371 (4-bit optimised); folded layout areas 0.167 to 0.172 mm² (ternary,
+sky130), 0.529 to 0.545 (ternary, gf180), 0.224 to 0.233 (4-bit, sky130), 0.718 to 0.741 (4-bit,
+gf180).
+
+- **Size ratio against the measured figures.** With the default emitter the folded engine is 28 to 63
+  times smaller after layout, close to the 29 to 66 of the earlier estimate. With the optimised
+  emitter it is 16 to 34 times smaller, a ratio 40 to 45 % lower, and the ROM
+  alone stores a weight 19 to 47 times more cheaply than the measured wired designs.
+- **The recommendation does not change.** No measured wired 30k design fits a Tiny Tapeout route, so
+  folding stays the only route to 30k weights there. One detail of section 8 is narrower than
+  stated: the scale study fits ternary 30k with the optimised emitter on a wafer.space full GF180 die
+  (70 %) and 4-bit 30k with it on ChipFoundry (77 %) (`m3/scale/RESULTS.md`, "Short answer"), so on
+  wafer.space folding is the only route for 4-bit weights and for the default emitter, not for
+  optimised ternary.
 
 ## 4. Design sketch: folded per-channel engine
 
