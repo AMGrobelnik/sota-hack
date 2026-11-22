@@ -2,12 +2,26 @@
 
 ## Verdict
 
-Partly reached. Per minute, the pre-registered design D5 (16 features,
-linear, 2282 gates) scores 14627 of 17268 test minutes (84.71 percent)
-against the database's reference rule apdet at 14591 of 17268 (84.49);
-the margin is 36 minutes and well inside the intervals. Per recording, the
-pre-registered design D1 gets 32 of 35 (91.4 percent) and the best design
-33 of 35, below the hand-crafted 34 of 35 (97.1). Not reached there.
+Not reached. Per minute, the pre-registered design D5 (16 features,
+linear) scores 14627 of 17268 test minutes (84.71 percent) against the
+database's reference rule apdet at 14591 of 17268 (84.49). The margin is 36
+minutes, unpaired, well inside the intervals: this is a match within noise,
+not a win, and it is below every published learned result in the table
+below. Per recording, the pre-registered design D1 gets 32 of 35 (91.4
+percent) and the best design 33 of 35, against the hand-crafted 34 of 35
+(97.1): not reached.
+
+Caveat on the split (applies to every number here and to every published
+learned baseline in the table, which all use the same split). The
+database's released split is by record, not by subject. By the database's
+own additional-information table, 23 of the 35 test records (11372 of 17268
+minutes) share age, sex, height and weight with a learning record. The
+training cross-validation grouped only c05 and c06 as one subject, although
+at least 9 other learning subjects have two or more records (for example
+a01 and a14, a05, a10 and a20, b04 and c08). Twin-free figure for D5:
+5224 of 5896 minutes on the 12 test records with no learning twin, and 9403
+of 11372 on the other 23 (recomputed from designs/designs.json and the
+database's table).
 
 ## Pre-registration (written before the test records were scored)
 
@@ -56,7 +70,8 @@ Sources and what they cover:
   train on the 35 released, test on the 35 withheld; AHI = 60 N / L >= 5;
   23 OSA + 12 non-OSA test records; 17234 test minutes.
 - None of the baselines is hardware: all run as software on a computer.
-  There is no published chip, gate count or area to compare against.
+  There is no published chip, gate count or area to compare against, so no
+  size comparison with a baseline exists here.
 
 ## What runs where
 
@@ -66,8 +81,9 @@ beat times from the database's .qrs file; RR series with outlier removal
 centred 3, 5 and 9 minute windows: SDs, RMSSD, pNN50, 1 Hz resampling and
 a Hann-windowed periodogram for band powers (0.01-0.05 Hz cyclic
 variation, 0.15-0.4 Hz, as ms and as fractions of 0.01-0.5 Hz); the
-features of minutes i-2 .. i+2 join minute i (up to 4 minutes of
-look-ahead); affine 8-bit quantisation with offsets and steps fixed on the
+features of minutes i-2 .. i+2 join minute i. The look-ahead is 6
+minutes (a 9-minute centred window reaches 4 minutes ahead, and the context
+offset +2 adds 2 more); affine 8-bit quantisation with offsets and steps fixed on the
 learning records.
 
 On the chip (hard-wired, weights as constants, no weight memory):
@@ -79,8 +95,10 @@ registered. 22 flip-flops in every design.
 
 ## Size against accuracy (test records, scored once)
 
-Gates: the lab's generic two-input gates; GE: sky130 gate equivalents of
-the clocked night design (classifier + counters + registers).
+Gates: the lab's generic two-input gates. For the clocked night design the
+count includes its 22 flip-flops, so it is not a NAND2-equivalent count;
+only the sky130 gate-equivalent column (GE, of the clocked night design:
+classifier + counters + registers) is in NAND2 units.
 
 | Design | Gates (min / night) | GE | Minutes | AHI5 | A/C |
 |---|---|---|---|---|---|
@@ -116,8 +134,9 @@ gf180 and ihp mapping):
 - Level 2: prove-equivalence with the independent golden model: proved.
 - Clocked night design (core + 22 registers), with the lab's own
   functions: generic synthesis, mapping, and prove_sequential with the
-  core as a black box (compositional): proved for all six. The flattened
-  whole-design eqy proof failed on internal core partitions for D1 and D2
+  core as a black box (compositional): proved for all six. The clocked-design
+  proof is therefore compositional (wrapper with the core as a black box),
+  not a flattened proof. The flattened whole-design eqy proof failed on internal core partitions for D1 and D2
   (every output and register partition proved), timed out for D3 and was
   not run above 300 gates.
 - Icarus (the lab's oss-cad-suite) ran the clocked design over all 35
@@ -148,15 +167,19 @@ Area of the clocked night design (synthesis, before layout):
 
 - Per-recording result misses 34/35; with 35 records one error moves the
   accuracy by 2.9 points and every interval overlaps 97.1.
-- The per-minute win over apdet is 36 minutes and unpaired; it does not
-  beat Song, Chang, de Chazal or McNames.
+- The per-minute margin over apdet is 36 minutes and unpaired: a match
+  within noise, not a win; it is below Song, Chang, de Chazal and McNames.
+- The split is by record, not subject (see the verdict): 23 of 35 test
+  records have a learning twin.
 - The costly part (band powers over 9-minute windows) runs before the
   chip; the gate counts exclude it.
 - The night constant k was trained (6 or 8); the plain AHI rule (k = 12)
   scores lower, so the minute classifier over-calls minutes.
 - Feature ranking used liblinear L1 without a fixed seed; a training-only
   rerun swapped two near-tied features. designs.json is the exact model.
-- Training CV used 7 grouped folds (c05 and c06 as one subject).
+- Training CV used 7 grouped folds (c05 and c06 as one subject); at least
+  9 other learning subjects have two or more records, so the CV scores are
+  optimistic and the training-CV choices (D5, k) were made on leaky folds.
 - QRS annotations are machine-made and unaudited.
 
 ## Data, licence, credit
