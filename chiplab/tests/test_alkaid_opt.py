@@ -103,7 +103,16 @@ def test_alkaid_runs_after_torch_is_loaded():
     assert p.returncode == 0 and p.stdout.strip().endswith("ok"), (p.returncode, p.stderr[-800:])
 
 
-def test_worker_matches_in_process(monkeypatch):
+def test_worker_matches_in_process():
+    """The worker gives what alkaid gives in-process. The in-process reference runs in a fresh interpreter that never
+    loads torch: running alkaid inside pytest (torch loaded) is exactly what aborts on macOS."""
+    import subprocess
+    import sys
     via_worker = emit_optimized(TINY, "alkaid")
-    monkeypatch.setenv("CHIPLAB_ALKAID_INPROCESS", "1")
-    assert json.loads(json.dumps(emit_optimized(TINY, "alkaid"))) == json.loads(json.dumps(via_worker))
+    code = ("import json, sys\n"
+            "assert 'torch' not in sys.modules\n"
+            "from chiplab.emit.optimized import emit_optimized_local\n"
+            "sys.stdout.write(json.dumps(emit_optimized_local(json.loads(sys.argv[1]), 'alkaid'), default=str))\n")
+    p = subprocess.run([sys.executable, "-c", code, json.dumps(TINY)], capture_output=True, text=True, timeout=600)
+    assert p.returncode == 0, p.stderr[-800:]
+    assert json.loads(p.stdout) == json.loads(json.dumps(list(via_worker), default=str))

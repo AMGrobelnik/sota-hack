@@ -210,7 +210,9 @@ artifact lines; the lab runs the helper, so the backend validates every line). T
 metric key and has no chip id, so the lab never lets two chips share the panel:
 
 - **Exploring (every call):** only `gates` (the chip just synthesised), `candidates` (distinct chips under
-  `./chips/`) and the run's cumulative `vectors_checked` / `mismatches` (each distinct check counted once). Every
+  `./chips/`), the run's cumulative `vectors_checked` (each distinct check counted once) and `mismatches`: the sum
+  over chips of each chip's latest result per check kind (simulate with your vectors, simulate random, rtl-simulate,
+  submit-verilog), so a corrected re-run replaces a failed one and 0 means every chip's latest checks passed. Every
   other figure of a chip goes to `./chips/<design_id>/metrics.json` and to a status line
   (`ChipIn measured chip <id>: ...`).
 - **Reporting (`chip-report`, or `report_metrics: true` on any call):** the full figure set of that one chip in one

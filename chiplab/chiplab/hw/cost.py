@@ -25,6 +25,11 @@ ROUTES = [
 ]
 
 
+#: sky130 cell area per synthesised gate when no cell mapping is available (no PDK on this machine): measured
+#: 5.6-7.3 um2 per gate across the spike, the M3 run's chips and their alkaid versions; 7.0 errs towards more tiles.
+SKY130_UM2_PER_GATE = 7.0
+
+
 def estimate(gates: int | None = None, area_um2: float | None = None, tt_tiles: int | None = None,
              ice40_luts: int | None = None) -> dict:
     out = []
@@ -35,10 +40,14 @@ def estimate(gates: int | None = None, area_um2: float | None = None, tt_tiles: 
             fits = None if ice40_luts is None else ice40_luts <= r["capacity"]["lut4"]
             e.update(fits=fits, cost=r["unit_cost"], basis=f"{ice40_luts} LUT4 of 5280" if ice40_luts is not None else "LUT count unknown")
         elif r["id"].startswith("tt_"):
-            tiles = tt_tiles or (max(1, math.ceil(area_um2 / (161 * 111.5 * 0.6))) if area_um2 else None)
+            est_area = area_um2 or (gates * SKY130_UM2_PER_GATE if gates else None)
+            tiles = tt_tiles or (max(1, math.ceil(est_area / (161 * 111.5 * 0.6))) if est_area else None)
             fits = None if tiles is None else tiles <= r["max_tiles"] if "max_tiles" in r else None
-            e.update(tiles=tiles, fits=fits, cost=(tiles * r["tile_cost"] + r["devkit"]) if tiles else None,
-                     basis="tiles from layout" if tt_tiles else "tiles estimated from sky130 synthesis area at 60% utilisation")
+            basis = ("tiles from the Tiny Tapeout package" if tt_tiles else
+                     "tiles estimated from sky130 synthesis area at 60% utilisation" if area_um2 else
+                     f"tiles estimated from the gate count ({SKY130_UM2_PER_GATE} um2 per gate on sky130, 60% utilisation; "
+                     "no sky130 cell mapping on this machine)")
+            e.update(tiles=tiles, fits=fits, cost=(tiles * r["tile_cost"] + r["devkit"]) if tiles else None, basis=basis)
         elif r["id"] == "waferspace_gf180":
             e.update(fits=True, cost=r["run_cost"], cost_per_die=round(r["run_cost"] / r["dies"], 2), basis="whole run")
         elif r["id"] == "pragmatic_flexic":

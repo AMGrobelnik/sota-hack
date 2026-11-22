@@ -46,9 +46,12 @@ The dashboard keeps one value per key (the last one wins) and has no chip id. If
 panel would mix chips: in the M3 run (20261122-001507-0ef5bb) the final `gates` came from one classifier and the
 area, slack and power from the front-end. So the lab sends two kinds of metrics:
 
-- **While exploring (every call):** only the run keys below: `gates` of the chip just synthesised (keeps the
-  headline live), `candidates` (distinct chips under `./chips/`) and the run's cumulative `vectors_checked` and
-  `mismatches` (the same check repeated counts once). Every other number goes to
+- **While exploring (every call):** only the run keys below:
+  - `gates` of the chip just synthesised (keeps the headline live);
+  - `candidates` (distinct chips under `./chips/`);
+  - the run's cumulative `vectors_checked` (the same check repeated counts once);
+  - `mismatches`: the sum over chips of each chip's latest result per check kind. A corrected re-run replaces a
+    failed one, so 0 means every chip's latest checks passed. Every other number goes to
   `./chips/<design_id>/metrics.json` and to a status line such as
   `ChipIn measured chip 94090842ebae-alk: 11,804 um2, slack +29.15 ns, fmax 48.0 MHz, ...`.
 - **Without a report** the run still ends consistent: fewer numbers on the panel (`gates` of the latest chip and
@@ -67,7 +70,7 @@ doesn't, the timing and power keys still show A until B is laid out. Run `timing
 | `gates` | gates | exploring + report | synthesize | synthesized (Yosys, simple 2-input gates) |
 | `candidates` | designs | exploring | any tool that puts a chip under `./chips/` | count of distinct chips this run |
 | `vectors_checked` | vectors | exploring | simulate, rtl-simulate, submit-verilog | measured, cumulative over the run |
-| `mismatches` | vectors | exploring | simulate, rtl-simulate, submit-verilog | measured, cumulative (0 means every check was bit-exact) |
+| `mismatches` | vectors | exploring | simulate, rtl-simulate, submit-verilog | measured: sum over chips of each chip's latest result per check kind (simulate vectors, simulate random, rtl-simulate, submit-verilog); 0 means every chip's latest checks were bit-exact |
 | `depth` | levels | report | synthesize | synthesized (logic levels on the longest path) |
 | `transistors` | transistors | report | synthesize | estimate (Yosys CMOS cost model) |
 | `luts_ice40` | LUT4 | report | count-luts (ice40), bitstream | synthesized (iCE40UP5K) |

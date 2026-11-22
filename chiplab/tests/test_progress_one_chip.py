@@ -181,7 +181,9 @@ def test_m3_run_replay_panel_shows_one_chip(ws):
     c_alk = json.loads((ws / "chips" / alk["C"] / "metrics.json").read_text())["metrics"]
     assert before["gates"] == c_alk["gates"]["value"]                      # the last chip synthesised
     assert before["candidates"] == 7                                         # A, B, C, F and three -alk chips
-    assert before["mismatches"] == 256                                       # F's one wrong-expected check
+    assert before["mismatches"] == 0              # F's wrong-expected check was replaced by its corrected re-run
+    fail_at = next(i for i, ln in enumerate(lines) if ln["type"] == "status" and "found a problem" in ln["text"])
+    assert any(ln["type"] == "metric" and ln["key"] == "mismatches" and ln["value"] == 256 for ln in lines[:fail_at + 1])
     assert before["vectors_checked"] == 7 * (256 + 20000) + 256            # F re-checked with corrected expected values
     # timing-power runs layout inside: one report, not two; the 50 ns default closes; fmax is always there
     status = [ln["text"] for ln in lines if ln["type"] == "status"]
@@ -201,6 +203,7 @@ def test_m3_run_replay_panel_shows_one_chip(ws):
     assert chip_keys == figs, (chip_keys, figs)                              # every chip figure is C-alk's
     syn = json.loads((config.HOME / "designs" / alk["C"] / "synth.json").read_text())
     assert (after["gates"], after["depth"], after["transistors"]) == (syn["gates"], syn["depth"], syn["transistors_est"])
+    assert after["mismatches"] == 0
     assert figs["gates"] == c_alk["gates"]["value"] and figs["verification_level"] == 2
     assert figs["area_um2"] == M3_LAYOUT[alk["C"]][0] and figs["timing_slack_ns"] > 0
     assert figs["fmax_mhz"] == round(1000 / M3_LAYOUT[alk["C"]][1], 2)
@@ -218,14 +221,21 @@ def test_m3_run_replay_panel_shows_one_chip(ws):
         print("AFTER, chip-report on", alk["C"] + ":", json.dumps(after))
 
 
-def test_report_metrics_flag_sends_one_chips_figures(ws):
+@pytest.mark.parametrize("pdk", [True, False], ids=["with-pdk", "no-pdk"])
+def test_report_metrics_flag_sends_one_chips_figures(ws, monkeypatch, pdk):
+    import chiplab.hw.pdk as pdkmod
+    if not pdk:                                   # like CI: no sky130 PDK, so no cell mapping
+        def _none(*a, **k):
+            raise FileNotFoundError("no PDK (test)")
+        monkeypatch.setattr(pdkmod, "liberty", _none)
     ir = json.loads((FIX / "C.json").read_text())
     d = lab.compile_ir(ir=ir)["design_id"]
     r = lab.synthesize(design_id=d, report_metrics=True)
     assert r["status"] == "ok"
     snap = panel(_lines(ws))
     assert snap["gates"] == r["metrics"]["gates"] and snap["depth"] == r["metrics"]["depth"]
-    assert "verification_level" in snap and "cost_eur" in snap
+    assert snap["verification_level"] == 0                  # no checks ran yet: reported as 0, not left out
+    assert snap["cost_eur"] > 0 and snap["tt_tiles"] >= 1   # from sky130 mapping, or the gate count with no PDK
 
 
 def test_nested_tool_reports_once(ws):

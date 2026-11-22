@@ -6,7 +6,8 @@ validation applies. Reporting can never fail a tool.
 The dashboard keeps one value per metric key (last one wins) and has no chip id, so the lab never lets two chips'
 figures share the panel:
 - exploring (every call): only `gates` (the chip just synthesised, keeps the headline live), `candidates` (distinct
-  chips in ./chips/) and the run's cumulative `vectors_checked` / `mismatches`. Every other number of a chip goes
+  chips in ./chips/), the run's cumulative `vectors_checked`, and `mismatches` (sum over chips of each chip's latest
+  result per check kind, so a corrected re-run replaces a failed one). Every other number of a chip goes
   to ./chips/<design_id>/metrics.json and a status line.
 - reporting (chip_report, or `report_metrics: true` on any call): the full figure set of that one chip
   (tools_hw.FIGURE_KEYS) in one burst. After that, `gates` from other chips stays in status lines until the next
@@ -228,6 +229,11 @@ def _chip_count(ws: Path) -> int:
     return sum(1 for p in d.iterdir() if p.is_dir() and not p.name.startswith(".")) if d.exists() else 0
 
 
+def _check_kind(tool: str, args: dict) -> str:
+    """simulate:vectors, simulate:random, simulate:val, rtl_simulate, submit_verilog: one latest result per chip each."""
+    return f"simulate:{args.get('inputs') or 'random'}" if tool == "simulate" else tool
+
+
 def _check_key(tool: str, args: dict) -> str:
     a = {k: v for k, v in args.items() if k not in ("progress", "progress_stages", "report_metrics", "run_id", "session_id",
                                                     "round", "force")}
@@ -306,8 +312,14 @@ def after(tool: str, args: dict, res: dict, h: Path | None, stages: bool, report
                 key = _check_key(tool, args)
                 if isinstance(n, int) and key not in st["checks"]:      # the same check repeated counts once
                     st["checks"].append(key)
-                    st["vectors_checked"] += n; st["mismatches"] += int(mism or 0)
-                    send += [("vectors_checked", st["vectors_checked"]), ("mismatches", st["mismatches"])]
+                    st["vectors_checked"] += n
+                    send.append(("vectors_checked", st["vectors_checked"]))
+                if isinstance(n, int):
+                    # mismatches = sum over chips of each chip's LATEST result per check kind, so a corrected
+                    # re-run (e.g. fixed expected values) replaces the failed one instead of adding to it
+                    st.setdefault("latest", {})[f"{did}|{_check_kind(tool, args)}"] = int(mism or 0)
+                    st["mismatches"] = sum(st["latest"].values())
+                    send.append(("mismatches", st["mismatches"]))
             gates = dict(found).get("gates")
             if tool == "synthesize" and gates is not None and not report and st.get("reported") in (None, did):
                 send.append(("gates", gates))

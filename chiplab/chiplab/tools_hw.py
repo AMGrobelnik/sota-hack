@@ -351,8 +351,8 @@ def chip_figures(design_id: str, decision_rate_hz: float | None = None, fill: bo
     put("tt_tiles", sky.get("tt_tiles_est"), "estimate (sky130 area at 60% utilisation)")
     tt = next((r for r in rd("cost.json").get("routes", []) if r.get("route") == "tt_sky130"), None)
     if tt:
-        put("cost_eur", tt.get("cost"), f"price list checked {tt.get('checked')} (Tiny Tapeout sky130)")
-        put("tt_tiles", tt.get("tiles"), "the tiles the Tiny Tapeout price is for")
+        put("cost_eur", tt.get("cost"), f"price list checked {tt.get('checked')} (Tiny Tapeout sky130); {tt.get('basis')}")
+        put("tt_tiles", tt.get("tiles"), f"the tiles the Tiny Tapeout price is for: {tt.get('basis')}")
     try:
         from chiplab.verify.ladder import stamp
         put("verification_level", stamp(d).get("verification_level"), "verification ladder (0 to 5), from this chip's own checks")
