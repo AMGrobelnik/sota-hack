@@ -33,9 +33,11 @@
  *       "What this means for the battery": one row per budget (ChipInModels.classBoundaries,
  *       breakdown from deviceBudget): device power with the chip's share, battery class, life,
  *       judged against batteryTargetHours and reusable; class tips marked with
- *       ChipInModels.CONSEQUENCES; headline from ChipInModels.channelStory(caseKind) when it
- *       exists; "the chip is never your battery bottleneck" only when the chip is under 1% of
- *       device power in every budget.
+ *       ChipInModels.CONSEQUENCES; headline from ChipInModels.channelStory(caseKind,
+ *       { budgets, gates, decisionsPerSecond }) when it exists (its first sentence leads, the
+ *       rest sits under "More from the power model"); "the chip is never your battery
+ *       bottleneck" only when the chip is under 1% of device power in every budget. The chip's
+ *       gates are chosen.gates (else selected.gates, else the model's default 2,500).
  *   ChipInPanels.batteryClassFor(ctx, budgetKey) -> { class, label, color, hex } | null
  *       color is a CSS custom property name ("--okt" | "--amb" | "--badt"); hex its value.
  *   ChipInPanels.intervalFor(design, metric)
@@ -89,6 +91,9 @@
     ".cpn-h .cpn-sub{font-size:12px;color:var(--cpn-ink3)}",
     ".cpn-lede{font-family:var(--serif,'Source Serif 4',Georgia,serif);font-size:17px;line-height:1.4;color:var(--cpn-ink);margin:0 0 6px;text-wrap:pretty;max-width:64ch}",
     ".cpn-ask{font-size:12.5px;color:var(--cpn-ink3);margin:0 0 12px}",
+    ".cpn-more{font-size:12.5px;color:var(--cpn-ink2);margin:0 0 8px;max-width:78ch}",
+    ".cpn-more summary{cursor:pointer;color:var(--blue7,#2b55d0);font-weight:600;width:fit-content;max-width:100%}",
+    ".cpn-more p{margin:6px 0 0;line-height:1.55}",
     ".cpn-ask b{font-weight:600;color:var(--cpn-ink2)}",
     /* battery rows */
     ".cpn-rows{border-top:1px solid var(--cpn-line)}",
@@ -330,19 +335,29 @@
     }).join("") + "</ul>";
   }
 
+  // ChipInModels.channelStory(kind, opts) -> { text, estimate, tips } when the model has it
   function storyHTML(ctx) {
     var fn = M().channelStory;
     if (typeof fn !== "function") return "";
     var s;
     try {
-      s = fn(ctx.caseKind);
+      s = fn(ctx.caseKind, {
+        budgets: (ctx.budgets || []).map(function (b) {
+          return budgetCount(ctx, b);
+        }),
+        gates: chipGates(ctx),
+        decisionsPerSecond: dps(ctx),
+      });
     } catch (e) {
       return "";
     }
     if (!s || !s.text) return "";
-    if (!s.estimate) return esc(s.text);
-    var tip = Array.isArray(s.tips) ? s.tips.join(" ") : typeof s.tips === "string" ? s.tips : typeof s.estimate === "string" ? M().describeEstimate(s.estimate) : M().describeEstimate("device_power");
-    return estT(esc(s.text), tip);
+    // the first sentence leads; the rest of the model's story sits one click away
+    var parts = String(s.text).split(/(?<=\.)\s+(?=[A-Z])/);
+    var wrap = function (t) {
+      return s.estimate ? estT(esc(t), typeof s.estimate === "string" ? M().describeEstimate(s.estimate) : M().describeEstimate("device_power")) : esc(t);
+    };
+    return { lead: wrap(parts[0]), more: parts.length > 1 ? wrap(parts.slice(1).join(" ")) : "" };
   }
 
   function batteryHTML(ctx, openKeys) {
@@ -354,11 +369,11 @@
     rows.forEach(function (r) {
       if (r.chip_share > maxShare) maxShare = r.chip_share;
     });
-    var story = storyHTML(ctx);
+    var story = storyHTML(ctx) || { lead: "", more: "" };
     var neck = rows.length && maxShare < 0.01
       ? "The chip is never your battery bottleneck: at most " + estT(sharePct(maxShare), M().describeEstimate("chip_power")) + " of device power in these budgets."
       : "";
-    var lede = [story, neck].filter(Boolean).join(" ");
+    var lede = [story.lead, neck].filter(Boolean).join(" ");
 
     var dev = ctx.reusable === true ? "a <b>reusable</b> device" : ctx.reusable === false ? "a <b>disposable</b> device" : "";
     var ask = ctx.batteryTargetHours > 0
@@ -375,8 +390,8 @@
       var lifeTxt = r.class === "primary coin cell"
         ? est(life(r.life_days), "battery_life") + " on a " + esc(cellShort(r.cell))
         : r.class === "rechargeable lithium"
-          ? est(life(r.life_days), "battery_life") + " per charge, " + esc(cellShort(r.cell))
-          : "an LIR2032 lasts " + est(life(r.life_days), "battery_life");
+          ? est(life(r.life_days), "battery_life") + " per charge"
+          : "the reference rechargeable lasts " + est(life(r.life_days), "battery_life");
       var lines = r.parts.lines.map(function (ln, j) {
         var isChip = j === r.parts.lines.length - 1;
         return '<div class="cpn-ln' + (isChip ? " chip" : "") + '"><span>' + esc(ln.name) +
@@ -407,6 +422,7 @@
     return '<div class="cpn-pan">' +
       '<div class="cpn-h"><h2>What this means for the battery</h2><span class="cpn-sub">Chip of ' + gatesTxt + " at " + esc(dps(ctx)) + " decision" + (dps(ctx) === 1 ? "" : "s") + " a second</span></div>" +
       (lede ? '<p class="cpn-lede">' + lede + "</p>" : "") +
+      (story.more ? '<details class="cpn-more"><summary>More from the power model</summary><p>' + story.more + "</p></details>" : "") +
       '<p class="cpn-ask">' + ask + "</p>" +
       '<div class="cpn-rows" role="list" aria-label="Battery by ' + esc(unit) + '">' + html + "</div>" + same +
       '<p class="cpn-foot">Device power is front end, Bluetooth radio and chip; the chip\'s power is an estimate from one layout run. A class needs at least an illustrative ' + minH + " hours per cell or charge " + MK_ILL + " (not a clinical figure). Open a row for its parts and sources.</p>" +

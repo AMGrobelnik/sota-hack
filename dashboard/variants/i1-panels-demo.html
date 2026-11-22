@@ -96,10 +96,10 @@ footer{margin-top:52px;font-size:12px;color:var(--i600);line-height:1.5}
         targets: [{ metric: "sensitivity", op: ">=", value: 0.9 }, { metric: "specificity", op: ">=", value: 0.85 }], primary: "sensitivity",
         batteryTargetHours: 168, reusable: false, decisionsPerSecond: 1, dataSource: "measured", patientsUnseen: 800, who: "recordings", costInputs: null },
       facts: function () { return AF_FACTS.concat(P.defaultFacts()); } },
-    { id: "eeg", title: "Neonatal EEG brain monitor", src: "measured", blurb: "Measured on open data (Helsinki). Chosen: the best worst-baby design; selected: the smallest design one step below it.",
+    { id: "eeg", title: "Neonatal EEG brain monitor", src: "measured", blurb: "Measured on open data (Helsinki). No design catches any seizure on the worst baby, so this example charts pooled sensitivity. Chosen: the best pooled design; selected: the best one under half its gates.",
       ctx: { caseKind: "eeg-monitor", budgets: budgetsFrom([1, 2, 4, 18], "channels", { 18: "Full montage, 18" }), chosen: null, selected: null,
-        targets: [{ metric: "sensitivity", op: ">=", value: 0.9 }, { metric: "false_alarms_per_hour", op: "<=", value: 1 }], primary: "sensitivity",
-        batteryTargetHours: 72, reusable: true, decisionsPerSecond: 1, dataSource: "measured", patientsUnseen: 10, who: "babies", costInputs: null },
+        targets: [{ metric: "sensitivity", op: ">=", value: 0.9 }, { metric: "false_alarms_per_hour", op: "<=", value: 1 }], primary: "sensitivity_pooled",
+        batteryTargetHours: 72, reusable: true, decisionsPerSecond: 1, dataSource: "measured", patientsUnseen: null, who: "babies", costInputs: null },
       facts: function () { return P.defaultFacts(); } },
     { id: "inc", title: "Incubator Watch", src: "simulated", blurb: "Radar plus thermal infrared, simulated. Chosen: the dashboard's chip for 90% worst-baby sensitivity; selected: the next design on its frontier.",
       ctx: { caseKind: "incubator-radar-thermal", budgets: [{ key: "1", label: "Radar only", channels: 1, sensors: 1 }, { key: "2", label: "Radar + thermal", channels: 2, sensors: 2 }], chosen: INC[0], selected: INC[1],
@@ -153,10 +153,13 @@ footer{margin-top:52px;font-size:12px;color:var(--i600);line-height:1.5}
 
   // the measured EEG designs come from the dashboard's data file
   fetch("../data/neonatal-eeg.json").then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function (j) {
-    var c = CASES[1], byId = {};
-    j.designs.forEach(function (d) { byId[d.id] = d; });
-    c.ctx.chosen = byId["c2-h32-t-s2"] || null;
-    c.ctx.selected = byId["c1-h0-w4-s2"] || null;
+    var c = CASES[1];
+    var ds = j.designs.filter(function (d) { return d.gates > 0 && d.metrics.sensitivity_pooled != null; });
+    var better = function (a, b) { return b.metrics.sensitivity_pooled - a.metrics.sensitivity_pooled || a.gates - b.gates; };
+    var chosen = ds.slice().sort(better)[0];
+    var selected = ds.filter(function (d) { return d.gates <= chosen.gates / 2; }).sort(better)[0] || null;
+    c.ctx.chosen = chosen; c.ctx.selected = selected;
+    c.ctx.patientsUnseen = chosen.counts.patients;
     c.refresh();
   }).catch(function () {
     document.querySelector("#case-eeg [data-insp]").innerHTML = '<h3>Inspector lines</h3><p class="is">The EEG data file did not load, so this example has no design.</p>';
