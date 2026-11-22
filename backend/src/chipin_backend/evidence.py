@@ -1278,7 +1278,7 @@ def _vectors_checked(stamped: list[tuple[dict[str, Any], datetime]], spans: list
     orchestrator's, or one subagent's): the stage's share of it is how far it rose inside the
     spans, counted per agent.
     """
-    total = 0.0
+    total: float = 0
     running: dict[str, float] = {}
     for event, at in stamped:
         value = event.get("value")
@@ -1291,7 +1291,7 @@ def _vectors_checked(stamped: list[tuple[dict[str, Any], datetime]], spans: list
             total += value if inside else 0
             continue
         agent = str(event.get("agent") or "")
-        before = running.get(agent, 0.0)
+        before = running.get(agent, 0)
         running[agent] = max(before, value)
         if inside:
             total += running[agent] - before
