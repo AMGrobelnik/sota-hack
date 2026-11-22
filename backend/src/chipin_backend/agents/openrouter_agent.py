@@ -265,24 +265,17 @@ class OpenRouterAgentBackend(AgentBackend):
                 await self._turn(conversation, fix, spec, activity, deadline, emit)
         except (_AgentFailedError, TimeoutError) as err:
             error = str(err)
+        except asyncio.CancelledError:
+            # Cancelled from outside (the runner's wall clock, a stop): the
+            # money is spent all the same, so report it before going.
+            _emit_cost(conversation, emit)
+            raise
         finally:
             self._mailbox.close()
 
-        metrics = conversation.conversation_stats.get_combined_metrics()
-        tokens = metrics.accumulated_token_usage
-        usd = float(metrics.accumulated_cost or 0.0)
+        usd = _emit_cost(conversation, emit, error=error)
         await self.close()
         duration = time.monotonic() - started
-        if error:
-            emit("error", {"message": error})
-        emit(
-            "cost",
-            {
-                "usd": usd,
-                "input_tokens": int(tokens.prompt_tokens) if tokens else 0,
-                "output_tokens": int(tokens.completion_tokens) if tokens else 0,
-            },
-        )
         emit("agent_end", {"failed": error is not None, "duration_s": duration})
         return AgentResult(
             agent=spec.name,
@@ -408,6 +401,24 @@ class _AgentFailedError(Exception):
 
 class _DeadlineError(TimeoutError):
     """The agent's whole time budget is spent."""
+
+
+def _emit_cost(conversation: Any, emit: Any, *, error: str | None = None) -> float:
+    """Emit the ``error`` (if any) and the conversation's ``cost`` so far; returns the USD."""
+    metrics = conversation.conversation_stats.get_combined_metrics()
+    tokens = metrics.accumulated_token_usage
+    usd = float(metrics.accumulated_cost or 0.0)
+    if error:
+        emit("error", {"message": error})
+    emit(
+        "cost",
+        {
+            "usd": usd,
+            "input_tokens": int(tokens.prompt_tokens) if tokens else 0,
+            "output_tokens": int(tokens.completion_tokens) if tokens else 0,
+        },
+    )
+    return usd
 
 
 async def _run_until_idle(conversation: Any, activity: _Activity, deadline: float | None) -> None:

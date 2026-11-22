@@ -127,8 +127,21 @@ def _interpreter() -> str:
     return exe if exe and " " not in exe else "/usr/bin/env python3"
 
 
-def write_helper(workspace: Path, progress_file: Path) -> Path:
-    """Write the executable ``progress`` helper into ``workspace``; returns its path."""
+#: Added to a subagent's helper: the orchestrator owns the stages and the chosen chip.
+_SUBAGENT_REFUSAL = """\
+if cmd in ("stage", "chosen"):
+    sys.stderr.write("progress: a subagent does not mark stages or the chosen chip; "
+                     "the orchestrator does. Report your numbers with metric ... --chip <design_id>.\\n")
+    sys.exit(2)
+"""
+_DISPATCH = 'line = {"ts": datetime.now(timezone.utc).isoformat(), "type": cmd}\n'
+
+
+def write_helper(workspace: Path, progress_file: Path, *, subagent: bool = False) -> Path:
+    """Write the executable ``progress`` helper into ``workspace``; returns its path.
+
+    ``subagent``: the helper refuses ``stage`` and ``chosen`` (exit 2).
+    """
     source = _HELPER.format(
         out=str(progress_file),
         stages="|".join(STAGES),
@@ -136,6 +149,8 @@ def write_helper(workspace: Path, progress_file: Path) -> Path:
         kinds="|".join(ARTIFACT_KINDS),
         kinds_t=ARTIFACT_KINDS,
     )
+    if subagent:
+        source = source.replace(_DISPATCH, _SUBAGENT_REFUSAL + _DISPATCH, 1)
     helper = workspace / HELPER_NAME
     helper.write_text(f"#!{_interpreter()}\n{source}", encoding="utf-8")
     helper.chmod(helper.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
@@ -145,11 +160,15 @@ def write_helper(workspace: Path, progress_file: Path) -> Path:
 class ProgressTailer:
     """Turns new lines of ``progress.jsonl`` into contract events."""
 
-    def __init__(self, path: Path, log: EventLog, run_path: Path, workspace: Path) -> None:
+    def __init__(
+        self, path: Path, log: EventLog, run_path: Path, workspace: Path, *, marks: bool = True
+    ) -> None:
         self.path = path
         self.log = log
         self.run_path = run_path
         self.workspace = workspace
+        #: False for a subagent: ``stage`` and ``chosen`` lines are skipped.
+        self.marks = marks
         self._offset = 0
         self.artifacts: set[str] = set()
 
@@ -189,6 +208,8 @@ class ProgressTailer:
 
     def _emit(self, item: dict[str, Any]) -> None:
         kind = item.get("type")
+        if kind in ("stage", "chosen") and not self.marks:
+            raise ValueError(f"a subagent does not mark {kind}")
         if kind == "stage":
             if item["name"] not in STAGES or item["state"] not in STAGE_STATES:
                 raise ValueError("unknown stage or state")

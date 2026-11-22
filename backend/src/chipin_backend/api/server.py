@@ -184,14 +184,22 @@ async def read_file(request: web.Request) -> web.Response:
     )
 
 
+def _is_helper(rel: Path) -> bool:
+    """The ``progress`` / ``subagent`` helpers, in the workspace or a subagent's ``agents/<id>/``."""
+    parts = rel.parts
+    if len(parts) == 1:
+        return parts[0] in ("progress", "subagent")
+    return len(parts) == 3 and parts[0] == "agents" and parts[2] == "progress"
+
+
 def workspace_files(run_path: Path, workspace: Path, limit: int) -> list[dict[str, Any]]:
-    """Files under ``workspace`` (no hidden ones, no ``progress`` helper), first ``limit`` by path."""
+    """Files under ``workspace`` (no hidden ones, no helpers), first ``limit`` by path."""
     if not workspace.is_dir():
         return []
     out: list[dict[str, Any]] = []
     for path in sorted(workspace.rglob("*")):
         rel = path.relative_to(workspace)
-        if any(part.startswith(".") for part in rel.parts) or str(rel) == "progress" or not path.is_file():
+        if any(part.startswith(".") for part in rel.parts) or _is_helper(rel) or not path.is_file():
             continue
         out.append({"path": str(path.relative_to(run_path)), "size": path.stat().st_size})
         if len(out) >= limit:

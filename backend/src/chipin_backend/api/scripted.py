@@ -6,12 +6,29 @@ the helper -> ``progress.jsonl`` -> event path is exercised), emits text and
 tool events like a real agent, answers injected user messages, and writes a
 ``report.md``. Every number it reports is a labelled placeholder.
 Pause between steps: ``spec.env["CHIPIN_STUB_STEP_S"]`` seconds.
+
+Scripts, for tests of fan-out: when the last prompt holds lines that start
+with ``$ ``, the stub runs only those, in order, as shell commands in its
+folder (shown as ``Bash`` tool calls); a command that exits non-zero ends
+the run as failed, and the last ``# cost <usd>`` in the prompt (a shell
+comment at the end of a script line will do) sets the cost it reports.
+Without a script, a stub subagent (``CHIPIN_SUBAGENT_ID`` set) holds for a
+moment (five steps, at least 1.5 s, so a whole batch is seen running at
+once), reports one placeholder metric and a result; a stub orchestrator
+(``./subagent`` in its folder) runs each batch stage as one batch: it starts
+the batch size its instructions name, all at once, waits for the batch,
+merges it keeping the first subagent that finished ``done``, then marks the
+stage done. Every shell command runs in its own process group, killed as a
+whole when the agent is cancelled.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
+import re
+import signal
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -24,6 +41,13 @@ from chipin_backend.config import AgentsConfig
 
 NAME = "scripted"
 STEP_ENV = "CHIPIN_STUB_STEP_S"
+#: Set for subagents (``chipin_backend.api.fanout.ID_ENV``).
+SUBAGENT_ENV = "CHIPIN_SUBAGENT_ID"
+_COST = re.compile(r"# cost (\d+(?:\.\d+)?)")
+_WIDTH = re.compile(r"ONE BATCH of (\d+) subagents")
+_DONE = re.compile(r"^== (a\d+) .*: done", re.MULTILINE)
+#: The stages a stub orchestrator runs as batches (``chipin_backend.api.fanout.BATCH_STAGES``).
+_BATCH_STAGES = ("reference", "propose", "finetune", "compile", "verify")
 
 #: (stage, status line, agent text, metrics) per stage.
 _PLAN: list[tuple[str, str, str, list[tuple[str, float]]]] = [
@@ -71,6 +95,9 @@ class ScriptedBackend(AgentBackend):
 
         try:
             sink.emit(AgentEvent("agent_start", spec.name, {"backend": NAME, "model": None}))
+            script = _script(spec)
+            if script or spec.env.get(SUBAGENT_ENV):
+                return await self._script(spec, sink, script, started)
             say("This is the scripted stub agent: no model is called and every number is a placeholder.")
             await self._tool(sink, spec.name, "Read", {"file_path": str(workdir / "brief.md")}, "brief")
             for stage, status, text, metrics in _PLAN:
@@ -83,6 +110,8 @@ class ScriptedBackend(AgentBackend):
                 if stage == "report":
                     await self._write(sink, spec.name, workdir / "report.md", _report(spec))
                     await self._progress(sink, spec.name, workdir, "artifact", "report.md", "report")
+                if stage in _BATCH_STAGES and (workdir / "subagent").is_file():
+                    await self._batch(spec, sink, stage)
                 for key, value in metrics:
                     await self._progress(sink, spec.name, workdir, "metric", key, str(value))
                 say(f"{text} (stub)")
@@ -101,6 +130,98 @@ class ScriptedBackend(AgentBackend):
             )
         finally:
             self._mailbox.close()
+
+    async def _script(
+        self, spec: AgentSpec, sink: EventSink, script: list[str], started: float
+    ) -> AgentResult:
+        """Run the prompt's ``$ `` lines (a stub subagent without one gets a default script)."""
+        assert spec.workdir is not None
+        if not script:
+            design = f"stub-{spec.env[SUBAGENT_ENV]}"
+            hold = max(1.5, 5 * float(spec.env.get(STEP_ENV, "0.4")))
+            script = [
+                f'./progress status "Stub subagent {spec.env[SUBAGENT_ENV]} is trying its strategy"',
+                f"sleep {hold:g}",
+                f"./progress metric gates 1000 gates --chip {design}",
+                f"echo 'Stub result: design {design}, 1000 gates (placeholder).'",
+            ]
+        error, output = None, ""
+        for line in script:
+            code, output = await self._shell(sink, spec, line)
+            if code != 0:
+                error = f"command failed with exit status {code}: {line}"
+                break
+        text = output.strip() or "Stub script done."
+        sink.emit(AgentEvent("text", spec.name, {"text": text}))
+        costs = _COST.findall(spec.prompts[-1] if spec.prompts else "")
+        usd = float(costs[-1]) if costs else 0.0  # the last one: an orchestrator's briefs hold theirs
+        sink.emit(AgentEvent("cost", spec.name, {"usd": usd, "input_tokens": 0, "output_tokens": 0}))
+        if error:
+            sink.emit(AgentEvent("error", spec.name, {"message": error}))
+        duration = time.monotonic() - started
+        sink.emit(AgentEvent("agent_end", spec.name, {"failed": error is not None, "duration_s": duration}))
+        return AgentResult(
+            agent=spec.name,
+            final_text=text,
+            failed=error is not None,
+            error=error,
+            cost_usd=usd,
+            duration_s=duration,
+        )
+
+    async def _batch(self, spec: AgentSpec, sink: EventSink, stage: str) -> None:
+        """One batch stage of a stub orchestrator: start all, wait for all, merge."""
+        match = _WIDTH.search(spec.system_prompt or "")
+        width = int(match.group(1)) if match else 3
+        starts = " ".join(
+            f'./subagent start {stage} "Stub strategy {n} for {stage}" --name {stage}-{n} >/dev/null 2>&1 &'
+            for n in range(1, width + 1)
+        )
+        await self._shell(sink, spec, f"{starts} wait")
+        output = ""
+        for _ in range(100):
+            code, output = await self._shell(sink, spec, f"./subagent wait --stage {stage}")
+            if code != 0 or "Still running" not in output:
+                break
+        done = _DONE.findall(output)
+        kept = done[0] if done else "none"
+        await self._shell(
+            sink, spec, f'./subagent merge {stage} --kept {kept} --why "stub: kept the first one done"'
+        )
+
+    async def _shell(self, sink: EventSink, spec: AgentSpec, command: str) -> tuple[int, str]:
+        """Run one shell command in the workdir, shown as a ``Bash`` tool call."""
+        self._calls += 1
+        call_id = f"stub-{self._calls}"
+        sink.emit(
+            AgentEvent(
+                "tool_call", spec.name, {"tool": "Bash", "input": {"command": command}, "call_id": call_id}
+            )
+        )
+        proc = await asyncio.create_subprocess_exec(
+            "/bin/sh",
+            "-c",
+            command,
+            cwd=spec.workdir,
+            env={**os.environ, **spec.env},
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            start_new_session=True,
+        )
+        try:
+            out, _ = await proc.communicate()
+        except asyncio.CancelledError:
+            # The whole group: a shell's children (a sleep, a pipeline) go with it.
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.killpg(proc.pid, signal.SIGKILL)
+            await proc.wait()
+            raise
+        text = out.decode(errors="replace")
+        code = proc.returncode or 0
+        sink.emit(
+            AgentEvent("tool_result", spec.name, {"call_id": call_id, "output": text, "is_error": code != 0})
+        )
+        return code, text
 
     async def _answer_messages(self, say: Callable[[str], None]) -> None:
         for message in self._mailbox.drain():
@@ -152,6 +273,12 @@ class ScriptedBackend(AgentBackend):
                 },
             )
         )
+
+
+def _script(spec: AgentSpec) -> list[str]:
+    """The ``$ `` lines of the last prompt, without the ``$ ``."""
+    prompt = spec.prompts[-1] if spec.prompts else ""
+    return [line[2:].strip() for line in prompt.splitlines() if line.startswith("$ ") and line[2:].strip()]
 
 
 def _report(spec: AgentSpec) -> str:
