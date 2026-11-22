@@ -805,7 +805,7 @@
   }
   // a chip named in words, with its id small after it (../i1-fold.js chipName)
   var chipOpts = function () { return { files: V && V.rec ? V.rec.files : null }; };
-  var nameOf = function (M, id) { return F.chipName(M.f, id, chipOpts()).name; };
+  var nameOf = function (M, id) { return F.chipName ? F.chipName(M.f, id, chipOpts()).name : id; }; // an older cached fold has no chipName
   var NOT_Y = { gates: 1, ge: 1, transistors: 1, area_um2: 1, depth: 1, tt_tiles: 1, luts_ice40: 1, luts_xc7: 1, round: 1, candidates: 1, vectors_checked: 1, mismatches: 1, cost_eur: 1, verification_level: 1, timing_slack_ns: 1 };
   var PREF_Y = ["sensitivity", "test_accuracy", "accuracy", "specificity", "fa_per_hour", "synthetic_sensitivity_pct", "train_accuracy"];
   var LABEL = { sensitivity: "Sensitivity", specificity: "Specificity", fa_per_hour: "False alarms per hour", test_accuracy: "Test accuracy", train_accuracy: "Train accuracy", accuracy: "Accuracy", power_uw_at_rate: "Power (µW)" };
