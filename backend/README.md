@@ -1,8 +1,8 @@
 # ChipIn backend
 
 Runs ChipIn's AI-scientist agents and records every run as a folder on disk.
-The interface lives on its own branch, `amg/frontend`; this branch holds the
-backend only.
+The interface (the site and its dashboard) is served from the `gh-pages`
+branch; this folder holds the backend only.
 
 The code is adapted from AI Inventor, an earlier product by one of the team
 (Apache-2.0, see `LICENSE` and `NOTICE`). Only its agent-running layer was
@@ -296,7 +296,7 @@ python -m chipin_backend serve           # the Claude agent, port 8797
   `--frontend`) serves a checkout of the site at `/`, so the dashboard and
   the API share one loopback origin and a page opened through the link
   needs no other setup; open a dashboard as
-  `http://127.0.0.1:8797/dashboard/variants/g1.html#token=<token>`.
+  `http://127.0.0.1:8797/dashboard/variants/i1.html#token=<token>`.
 - A page on `https://chipin.space` may call this server with
   `?api=http://127.0.0.1:8797` plus the token: the server answers Chrome's
   Private Network Access preflight with
@@ -344,8 +344,8 @@ export CHIPLAB_USER_DIR=<lab tool folder> CHIPIN_TRAIN_PYTHON=<lab>/.venv/bin/py
    designs on the chart as their records arrive (hollow while the size is
    the agent's estimate, solid once the lab measured it), tiles and pass or
    fail against the spec's targets, the funnel, files and the report, cost
-   and elapsed time. "Where it fails", "Chip", "Chat" and "Sources" are the
-   other views. A reload resumes the run from its first event.
+   and elapsed time. "Chip", "Chat" and "Sources" are among the other
+   views. A reload resumes the run from its first event.
 
 The published page (`https://chipin.space/dashboard/...?api=http://127.0.0.1:<port>`)
 is not the demo path. Chrome refuses its calls to a loopback address
@@ -984,7 +984,7 @@ only for a run that is running.
 `POST /api/helper/suggestions` takes `{"view": ...}` and returns up to four
 `{"id", "label", "prompt"}` example prompts for that view and run state:
 the start page, each guided-flow step and the spec card, Configure, a
-running run, a finished run, a selected design and the Where it fails tab.
+running run, a finished run and a selected design.
 Each names the run or design it is about, so it can be answered from the
 data.
 
@@ -1016,13 +1016,13 @@ plain `error` line and ends; `GET /api/health` reports `helper`.
 
 Not done: conversations are lost when the server stops and a dropped
 connection ends the answer (the product it is modelled on keeps the turn
-running and lets the page resume it); the dashboard panel itself is on the
-interface branch.
+running and lets the page resume it). The dashboard's Chippy panel is part
+of the site on `gh-pages`.
 
 ## Chip lab
 
-The chip lab (`chiplab/` on the `ant/chip-lab` branch, guide
-`chiplab/docs/CHIPIN_INTEGRATION.md`) turns a trained model into a
+The chip lab (`chiplab/` in this repo, newest version on the `ant/chip-lab`
+branch, guide `chiplab/docs/CHIPIN_INTEGRATION.md`) turns a trained model into a
 verified, measured chip. The backend only lets the agent reach it; the lab
 reports its own status lines, metrics and chip files through `./progress`.
 
@@ -1252,7 +1252,7 @@ backend/
     log.py                   loguru: stderr plus logs/backend.log
     runs.py                  run folders: run.json, events.jsonl, workspace/
     orchestrate.py           run_agent(spec, config): one run end to end
-    cli.py                   chipin-backend run / ask / serve / config / evidence / summarise / skill
+    cli.py                   chipin-backend run / ask / serve / config / evidence / export / summarise / skill
     evidence.py              run evidence: number check, weights, timings
     export.py                a recorded run as one scrubbed static file
     chiplab.py               the optional chip lab: agent PATH, settings, skill
