@@ -42,6 +42,7 @@ from chipin_backend.agents.types import AgentResult, AgentSpec, utc_now
 from chipin_backend.api.config import ApiAgent, FanoutConfig
 from chipin_backend.api.events import STAGES, EventLog
 from chipin_backend.api.progress import PROGRESS_FILE, ProgressTailer, _interpreter, write_helper
+from chipin_backend.api.spec import RunSpec, write_spec
 from chipin_backend.api.translate import Translator, clip
 from chipin_backend.compute.factory import runner_for
 from chipin_backend.config import BackendConfig, Effort, RunMode
@@ -530,8 +531,8 @@ class TaggedLog:
         self.run_id = log.run_id
 
     def append(self, type_: str, **fields: Any) -> dict[str, Any] | None:
-        """:meth:`EventLog.append` with the subagent's id added."""
-        return self.log.append(type_, **fields, agent=self.agent_id)
+        """:meth:`EventLog.append` with the subagent's id as ``agent`` (it replaces any ``agent`` given)."""
+        return self.log.append(type_, **{**fields, "agent": self.agent_id})
 
 
 @dataclass
@@ -616,6 +617,7 @@ class Fanout:
         mode: RunMode,
         backends: Mapping[str, str],
         instructions: str,
+        run_spec: RunSpec | None = None,
         stub_env: Mapping[str, str] | None = None,
         on_change: Callable[[], None] | None = None,
     ) -> None:
@@ -626,6 +628,8 @@ class Fanout:
         self.mode = mode
         self.backends = backends
         self.instructions = instructions
+        #: The user's spec: each subagent gets its block and ``spec.json``, as the orchestrator does.
+        self.run_spec = run_spec
         self.stub_env = dict(stub_env or {})
         self.on_change = on_change
         self.subagents: dict[str, Subagent] = {}
@@ -895,6 +899,8 @@ class Fanout:
         meta.mkdir(parents=True, exist_ok=True)
         write_helper(folder, meta / "progress.jsonl", subagent=True)
         (folder / "brief.md").write_text(f"# Brief from the orchestrator\n\n{sub.brief}\n", encoding="utf-8")
+        if self.run_spec is not None:
+            write_spec(folder, self.run_spec)
         tagged = TaggedLog(self.log, sub.id)
         translator = Translator(
             tagged,  # type: ignore[arg-type]
@@ -903,7 +909,14 @@ class Fanout:
             start_status=None,
             errors=False,
         )
-        tailer = ProgressTailer(meta / "progress.jsonl", tagged, self.run.path, folder, marks=False)  # type: ignore[arg-type]
+        tailer = ProgressTailer(
+            meta / "progress.jsonl",
+            tagged,  # type: ignore[arg-type]
+            self.run.path,
+            folder,
+            marks=False,
+            agent=sub.id,
+        )
         follow = asyncio.create_task(tailer.follow(0.5))
         self.log.append(
             "subagent.started",
@@ -984,7 +997,8 @@ class Fanout:
         mine = (self.run.workspace / AGENTS_DIR / sub.id).resolve()
         theirs = self.run.workspace.resolve()
         minutes = max(1, round(self.plan.timeout_s / 60))
-        return (
+        block = f"{self.run_spec.block}\n\n" if self.run_spec is not None else ""
+        return block + (
             f'You are subagent {sub.id} ("{sub.name}") of a ChipIn run, one of the batch trying '
             f"different strategies for its {sub.stage} stage at once; your strategy is the brief's "
             "first line. "

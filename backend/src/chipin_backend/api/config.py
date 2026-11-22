@@ -91,6 +91,17 @@ class ApiConfig(BaseModel):
     )
     transcribe: TranscribeConfig = Field(default_factory=TranscribeConfig)
     fanout: FanoutConfig = Field(default_factory=FanoutConfig)
+    #: Browser origins that may call the API; ``:*`` at the end allows any port.
+    allowed_origins: list[str] = Field(
+        default_factory=lambda: [
+            "https://chipin.space",
+            "http://127.0.0.1:*",
+            "http://localhost:*",
+            "http://[::1]:*",
+        ]
+    )
+    #: Public dataset name (a spec's ``data.dataset``) -> a local folder holding it.
+    datasets: dict[str, Path] = Field(default_factory=dict)
     helper: HelperConfig = Field(default_factory=HelperConfig)
 
 
