@@ -541,9 +541,9 @@ select.gfin{padding:0 10px}
 .gie textarea:focus{border-color:var(--blue7);background:#fff;box-shadow:0 0 0 3px rgb(61 109 240/.14)}
 .gie textarea::placeholder{color:#8a6a3e;font-weight:400}
 .gsq{display:flex;flex-wrap:wrap;align-items:center;gap:14px 26px;margin-top:22px;padding:0 4px}
-.gsqi{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--i600)}
+.gsqi{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;font-size:12.5px;color:var(--i600)}
 .gseg{display:inline-flex;border-radius:99px;background:rgb(0 0 0/.045);padding:2px}
-.gseg button{height:26px;padding:0 11px;border-radius:99px;font-size:12.5px;font-weight:500;color:var(--i600)}
+.gseg button{height:26px;padding:0 11px;white-space:nowrap;border-radius:99px;font-size:12.5px;font-weight:500;color:var(--i600)}
 .gseg button:hover{color:var(--i900)}
 .gseg button[aria-checked=true]{background:#fff;color:var(--i900);box-shadow:0 1px 2px rgb(0 0 0/.12)}
 .gfa{display:flex;align-items:center;gap:12px;margin-top:52px;padding-top:20px;border-top:1px solid var(--hair)}
@@ -743,11 +743,11 @@ select.gfin{padding:0 10px}
 <script src="../i1-messages.js?v=fb3a"></script><!-- MESSAGES HOOK: messages and levels of summaries for live runs (window.ChipInMessages) -->
 <script src="../i1-msgrow.js?v=rs1"></script><!-- MSGROW HOOK: one row per message with its one-line summary, click to expand (window.ChipInMsgRow) -->
 <script src="../i1-connect.js?v=2"></script><!-- CONNECT HOOK: #backend=...&token=... link stores a local backend for this browser, before i1-live.js reads it -->
-<script src="../i1-live.js?v=pub2"></script>
+<script src="../i1-live.js?v=sz1"></script>
 <!-- PLAYBACK HOOK: one clock and one playback bar for example and recorded runs, in ../i1-playback.js -->
-<script src="../i1-playback.js?v=pb2b"></script>
+<script src="../i1-playback.js?v=sz1"></script>
 <!-- CHIPPY HOOK: the helper panel (corner button, side panel, example prompts, page actions) lives in ../i1-chippy.js -->
-<script src="../i1-chippy.js?v=fx4"></script>
+<script src="../i1-chippy.js?v=sz1"></script>
 <script src="../i1-designs.js?v=dn1c"></script><!-- DESIGNS HOOK: the designs a run tried, in the Chip view (window.ChipInDesigns) -->
 <script src="../i1-questions.js?v=ik3"></script>
 <script src="../i1-search.js"></script><!-- SEARCH HOOK: the five search steps between Run and the run view, replayed on examples (window.ChipInSearch) --><!-- QUESTIONS HOOK: follow-up questions from a connected backend, one extra step before the spec card (window.ChipInQuestions) -->
@@ -932,11 +932,11 @@ const afFile = run => !!run && run.case === "af" && !!MEASURED.af;
 const PRESETS = [
   { n: "Lite", i: "zap", rounds: 3, cands: 2048, per: 200, min: 35, k: 1 },
   { n: "Pro", i: "flask", rounds: 4, cands: 4096, per: 220, min: 80, k: 1.08 },
-  { n: "Max", i: "rocket", rounds: 5, cands: 8192, per: 240, min: 180, k: 1.15 },
-  { n: "Ultra", i: "atom", rounds: 5, cands: 16384, per: 260, min: 360, k: 1.22 }
+  { n: "Max", i: "rocket", rounds: 5, cands: 8192, per: 240, min: 180, k: 1.15 }
 ];
 const preset = n => PRESETS.find(p => p.n === n) || PRESETS[0];
-const plab = n => (n === "Pro" ? "Large" : n); // shown label; the key "Pro" stays internal (backend gets "pro")
+const SUBAGENTS = { Lite: 5, Pro: 15, Max: 30 }; // subagents per stage batch, sent to the backend as fanout.width
+const sizeLab = n => `${n} · ${SUBAGENTS[n]} agents`;
 // the model a run uses: one of four, by name (RUN_MODELS in ../chipin-models.js); run.agent keeps
 // { backend, model } so a live run knows which backend agent runs it
 const RUN_MODELS = window.ChipInModels.RUN_MODELS;
@@ -947,7 +947,7 @@ function estTxt(m) { if (m < 90) { const r = Math.round(m / 5) * 5; return `abou
 const estSpan = (txt, why) => `<span class="est" title="${esc(why)}">${txt}</span>`;
 
 // defaults for new runs (Configure changes these, and each changes what a new run does)
-const cfg = { preset: "Pro", agent: modelChoice(null), judge: "worst", gateBudget: 12000 }; // "Pro" is shown as Large, the default size; Lite stays selectable
+const cfg = { preset: "Pro", agent: modelChoice(null), judge: "worst", gateBudget: 12000 }; // Pro is the default size
 
 // the run object, shared by simulated and measured runs
 function makeRun(o) {
@@ -1583,10 +1583,10 @@ function toast(msg) { $(".toast")?.remove(); const t = document.createElement("d
    The pattern follows AI Inventor's composer: a 24px pill showing the current choice, opening a small
    popover above it; rows with a check on the current one, a quiet secondary column for figures. */
 const ck = I("check", "s14");
-function presetPillHTML(sel) { const p = preset(sel); return `<button class="cpill" id="pPre" aria-haspopup="dialog" aria-expanded="false" aria-label="Preset: ${plab(p.n)}"><span class="mark">${I(p.i, "s13")}</span><span class="pv">${plab(p.n)}</span>${I("down", "s12 cv")}</button>`; }
+function presetPillHTML(sel) { const p = preset(sel); return `<button class="cpill" id="pPre" aria-haspopup="dialog" aria-expanded="false" aria-label="Run size: ${sizeLab(p.n)}"><span class="mark">${I(p.i, "s13")}</span><span class="pv">${p.n}</span>${I("down", "s12 cv")}</button>`; }
 function agentPillHTML(a) { return `<button class="cpill" id="pAg" aria-haspopup="dialog" aria-expanded="false" aria-label="Model: ${esc(modelName(a))}"><span class="pv">${esc(modelName(a))}</span>${I("down", "s12 cv")}</button>`; }
 function presetPopover(anchor, sel, onPick) {
-  const html = `<div class="ph">Preset</div>${PRESETS.map(p => `<button class="prow${p.n === sel ? " on" : ""}" data-pr="${p.n}">${I(p.i, "s14")}<span class="rn">${plab(p.n)}</span><span class="rs">${p.rounds} rounds, ${fmt(p.cands)}</span>${p.n === sel ? `<span class="ck">${ck}</span>` : ""}</button>`).join("")}`;
+  const html = `<div class="ph">Run size</div>${PRESETS.map(p => `<button class="prow${p.n === sel ? " on" : ""}" data-pr="${p.n}">${I(p.i, "s14")}<span class="rn">${p.n}</span><span class="rs">${SUBAGENTS[p.n]} agents</span>${p.n === sel ? `<span class="ck">${ck}</span>` : ""}</button>`).join("")}`;
   openPop(anchor, html, (e) => { const b = e.target.closest("[data-pr]"); if (b) { closePop(); onPick(b.dataset.pr); } }, { width: 212 });
 }
 const agentPopover = (anchor, cur, onPick) => flowAgentPop(anchor, cur, onPick);
@@ -1765,6 +1765,7 @@ const FLOW_STORE = "chipin-i1-flow";
 function flowSave() { try { if (SPEC) sessionStorage.setItem(FLOW_STORE, JSON.stringify(SPEC)); else sessionStorage.removeItem(FLOW_STORE); } catch (e) { /* storage may be off; the flow still works */ } }
 function flowLoad() { try { const s = JSON.parse(sessionStorage.getItem(FLOW_STORE) || "null"); return s && typeof s.brief === "string" && s.cons ? s : null; } catch (e) { return null; } }
 let SPEC = flowLoad();
+if (SPEC) { if (!SUBAGENTS[SPEC.preset]) SPEC.preset = "Pro"; SPEC.width = SUBAGENTS[SPEC.preset]; } // a stored size from before Lite, Pro, Max
 if (SPEC) SPEC.agent = modelChoice(SPEC.agent); // a stored Auto becomes Opus 5.5
 function parseGroup(t) {
   t = t.toLowerCase();
@@ -1965,8 +1966,7 @@ function cardHTML(s) {
   const noM = window.ChipInModels.unavailableReason(window.ChipInModels.runModel(s.agent && s.agent.model), liveDefaults());
   const af = s.case === "af" && !liveOn() ? `<p class="gfr">${MEASURED.af ? tp("AF patch case: Run replays its real search.", "This brief is the AF patch case: Run replays its real search with your targets.") : tp("AF patch case: Run opens its measured run.", "This brief is the AF patch case: Run opens its measured run with your targets.")}</p>` : "";
   return `<p class="gfl">Check it, change anything, then run.</p><div class="gsc">${rows}${window.ChipInQuestions?.cardRows(s, flowSave) || "" /* QUESTIONS HOOK: the answers, editable */}${window.ChipInIntake?.cardRows(s, intakeCtx()) || "" /* INTAKE HOOK: the assumed rows, editable, and unread answers */}</div>
-    <div class="gsq">${sizeUsable(s) ? `<div class="gsqi"><span id="gRs">Run size</span><div class="gseg" role="radiogroup" aria-labelledby="gRs">${PRESETS.map(x => `<button type="button" role="radio" aria-checked="${x.n === s.preset}" data-c="preset" data-v="${x.n}">${plab(x.n)}</button>`).join("")}</div>
-      <span class="gfx" aria-live="polite">${SUBAGENTS[s.preset]} subagents per stage</span></div>` : ""}
+    <div class="gsq">${sizeUsable(s) ? `<div class="gsqi"><span id="gRs">Run size</span><div class="gseg" role="radiogroup" aria-labelledby="gRs">${PRESETS.map(x => `<button type="button" role="radio" aria-checked="${x.n === s.preset}" data-c="preset" data-v="${x.n}">${sizeLab(x.n)}</button>`).join("")}</div></div>` : ""}
       <div class="gsqi"><span>Model</span>${agentPill(s.agent)}${noM ? `<span class="gfx">${esc(noM)}; pick another</span>` : ""}</div></div>${af}`;
 }
 const bodyHTML = (s, i) => [step1, step2, step3, step4, step5, cardHTML][i](s);
@@ -2081,7 +2081,7 @@ function startFromSpec() {
   targets = targets.filter(t => !dropped.includes(t));
   const primary = targets.some(t => t.metric === s.primary) ? s.primary : targets[0] ? targets[0].metric : (TASKS[s.task] ? TASKS[s.task].def[0] : "sensitivity");
   const k = s.cons, constraints = { channels: k.findBest ? null : k.channels, findBest: k.findBest, batteryHours: k.batN * (k.batU === "days" ? 24 : 1), reusable: k.reusable };
-  const common = { place: s.place, group: s.group, constraints, width: SUBAGENTS[s.preset], specCard: specLines(s).map(r => [r.k, r.v]).concat(sizeUsable(s) ? [["Run size", `${plab(s.preset)}, ${SUBAGENTS[s.preset]} subagents per stage`]] : [], [["Model", modelName(s.agent)]]) };
+  const common = { place: s.place, group: s.group, constraints, width: SUBAGENTS[s.preset], specCard: specLines(s).map(r => [r.k, r.v]).concat(sizeUsable(s) ? [["Run size", sizeLab(s.preset)]] : [], [["Model", modelName(s.agent)]]) };
   if (dropped.length) toast(`${andList(dropped.map(t => MET[t.metric].name))} is not in the measured results yet, so this run leaves it out.`);
   if (s.case === "af" && MEASURED.af) {
     // the real search replays on the demo clock, judged against the typed targets
@@ -2132,7 +2132,7 @@ function renderRun() {
       <nav class="tabs" aria-label="Run views">${VIEWS.map(([k, n]) => `<a class="tab${route.view === k ? " on" : ""}" href="#/run/${run.id}/${k}">${n}</a>`).join("")}</nav>
       <span id="stp"></span>
       ${!plays(run) || window.ChipInPlayback /* PLAYBACK HOOK: the bar goes under the header */ ? '<span class="grow" style="flex:1"></span>' : `<div class="pbar"><button class="pbtn" id="pbtn" aria-label="Pause"></button><span class="clk" id="clk"></span><div class="track" id="trk"><i></i><b></b></div><span class="left2" id="left2"></span></div>`}
-      <div class="tright">${window.ChipInReport?.linkHTML() || "" /* REPORT HOOK: Assumptions and limits, always in the top bar */}<span class="mk ${isSim(run) ? "sim" : "mea"} topbadge">${esc(badgeText(run))}</span><button class="cpill rset" id="rset" title="Run settings"><span class="pv">${isMea(run) ? "Measured run" : esc(`Run size: ${plab(run.preset)} · Model: ${modelName(run.agent)}`)}</span></button><button class="ib" id="rmenu" aria-label="Run menu">${I("hdots", "s16")}</button></div>
+      <div class="tright">${window.ChipInReport?.linkHTML() || "" /* REPORT HOOK: Assumptions and limits, always in the top bar */}<span class="mk ${isSim(run) ? "sim" : "mea"} topbadge">${esc(badgeText(run))}</span><button class="cpill rset" id="rset" title="Run settings"><span class="pv">${isMea(run) ? "Measured run" : esc(`Run size: ${run.preset} · Model: ${modelName(run.agent)}`)}</span></button><button class="ib" id="rmenu" aria-label="Run menu">${I("hdots", "s16")}</button></div>
     </div><div class="body" id="body"></div>`;
   cur = { id: run.id, view: route.view, sig: "" };
   if ($("#pbtn")) $("#pbtn").onclick = () => {
@@ -2157,11 +2157,11 @@ function renderRun() {
 function runSettings(run) {
   const pr = preset(run.preset), c = caseOf(run);
   openModal(`<h3>Run settings</h3><p style="margin:0 0 10px">Stored with the run when it started.</p>
-    ${isMea(run) ? `<div class="kv"><span>Run</span><span>${run.case === "af" ? "The measured AF feasibility run" : "Measured on open data, from the results file for this case"}</span></div>` : `<div class="kv"><span>Preset</span><span>${plab(pr.n)}: ${pr.rounds} rounds, ${fmt(pr.cands)} designs trained per round, ${pr.per} compiled per round</span></div>
-    <div class="kv"><span>Subagents per stage</span><span>${widthOf(run)}, set by the ${plab(pr.n)} preset; the batches are simulated</span></div>
+    ${isMea(run) ? `<div class="kv"><span>Run</span><span>${run.case === "af" ? "The measured AF feasibility run" : "Measured on open data, from the results file for this case"}</span></div>` : `<div class="kv"><span>Preset</span><span>${pr.n}: ${pr.rounds} rounds, ${fmt(pr.cands)} designs trained per round, ${pr.per} compiled per round</span></div>
+    <div class="kv"><span>Subagents per stage</span><span>${widthOf(run)}, set by the ${pr.n} preset; the batches are simulated</span></div>
     <div class="kv"><span>Model</span><span>${esc(modelName(run.agent))}<br><span style="color:#4a5062;font-size:12px">${isSim(run) ? "Labels only: this simulated run called no model" : ""}</span></span></div>
     <div class="kv"><span>Demo length</span><span>${clock(timeline(run).T)} on the demo clock</span></div>
-    <div class="kv"><span>A real run</span><span>${estSpan(estTxt(pr.min), `Assumes the ${plab(pr.n)} preset's ${pr.rounds} rounds of ${fmt(pr.cands)} designs at the team's planned throughput; not measured`)}</span></div>`}
+    <div class="kv"><span>A real run</span><span>${estSpan(estTxt(pr.min), `Assumes the ${pr.n} preset's ${pr.rounds} rounds of ${fmt(pr.cands)} designs at the team's planned throughput; not measured`)}</span></div>`}
     <div class="kv"><span>Judged on</span><span>${run.judge === "pooled" ? `All unseen ${c.whoP} pooled` : `The worst unseen ${c.who}, where the data allows`}</span></div>
     <div class="kv"><span>Data</span><span>${isMea(run) ? "Measured" : { own: "Own recordings chosen; this run is simulated", public: "Public data chosen; this run is simulated", sim: "Simulated" }[run.data.mode] || "Simulated"}</span></div>${specRowsHTML(run)}`);
 }
@@ -2214,7 +2214,7 @@ function headHTML(run, v) {
   else h1 = v.done || isMea(run) ? "No design in this family clears your bar on this data." : "No design clears every target yet.";
   const near = v.ev.chosen || v.ev.nearest[0];
   const chips = run.targets.map((t, i) => { const s = near ? targetState(run, near)[i] : null; return `<button class="tgt${t.metric === run.primary ? " pri" : ""}" data-t="${i}" aria-haspopup="dialog" aria-expanded="false" title="Change this target">${esc(MET[t.metric].kind === "rate" ? tName(t.metric) : MET[t.metric].name)} ${fmtTarget(t)} ${s ? pfHTML(s.ok) : ""}</button>`; }).join("");
-  return `<div class="tx"><p class="k0"><span>${esc(run.case === "custom" ? "Your device" : CASES[run.case].title)}</span>${runMark(run)}<span>${isMea(run) ? "" : esc(`Run size: ${plab(pr.n)} · Model: ${modelName(run.agent)}`)}</span></p>
+  return `<div class="tx"><p class="k0"><span>${esc(run.case === "custom" ? "Your device" : CASES[run.case].title)}</span>${runMark(run)}<span>${isMea(run) ? "" : esc(`Run size: ${pr.n} · Model: ${modelName(run.agent)}`)}</span></p>
     <h1>${h1}</h1>
     <p class="k1">Device: ${notGiven(run.device)}. Signal: ${notGiven(run.signal)}. Detects: ${notGiven(run.detect)}.</p>
     <div class="tgts" id="tgts">${chips}${run.targets.length < MET_KEYS.length ? `<button class="tgt add" id="addTgt" aria-haspopup="dialog" aria-expanded="false">${I("plus", "s12")} Add a target</button>` : ""}</div></div>`;
@@ -3035,7 +3035,7 @@ function renderConfigure() {
   setBadge(null);
   $("#main").innerHTML = `<div class="body"><div class="cfg"><h1>Configure</h1><p class="lead2">Defaults for new runs. Runs already started keep their own settings.</p>
     <div class="cpanel">
-      <div class="crow2"><div class="l"><b>Preset</b><span>How many rounds and designs a new run tries</span></div>${presetPillHTML(cfg.preset)}</div>
+      <div class="crow2"><div class="l"><b>Run size</b><span>How many agents a new run spawns</span></div>${presetPillHTML(cfg.preset)}</div>
       <div class="crow2"><div class="l"><b>Model</b><span>The model a new run uses</span></div>${agentPillHTML(cfg.agent)}</div>
       <div class="crow2"><div class="l"><b>Judge on the worst ${"patient"}</b><span>Off: judge on all unseen patients pooled</span></div><button class="sw" role="switch" id="swJ" aria-checked="${cfg.judge === "worst"}" aria-label="Judge on the worst patient"></button></div>
       <div class="crow2"><div class="l"><b>Largest chip to try</b><span>The gate count new runs search up to</span></div><select id="gb" aria-label="Largest chip to try">${[4000, 8000, 12000].map(n => `<option value="${n}"${cfg.gateBudget === n ? " selected" : ""}>${fmt(n)} gates</option>`).join("")}</select></div>
@@ -3061,7 +3061,6 @@ function renderConfigure() {
      stage.merged { stage, kept, why }, and any other event with an "agent" field (its text or value).
    Simulated runs make those events from the run's seed and designs (sabEvents); a real backend can put its
    events on run.events and the same reader (sabRead) and row (sabRender) show them. Measured runs show none. */
-const SUBAGENTS = { Lite: 3, Pro: 10, Max: 15, Ultra: 20 }; // subagents per stage batch; Max = 15 is assumed, to confirm
 const widthOf = run => SUBAGENTS[run.preset] || run.width || 3;
 const PN = { conf: null, confM: null, confSig: "", ctx: null, cls: null };
 const PANELS = () => window.ChipInPanels && window.ChipInModels ? window.ChipInPanels : null;
@@ -3480,7 +3479,7 @@ const CANNED = [
   { id: "af-patch", case: "af", finished: true, canned: true }
 ];
 function initRuns() {
-  try { const c = JSON.parse(sessionStorage.getItem(CFG_STORE) || "null"); if (c) { Object.assign(cfg, c); ensureModel(cfg.agent); } } catch (e) { /* defaults */ }
+  try { const c = JSON.parse(sessionStorage.getItem(CFG_STORE) || "null"); if (c) { Object.assign(cfg, c); ensureModel(cfg.agent); if (!SUBAGENTS[cfg.preset]) cfg.preset = "Pro"; } } catch (e) { /* defaults */ }
   const saved = loadRuns() || [];
   const keep = saved.filter(o => o && o.id && (o.case === "custom" || CASES[o.case])).map(o => { if (o.agent) ensureModel(o.agent); const r = makeRun({ ...o, ui: { sel: o.sel || null } }); delete r.sel; return r; });
   for (const c of CANNED) if (!keep.some(r => r.id === c.id)) keep.push(makeRun(c));

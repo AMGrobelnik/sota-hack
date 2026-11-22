@@ -48,6 +48,8 @@
   var fmt = function (n) { return Math.round(n).toLocaleString("en-GB"); };
   var clamp = function (x, a, b) { return Math.max(a, Math.min(b, x)); };
   var cap = function (s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; };
+  // a live run's size as the page names it: Pro · 15 agents (the agents the backend took)
+  var runSize = function (M) { return cap(M.r.preset) + (M.r.width ? " · " + M.r.width + " agents" : ""); };
   var clip = function (s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
   var clock = function (s) { s = Math.max(0, Math.floor(s)); var h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = String(s % 60).padStart(2, "0"); return h ? h + ":" + String(m).padStart(2, "0") + ":" + x : m + ":" + x; };
   var tsMs = function (ts) { var t = Date.parse(ts || ""); return isNaN(t) ? null : t; };
@@ -342,7 +344,8 @@
     // a backend that lists run_agents takes a run's own agent and model; an older one only a model for its own agent
     if (!srv || srv === mod.agent || Array.isArray(D.run_agents)) { body.agent = mod.agent; body.model = mod.id; }
     if (s.preset) body.preset = String(s.preset).toLowerCase();
-    if (body.preset) body.fanout = true; // the spec card promises the preset's subagents per stage
+    // the run size's agents per stage (Lite 5, Pro 15, Max 30); a server that allows fewer gets its most (post below)
+    if (body.preset) body.fanout = s.width > 0 ? { width: s.width } : true;
     var fu = window.ChipInQuestions && window.ChipInQuestions.payload(s); // QUESTIONS HOOK: the follow-up answers (../i1-questions.js)
     if (fu) body.follow_up = fu;
     var notes = [];
@@ -362,10 +365,20 @@
       lines: [{ p: "Sending your spec to the backend", w: "Brief, answers and model", t: "Spec sent" }, { p: "Waiting for the backend to accept the run", w: "It checks the spec and creates the run", t: "Run accepted" }, { p: "Opening the run view", w: "The search's own steps show there" }]
     }) : null;
     if (stg) stg.tick(1);
-    fetch(C.base + "/api/runs", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json", "X-ChipIn-Token": C.token || "" }, body: JSON.stringify(body) })
-      .then(function (res) { return res.json().catch(function () { return {}; }).then(function (j) { if (!res.ok) { var er = new Error(j.error || "the backend answered HTTP " + res.status); er.status = res.status; throw er; } return j; }); })
+    // an older server caps the agents per stage ("fanout.width must be a whole number from 1 to 20"):
+    // send its cap once instead of failing the start
+    var post = function (retry) {
+      return fetch(C.base + "/api/runs", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json", "X-ChipIn-Token": C.token || "" }, body: JSON.stringify(body) })
+        .then(function (res) { return res.json().catch(function () { return {}; }).then(function (j) {
+          var most = !res.ok && retry && res.status === 400 && body.fanout && body.fanout.width && /fanout\.width must be a whole number from 1 to (\d+)/.exec(j.error || "");
+          if (most && +most[1] < body.fanout.width) { body.fanout.width = +most[1]; notes.push("This server allows at most " + most[1] + " agents, so the run uses " + most[1] + "."); return post(false); }
+          if (!res.ok) { var er = new Error(j.error || "the backend answered HTTP " + res.status); er.status = res.status; throw er; }
+          return j;
+        }); });
+    };
+    post(true)
       .then(function (j) {
-        RUNS.unshift({ id: j.id, base: C.base, title: s.device ? clip(cap(s.device), 60) : clip(s.brief, 60), brief: s.brief, spec: spec, preset: body.preset || null, agent: srv === "stub" ? "stub" : mod.agent, model: srv === "stub" ? null : mod.id, notes: notes, created: new Date().toISOString(), status: "running" });
+        RUNS.unshift({ id: j.id, base: C.base, title: s.device ? clip(cap(s.device), 60) : clip(s.brief, 60), brief: s.brief, spec: spec, preset: body.preset || null, width: body.fanout && body.fanout.width || null, agent: srv === "stub" ? "stub" : mod.agent, model: srv === "stub" ? null : mod.id, notes: notes, created: new Date().toISOString(), status: "running" });
         saveRuns(); bump();
         if (stg) stg.tick(2);
         if (typeof done === "function") done();
@@ -948,7 +961,7 @@
     var co = F.cost(x.f), sm = co && num(co.summaries_usd) > 0 ? co.summaries_usd : 0, cost = co && num(co.usd) != null ? "Cost: $" + (co.usd + sm).toFixed(2) : ""; if (ch("cost", cost)) { $("#lvCost").textContent = cost; $("#lvCost").title = co ? (sm ? "Agent " + co.usd.toFixed(2) + ", summaries " + sm.toFixed(2) + "; " : "") + fmt(co.tokens_in || 0) + " tokens in, " + fmt(co.tokens_out || 0) + " out" : ""; }
     var cm = $("#lvCostM"); if (cm && cm.textContent !== cost) cm.textContent = cost; // the same figure, under the headline on phones
     var bt = M.running || M.status === "connecting" ? "Live run" : "Finished run"; if (ch("badge", bt)) { $("#lvBadge").textContent = bt; $("#lvBadge").className = "mk topbadge " + (bt === "Live run" ? "lv-live" : "no"); setDemo(bt); }
-    var setT = (M.r.preset ? "Run size: " + (cap(M.r.preset) === "Pro" ? "Large" : cap(M.r.preset)) + " · " : "") + "Model: " + usedModel(M); if (ch("set", setT)) $("#lvSetT").textContent = setT;
+    var setT = (M.r.preset ? "Run size: " + runSize(M) + " · " : "") + "Model: " + usedModel(M); if (ch("set", setT)) $("#lvSetT").textContent = setT;
     var stop = $("#lvStop"); stop.hidden = !M.running;
     if (M.lost || V.wasLost) { var lb = [stop, $("#lvCxStop")].filter(Boolean); lb.forEach(function (b) { b.disabled = !!M.lost; if (!M.lost && b.lastChild.textContent === "Stopping") b.lastChild.textContent = b === stop ? "Stop" : "Stop the run"; }); V.wasLost = !!M.lost; }
     if (!M.running && stop.disabled) { stop.disabled = false; stop.lastChild.textContent = "Stop"; var cs = $("#lvCxStop"); if (cs) { cs.disabled = false; cs.lastChild.textContent = "Stop the run"; } }
@@ -1151,7 +1164,7 @@
   }
   function settingsModal(M) {
     var bg = document.createElement("div"); bg.className = "mbg";
-    var rows = [["Run", M.id], ["Backend", hostOf() || "not connected"], ["Preset", M.r.preset ? (cap(M.r.preset) === "Pro" ? "Large" : cap(M.r.preset)) : "the backend's default"], ["Model", usedModel(M)]].concat(specRows(M.spec));
+    var rows = [["Run", M.id], ["Backend", hostOf() || "not connected"], ["Run size", M.r.preset ? runSize(M) : "the backend's default"], ["Model", usedModel(M)]].concat(specRows(M.spec));
     bg.innerHTML = '<div class="modal" role="dialog" aria-label="Run settings"><button class="mx" aria-label="Close">' + I("x", "s16") + '</button><h3>Run settings</h3><p style="margin:0 0 10px">Sent with the run when it started.</p>' +
       rows.map(function (r) { return '<div class="kv"><span>' + esc(r[0]) + "</span><span>" + esc(r[1]) + "</span></div>"; }).join("") + ((M.r.notes || []).length ? '<p class="lv-mute">' + esc(M.r.notes.join(" ")) + "</p>" : "") + "</div>";
     bg.onclick = function (e) { if (e.target === bg || e.target.closest(".mx")) bg.remove(); };

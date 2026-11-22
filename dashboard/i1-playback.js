@@ -533,7 +533,7 @@
     var g = st === "running" ? '<span class="spin"></span>' : st === "succeeded" && !miss ? '<svg viewBox="0 0 24 24" class="ok" aria-hidden="true">' + MARK.ok + "</svg>" : st === "failed" || miss ? '<svg viewBox="0 0 24 24" class="bad" aria-hidden="true">' + MARK.bad + "</svg>" : "";
     var sub = [dateTxt(r.started_at), r.duration_s ? durTxt(r.duration_s).trim() : "", c.designs ? fmtN(c.designs) + " designs" : ""].filter(Boolean).join(" · ");
     var tip = [r.title || r.id, sub, "Recorded run, " + (r.src === "mac" ? "on this computer" + (r.alsoSite ? ", copy on the site" : "") : "copy on this site"), st !== "succeeded" ? st : "", miss ? "Chosen chip misses its held-out targets" : "",
-      r.preset ? "Run size: " + String(r.preset).replace(/^pro$/i, "large").replace(/^\w/, function (m) { return m.toUpperCase(); }) : "", r.agent || r.model ? "Model: " + usedModel(r) : "",
+      r.preset ? "Run size: " + String(r.preset).replace(/^\w/, function (m) { return m.toUpperCase(); }) : "", r.agent || r.model ? "Model: " + usedModel(r) : "",
       r.chosen ? "chosen " + r.chosen : "", c.subagents ? fmtN(c.subagents) + " subagents" : "", c.events ? fmtN(c.events) + " events" : "",
       r.data && r.data.name ? "Data: " + r.data.name + (r.data.licence ? ", " + r.data.licence : "") : "", r.note || ""].filter(Boolean).join("\n");
     return '<a class="rrow pb-rrow' + (on ? " on" : "") + '" href="#/rec/' + r.src + "/" + encodeURIComponent(r.id) + '/overview" title="' + esc(tip) + '"><span class="g">' + g + '</span><span class="t">' + esc(r.title || r.id) + "</span></a>";
@@ -888,7 +888,7 @@
     var rec = V.rec, f = rec.facts || {}, st = M.st, ck = V.clock;
     once("head", [st.chosen, M.chosen && nameOf(M, M.chosen.id), M.ended, st.finished && st.finished.status, M.pts.length, M.n > 0, ck.live, heldText(M)].join("|"), function () {
       var k0 = ['<span class="mk mea">recorded</span>', "<span>" + esc(dateTxt(f.started_at)) + "</span>"];
-      if (f.preset) k0.push("<span>Run size: " + esc(String(f.preset).replace(/^pro$/i, "large").replace(/^\w/, function (m) { return m.toUpperCase(); })) + "</span>");
+      if (f.preset) k0.push("<span>Run size: " + esc(String(f.preset).replace(/^\w/, function (m) { return m.toUpperCase(); })) + "</span>");
       if (f.agent || f.model) k0.push("<span>Model: " + esc(usedModel(f)) + "</span>");
       if (rec.running || ck.live) k0[0] = '<span class="mk sim">still running</span>';
       $("#rvK0").innerHTML = k0.join("");
