@@ -52,6 +52,7 @@ from chipin_backend.agents.output import (
     written_files,
 )
 from chipin_backend.agents.types import AgentEvent, AgentResult, AgentSpec, EventSink
+from chipin_backend.chiplab import SKILL_DIRS
 from chipin_backend.config import AgentsConfig, ClaudeCliConfig
 
 #: API-error statuses worth another turn (auth blips, rate limits, overload).
@@ -363,6 +364,21 @@ class _TurnDriver:
         time.sleep(wait_s)
 
 
+def setting_sources(spec: AgentSpec, cli: ClaudeCliConfig) -> list[str]:
+    """``cli.setting_sources``, plus ``project`` when the working folder holds skills.
+
+    The CLI reads project skills (``.claude/skills/<name>/SKILL.md`` under its
+    working folder) only with the ``project`` source; the backend installs the
+    chip-lab skill there when the lab is on (``chiplab.install_skill``). A run
+    without that folder keeps the configured sources unchanged.
+    """
+    sources = list(cli.setting_sources)
+    has_skills = spec.workdir is not None and (spec.workdir / SKILL_DIRS["claude_cli"]).is_dir()
+    if has_skills and "project" not in sources:
+        sources.append("project")
+    return sources
+
+
 def build_argv(spec: AgentSpec, cli: ClaudeCliConfig, *, session_id: str, resume: bool) -> list[str]:
     """The ``claude`` command line for ``spec``.
 
@@ -391,7 +407,7 @@ def build_argv(spec: AgentSpec, cli: ClaudeCliConfig, *, session_id: str, resume
     if cli.skip_permissions:
         argv.append("--dangerously-skip-permissions")
     argv += ["--settings", json.dumps(settings)]
-    argv += ["--setting-sources", ",".join(cli.setting_sources)]
+    argv += ["--setting-sources", ",".join(setting_sources(spec, cli))]
     argv += ["--effort", spec.effort or cli.effort]
     if spec.allowed_tools is not None:
         argv += ["--allowed-tools", ",".join(spec.allowed_tools)]
@@ -470,4 +486,4 @@ def translate_record(record: dict[str, object], agent: str) -> list[AgentEvent]:
     return events
 
 
-__all__ = ["ClaudeCliBackend", "build_argv", "transcript_path", "translate_record"]
+__all__ = ["ClaudeCliBackend", "build_argv", "setting_sources", "transcript_path", "translate_record"]

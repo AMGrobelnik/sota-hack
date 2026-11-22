@@ -8,6 +8,7 @@ Examples::
     chipin-backend run --preset pro --prompt-file examples/seizure_eeg_prompt.md
     chipin-backend ask --model cheap "Name one low-power EEG seizure feature"
     chipin-backend serve --agent stub
+    chipin-backend skill export <project>/.claude/skills
 
 ``python -m chipin_backend`` is the same command.
 """
@@ -30,6 +31,7 @@ from chipin_backend.agents.types import AgentSpec, utc_now
 from chipin_backend.api.cli import add_serve_parser, run_serve
 from chipin_backend.api.config import Preset, load_api_config
 from chipin_backend.api.manager import ApiAgent, RequestError, RunManager
+from chipin_backend.chiplab import SKILL_NAME, TOOLS_REFERENCE, chiplab_available, write_skill
 from chipin_backend.config import BackendConfig, ComputeTier, RunMode, load_config
 from chipin_backend.llm import MissingKeyError, OpenRouterClient, expand_preset
 from chipin_backend.llm.providers import ProviderError, resolve_provider
@@ -88,6 +90,15 @@ def _parser() -> argparse.ArgumentParser:
     ask.add_argument("--provider", default=None, help="model provider from the config (default openrouter)")
     ask.add_argument("--max-tokens", type=int, default=4096)
     add_serve_parser(sub, common)
+    skill = sub.add_parser("skill", parents=[common], help="the chip-lab agent skill")
+    skill_sub = skill.add_subparsers(dest="skill_command", required=True)
+    export = skill_sub.add_parser(
+        "export",
+        parents=[common],
+        help="write the chiplab skill folder into FOLDER (as FOLDER/chiplab), with the installed "
+        "lab's reference when the lab is on",
+    )
+    export.add_argument("folder", type=Path, help="where to write it, e.g. <project>/.claude/skills")
     return parser
 
 
@@ -119,6 +130,8 @@ def _main(argv: list[str] | None) -> int:
         return 0
     if args.command == "serve":
         return run_serve(args, config)
+    if args.command == "skill":
+        return _skill_export(args.folder)
     if args.command == "ask":
         return asyncio.run(
             _ask(config, args.question, model=args.model, max_tokens=args.max_tokens, provider=args.provider)
@@ -153,6 +166,25 @@ def _main(argv: list[str] | None) -> int:
         return 2
     print(json.dumps({"run_dir": str(run.path), **result.to_dict()}, indent=2))
     return 1 if result.failed else 0
+
+
+def _skill_export(folder: Path) -> int:
+    """``skill export FOLDER``: write the chip-lab skill to ``FOLDER/chiplab``; print its path.
+
+    Refuses a folder inside a hidden folder of the home directory (``~/.claude``,
+    ``~/.agents``, ``~/.openhands`` and the like): those make the skill global for
+    every session of a tool, and this command only writes where a project asks.
+    """
+    target = (folder.expanduser() / SKILL_NAME).resolve()
+    home = Path.home().resolve()
+    if target.is_relative_to(home) and target.relative_to(home).parts[0].startswith("."):
+        logger.error("refusing to write into {}: a tool folder in the home directory", folder)
+        return 2
+    if not chiplab_available():
+        logger.warning("the chip lab is off here; the skill is written without the lab's tool reference")
+    dest = write_skill(target)
+    print(json.dumps({"skill": str(dest), "tools_reference": (dest / TOOLS_REFERENCE).is_file()}))
+    return 0
 
 
 #: ``run --backend`` -> the dashboard's agent name.

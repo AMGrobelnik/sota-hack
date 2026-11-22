@@ -283,15 +283,57 @@ Point the backend at a lab install (in the environment, `backend/.env` or
   ok. The lab's `chiplab doctor --agent-env` checks only the default
   install.
 
-What the agent can do with it: when the lab is on, the standing
-instructions get the lab's paragraph (`api/chiplab.md`, section 6 of the
-guide). The agent calls `chiplab <tool> --json '{...}'` from its working
+What the agent can do with it: when the lab is on, the agent gets the
+chip-lab skill (below) and the standing instructions get a short paragraph
+(`api/chiplab.md`) naming the skill, the required `chip-report` call and a
+fallback. The agent calls `chiplab <tool> --json '{...}'` from its working
 folder: compile (`ingest-model` or `compile-ir`, `synthesize`,
 `count-luts`, `map-to-process`), verify (`simulate`, `prove-equivalence`,
 `rtl-simulate`, `verification-level`) and the chip part of report
 (`layout`, `timing-power`, `tt-package`, `bitstream`, `estimate-cost`,
 and always `chip-report` on the one chosen chip before report is done). It marks the compile and verify stages itself, or passes
 `"progress_stages": true`.
+
+### The chip-lab skill
+
+The lab's tools also reach the agent as a skill named `chiplab`
+(`src/chipin_backend/skills/chiplab/`, shipped in the package): `SKILL.md`
+says when to use the lab, the call shape, the exit codes, which tools serve
+compile, verify and report, the required `chip-report` call and how
+results go through `./progress`; `references/` holds a worked sequence
+and, per run, `tools.md`: the installed lab's own reference
+(`chiplab agent-doc`) under a header naming the lab's version and commit,
+so it never drifts from the lab. If the lab's reference cannot be read,
+the skill is installed without it, the agent is told to run
+`chiplab agent-doc`, and a warning is logged.
+
+When the lab is on, the runner installs the skill into each run's
+working folder before the agent starts; nothing is written outside the
+run folder, and with the lab off nothing is installed.
+
+| Harness      | Installed at                       | How it loads   |
+| ------------ | ---------------------------------- | -------------- |
+| `claude_cli` | `workspace/.claude/skills/chiplab` | `Skill` tool   |
+| `openrouter` | `workspace/.agents/skills/chiplab` | `invoke_skill` |
+
+- `claude_cli`: the CLI lists project skills only with the `project`
+  setting source, so it is added to `--setting-sources` for a run that
+  has the skill; other runs keep `setting_sources` as configured.
+- `openrouter`: the folder's skills go into the OpenHands agent's
+  `AgentContext`; the SDK lists name and description under
+  `<available_skills>` and returns the body when the agent calls
+  `invoke_skill`. Only this folder is read, not the SDK's wider project
+  loading.
+
+To use the skill in another project:
+
+```bash
+chipin-backend skill export <project>/.claude/skills   # writes .../chiplab
+```
+
+It writes the same folder, with the lab's reference when the lab is on
+here, only where it is told; it refuses a tool folder in the home
+directory (`~/.claude`, `~/.agents` and the like).
 
 What reaches the dashboard: the lab runs `./progress` as a program, so
 its lines go through the same checks as the agent's and become ordinary
@@ -316,7 +358,8 @@ backend/
     runs.py                  run folders: run.json, events.jsonl, workspace/
     orchestrate.py           run_agent(spec, config): one run end to end
     cli.py                   chipin-backend run / ask / serve / config
-    chiplab.py               the optional chip lab: agent PATH and settings
+    chiplab.py               the optional chip lab: agent PATH, settings, skill
+    skills/chiplab/          the chip-lab agent skill (SKILL.md, references/)
     api/                     the local API server for the dashboards
     llm/                     OpenRouter client, key, retry, presets, summaries
     agents/                  AgentBackend interface and the backends
