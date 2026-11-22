@@ -179,6 +179,7 @@ body.col .main{left:52px}
 .src .sw2 a{color:var(--blue7)}
 .src .sk{font-size:12.5px;color:var(--i700);margin-top:6px;line-height:1.5}
 .src ul{margin:6px 0 0;padding-left:18px;font-size:12.5px;color:var(--i700);line-height:1.55}
+.srcp>ul{margin:6px 0 0;padding-left:18px;font-size:12.5px;color:var(--i700);line-height:1.55}
 .srcp>.sk{font-size:13px;color:var(--i700);line-height:1.55;margin:0}
 .credit{font-size:12px;color:var(--i600);line-height:1.5;margin:18px 0 0}
 
@@ -753,7 +754,9 @@ function frontier(run, ds, key) {
 function shortfall(run, d) {
   return targetState(run, d).reduce((a, s) => a + (s.ok === true ? 0 : s.v == null ? 1 : Math.abs(s.v - s.t.value) / (MET[s.t.metric].kind === "frac" ? 0.05 : Math.max(0.5, s.t.value))), 0);
 }
+// a design with 0 gates is a constant output (it never alarms): shown nowhere and never chosen
 function evaluate(run, ds) {
+  ds = ds.filter(d => d.gates > 0);
   const pass = new Set(ds.filter(d => passesAll(run, d)).map(d => d.id));
   let chosen = null;
   for (const d of ds) if (pass.has(d.id) && (!chosen || d.gates < chosen.gates || (d.gates === chosen.gates && good(run, d, run.primary) > good(run, chosen, run.primary)))) chosen = d;
@@ -1409,7 +1412,9 @@ const VIEWS = [["overview", "Overview"], ["patients", "Patients"], ["signal", "S
 let cur = { id: null, view: null, sig: "" };
 let sig2d = null; // the Signal tab's 2D loop
 function teardown() { unmount3D(); if (sig2d) { cancelAnimationFrame(sig2d.raf); sig2d = null; } }
-const isSim = run => run.source === "simulated" && !(run.case === "neonatal-eeg" && MEASURED.eeg);
+// measured: the AF run, or a case whose designs came from a measured results file
+const isMea = run => run.source === "measured" || !!designsOf(run).measured;
+const isSim = run => !isMea(run);
 const runMark = run => isSim(run) ? '<span class="mk sim">simulated</span>' : '<span class="mk mea">measured</span>';
 function setBadge(run) {
   const b = $("#demo");
@@ -1424,8 +1429,8 @@ function renderRun() {
   $("#main").innerHTML = `<div class="top">
       <nav class="tabs" aria-label="Run views">${VIEWS.map(([k, n]) => `<a class="tab${route.view === k ? " on" : ""}" href="#/run/${run.id}/${k}">${n}</a>`).join("")}</nav>
       <span id="stp"></span>
-      ${run.source === "measured" ? '<span class="grow" style="flex:1"></span>' : `<div class="pbar"><button class="pbtn" id="pbtn" aria-label="Pause"></button><span class="clk" id="clk"></span><div class="track" id="trk"><i></i><b></b></div><span class="left2" id="left2"></span></div>`}
-      <div class="tright"><button class="cpill rset" id="rset" title="Run settings"><span class="pv">${run.source === "measured" ? "Measured run" : esc(run.preset + " · " + agentLabel(run.agent))}</span></button><button class="ib" id="rmenu" aria-label="Run menu">${I("hdots", "s16")}</button></div>
+      ${isMea(run) ? '<span class="grow" style="flex:1"></span>' : `<div class="pbar"><button class="pbtn" id="pbtn" aria-label="Pause"></button><span class="clk" id="clk"></span><div class="track" id="trk"><i></i><b></b></div><span class="left2" id="left2"></span></div>`}
+      <div class="tright"><button class="cpill rset" id="rset" title="Run settings"><span class="pv">${isMea(run) ? "Measured run" : esc(run.preset + " · " + agentLabel(run.agent))}</span></button><button class="ib" id="rmenu" aria-label="Run menu">${I("hdots", "s16")}</button></div>
     </div><div class="body" id="body"></div>`;
   cur = { id: run.id, view: route.view, sig: "" };
   if ($("#pbtn")) $("#pbtn").onclick = () => {
@@ -1434,7 +1439,7 @@ function renderRun() {
     saveRuns(); tick();
   };
   $("#rset").onclick = () => runSettings(run);
-  $("#rmenu").onclick = e => openPop(e.currentTarget, `<button class="pi" data-v="sources">${I("db", "s14")}<span>Where this comes from</span></button><button class="pi" data-v="settings">${I("sliders", "s14")}<span>Run settings</span></button>${run.source === "measured" ? "" : `<div class="psep"></div><button class="pi" data-v="restart">${I("restart", "s14")}<span>Play this run again<span class="h">From the start of the demo clock</span></span></button>`}`, ev => {
+  $("#rmenu").onclick = e => openPop(e.currentTarget, `<button class="pi" data-v="sources">${I("db", "s14")}<span>Where this comes from</span></button><button class="pi" data-v="settings">${I("sliders", "s14")}<span>Run settings</span></button>${isMea(run) ? "" : `<div class="psep"></div><button class="pi" data-v="restart">${I("restart", "s14")}<span>Play this run again<span class="h">From the start of the demo clock</span></span></button>`}`, ev => {
     const b = ev.target.closest("[data-v]"); if (!b) return; closePop();
     if (b.dataset.v === "sources") openSources(run);
     if (b.dataset.v === "settings") runSettings(run);
@@ -1446,16 +1451,16 @@ function renderRun() {
 function runSettings(run) {
   const pr = preset(run.preset), c = caseOf(run);
   openModal(`<h3>Run settings</h3><p style="margin:0 0 10px">Stored with the run when it started.</p>
-    ${run.source === "measured" ? `<div class="kv"><span>Run</span><span>The measured AF feasibility run</span></div>` : `<div class="kv"><span>Preset</span><span>${pr.n}: ${pr.rounds} rounds, ${fmt(pr.cands)} designs trained per round, ${pr.per} compiled per round</span></div>
+    ${isMea(run) ? `<div class="kv"><span>Run</span><span>${run.case === "af" ? "The measured AF feasibility run" : "Measured on open data, from the results file for this case"}</span></div>` : `<div class="kv"><span>Preset</span><span>${pr.n}: ${pr.rounds} rounds, ${fmt(pr.cands)} designs trained per round, ${pr.per} compiled per round</span></div>
     <div class="kv"><span>Agent</span><span>${esc(agentLabel(run.agent))}<br><span style="color:#4a5062;font-size:12px">${isSim(run) ? "Labels only: this simulated run called no model" : ""}</span></span></div>
     <div class="kv"><span>Demo length</span><span>${clock(timeline(run).T)} on the demo clock</span></div>
     <div class="kv"><span>A real run</span><span>${estSpan(estTxt(pr.min), `Assumes the ${pr.n} preset's ${pr.rounds} rounds of ${fmt(pr.cands)} designs at the team's planned throughput; not measured`)}</span></div>`}
     <div class="kv"><span>Judged on</span><span>${run.judge === "pooled" ? `All unseen ${c.whoP} pooled` : `The worst unseen ${c.who}, where the data allows`}</span></div>
-    <div class="kv"><span>Data</span><span>${run.source === "measured" ? "Measured" : { own: "Own recordings chosen; this run is simulated", public: "Public data chosen; this run is simulated", sim: "Simulated" }[run.data.mode] || "Simulated"}</span></div>`);
+    <div class="kv"><span>Data</span><span>${isMea(run) ? "Measured" : { own: "Own recordings chosen; this run is simulated", public: "Public data chosen; this run is simulated", sim: "Simulated" }[run.data.mode] || "Simulated"}</span></div>`);
 }
 function updTop(run, force) {
   const v = viewAt(run), live = run.clock.playing && !v.done && run.source !== "measured";
-  const key = run.source === "measured" ? "measured" : v.done ? "done" : live ? "live" : "paused";
+  const key = isMea(run) ? "measured" : v.done ? "done" : live ? "live" : "paused";
   if ($("#clk")) {
     $("#clk").textContent = clock(v.t); $("#clk").classList.toggle("live", live);
     const p = v.T ? v.t / v.T * 100 : 100, trk = $("#trk");
@@ -1494,12 +1499,12 @@ function headHTML(run, v) {
   let h1;
   if (!run.targets.length) h1 = "Set a target to choose a chip. Every design is shown below.";
   else if (!v.vis.length) h1 = "Searching. No design has been checked yet.";
-  else if (ch) h1 = `${v.done || run.source === "measured" ? "The smallest chip that clears every target" : "Smallest chip so far that clears every target"}: ${fmt(ch.gates)} gates, ${esc(budgetLabel(run, ch.channels).toLowerCase())}.`;
+  else if (ch) h1 = `${v.done || isMea(run) ? "The smallest chip that clears every target" : "Smallest chip so far that clears every target"}: ${fmt(ch.gates)} gates, ${esc(budgetLabel(run, ch.channels).toLowerCase())}.`;
   else if (run.case === "af") { const st = targetState(run, AF_DESIGN), no = st.filter(x => x.ok === false).map(x => MET[x.t.metric].name.toLowerCase()), yes = st.filter(x => x.ok === true).map(x => MET[x.t.metric].name.toLowerCase()); h1 = `The measured ${fmt(AF_DESIGN.gates)}-gate circuit misses your ${andList(no)} target${yes.length ? ` and clears ${andList(yes)}` : ""}. The gap is in the model, not the hardware.`; }
-  else h1 = v.done || run.source === "measured" ? "No design in this family clears your bar on this data." : "No design clears every target yet.";
+  else h1 = v.done || isMea(run) ? "No design in this family clears your bar on this data." : "No design clears every target yet.";
   const near = v.ev.chosen || v.ev.nearest[0];
   const chips = run.targets.map((t, i) => { const s = near ? targetState(run, near)[i] : null; return `<button class="tgt${t.metric === run.primary ? " pri" : ""}" data-t="${i}" aria-haspopup="dialog" aria-expanded="false" title="Change this target">${esc(MET[t.metric].name)} ${fmtTarget(t)} ${s ? pfHTML(s.ok) : ""}</button>`; }).join("");
-  return `<div class="tx"><p class="k0"><span>${esc(run.case === "custom" ? "Your device" : CASES[run.case].title)}</span>${runMark(run)}<span>${run.source === "measured" ? "" : esc(pr.n + " · " + agentLabel(run.agent))}</span></p>
+  return `<div class="tx"><p class="k0"><span>${esc(run.case === "custom" ? "Your device" : CASES[run.case].title)}</span>${runMark(run)}<span>${isMea(run) ? "" : esc(pr.n + " · " + agentLabel(run.agent))}</span></p>
     <h1>${h1}</h1>
     <p class="k1">Device: ${notGiven(run.device)}. Signal: ${notGiven(run.signal)}. Detects: ${notGiven(run.detect)}.</p>
     <div class="tgts" id="tgts">${chips}${run.targets.length < MET_KEYS.length ? `<button class="tgt add" id="addTgt" aria-haspopup="dialog" aria-expanded="false">${I("plus", "s12")} Add a target</button>` : ""}</div></div>`;
@@ -1507,7 +1512,7 @@ function headHTML(run, v) {
 const pfHTML = ok => ok === true ? '<span class="pf ok">Pass</span>' : ok === false ? '<span class="pf no">Fail</span>' : '<span class="pf na">Not measured</span>';
 function tilesHTML(run, v) {
   const c = caseOf(run), d = v.ev.chosen || v.ev.nearest[0], fails = !v.ev.chosen && d;
-  const lab = run.case === "af" ? "the measured circuit" : fails ? `nearest design, fails` : v.done || run.source === "measured" ? "chosen chip" : "best so far";
+  const lab = run.case === "af" ? "the measured circuit" : fails ? `nearest design, fails` : v.done || isMea(run) ? "chosen chip" : "best so far";
   const out = run.targets.map(t => {
     const m = d ? metricOf(run, d, t.metric) : { v: null };
     const val = m.v == null ? "" : MET[t.metric].kind === "frac" ? (m.v * 100).toFixed(1) + "<small>%</small>" : m.v.toFixed(2) + "<small>an hour</small>";
@@ -1542,11 +1547,12 @@ function inspHTML(run, v) {
     if (d.metrics.lead_time_s != null) rows.push(["Time to alarm, median", `${d.metrics.lead_time_s.toFixed(1)} s`]);
     if (d.counts.events_total) rows.push([`${capFirst(c.events)} caught`, `${fmt(d.counts.events_caught)} of ${fmt(d.counts.events_total)}, ${d.counts.patients} ${c.whoP}`]);
   }
-  if (d.verified) rows.push(["Circuit against its model", run.case === "af" ? `${fmt(d.verified.vectors)} of ${fmt(d.verified.vectors)} test windows identical, ${d.verified.mismatches} mismatches` : `${fmt(d.verified.vectors)} test vectors, ${d.verified.mismatches} mismatches`]);
+  if (d.verified) rows.push(["Circuit against its model", run.case === "af" ? `${fmt(d.verified.vectors)} of ${fmt(d.verified.vectors)} test windows identical, ${d.verified.mismatches} mismatches` : `${fmt(d.verified.vectors)} test vectors, ${d.verified.mismatches} mismatches${d.verified.proved_equivalent ? ", proved equivalent" : ""}`]);
+  else if (d.source === "measured" && run.case !== "af") rows.push(["Circuit against its model", "not checked for this design"]);
   let note = "";
   if (run.case === "af") note = `<p class="inote gap">The circuit is less accurate than the full-precision model it came from (sensitivity ${fmtVal("sensitivity", AF_BASE.sensitivity_pooled)} and specificity ${fmtVal("specificity", AF_BASE.specificity)} per recording). That is a model gap, not a hardware gap: the circuit matched its own model on every test window.</p>`;
-  else if (!v.ev.chosen && run.targets.length && v.done) note = `<p class="inote">No design passes every target, so this is the nearest. Loosen a target, or try a bigger preset.</p>`;
-  return `<h2>Design ${esc(d.id)} ${mark}${isCh ? '<span class="pf ok">Chosen</span>' : ""}</h2><p class="is">${esc(budgetLabel(run, d.channels))}${d.round ? `, round ${d.round}` : ""}</p>
+  else if (!v.ev.chosen && run.targets.length && v.done) note = `<p class="inote">No design passes every target, so this is the nearest. ${isSim(run) ? "Loosen a target, or try a bigger preset." : "Loosen a target to see which designs clear it."}</p>`;
+  return `<h2>${d.role === "baseline" ? "Baseline" : "Design"} ${esc(d.id)} ${mark}${isCh ? '<span class="pf ok">Chosen</span>' : ""}</h2><p class="is">${esc(budgetLabel(run, d.channels))}${d.round ? `, round ${d.round}` : ""}</p>
     ${rows.map(([a, b]) => `<div class="irow"><span>${a}</span><b>${b}</b></div>`).join("")}${note}
     <div class="ilinks">${run.case === "af" ? "" : `<a class="qbtn" href="#/run/${run.id}/patients">${I("right", "s13")}Per ${esc(c.who)}</a>`}<a class="qbtn" href="#/run/${run.id}/chip">${I("chip", "s13")}The chip</a></div>`;
 }
@@ -1604,10 +1610,10 @@ function updOverview(run) {
     const ord = [...run.targets.map(t => t.metric), ...avail.filter(k => !run.targets.some(t => t.metric === k))];
     $("#ysel").innerHTML = ord.map(k => `<option value="${k}"${k === run.primary ? " selected" : ""}>${MET[k].name}${run.targets.some(t => t.metric === k) ? "" : " (no target)"}</option>`).join("");
     const np = $("#nopass");
-    np.innerHTML = run.case === "af" && run.targets.length && !v.ev.chosen ? `<p class="nopass"><b>One circuit was measured, so there is no family to choose from yet.</b> ${afBaseLine(run)}</p>` : run.targets.length && !v.ev.chosen && (v.done || run.source === "measured") && v.vis.length ? `<p class="nopass"><b>No design in this family clears your bar on this data.</b> The nearest ${v.ev.nearest.length === 1 ? "is" : "are"} ${v.ev.nearest.map(d => `<button class="lnk2" data-sel="${esc(d.id)}" style="color:#7c2d12;font-weight:600;text-decoration:underline">${esc(d.id)} (${fmt(d.gates)} gates)</button>`).join(", ")}, ringed on the chart.</p>` : "";
+    np.innerHTML = run.case === "af" && run.targets.length && !v.ev.chosen ? `<p class="nopass"><b>One circuit was measured, so there is no family to choose from yet.</b> ${afBaseLine(run)}</p>` : run.targets.length && !v.ev.chosen && (v.done || isMea(run)) && v.vis.length ? `<p class="nopass"><b>No design in this family clears your bar on this data.</b> The nearest ${v.ev.nearest.length === 1 ? "is" : "are"} ${v.ev.nearest.map(d => `<button class="lnk2" data-sel="${esc(d.id)}" style="color:#7c2d12;font-weight:600;text-decoration:underline">${esc(d.id)} (${fmt(d.gates)} gates)</button>`).join(", ")}, ringed on the chart.</p>` : "";
     np.onclick = e => { const b = e.target.closest("[data-sel]"); if (b) { run.ui.sel = b.dataset.sel; saveRuns(); updOverview(run); } };
   }
-  const stTxt = run.source === "measured" ? "" : v.done ? `Done. ${v.all.length.toLocaleString("en-GB")} designs checked, ${clock(v.T)} on the demo clock.` : run.clock.playing ? v.stage.txt : "Paused. " + v.stage.txt;
+  const stTxt = isMea(run) ? "" : v.done ? `Done. ${v.all.length.toLocaleString("en-GB")} designs checked, ${clock(v.T)} on the demo clock.` : run.clock.playing ? v.stage.txt : "Paused. " + v.stage.txt;
   const s = $("#ovStatus"); if (s.dataset.t !== stTxt) { s.dataset.t = stTxt; s.className = "status" + (v.done ? " done" : ""); s.innerHTML = stTxt ? `${!v.done && run.clock.playing ? '<span class="spin"></span>' : ""}<span>${esc(stTxt)}</span>` : ""; s.style.display = stTxt ? "" : "none"; }
   if (v.funnel && !v.done) { const f = funnelHTML(run, v); if ($("#fun").innerHTML !== f.html) $("#fun").innerHTML = f.html; }
   drawChart(run, v);
@@ -1685,14 +1691,15 @@ function drawChart(run, v) {
   // scales: from all of the run's designs, so the axes do not jump while designs arrive
   const all = v.all, vals = all.map(d => metricOf(run, d, key).v).filter(x => x != null);
   const tgt = run.targets.find(t => t.metric === key);
-  let gLo = Math.min(...all.map(d => d.gates)), gHi = Math.max(...all.map(d => d.gates));
+  const gp = all.map(d => d.gates).filter(x => x > 0);
+  let gLo = gp.length ? Math.min(...gp) : 100, gHi = gp.length ? Math.max(...gp) : 10000;
   if (run.case === "af") { gLo = 800; gHi = 8000; }
   gLo = Math.min(gLo * 0.85, gHi / 3); gHi = gHi * 1.12;
   let vLo, vHi;
   if (M.kind === "frac") { const extra = [tgt ? tgt.value : 1, run.case === "af" ? AF_BASE[key === "specificity" ? "specificity" : "sensitivity_pooled"] : 1]; vLo = Math.max(0, Math.floor((Math.min(...vals, ...extra) - 0.03) * 20) / 20); vHi = 1; if (run.case === "af") vLo = Math.min(vLo, 0.7); }
   else { vLo = 0; vHi = Math.max(...vals, tgt ? tgt.value * 1.3 : 0, 1) * 1.05; }
   if (!vals.length) { vLo = 0; vHi = 1; }
-  const X = gt => x0 + (Math.log(gt) - Math.log(gLo)) / (Math.log(gHi) - Math.log(gLo)) * (x1 - x0);
+  const X = gt => x0 + (Math.log(Math.max(gt, gLo)) - Math.log(gLo)) / (Math.log(gHi) - Math.log(gLo)) * (x1 - x0);
   const Yr = val => M.up ? y1 - (val - vLo) / (vHi - vLo) * (y1 - y0) : y0 + (val - vLo) / (vHi - vLo) * (y1 - y0);
   const Y = val => clamp(Yr(val), y0 - 6, y1 + 6);
   const font = (w, s) => `${w} ${s}px Inter, system-ui, -apple-system, sans-serif`;
@@ -1715,7 +1722,7 @@ function drawChart(run, v) {
   // dots: failing ones first, grey; passing ones on top in their budget's colour and shape
   const pass = v.ev.pass, ok = d => pass.has(d.id), pts = [];
   const shape = (x, y, i, r) => { g.beginPath(); if (i % 4 === 0) g.arc(x, y, r, 0, 7); else if (i % 4 === 1) g.rect(x - r * 0.9, y - r * 0.9, r * 1.8, r * 1.8); else if (i % 4 === 2) { g.moveTo(x, y - r * 1.15); g.lineTo(x + r * 1.1, y + r * 0.8); g.lineTo(x - r * 1.1, y + r * 0.8); g.closePath(); } else { g.moveTo(x, y - r * 1.2); g.lineTo(x + r * 1.2, y); g.lineTo(x, y + r * 1.2); g.lineTo(x - r * 1.2, y); g.closePath(); } };
-  const ordered = v.vis.slice().sort((a, b) => (ok(a) ? 1 : 0) - (ok(b) ? 1 : 0));
+  const ordered = v.vis.filter(d => d.gates > 0).sort((a, b) => (ok(a) ? 1 : 0) - (ok(b) ? 1 : 0));
   const big = run.case === "af" ? 7 : narrow ? 2.4 : 2.9;
   for (const d of ordered) {
     const val = metricOf(run, d, key).v; if (val == null) continue;
@@ -1756,7 +1763,7 @@ function drawChart(run, v) {
     g.fillStyle = "rgb(255 255 255 / .92)"; g.fillRect(lx - 4, ly - 14, tw + 8, 19); g.fillStyle = col; g.textAlign = "left"; g.fillText(txt, lx, ly);
   };
   if (v.ev.chosen) { const p = ring(v.ev.chosen, 8.5, "#141a2e", 2.2); callout(p, `Chosen: ${fmt(v.ev.chosen.gates)} gates`, "#141a2e"); }
-  else if (v.ev.nearest[0] && (v.done || run.source === "measured")) { const d = v.ev.nearest[0], val = metricOf(run, d, key).v; if (val != null) callout({ x: X(d.gates), y: Y(val) }, run.case === "af" ? `Measured circuit: ${fmt(d.gates)} gates` : `Nearest: ${fmt(d.gates)} gates`, "#9f2a20"); }
+  else if (v.ev.nearest[0] && (v.done || isMea(run))) { const d = v.ev.nearest[0], val = metricOf(run, d, key).v; if (val != null) callout({ x: X(d.gates), y: Y(val) }, run.case === "af" ? `Measured circuit: ${fmt(d.gates)} gates` : `Nearest: ${fmt(d.gates)} gates`, "#9f2a20"); }
   const sd = run.ui.sel && selDesign(run, v); if (sd && sd.id === run.ui.sel && (!v.ev.chosen || sd.id !== v.ev.chosen.id)) ring(sd, 7, "#2b55d0", 2.2);
   const hd = CH.hover && v.vis.find(d => d.id === CH.hover); if (hd) ring(hd, 6, "#141a2e", 1.2);
   if (!v.vis.length) { g.fillStyle = "#4a5062"; g.font = font(500, 13); g.textAlign = "center"; g.fillText(run.clock.playing ? "Designs appear here as they are checked." : "No designs yet.", (x0 + x1) / 2, (y0 + y1) / 2); }
@@ -1769,7 +1776,7 @@ const tabHead = (run, title, sub) => `<div class="vh"><h2>${title} ${runMark(run
 // PATIENTS: the per-patient tallies of the selected design, and one patient's day drawn to match them
 function perPatientOK(run, p) {
   return run.targets.every(t => {
-    const v = t.metric === "sensitivity" ? p.caught / p.total : t.metric === "false_alarms_per_hour" ? (p.hours ? p.false_alarms / p.hours : null) : t.metric === "specificity" ? (p.neg_total ? p.neg_correct / p.neg_total : null) : t.metric === "expert_agreement" ? (p.graded ? p.agreed / p.graded : null) : null;
+    const v = t.metric === "sensitivity" ? (p.total ? p.caught / p.total : null) : t.metric === "false_alarms_per_hour" ? (p.hours ? p.false_alarms / p.hours : null) : t.metric === "specificity" ? (p.neg_total ? p.neg_correct / p.neg_total : null) : t.metric === "expert_agreement" ? (p.graded ? p.agreed / p.graded : null) : null;
     return v == null || meets(t, v);
   });
 }
@@ -1779,25 +1786,28 @@ function renderPatients(run, force) {
   if (!force && sig === cur.sig) return; cur.sig = sig;
   if (run.case === "af") { $("#body").innerHTML = `<div class="vis">${tabHead(run, "Per recording", "")}<div class="stage"><p style="margin:0;font-size:14px;line-height:1.6">Per-recording tallies were not recorded in this measured run. What was measured is the total over the ${fmt(800)} unseen test recordings (${fmt(96)} with AF, ${fmt(704)} without): sensitivity ${fmtVal("sensitivity", AF_DESIGN.metrics.sensitivity_pooled)} and specificity ${fmtVal("specificity", AF_DESIGN.metrics.specificity)} per recording.</p></div></div>`; return; }
   if (!d) { $("#body").innerHTML = `<div class="vis">${tabHead(run, `Per ${c.who}`, "")}<div class="stage"><p style="margin:0">No design has been checked yet. Each ${c.who}'s results appear here once the first designs arrive.</p></div></div>`; return; }
-  const pp = d.per_patient, pid = clamp(run.ui.pt || 1, 1, pp.length), p = pp[pid - 1], cont = p.hours != null;
-  const rows = pp.map(x => `<button class="ptb${perPatientOK(run, x) ? "" : " no"}${x.id === pid ? " on" : ""}" data-pt="${x.id}" aria-pressed="${x.id === pid}"><i></i>${c.Who} ${x.id}</button>`).join("");
-  const worst = pp.reduce((a, x) => x.caught / x.total < a.caught / a.total ? x : a, pp[0]);
-  $("#body").innerHTML = `<div class="vis">${tabHead(run, `Each unseen ${c.who}, design ${esc(d.id)}`, `${fmt(d.gates)} gates, ${esc(budgetLabel(run, d.channels).toLowerCase())}. A red dot marks a ${c.who} where this design misses a target. The page judges on the worst ${c.who}: here ${c.Who} ${worst.id}, ${fmtVal("sensitivity", worst.caught / worst.total)} of ${esc(c.events)} caught.`)}
+  const pp = d.per_patient || [];
+  if (!pp.length) { $("#body").innerHTML = `<div class="vis">${tabHead(run, `Per ${c.who}`, "")}<div class="stage"><p style="margin:0">This design has no per-${c.who} tallies.</p></div></div>`; return; }
+  const pid = clamp(run.ui.pt || 1, 1, pp.length), p = pp[pid - 1], cont = p.hours != null, hrs = h => +h.toFixed(h < 10 ? 1 : 0);
+  const rows = pp.map((x, i) => `<button class="ptb${perPatientOK(run, x) ? "" : " no"}${i + 1 === pid ? " on" : ""}" data-pt="${i + 1}" aria-pressed="${i + 1 === pid}"><i></i>${c.Who} ${esc(x.id)}</button>`).join("");
+  const withEv = pp.filter(x => x.total > 0), worst = withEv.length ? withEv.reduce((a, x) => x.caught / x.total < a.caught / a.total ? x : a, withEv[0]) : null;
+  $("#body").innerHTML = `<div class="vis">${tabHead(run, `Each unseen ${c.who}, design ${esc(d.id)}`, `${fmt(d.gates)} gates, ${esc(budgetLabel(run, d.channels).toLowerCase())}. A red dot marks a ${c.who} where this design misses a target.${worst ? ` Lowest share caught: ${c.Who} ${esc(worst.id)}, ${fmtVal("sensitivity", worst.caught / worst.total)} of ${esc(c.events)}.` : ""}`)}
     <div class="stage"><div class="ptiles2" role="group" aria-label="Choose a ${c.who}">${rows}</div>
-      <div class="ptlh"><b>${c.Who} ${pid}</b><span>${p.caught} of ${p.total} ${esc(c.events)} caught (${fmtVal("sensitivity", p.caught / p.total)})</span>${cont ? `<span>${p.false_alarms} false alarms in ${p.hours} hours (${(p.false_alarms / p.hours).toFixed(2)} an hour)</span>` : ""}${p.graded ? `<span>${p.agreed} of ${p.graded} graded hours agree with the experts</span>` : ""}${p.neg_total && !cont ? `<span>${p.neg_correct} of ${p.neg_total} negatives correct</span>` : ""}</div>
+      <div class="ptlh"><b>${c.Who} ${esc(p.id)}</b><span>${p.total ? `${p.caught} of ${p.total} ${esc(c.events)} caught (${fmtVal("sensitivity", p.caught / p.total)})` : `no ${esc(c.events)} in this recording`}</span>${cont ? `<span>${p.false_alarms} false alarms in ${hrs(p.hours)} hours (${(p.false_alarms / p.hours).toFixed(2)} an hour)</span>` : ""}${p.graded ? `<span>${p.agreed} of ${p.graded} graded hours agree with the experts</span>` : ""}${p.neg_total && !cont ? `<span>${p.neg_correct} of ${p.neg_total} negatives correct</span>` : ""}</div>
       ${cont ? patientTimeline(run, d, p) : ""}
-    </div><p class="vf">Simulated ${c.whoP}: the tallies come from the simulation model (see Sources); the times on the timeline are drawn to match the tallies.</p></div>`;
+    </div><p class="vf">${isSim(run) ? `Simulated ${c.whoP}: the tallies come from the simulation model (see Sources); the times on the timeline are drawn to match the tallies.` : `The tallies are measured; the times on the timeline are not in the results file, so they are drawn to match the tallies.`}</p></div>`;
   $(".ptiles2").onclick = e => { const b = e.target.closest("[data-pt]"); if (b) { run.ui.pt = +b.dataset.pt; renderPatients(run, true); } };
 }
 function patientTimeline(run, d, p) {
-  const R = rng(hashStr(d.id + "/" + p.id)), H = p.hours, W = 1000, c = caseOf(run);
+  const R = rng(hashStr(d.id + "/" + p.id)), H = Math.max(0.1, p.hours), W = 1000, c = caseOf(run);
   const ev = Array.from({ length: p.total }, () => R() * H).sort((a, b) => a - b);
   const missIdx = new Set(); while (missIdx.size < p.total - p.caught) missIdx.add(Math.floor(R() * p.total));
   const fas = Array.from({ length: p.false_alarms }, () => R() * H).sort((a, b) => a - b);
   const X = h => 20 + h / H * (W - 40), hm = h => `${String(Math.floor(h)).padStart(2, "0")}:${String(Math.floor(h % 1 * 60)).padStart(2, "0")}`;
   let s = `<svg class="tl5" viewBox="0 0 ${W} 120" role="img" aria-label="${c.Who} ${p.id}: ${p.caught} caught, ${p.total - p.caught} missed, ${p.false_alarms} false alarms over ${H} hours">`;
   s += `<line x1="20" x2="${W - 20}" y1="60" y2="60" stroke="#d5d8e0"/>`;
-  for (let h = 0; h <= H; h += 6) s += `<line x1="${X(h)}" x2="${X(h)}" y1="56" y2="64" stroke="#b2b6c2"/><text x="${X(h)}" y="112" font-size="12" text-anchor="middle" fill="#4a5062">${h} h</text>`;
+  const step = H > 12 ? 6 : H > 4 ? 1 : 0.5;
+  for (let h = 0; h <= H + 1e-9; h += step) s += `<line x1="${X(h)}" x2="${X(h)}" y1="56" y2="64" stroke="#b2b6c2"/><text x="${X(h)}" y="112" font-size="12" text-anchor="middle" fill="#4a5062">${step < 1 && h % 1 ? Math.round(h * 60) + " min" : h + " h"}</text>`;
   ev.forEach((h, i) => { s += missIdx.has(i) ? `<circle cx="${X(h)}" cy="40" r="4.5" fill="#c2362b"/>` : `<line x1="${X(h)}" x2="${X(h)}" y1="30" y2="52" stroke="#0f7a55" stroke-width="1.6"/>`; });
   fas.forEach(h => { s += `<rect x="${X(h) - 4}" y="72" width="8" height="8" rx="1.5" fill="#c98a12"/>`; });
   s += `<text x="20" y="16" font-size="12" fill="#262c40">Green: caught. Red: missed. Amber, below the line: false alarm.</text></svg>`;
@@ -1885,7 +1895,7 @@ function chipCard(run, v, d) {
 function chatEvents(run) {
   const v = viewAt(run), c = caseOf(run), pr = preset(run.preset), ev = [], tl = v.tl;
   const tg = run.targets.length ? andList(run.targets.map(t => `${MET[t.metric].name.toLowerCase()} ${fmtTarget(t)}`)) : "no targets yet";
-  if (run.source === "measured") {
+  if (run.case === "af") {
     ev.push({ t: 0, k: "spec", txt: `This is the measured AF feasibility run on ${DS.cinc17.name}: ${fmt(5788)} recordings split by recording, ${fmt(800)} held out for testing, ${fmt(96)} of them with AF.` });
     ev.push({ t: 0, k: "check", txt: `One circuit was compiled: ${fmt(AF_DESIGN.gates)} gates, longest path ${AF_DESIGN.depth} cells. It matched its own model on ${fmt(3880)} of ${fmt(3880)} test windows, with 0 mismatches.` });
     ev.push({ t: 0, k: "report", txt: `Against your targets (${tg}): sensitivity ${fmtVal("sensitivity", AF_DESIGN.metrics.sensitivity_pooled)} and specificity ${fmtVal("specificity", AF_DESIGN.metrics.specificity)} per recording. The full-precision model reached ${fmtVal("sensitivity", AF_BASE.sensitivity_pooled)} and ${fmtVal("specificity", AF_BASE.specificity)}, so the shortfall is a model gap, not a hardware gap.` });
@@ -1903,20 +1913,20 @@ function chatEvents(run) {
     ev.push({ t: v.T, k: "report", txt: fe.chosen ? `Done. The smallest design that clears every target is ${fe.chosen.id}: ${fmt(fe.chosen.gates)} gates, ${budgetLabel(run, fe.chosen.channels).toLowerCase()}. The chart shows what each smaller design gives up.` : "Done. No design in this family clears your bar on this data; the nearest designs are ringed on the chart." });
   }
   for (const n of run.notes || []) { ev.push({ t: n.t, k: "you", txt: n.text }); ev.push({ t: n.t + 0.001, k: "reply", txt: "Noted with the run. In this simulated demo a note does not change the designs, and no model was called." }); }
-  return ev.filter(e => e.t <= v.t + 1e-6 || run.source === "measured").sort((a, b) => a.t - b.t);
+  return ev.filter(e => e.t <= v.t + 1e-6 || isMea(run)).sort((a, b) => a.t - b.t);
 }
 const CHAT_K = { spec: ["file", "#2b55d0"], propose: ["bulb", "#6b46c1"], train: ["flask", "#a04812"], check: ["chip", "#0f7a55"], report: ["check", "#141a2e"], reply: ["check", "#4a5062"] };
 function renderChat(run, force) {
   const evs = chatEvents(run), sig = evs.length + "";
   if (!force && sig === cur.sig) return;
   const first = force || !$("#feed"); cur.sig = sig;
-  const html = evs.map(e => e.k === "you" ? `<div class="you"><p>${esc(e.txt)}</p></div>` : `<div class="msg" style="--rc:${CHAT_K[e.k][1]}"><span class="mav" style="background:${CHAT_K[e.k][1]}1a;color:${CHAT_K[e.k][1]}">${I(CHAT_K[e.k][0])}</span><div><div class="who">${APP.name}<span class="when">${run.source === "measured" ? "measured run" : clock(e.t)}</span></div><div class="mt">${esc(e.txt)}</div></div></div>`).join("");
+  const html = evs.map(e => e.k === "you" ? `<div class="you"><p>${esc(e.txt)}</p></div>` : `<div class="msg" style="--rc:${CHAT_K[e.k][1]}"><span class="mav" style="background:${CHAT_K[e.k][1]}1a;color:${CHAT_K[e.k][1]}">${I(CHAT_K[e.k][0])}</span><div><div class="who">${APP.name}<span class="when">${isMea(run) ? "measured run" : clock(e.t)}</span></div><div class="mt">${esc(e.txt)}</div></div></div>`).join("");
   if (first) {
     $("#body").innerHTML = `<div class="chat"><div class="feed" id="feed"><div class="fin"><p class="cnote2">${isSim(run) ? `This simulated run narrates its own steps. No model was called; ${esc(agentLabel(run.agent))} is the label the run started with.` : "The measured run's results, as recorded."}</p><div id="msgs">${html}</div></div></div>
       <div class="comp"><div class="box"><textarea id="note" rows="1" aria-label="Add a note to this run" placeholder="Add a note to this run" data-voice></textarea><button class="send" id="sendN" aria-label="Add note">${I("up")}</button></div></div></div>`;
     const ta = $("#note"), sb = $("#sendN");
     ta.addEventListener("input", () => sb.classList.toggle("ready", !!ta.value.trim()));
-    const send = () => { const t = ta.value.trim(); if (!t) return; (run.notes = run.notes || []).push({ t: run.source === "measured" ? 0 : viewAt(run).t, text: t }); ta.value = ""; sb.classList.remove("ready"); saveRuns(); renderChat(run, false); };
+    const send = () => { const t = ta.value.trim(); if (!t) return; (run.notes = run.notes || []).push({ t: isMea(run) ? 0 : viewAt(run).t, text: t }); ta.value = ""; sb.classList.remove("ready"); saveRuns(); renderChat(run, false); };
     sb.onclick = send; ta.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
   } else $("#msgs").innerHTML = html;
   const f = $("#feed"); f.scrollTop = f.scrollHeight;
@@ -1929,9 +1939,9 @@ function simModelText() {
 function sourcesHTML(run) {
   const c = caseOf(run), file = run.case === "neonatal-eeg" && MEASURED.eeg;
   const dsl = file && Array.isArray(file.datasets) ? file.datasets : (run.case === "custom" ? [] : CASES[run.case].datasets.map(k => DS[k]));
-  const dsH = dsl.length ? dsl.map(x => `<div class="src"><div class="sn">${esc(x.name)}<span class="mk no">${esc(x.licence || "")}</span></div><div class="sw2">${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.url.replace(/^https:\/\//, ""))}</a>` : ""}${x.subjects ? ` · ${esc(x.subjects)}` : ""}</div><p class="sk">${esc(x.credit || "")}</p></div>`).join("") : `<p class="sk">No dataset: this run is simulated from the fields of your brief.</p>`;
-  const how = run.source === "measured" ? `<p class="sk">Measured. One circuit was compiled from a model trained on the training recordings and run on the ${fmt(800)} held-out test recordings. The full-precision model's figures are shown as a reference line, not as a chip. Funnel counts were not recorded in this run, so none are shown.</p>`
-    : file ? `<p class="sk">Measured on open data, from the results file for this case. ${esc(file.notes || "")}</p>` : simModelText();
+  const dsH = dsl.length ? dsl.map(x => `<div class="src"><div class="sn">${esc(x.name)}<span class="mk no">${esc(x.licence || "")}</span></div><div class="sw2">${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.url.replace(/^https:\/\//, ""))}</a>` : ""}${x.subjects ? ` · ${esc(typeof x.subjects === "number" ? `${x.subjects} ${caseOf(run).whoP}` : x.subjects)}` : ""}</div><p class="sk">${esc(x.credit || "")}</p></div>`).join("") : `<p class="sk">No dataset: this run is simulated from the fields of your brief.</p>`;
+  const how = run.case === "af" ? `<p class="sk">Measured. One circuit was compiled from a model trained on the training recordings and run on the ${fmt(800)} held-out test recordings. The full-precision model's figures are shown as a reference line, not as a chip. Funnel counts were not recorded in this run, so none are shown.</p>`
+    : file ? `<p class="sk">Measured on open data, from the results file for this case. Every figure below the chart comes from it.</p>${Array.isArray(file.notes) ? `<ul>${file.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : `<p class="sk">${esc(file.notes || "")}</p>`}` : simModelText();
   return `<div class="srcp"><h4>Data</h4>${dsH}<h4>Split</h4><p class="sk">${esc(file && file.split ? file.split : run.case === "custom" ? "Split by patient: 12 simulated patients are held out; no design trains on them." : CASES[run.case].split)}</p>
     <h4>How these numbers are made</h4>${how}
     <h4>How numbers are marked</h4><ul><li>Measured values are plain text.</li><li>${estSpan("Estimates", "An example of the estimate style")} are italic with a dotted underline; hover one to see its assumption.</li><li>Simulated runs carry the badge “Simulated run, demo data” and a small <span class="mk sim">simulated</span> mark on the chart and tiles.</li></ul>
@@ -2027,7 +2037,14 @@ function loadMeasured() {
     if (!j || !Array.isArray(j.designs) || !j.designs.length) return;
     j.designs.forEach(d => { d.source = "measured"; });
     MEASURED.eeg = j;
-    for (const r of runs) if (r.case === "neonatal-eeg") { delete r._d; delete r._tl; if (j.primary && MET[j.primary]) r.primary = j.primary; }
+    const prim = String(j.primary || "").replace(/_(worst|pooled)$/, "");
+    for (const r of runs) if (r.case === "neonatal-eeg") {
+      delete r._d; delete r._tl;
+      if (/continuous/.test(j.task || "")) r.task = "continuous";
+      if (r.canned) { r.detect = "Seizures (the brain-injury grade is not measured yet)"; r.task = "continuous"; }
+      if (r.canned) r.targets = r.targets.filter(t => j.designs.some(d => metricOf(r, d, t.metric).v != null));
+      if (MET[prim] && r.targets.some(t => t.metric === prim)) r.primary = prim;
+    }
     viewCache = new WeakMap(); render();
   }).catch(() => { /* no file: the simulated cloud stays, marked simulated */ });
 }
