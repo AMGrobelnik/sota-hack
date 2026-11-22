@@ -14,6 +14,7 @@ import time
 import weakref
 from collections.abc import Callable
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -90,7 +91,7 @@ async def run_agent(
             run = RunDir.create(config.resolved_runs_dir(), run_id)
         run, result = await _run_agent(spec, config, run, mode=mode, tier=chosen_tier, on_runner=on_runner)
     if summary:
-        await summarise_into_record(run, result)
+        await summarise_into_record(run, result, settings_file=config.llm.summaries_file)
     return run, result
 
 
@@ -161,20 +162,23 @@ async def _run_agent(
     return run, result
 
 
-async def summarise_into_record(run: RunDir, result: AgentResult) -> None:
+async def summarise_into_record(
+    run: RunDir, result: AgentResult, *, settings_file: Path | None = None
+) -> None:
     """Summarise a finished run on OpenRouter and write it into ``run.json``.
 
     ``result.summary["run"]`` is three bullets on the whole run; a final answer
     longer than ``label_min_output_chars`` also gets ``output_label``. Each
     carries its own cost, which is added to the record's ``llm_cost_usd``.
     Without an OpenRouter key this is skipped with one log line. A summary
-    that cannot be written is logged; it never fails the run.
+    that cannot be written is logged; it never fails the run. ``settings_file``
+    is the config's summary-chain override (default: the bundled chain).
     """
     if not has_openrouter_key():
         logger.info("run {}: no OpenRouter summary ({} is not set)", run.run_id, OPENROUTER_KEY_ENV)
         return
     try:
-        settings = load_summary_settings()
+        settings = load_summary_settings(settings_file)
         run_summary = await summarise_run(run.read_events(), result, settings=settings)
         summaries = {"run": run_summary.to_dict()}
         if len(result.final_text) > settings.label_min_output_chars:

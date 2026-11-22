@@ -141,7 +141,10 @@ URL, model and key are filled in under `providers.callosum`.
 Every summary uses one OpenRouter model,
 `openai/gpt-oss-120b`, walked provider by provider: each tier pins one
 provider, the next tier is the fallback, and the whole walk has one time
-budget. The settings are in `src/chipin_backend/llm/summaries.yaml`.
+budget. The settings are in `src/chipin_backend/llm/summaries.yaml`; set
+`llm.summaries_file` in the config to use another file of the same shape.
+Every summary goes through `summarise()` in `llm/summarise.py`, so a new
+summary kind inherits the chain.
 
 - `result.summary.run`: three bullets on what the run did, built from a
   digest of its events, with the run's end pinned first.

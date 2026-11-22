@@ -108,6 +108,82 @@ async def test_no_key_sends_nothing() -> None:
     assert result.error == "OPENROUTER_API_KEY is not set" and fake.requests == []
 
 
+def _timeout(request: httpx.Request) -> httpx.Response:
+    raise httpx.ReadTimeout("slow", request=request)
+
+
+FALL_THROUGH = {
+    "rate limited": httpx.Response(429, json={"error": {"message": "slow down"}}),
+    "server error": httpx.Response(503, text="busy"),
+    "timeout": _timeout,
+    "error body": httpx.Response(200, json={"error": {"code": 502, "message": "upstream"}}),
+    "unreadable body": httpx.Response(200, text="not json"),
+    "cut off": _reply("cut off mid", finish="length"),
+}
+
+
+@pytest.mark.parametrize("condition", sorted(FALL_THROUGH))
+async def test_each_failure_falls_through_to_the_next_tier(key: None, condition: str) -> None:
+    failure = FALL_THROUGH[condition]
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(json.loads(request.content)["provider"]["only"][0])
+        if len(seen) == 1:
+            return failure(request) if callable(failure) else failure
+        return _reply("Second tier answered.", provider="Groq")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        result = await summarise(prompt="p", system="s", client=client)
+    settings = load_summary_settings()
+    assert seen == settings.providers[:2]
+    assert result.text == "Second tier answered." and result.provider == "Groq"
+    assert result.model == "openai/gpt-oss-120b" and result.error == ""
+
+
+async def test_empty_reply_is_retried_once_then_falls_through(key: None) -> None:
+    fake = FakeOpenRouter([_reply(""), _reply(""), _reply("Answered.")])
+    async with fake.client() as client:
+        result = await summarise(prompt="p", system="s", client=client)
+    settings = load_summary_settings()
+    assert fake.providers() == [settings.providers[0]] * 2 + [settings.providers[1]]
+    assert result.text == "Answered."
+
+
+async def test_every_tier_failing_returns_an_empty_summary_not_an_error(key: None) -> None:
+    settings = load_summary_settings()
+    fake = FakeOpenRouter([httpx.Response(503, text="busy") for _ in settings.providers])
+    async with fake.client() as client:
+        result = await summarise(prompt="p", system="s", client=client)
+    assert result.text == "" and result.model == ""
+    assert fake.providers() == settings.providers
+    assert result.error.count("HTTP 503") == len(settings.providers)
+
+
+async def test_settings_file_overrides_the_chain_and_the_answer_names_its_model(
+    key: None, tmp_path: Path
+) -> None:
+    override = tmp_path / "chain.yaml"
+    override.write_text(
+        yaml.safe_dump({"model": "vendor/other-model", "providers": ["alpha", "beta"]}), encoding="utf-8"
+    )
+    settings = load_summary_settings(override)
+    fake = FakeOpenRouter([httpx.Response(503, text="busy"), _reply("Beta answered.", provider="beta")])
+    async with fake.client() as client:
+        result = await summarise(prompt="p", system="s", settings=settings, client=client)
+    assert fake.providers() == ["alpha", "beta"]
+    assert fake.requests[0]["model"] == "vendor/other-model"
+    assert result.to_dict()["model"] == "openai/gpt-oss-120b"  # as reported by OpenRouter
+    assert result.to_dict()["provider"] == "beta"
+
+
+def test_config_names_the_override_file(tmp_path: Path) -> None:
+    from chipin_backend.config import LlmConfig
+
+    assert LlmConfig().summaries_file is None
+    assert LlmConfig(summaries_file=tmp_path / "chain.yaml").summaries_file == tmp_path / "chain.yaml"
+
+
 def _events() -> list[AgentEvent]:
     return [
         AgentEvent("agent_start", "a", {"model": "m"}),
