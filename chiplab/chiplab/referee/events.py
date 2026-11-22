@@ -15,6 +15,7 @@ Guards against known timescoring 0.0.7 pitfalls:
 """
 from __future__ import annotations
 
+import hashlib
 import math
 from importlib import metadata
 
@@ -173,14 +174,22 @@ def _score_mask(ref, hyp, fs: float, P) -> tuple[int, int, int]:
     return int(es.tp), int(es.fp), int(es.refTrue)
 
 
-def _count(recs: list[dict], P, hyp_of=None) -> list[dict]:
-    """Per-recording counts, summing the recording's segments. hyp_of(rec) overrides the decisions."""
+def _count(recs: list[dict], P, hyp_of=None, memo: dict | None = None) -> list[dict]:
+    """Per-recording counts, summing the recording's segments. hyp_of(rec) overrides the decisions; memo reuses
+    the result of a segment whose decision mask was already scored (the threshold sweep repeats many)."""
     rows = []
-    for r in recs:
+    for i, r in enumerate(recs):
         hyp = r["decisions"] if hyp_of is None else hyp_of(r)
         tp = fp = ref = ns = 0
         for a, b in r["segments"]:
-            t, f, e = _score_mask(r["labels"][a:b], hyp[a:b], r["fs"], P)
+            key = (i, a, hashlib.blake2b(np.packbits(hyp[a:b]).tobytes(), digest_size=16).digest()) \
+                if memo is not None else None
+            if key is not None and key in memo:
+                t, f, e = memo[key]
+            else:
+                t, f, e = _score_mask(r["labels"][a:b], hyp[a:b], r["fs"], P)
+                if key is not None:
+                    memo[key] = (t, f, e)
             tp += t; fp += f; ref += e; ns += b - a
         rows.append({"patient_id": r["patient_id"], "recording_id": r["recording_id"], "tp": tp, "fp": fp,
                      "refTrue": ref, "numSamples": ns, "hours": ns / r["fs"] / 3600.0})
@@ -255,8 +264,10 @@ def _sweep(recs: list[dict], P, policy: str, targets, thresholds: dict | None, n
     if any(r["scores"] is None for r in recs):
         return {"skipped": "every recording needs scores for the threshold sweep"}
 
+    memo: dict = {}
+
     def at(t: float) -> dict:
-        rows = _count(recs, P, hyp_of=lambda r: r["scores"] >= t)
+        rows = _count(recs, P, hyp_of=lambda r: r["scores"] >= t, memo=memo)
         pats = _patients(rows)
         po = _pooled(rows, policy)
         return {"threshold": t, "sensitivity": po["sensitivity"], "fa_per_hour": po["fa_per_hour"],

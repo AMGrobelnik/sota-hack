@@ -206,7 +206,7 @@ def test_sweep_auc_bootstrap_provenance():
     assert lo <= out["auc"]["per_patient_median"] <= hi
     ci = out["bootstrap"]["ci95"]["sensitivity_pooled"]
     assert ci[0] <= ci[1] and out["bootstrap"]["n_resamples"] == 200
-    again = E.score(_scored(), n_bootstrap=200)
+    again = E.score(_scored(), n_bootstrap=200, n_thresholds=10)
     assert again["bootstrap"] == out["bootstrap"]                        # fixed seed
     pv = out["provenance"]
     assert pv["timescoring_version"] == "0.0.7" and pv["parameters"]["merge_s"] == 90.0
@@ -246,10 +246,11 @@ def test_tool_and_progress(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     f = tmp_path / "in.json"
     f.write_text(json.dumps({"recordings": _scored(3)}))
-    res = tools.TOOLS["score_events"]["fn"](path=str(f), n_bootstrap=50)
+    res = tools.TOOLS["score_events"]["fn"](path=str(f), n_bootstrap=50, n_thresholds=20)
     assert res["status"] == "ok" and res["per_recording"][0]["numSamples"] == 3600
     assert not log.exists() or "event_sensitivity" not in log.read_text()   # off by default
-    res = tools.TOOLS["score_events"]["fn"](recordings=_scored(3), n_bootstrap=50, progress_metrics=True)
+    res = tools.TOOLS["score_events"]["fn"](recordings=_scored(3), n_bootstrap=50, n_thresholds=20,
+                                            progress_metrics=True)
     lines = [ln.split() for ln in log.read_text().splitlines() if ln.startswith("metric")]
     sent = {ln[1]: ln for ln in lines}
     for k in ("event_sensitivity", "fa_per_hour", "worst_patient_sensitivity", "auc"):

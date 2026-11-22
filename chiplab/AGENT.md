@@ -279,7 +279,7 @@ Fair event-level referee (timescoring 0.0.7): your detections vs reference label
   - `score_threshold`: float — decisions = scores >= this where decisions are missing (0.5)
   - `fa_targets`: list[float] — FA/h targets for the sweep (0.1, 0.36, 1.0)
   - `thresholds`: dict — {target: threshold} chosen on other data; skips the same-data sweep
-  - `n_thresholds`: int — score quantiles in the sweep, at most 200 (200)
+  - `n_thresholds`: int — score quantiles in the sweep, at most 200; each one rescores every recording, so lower it for many long recordings with noisy scores (200)
   - `n_bootstrap`: int — patient-level bootstrap resamples (2000)
   - `seed`: int — bootstrap seed (0)
   - `progress_metrics`: bool — send event_sensitivity, fa_per_hour, worst_patient_sensitivity, auc to ./progress (false)
