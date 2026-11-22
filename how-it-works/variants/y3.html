@@ -23,9 +23,16 @@
    - Recorded run (token captions, summary counts, chat, measured row 3):
      dashboard/data/runs/20261122-050322-2c7896.json and
      dashboard/data/runs/index.json on origin/gh-pages.
-   - 2,330 gates, 3,880 of 3,880 windows, 256 per batch:
-     dashboard/data/af-candidates.json on origin/gh-pages.
-   - 17 min 50 s run with placeholder weights: m3/e2e/REPORT.md on origin/main.
+   - 2,330 gates, 3,880 of 3,880 windows, 256 per batch; batched 1,625.5
+     against 27.6 candidates a minute (search_rate), about 59 times
+     (1,625.5 / 27.6 = 58.9): dashboard/data/af-candidates.json on origin/gh-pages.
+   - 4 to 32 minutes, brief to verified gates: duration_s 235.516 to 1896.954
+     of the five recorded runs, dashboard/data/runs/index.json on origin/gh-pages.
+   - 12 to 36 months: OpenROAD: Toward a Self-Driving, Open-Source Digital
+     Layout Implementation Tool Chain (GOMACTech 2019),
+     https://vlsicad.ucsd.edu/Publications/Conferences/370/c370.pdf
+   - compile-stream in the compile stage: backend/README.md on origin/main.
+   Dropped as untraceable: the 17 min 50 s run with placeholder weights.
    ===================================================================== */
 window.COPY = {
   brand: 'ChipIn',
@@ -75,7 +82,7 @@ window.COPY = {
       tok: 'The chip waits at the report stage', rec: false },
     { key: 'stream', title: 'How a run reports',
       lines: ['Agents report stages, numbers and files as they go. The dashboard draws from one event stream.',
-              'A smaller, cheaper model writes short summaries at every level, so a long run stays readable.'],
+              'A smaller model writes short summaries at every level, so a long run stays readable.'],
       tok: '1,765 events, 723 summary lines', rec: true },
     { key: 'talk', title: 'Talk to the agent',
       lines: ['Message the orchestrator during a run to steer it, ask something or stop it. It answers in the same stream.',
@@ -86,7 +93,10 @@ window.COPY = {
               'That shows the gates equal the model. It does not show the chip is clinically good.'],
       tok: 'Level 3: simulation, proof, streaming RTL', rec: true },
     { key: 'meas', title: 'Measured so far',
-      lines: ['Only these figures are stated as measured. Each comes with its scope.'],
+      lines: ['Only these figures are stated as measured. Each comes with its scope.',
+              'Typical hardware design cycle without a large team: 12 to 36 months (OpenROAD, 2019). Our runs, brief to verified gates only: 4 to 32 minutes.',
+              'Different scopes: our minutes cover only brief to verified gate-level design on synthetic data; layout, signoff, fabrication, testing and clinical approval are not included.'],
+      link: { text: 'OpenROAD: Toward a Self-Driving, Open-Source Digital Layout Implementation Tool Chain (GOMACTech, 2019)', href: 'https://vlsicad.ucsd.edu/Publications/Conferences/370/c370.pdf' },
       tok: 'Caught 5 of 7 held-out seizures: target missed', rec: true },
     { key: 'limits', title: 'Limits',
       lines: ['ChipIn is a feasibility tool, not clinical evidence.',
@@ -194,7 +204,7 @@ window.COPY = {
       lead: 'A trained model becomes a fixed circuit, with the weights wired in.',
       does: 'Turns each kept model into logic gates, weights wired in as constants, so the chip has no weight memory.',
       fan: ['Kept design 1', 'Kept design 2', 'Kept designs 3 and 4'],
-      tools: ['ingest-model', 'compile-ir', 'synthesize', 'count-luts', 'map-to-process', 'ingest-batch', 'synthesize-batch'],
+      tools: ['ingest-model', 'compile-ir', 'compile-stream', 'synthesize', 'count-luts', 'map-to-process', 'ingest-batch', 'synthesize-batch'],
       out: 'A netlist per design, with gate count and logic depth.',
       keeps: 'The smallest netlist for each design.',
       tok: '45 gates, logic depth 11' },
@@ -295,7 +305,7 @@ window.COPY = {
     events: ['run.started', 'stage', 'subagent.started', 'subagent.finished', 'stage.merged', 'message', 'tool', 'metric', 'chosen', 'artifact', 'summary', 'cost', 'run.finished'],
     backend: 'The backend joins these lines, the agents’ messages and their tool calls into one stream, saved with the run. The dashboard draws from it.',
     sumTitle: 'Summaries at every level',
-    sumModel: 'A smaller, cheaper model writes them, tried provider by provider through a fallback chain. The counts are the summary lines in the recorded run.',
+    sumModel: 'A smaller model writes them, tried provider by provider through a fallback chain. The counts are the summary lines in the recorded run.',
     levels: [
       { name: 'item', per: 'One per message, tool call or metric', n: 595 },
       { name: 'group', per: 'One per run of one agent’s items', n: 86 },
@@ -332,7 +342,7 @@ window.COPY = {
     title: 'What is checked',
     levels: [
       { n: '1', name: 'Bit-exact simulation', text: 'The gates run on test vectors; outputs compared bit for bit with the model.', tool: 'simulate', key: true },
-      { n: '2', name: 'Formal equivalence', text: 'A proof that the gates agree with the model on every input.', tool: 'prove-equivalence', key: true },
+      { n: '2', name: 'Formal equivalence', text: 'A proof that the gates agree with the model on every input, when the proof finishes in time.', tool: 'prove-equivalence', key: true },
       { n: '3', name: 'Streaming RTL simulation and lint', text: 'The clocked chip, fed frame by frame.', tool: 'rtl-simulate' },
       { n: '4', name: 'Gate-level test after layout', text: 'The laid-out chip, tested at gate level.', tool: 'tt-package' },
       { n: '5', name: 'Real hardware', text: 'Never set automatically.', tool: '' }
@@ -354,14 +364,14 @@ window.COPY = {
       { fig: '2,330 gates. Outputs matched the model on 3,880 of 3,880 test windows.',
         scope: 'One atrial-fibrillation feasibility circuit.' },
       /* dashboard/data/af-candidates.json: funnel.trained, search_rate.batch */
-      { fig: '256 candidate models trained together, in one GPU batch.',
-        scope: 'The same feasibility search.' },
+      { fig: '256 candidate models trained together as one batch on one GPU: about 59 times faster than one at a time, 1,625.5 against 27.6 candidates a minute.',
+        scope: 'The same feasibility search. One run, on one machine.' },
       /* dashboard/data/runs/index.json and runs/20261122-050322-2c7896.json (report.md inside) */
-      { fig: 'One recorded Lite run: 5 batches of 3 subagents, 139 tool calls, 1,765 events, 31 min 37 s. It chose a 45-gate chip at verification level 3.',
+      { fig: 'One recorded Lite run: 5 batches of 3 subagents, 139 tool calls, 1,765 events, 1,896.954\u00a0s. It chose a 45-gate chip at verification level 3.',
         scope: 'Synthetic data. The chip caught 5 of 7 held-out seizures, short of the 80% target.' },
-      /* m3/e2e/REPORT.md on origin/main */
-      { fig: 'One run through the real chip-lab tools: three classifiers and a front-end compiled, each bit-exact on 100,000 random vectors and formally proved, in 17 min 50 s.',
-        scope: 'Placeholder weights, so no detection figures.' }
+      /* runs/index.json durations; OpenROAD, GOMACTech 2019 */
+      { fig: 'Teams without large design staffs typically see hardware design cycles of 12 to 36 months (OpenROAD, 2019). Our five recorded runs went from a one-paragraph brief to verified logic gates in 4 to 32 minutes, on synthetic data.',
+        scope: 'Different scopes: our minutes cover only brief to verified gate-level design on synthetic data; layout, signoff, fabrication, testing and clinical approval are not included.' }
     ],
     note: 'Nothing else on this page is stated as measured.'
   }
@@ -413,6 +423,8 @@ main { padding-top: var(--bar); }
 .step h1 { font-size: 46px; }
 .step h2 { font-size: 36px; }
 .step p { margin: 0 0 12px; color: #c4d1df; font-size: 18px; line-height: 1.48; max-width: 36ch; }
+.step p.src { font-size: 14.5px; }
+.step p.src a { color: var(--signal); text-underline-offset: 3px; }
 .step .kick { font-size: 15px; color: var(--signal); font-weight: 600; margin-bottom: 10px; }
 .step .hint { color: var(--mute); font-size: 15px; margin-top: 22px; }
 .step .tokcap { font-family: var(--mono); font-size: 14px; color: #bfe9d2; display: flex; gap: 10px; align-items: baseline; }
@@ -1064,7 +1076,7 @@ footer p { font-size: 13.5px !important; color: #8597ad !important; margin: 0 0 
       o.stage = si; o.kicker = PI.stageWord.replace('{i}', si + 1); o.title = sd.name; o.lines = [sd.lead];
       o.tok = sd.tok; o.rec = true; o.form = sd.form;
     } else {
-      o.title = fill(s.title); o.lines = s.lines.map(fill); o.hint = s.hint; o.tok = s.tok; o.rec = s.rec;
+      o.title = fill(s.title); o.lines = s.lines.map(fill); o.hint = s.hint; o.tok = s.tok; o.rec = s.rec; o.link = s.link;
       o.form = STEPFORM[s.key] || 'chip';
     }
     o.rect = (s.key === 'intro' || s.key === 'limits') ? ALL : REG[s.key];
@@ -1187,6 +1199,7 @@ footer p { font-size: 13.5px !important; color: #8597ad !important; margin: 0 0 
       var ft = H('footer', '', null, tx); H('p', '', C.footer, ft); H('p', '', C.source, ft);
     } else {
       st.lines.forEach(function (l) { H('p', '', l, tx); });
+      if (st.link) { var lk = H('a', '', st.link.text, H('p', 'src', null, tx)); lk.href = st.link.href; lk.target = '_blank'; lk.rel = 'noopener'; }
       if (st.hint) H('p', 'hint', st.hint, tx);
     }
     if (st.key !== 'limits') { var cap = H('p', 'tokcap', null, tx); H('b', '', st.rec ? C.hud.rec : C.tokWord, cap); cap.appendChild(document.createTextNode(st.tok)); }

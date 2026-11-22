@@ -51,6 +51,13 @@
   - origin/gh-pages: dashboard/data/neonatal-eeg.json
       Best pooled 30 of 113 held-out events, 2,451 gates, 1.507 false alarms per hour;
       5 designs bit-exact and formally proved; gates cover the classifier only.
+  - origin/gh-pages: dashboard/data/runs/index.json (durations)
+      Five recorded runs, duration_s 235.516 to 1896.954: 4 to 32 minutes, brief to verified gates.
+  - OpenROAD: Toward a Self-Driving, Open-Source Digital Layout Implementation Tool Chain
+      (GOMACTech 2019), https://vlsicad.ucsd.edu/Publications/Conferences/370/c370.pdf:
+      typical hardware design cycles of 12-36 months for teams without large design staffs.
+  - origin/gh-pages: dashboard/data/af-candidates.json, search_rate
+      batch 256, batched_per_min 1625.5, single_per_min 27.6: about 59 times (1,625.5 / 27.6 = 58.9).
   Dropped as untraceable: about eight questions; agent run in 17 min 50 s for $1.42;
   smaller-model run at about $0.10.
 -->
@@ -124,6 +131,11 @@ window.COPY = {
     { key: 'meas2', title: 'Measured so far: open recordings',
       lines: ['Three feasibility results on open data.',
               'The AF baseline matches published accuracy. Its chip is much smaller, but it does a smaller, different function, so it is not a win.'] },
+    { key: 'meas3', title: 'How long it takes',
+      lines: ['Typical hardware design cycle without a large team: 12 to 36 months (OpenROAD, 2019). Our runs, brief to verified gates only: 4 to 32 minutes.',
+              'Different scopes: our minutes cover only brief to verified gate-level design on synthetic data; layout, signoff, fabrication, testing and clinical approval are not included.',
+              'Training 256 candidate designs as one batch on one GPU ran about 59 times faster than one at a time. One run, on one machine.'],
+      link: { text: 'OpenROAD: Toward a Self-Driving, Open-Source Digital Layout Implementation Tool Chain (GOMACTech, 2019)', href: 'https://vlsicad.ucsd.edu/Publications/Conferences/370/c370.pdf' } },
     { key: 'limits', title: 'Limits',
       lines: ['ChipIn is a feasibility tool, not clinical evidence. Nothing here is medically certified.',
               'The device maker keeps clinical validation and regulatory responsibility.',
@@ -413,7 +425,16 @@ window.COPY = {
         { fig: 'Neonatal EEG: the best design caught 30 of 113 held-out events, with 2,451 gates and 1.507 false alarms per hour.',
           scope: 'Every design misses every event in at least one held-out baby. Five designs bit-exact and formally proved; gates cover the classifier only. One hospital’s recordings: feasibility, not clinical evidence.' }
       ],
-      note: 'Nothing else on this page is stated as measured.' }
+      note: 'Nothing else on this page is stated as measured.' },
+    { key: 'meas3', title: 'How long it takes',
+      head: ['Figure', 'Scope'],
+      rows: [
+        { fig: 'Teams without large design staffs typically see hardware design cycles of 12 to 36 months (OpenROAD, 2019). Our five recorded runs went from a one-paragraph brief to verified logic gates in 4 to 32 minutes, on synthetic data.',
+          scope: 'Different scopes: our minutes cover only brief to verified gate-level design on synthetic data; layout, signoff, fabrication, testing and clinical approval are not included.' },
+        { fig: 'Training 256 candidate designs as one batch on one GPU ran about 59 times faster than one at a time: 1,625.5 against 27.6 candidates a minute.',
+          scope: 'Measured in the AF feasibility run. One run, on one machine.' }
+      ],
+      note: 'Layout, fabrication and approval are not included.' }
   ]
 };
 /* ======================= END OF VISIBLE COPY ======================= */
@@ -467,6 +488,8 @@ main { padding-top: var(--bar); }
 .step h2 { font-size: 36px; }
 .step p { margin: 0 0 12px; color: #c4d1df; font-size: 17.5px; line-height: 1.48; max-width: 36ch; }
 .step .kick { font-size: 15px; color: var(--signal); font-weight: 600; margin-bottom: 10px; }
+.step p.src { font-size: 14.5px; }
+.step p.src a { color: var(--signal); text-underline-offset: 3px; }
 .step .hint { color: var(--mute); font-size: 15px; margin-top: 22px; }
 .step ul.lim { list-style: none; margin: 0 0 22px; padding: 0; }
 .step ul.lim li { color: #dfe8f1; font-size: 17.5px; line-height: 1.42; padding: 10px 0; border-top: 1px solid var(--rule); max-width: 34ch; }
@@ -1101,7 +1124,7 @@ html.cam { scroll-snap-type: y mandatory; }
     if (m) {
       var si = +m[1], sd = ST[si];
       o.stage = si; o.kicker = PI.stageWord.replace('{i}', si + 1); o.title = sd.name; o.lines = [sd.lead, sd.fan.length ? PI.batchLine : PI.soloLine];
-    } else { o.title = s.title; o.lines = s.lines.map(fill); o.hint = s.hint; }
+    } else { o.title = s.title; o.lines = s.lines.map(fill); o.hint = s.hint; o.link = s.link; }
     var camKey = { intro: 'all', limits: 'all' }[s.key] || s.key;
     o.rect = REG[camKey];
     o.whole = camKey === 'all';
@@ -1181,6 +1204,7 @@ html.cam { scroll-snap-type: y mandatory; }
       H('footer', '', C.footer, sec);
     } else {
       st.lines.forEach(function (l) { H('p', '', l, sec); });
+      if (st.link) { var lk = H('a', '', st.link.text, H('p', 'src', null, sec)); lk.href = st.link.href; lk.target = '_blank'; lk.rel = 'noopener'; }
       if (st.hint) H('p', 'hint', st.hint, sec);
     }
     // figure: the same map, cropped to this step (shown in the plain sequence)
@@ -1197,7 +1221,7 @@ html.cam { scroll-snap-type: y mandatory; }
   // ---------- minimap ----------
   var mini = document.getElementById('mini');
   mini.setAttribute('viewBox', ALL.x + ' ' + ALL.y + ' ' + ALL.w + ' ' + ALL.h);
-  ['spec', 'run', 'agent', 'tools', 'reports', 'talk', 'playback', 'checks', 'meas', 'meas2'].forEach(function (k) { var r = REG[k]; E('rect', { x: r.x, y: r.y, width: r.w, height: r.h, 'class': 'mr', rx: 30 }, mini); });
+  ['spec', 'run', 'agent', 'tools', 'reports', 'talk', 'playback', 'checks', 'meas', 'meas2', 'meas3'].forEach(function (k) { var r = REG[k]; E('rect', { x: r.x, y: r.y, width: r.w, height: r.h, 'class': 'mr', rx: 30 }, mini); });
   E('rect', { x: PX, y: orchY, width: PSTEP * 6 + PWID, height: orchH, 'class': 'mr', rx: 20 }, mini);
   for (var mi = 0; mi < 7; mi++) E('rect', { x: PX + mi * PSTEP, y: Y0, width: PWID, height: PH, 'class': 'mr', rx: 20 }, mini);
   var mcam = E('rect', { 'class': 'mc', rx: 24 }, mini);
@@ -1207,7 +1231,7 @@ html.cam { scroll-snap-type: y mandatory; }
   var vp = document.getElementById('viewport');
   var A = 1.2, FIT = [], raf = 0, cur = -1, isCam = null;
   var regions = [].slice.call(map.querySelectorAll('.rg'));
-  var FOCUS = { spec: 'spec', run: 'run', pipe: 'pipe', agent: 'agent', tools: 'tools', reports: 'live', talk: 'live', playback: 'live', checks: 'dash', meas: 'dash', meas2: 'dash' };
+  var FOCUS = { spec: 'spec', run: 'run', pipe: 'pipe', agent: 'agent', tools: 'tools', reports: 'live', talk: 'live', playback: 'live', checks: 'dash', meas: 'dash', meas2: 'dash', meas3: 'dash' };
   function fit(r, a) {
     var pad = 24, x = r.x - pad, y = r.y - pad, w = r.w + 2 * pad, h = r.h + 2 * pad;
     if (w / h < a) { var nw = h * a; x -= (nw - w) / 2; w = nw; } else { var nh = w / a; y -= (nh - h) / 2; h = nh; }

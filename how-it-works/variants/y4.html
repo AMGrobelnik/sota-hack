@@ -23,6 +23,17 @@
    - the 44 tools and the five verification levels: chiplab/AGENT.md
    - measured figures: dashboard/data/af-candidates.json and
      dashboard/data/runs/index.json plus 20261122-050322-2c7896.json
+   - batch speed: af-candidates.json search_rate, batch 256,
+     batched_per_min 1625.5, single_per_min 27.6: about 59 times
+     (1,625.5 / 27.6 = 58.9)
+   - 4 to 32 minutes, brief to verified gates: duration_s 235.516 to
+     1896.954 of the five recorded runs in dashboard/data/runs/index.json
+   - 12 to 36 months: OpenROAD: Toward a Self-Driving, Open-Source
+     Digital Layout Implementation Tool Chain (GOMACTech 2019),
+     https://vlsicad.ucsd.edu/Publications/Conferences/370/c370.pdf
+   - compile-stream in the compile stage; summaries by a smaller model
+     through a fallback chain: backend/README.md and
+     backend/src/chipin_backend/llm/summaries.yaml on main
    ===================================================================== */
 window.COPY = {
   brand: 'ChipIn',
@@ -73,7 +84,7 @@ window.COPY = {
               'Beside each pin: the stage that calls it.'] },
     { key: 'stream', title: 'How a run reports',
       lines: ['Every agent reports stages, numbers, files and designs into one event stream. The dashboard draws from it.',
-              'A smaller, cheaper model writes summaries level by level, from single events up to the whole run, so a long run stays readable.'] },
+              'A smaller model writes summaries level by level, from single events up to the whole run, so a long run stays readable.'] },
     { key: 'talk', title: 'Talking to the agent',
       lines: ['During a run you can message the orchestrator: steer it, ask it something, or stop it.',
               'It reads your message between tool calls and answers in the same stream. A run is one conversation; it is never forked.',
@@ -83,7 +94,10 @@ window.COPY = {
               'That shows the gates are the model. It does not show the device is clinically good.',
               'Patients are split before training. Numbers are marked measured, estimate or simulated.'] },
     { key: 'meas', title: 'Measured so far',
-      lines: ['Only these figures are stated as measured. Each has its scope and its source file.'] },
+      lines: ['Only these figures are stated as measured. Each has its scope and its source file.',
+              'Typical hardware design cycle without a large team: 12 to 36 months (OpenROAD, 2019). Our runs, brief to verified gates only: 4 to 32 minutes.',
+              'Different scopes: our minutes cover only brief to verified gate-level design on synthetic data; layout, signoff, fabrication, testing and clinical approval are not included.'],
+      link: { text: 'OpenROAD: Toward a Self-Driving, Open-Source Digital Layout Implementation Tool Chain (GOMACTech, 2019)', href: 'https://vlsicad.ucsd.edu/Publications/Conferences/370/c370.pdf' } },
     { key: 'limits', title: 'Limits',
       lines: ['ChipIn is a feasibility tool, not clinical evidence.',
               'The device maker keeps clinical validation and regulatory responsibility.',
@@ -189,7 +203,7 @@ window.COPY = {
       does: 'Turns each kept model into logic gates with the weights wired in as constants, so the chip has no weight memory.',
       strat: 'different kept designs and compile choices.',
       fan: ['Kept design 1', 'Kept design 2', 'Compile options'],
-      tools: ['ingest-model', 'ingest-batch', 'compile-ir', 'synthesize', 'synthesize-batch', 'count-luts', 'map-to-process'],
+      tools: ['ingest-model', 'ingest-batch', 'compile-ir', 'compile-stream', 'synthesize', 'synthesize-batch', 'count-luts', 'map-to-process'],
       out: 'Gate count, logic depth and a netlist per design.',
       keeps: 'The smallest netlist for each design.' },
     { key: 'verify', name: 'Verify', batch: true,
@@ -305,7 +319,7 @@ window.COPY = {
       { k: 'stage', t: 'One per stage, when it closes' },
       { k: 'run', t: 'One for the run, as three bullets' }
     ],
-    model: 'A smaller, cheaper open model writes them, tried provider by provider until one answers.',
+    model: 'A smaller model writes them, through a fallback chain: each tier tries one provider, the next tier is the fallback.',
     notes: ['Short rows keep their own words: tool rows, files, numbers, and messages up to 135 characters.',
             'A final answer over 300 characters also gets a one-line label.',
             'Each line opens down to the full message or tool call.'],
@@ -372,12 +386,15 @@ window.COPY = {
       { fig: '2,330 gates. Outputs matched the model on 3,880 of 3,880 test windows.',
         scope: 'One atrial-fibrillation feasibility circuit.',
         src: 'dashboard/data/af-candidates.json' },
-      { fig: '256 candidate models trained together, in one GPU batch.',
-        scope: 'One search round for that circuit.',
+      { fig: '256 candidate models trained together as one batch on one GPU: about 59 times faster than one at a time, 1,625.5 against 27.6 candidates a minute.',
+        scope: 'One search round for that circuit. One run, on one machine.',
         src: 'dashboard/data/af-candidates.json' },
-      { fig: 'One recorded Lite run with batches: 5 batches of 3, so 15 subagents; 139 tool calls; 1,765 events; 1,897 s.',
+      { fig: 'One recorded Lite run with batches: 5 batches of 3, so 15 subagents; 139 tool calls; 1,765 events; 1,896.954\u00a0s.',
         scope: 'Synthetic data. Its chosen chip, 45 gates, was bit-exact on 100,000 random vectors and formally proved, but missed the held-out targets.',
-        src: 'dashboard/data/runs/20261122-050322-2c7896.json' }
+        src: 'dashboard/data/runs/20261122-050322-2c7896.json' },
+      { fig: 'Teams without large design staffs typically see hardware design cycles of 12 to 36 months (OpenROAD, 2019). Our five recorded runs went from a one-paragraph brief to verified logic gates in 4 to 32 minutes, on synthetic data.',
+        scope: 'Different scopes: our minutes cover only brief to verified gate-level design on synthetic data; layout, signoff, fabrication, testing and clinical approval are not included.',
+        src: 'dashboard/data/runs/index.json; OpenROAD, GOMACTech 2019' }
     ],
     note: 'Nothing else on this page is stated as measured.'
   }
@@ -422,6 +439,8 @@ main { padding-top: var(--bar); }
 .step h1 { font-size: 42px; }
 .step h2 { font-size: 38px; }
 .step p { margin: 0 0 12px; color: #c4d1df; font-size: 17.5px; line-height: 1.48; max-width: 36ch; }
+.step p.src { font-size: 14.5px; }
+.step p.src a { color: var(--signal); text-underline-offset: 3px; }
 .step .kick { font-size: 16px; color: var(--signal); font-weight: 600; margin-bottom: 10px; }
 .step .hint { color: var(--mute); font-size: 15px; margin-top: 18px; }
 .leg { list-style: none; margin: 14px 0 6px; padding: 0; }
@@ -1192,7 +1211,7 @@ html.cam { scroll-snap-type: y mandatory; }
     if (m) {
       var si = +m[1], sd = ST[si];
       o.stage = si; o.kicker = (sd.batch ? PI.kickBatch : PI.kickOwn).replace('{i}', si + 1); o.title = sd.name; o.lines = [sd.lead];
-    } else { o.title = fill(s.title); o.lines = (s.lines || []).map(fill); o.hint = s.hint; }
+    } else { o.title = fill(s.title); o.lines = (s.lines || []).map(fill); o.hint = s.hint; o.link = s.link; }
     var camKey = { intro: 'all', limits: 'all' }[s.key] || s.key;
     o.rect = REG[camKey]; o.whole = camKey === 'all';
     o.focus = m ? ['pipe', 'bus'] : (FOCUS[s.key] || []);
@@ -1286,6 +1305,7 @@ html.cam { scroll-snap-type: y mandatory; }
       H('footer', '', C.footer, sec);
     } else {
       st.lines.forEach(function (l) { H('p', '', l, sec); });
+      if (st.link) { var lk = H('a', '', st.link.text, H('p', 'src', null, sec)); lk.href = st.link.href; lk.target = '_blank'; lk.rel = 'noopener'; }
       if (st.key === 'intro') {
         var lg = H('ul', 'leg', null, sec);
         H('p', 'lt', C.legendLabel, lg);
