@@ -20,10 +20,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 from aiohttp.test_utils import TestClient, TestServer
+from loguru import logger
 
 from chipin_backend.agents import AgentResult, AgentSpec, backend_for
-from chipin_backend.agents.claude_cli import transcript_path
+from chipin_backend.agents.claude_cli import build_argv, plugin_dirs, transcript_path
 from chipin_backend.agents.env import build_agent_env
 from chipin_backend.api.config import ApiConfig
 from chipin_backend.api.events import EventLog
@@ -32,13 +34,21 @@ from chipin_backend.api.progress import ProgressTailer, write_helper
 from chipin_backend.api.server import TOKEN_HEADER, create_app
 from chipin_backend.chiplab import (
     CHIPLAB_BIN_ENV,
+    CLAUDE_PLUGIN_NAME,
     PROGRESS_CHIP_ENV,
+    TOOLS_REFERENCE,
     chiplab_available,
     chiplab_env,
     chiplab_instructions,
+    install_skill,
+    lab_version,
+    skill_files,
 )
 from chipin_backend.cli import main
-from chipin_backend.config import BackendConfig
+from chipin_backend.compute import local as local_runner
+from chipin_backend.compute.factory import runner_for
+from chipin_backend.config import BackendConfig, ClaudeCliConfig
+from chipin_backend.runs import RunDir
 
 #: The lab's fixed metric keys and units: ``chiplab.progress.METRIC_KEYS``,
 #: docs/CHIPIN_INTEGRATION.md section 2.
@@ -87,6 +97,8 @@ LAB_VALUES: dict[str, int | float] = {
 }
 DESIGN = "765fa47586bd"
 FAKE_CLAUDE = Path(__file__).with_name("fake_claude_cli.py")
+#: What the fake lab prints for ``chiplab agent-doc`` (the real lab prints its AGENT.md).
+LAB_REFERENCE = "# fake chip lab: interface for AI scientists\n\n### `synthesize`\n\nGates from a design."
 #: (workspace path, artifact kind) the lab copies into a ChipIn workspace (section 5 of the guide).
 LAB_FILES = [
     (f"chips/{DESIGN}/design.v", "file"),
@@ -119,6 +131,9 @@ def call(h, *args):
 
 
 tool = sys.argv[1]
+if tool == "agent-doc":
+    print({reference!r})
+    sys.exit(0)
 args = json.loads(sys.argv[3]) if len(sys.argv) > 3 else {{}}
 h = helper()
 stages = bool(args.get("progress_stages"))
@@ -143,7 +158,9 @@ print(json.dumps({{"status": "ok", "design_id": DESIGN, "metrics": {{"gates": VA
 
 def _fake_lab(bin_dir: Path) -> Path:
     bin_dir.mkdir(parents=True, exist_ok=True)
-    source = FAKE_LAB.format(units=LAB_METRIC_UNITS, values=LAB_VALUES, files=LAB_FILES, design=DESIGN)
+    source = FAKE_LAB.format(
+        units=LAB_METRIC_UNITS, values=LAB_VALUES, files=LAB_FILES, design=DESIGN, reference=LAB_REFERENCE
+    )
     command = bin_dir / "chiplab"
     command.write_text(f"#!{sys.executable}\n{source}", encoding="utf-8")
     command.chmod(0o755)
@@ -178,6 +195,20 @@ def _expected_lab_events() -> list[dict[str, Any]]:
 
 def _strip(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [{k: v for k, v in e.items() if k not in {"seq", "ts", "run_id"}} for e in events]
+
+
+#: The sentence the agent must always have in view, word for word (whitespace normalised).
+REQUIRED_CHIP_REPORT = (
+    'Before you mark report done, call `chiplab chip-report --json \'{"design_id": '
+    '"<the chip you chose>", "decision_rate_hz": <decisions per second>}\'` on the one chip you '
+    "chose: the chip figures the user sees (area, power, energy, cost, verification) come from "
+    "that call."
+)
+
+
+def _skill_md() -> str:
+    """The packaged SKILL.md, read through the package's resources."""
+    return (skill_files() / "SKILL.md").read_text(encoding="utf-8")
 
 
 # ---- environment and instructions ----
@@ -227,23 +258,16 @@ def test_instructions_carry_the_lab_paragraph_only_when_the_lab_is_on(tmp_path: 
     assert on.startswith(off.rstrip())
     paragraph = chiplab_instructions()
     assert on.endswith(paragraph)
-    for phrase in (
-        "chiplab agent-doc",
-        "ingest-model",
-        "prove-equivalence",
-        "decision_rate_hz",
-        "progress_stages",
-    ):
+    # Always in view: the skill by name, when to use it, the required call and a fallback.
+    for phrase in ("skill named `chiplab`", "compile stage", "chiplab agent-doc", "references/tools.md"):
         assert phrase in paragraph
-    assert "./progress stage compile started" in paragraph
-    must = (
-        'Before you mark report done, call `chiplab chip-report --json \'{"design_id": '
-        '"<the chip you chose>", "decision_rate_hz": <decisions per second>}\'` on the one chip you '
-        "chose: the chip figures the user sees (area, power, energy, cost, verification) come from "
-        "that call."
-    )
-    assert must in " ".join(on.split())
-    assert "chip-report" not in off
+    assert REQUIRED_CHIP_REPORT in " ".join(on.split())
+    assert "chip-report" not in off and "chiplab" not in off
+    # The detail moved into the skill.
+    body = _skill_md()
+    for phrase in ("ingest-model", "prove-equivalence", "decision_rate_hz", "progress_stages"):
+        assert phrase in body
+    assert "./progress stage compile started" in body
 
 
 def test_verify_stage_means_the_chip_against_its_model() -> None:
@@ -257,7 +281,7 @@ def test_verify_stage_means_the_chip_against_its_model() -> None:
     assert stage.startswith("verify:")
     assert "bit for bit" in stage
     assert "even with no recordings" in " ".join(stage.split())
-    assert "the chip against your model" in chiplab_instructions()
+    assert "the chip against your model" in _skill_md()
 
 
 def test_both_run_paths_get_the_same_instructions(
@@ -650,6 +674,7 @@ def test_run_preset_writes_a_dashboard_run(
     assert events[0]["type"] == "run.started" and events[-1]["type"] == "run.finished"
     assert {"compile", "verify"} <= {e["name"] for e in events if e["type"] == "stage"}
     assert json.loads((run_dir / "api.json").read_text())["preset"] == "lite"
+    assert not [p for p in (run_dir / "workspace").iterdir() if p.name.startswith(".")]
 
 
 def test_run_preset_refuses_other_machines(run_config: Path) -> None:
@@ -665,3 +690,256 @@ def test_fake_lab_is_inert_without_a_helper(tmp_path: Path) -> None:
     _run_lab(tmp_path / "ws", env, {"design_id": DESIGN})
     assert not (tmp_path / "ws" / "progress.jsonl").exists()
     assert os.listdir(tmp_path / "ws") == ["chips"]
+
+
+# ---- the chip-lab skill ----
+
+
+def _front_matter(text: str) -> tuple[dict[str, Any], str]:
+    _, head, body = text.split("---\n", 2)
+    return yaml.safe_load(head), body
+
+
+@pytest.mark.parametrize(
+    ("harness", "folder"),
+    [
+        ("claude_cli", ".claude/plugins/chipin/skills/chiplab"),
+        ("claude", ".claude/plugins/chipin/skills/chiplab"),
+        ("openrouter", ".agents/skills/chiplab"),
+    ],
+)
+def test_skill_installed_where_each_harness_finds_it(tmp_path: Path, harness: str, folder: str) -> None:
+    workspace = tmp_path / "run" / "workspace"
+    workspace.mkdir(parents=True)
+    dest = install_skill(workspace, harness, _lab_env(tmp_path))
+    assert dest == workspace / folder
+    files = sorted(str(p.relative_to(workspace)) for p in workspace.rglob("*") if p.is_file())
+    # The claude CLI loads the skill as a plugin: its manifest sits at the plugin root.
+    manifest = [".claude/plugins/chipin/.claude-plugin/plugin.json"] if folder.startswith(".claude") else []
+    assert files == [
+        *manifest,
+        f"{folder}/SKILL.md",
+        f"{folder}/references/tools.md",
+        f"{folder}/references/workflow.md",
+    ]
+
+
+def test_skill_contents(tmp_path: Path) -> None:
+    dest = install_skill(tmp_path, "claude_cli", _lab_env(tmp_path))
+    assert dest is not None
+    meta, body = _front_matter((dest / "SKILL.md").read_text(encoding="utf-8"))
+    assert meta["name"] == "chiplab" == dest.name
+    description = " ".join(meta["description"].split())
+    assert len(description) <= 1024
+    for phrase in ("logic gates", "bit for bit", "formally equivalent", "layout", "power", "report"):
+        assert phrase in description
+    flat = " ".join(body.split())
+    assert REQUIRED_CHIP_REPORT in flat
+    for phrase in ("chiplab <tool> --json", "Exit codes: 0 ok", "**compile**", "**verify**", "**report**"):
+        assert phrase in flat
+    assert "--chip <design_id>" in flat and "./progress chosen <design_id>" in flat
+    assert "references/tools.md" in flat and "chiplab agent-doc" in flat
+    # Both harnesses run inline ``!`cmd` `` in a skill body; this one has none.
+    assert "!`" not in body
+    tools = (dest / TOOLS_REFERENCE).read_text(encoding="utf-8")
+    header, rest = tools.split("\n", 1)
+    assert header.startswith("> Copied from the installed chip lab (chiplab")
+    assert "chiplab agent-doc" in header
+    assert rest.strip() == LAB_REFERENCE
+
+
+def test_skill_install_is_idempotent(tmp_path: Path) -> None:
+    env = _lab_env(tmp_path)
+
+    def snapshot() -> dict[str, bytes]:
+        files = (p for p in (tmp_path / "ws").rglob("*") if p.is_file())
+        return {str(p.relative_to(tmp_path / "ws")): p.read_bytes() for p in files}
+
+    (tmp_path / "ws").mkdir()
+    for harness in ("claude_cli", "openrouter"):
+        install_skill(tmp_path / "ws", harness, env)
+    first = snapshot()
+    for harness in ("claude_cli", "openrouter"):
+        install_skill(tmp_path / "ws", harness, env)
+    assert snapshot() == first
+
+
+def test_lab_off_installs_nothing(tmp_path: Path) -> None:
+    off = {"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"}
+    for harness in ("claude_cli", "claude", "openrouter"):
+        assert install_skill(tmp_path, harness, off) is None
+    assert install_skill(tmp_path, "stub", _lab_env(tmp_path / "lab")) is None
+    assert list(tmp_path.iterdir()) == [tmp_path / "lab"]
+    assert "chiplab" not in standing_instructions(off)
+
+
+def test_skill_without_the_labs_reference(tmp_path: Path) -> None:
+    """A lab whose reference cannot be read: the skill is still installed, with a warning."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    command = bin_dir / "chiplab"
+    command.write_text("#!/bin/sh\nexit 1\n")
+    command.chmod(0o755)
+    warnings: list[str] = []
+    sink = logger.add(lambda m: warnings.append(m.record["message"]), level="WARNING")
+    try:
+        dest = install_skill(tmp_path / "ws", "openrouter", {"PATH": "/bin", CHIPLAB_BIN_ENV: str(bin_dir)})
+    finally:
+        logger.remove(sink)
+    assert dest is not None and (dest / "SKILL.md").is_file()
+    assert not (dest / TOOLS_REFERENCE).exists()
+    assert "chiplab agent-doc" in (dest / "SKILL.md").read_text()
+    assert any("agent-doc failed" in w for w in warnings)
+    assert any("has no tools.md" in w for w in warnings)
+
+
+def test_lab_version_follows_the_launcher(tmp_path: Path) -> None:
+    lab = tmp_path / "chiplab"
+    (lab / "pyproject.toml").parent.mkdir()
+    (lab / "pyproject.toml").write_text('[project]\nname = "chiplab"\nversion = "9.9.1"\n')
+    venv_command = lab / ".venv" / "bin" / "chiplab"
+    venv_command.parent.mkdir(parents=True)
+    venv_command.write_text("#!/usr/bin/env python3\n")
+    launcher = tmp_path / "local-bin" / "chiplab"
+    launcher.parent.mkdir()
+    launcher.write_text(f'#!/bin/sh\nexec "{venv_command}" "$@"\n')
+    assert lab_version(launcher) == "chiplab 9.9.1"
+    assert lab_version(venv_command) == "chiplab 9.9.1"
+    assert lab_version(tmp_path / "nowhere" / "chiplab") == "chiplab, version unknown"
+
+
+def test_skill_ships_as_package_data() -> None:
+    """The skill is found through the package's resources, wherever the package is installed."""
+    root = skill_files()
+    assert root.is_dir()
+    names = {p.name for p in root.iterdir()}
+    assert {"SKILL.md", "references"} <= names
+    assert (root / "references" / "workflow.md").is_file()
+    assert not (root / "references" / "tools.md").is_file()  # copied from the lab at install time
+
+
+class _SkillCheckBackend:
+    """Stands in for a harness: records the skill folders present when it starts."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.seen: list[str] = []
+
+    async def run(self, spec: AgentSpec, sink: Any) -> AgentResult:
+        assert spec.workdir is not None
+        self.seen = sorted(str(p.relative_to(spec.workdir)) for p in spec.workdir.rglob("SKILL.md"))
+        return AgentResult(agent=spec.name)
+
+    async def close(self) -> None:
+        return None
+
+
+@pytest.mark.parametrize(
+    ("harness", "expected"),
+    [
+        ("claude_cli", [".claude/plugins/chipin/skills/chiplab/SKILL.md"]),
+        ("openrouter", [".agents/skills/chiplab/SKILL.md"]),
+        ("stub", []),
+    ],
+)
+async def test_the_runner_installs_the_skill_before_the_agent_starts(
+    tmp_path: Path, config: BackendConfig, monkeypatch: pytest.MonkeyPatch, harness: str, expected: list[str]
+) -> None:
+    for name, value in _lab_env(tmp_path).items():
+        monkeypatch.setenv(name, value)
+    backend = _SkillCheckBackend(harness)
+    monkeypatch.setattr(local_runner, "backend_for", lambda *a, **k: backend)
+    run = RunDir.create(config.resolved_runs_dir(), "skill-run")
+    await runner_for(config, "local").run(AgentSpec(name="a", prompts=["p"]), run)
+    assert backend.seen == expected
+    # A working folder outside the run folder gets nothing.
+    outside = tmp_path / "elsewhere"
+    spec = AgentSpec(name="a", prompts=["p"], backend=harness, workdir=outside)
+    await runner_for(config, "local").run(spec, RunDir.create(config.resolved_runs_dir(), "other"))
+    assert backend.seen == []
+
+
+async def test_the_runner_installs_nothing_with_the_lab_off(
+    tmp_path: Path, config: BackendConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    monkeypatch.delenv(CHIPLAB_BIN_ENV, raising=False)
+    backend = _SkillCheckBackend("claude_cli")
+    monkeypatch.setattr(local_runner, "backend_for", lambda *a, **k: backend)
+    run = RunDir.create(config.resolved_runs_dir(), "off-run")
+    await runner_for(config, "local").run(AgentSpec(name="a", prompts=["p"]), run)
+    assert backend.seen == []
+    assert list(run.workspace.iterdir()) == []
+
+
+def test_claude_loads_the_skill_as_a_plugin_without_setting_sources(tmp_path: Path) -> None:
+    """The skill comes in by ``--plugin-dir``; the setting sources stay as configured.
+
+    The ``project`` source would load every CLAUDE.md above the run folder and
+    the user's own, so a run with the skill must not add it.
+    """
+    cli = ClaudeCliConfig()
+    workdir = tmp_path / "ws"
+    spec = AgentSpec(name="a", prompts=["p"], workdir=workdir)
+    argv = build_argv(spec, cli, session_id="sid", resume=False)
+    assert plugin_dirs(spec) == [] and "--plugin-dir" not in argv
+    install_skill(workdir, "claude_cli", _lab_env(tmp_path / "lab"))
+    root = (workdir / ".claude" / "plugins" / CLAUDE_PLUGIN_NAME).resolve()
+    assert plugin_dirs(spec) == [root]
+    manifest = json.loads((root / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    assert manifest["name"] == CLAUDE_PLUGIN_NAME
+    assert (root / "skills" / "chiplab" / "SKILL.md").is_file()
+    for resume in (False, True):
+        argv = build_argv(spec, cli, session_id="sid", resume=resume)
+        assert argv[argv.index("--plugin-dir") + 1] == str(root)
+        assert argv[argv.index("--setting-sources") + 1] == ""
+    configured = cli.model_copy(update={"setting_sources": ["user"]})
+    argv = build_argv(spec, configured, session_id="sid", resume=False)
+    assert argv[argv.index("--setting-sources") + 1] == "user"
+
+
+def test_openhands_agent_gets_the_skill_in_its_context(tmp_path: Path, config: BackendConfig) -> None:
+    """The agent a run builds lists the skill (name, description) and can load its body."""
+    pytest.importorskip("openhands.sdk")
+    from chipin_backend.agents.openrouter_agent import OpenRouterAgentBackend, workspace_skills
+    from chipin_backend.llm.providers import resolve_provider
+
+    workdir = tmp_path / "ws"
+    workdir.mkdir()
+    assert workspace_skills(workdir) == []
+    install_skill(workdir, "openrouter", _lab_env(tmp_path / "lab"))
+    [skill] = workspace_skills(workdir)
+    assert skill.name == "chiplab" and skill.is_agentskills_format
+    assert REQUIRED_CHIP_REPORT in " ".join(skill.content.split())
+    backend = OpenRouterAgentBackend(config.agents)
+    spec = AgentSpec(name="a", prompts=["p"], workdir=workdir)
+    provider = resolve_provider(config.providers, None)
+    agent = backend._build_agent(spec, "openrouter/openai/gpt-4o-mini", "not-a-key", provider)
+    assert [s.name for s in agent.agent_context.skills] == ["chiplab"]
+    context = agent.dynamic_context or ""
+    assert "<available_skills>" in context and "<name>chiplab</name>" in context
+    assert "invoke_skill" in context
+
+
+def test_skill_export_command(
+    tmp_path: Path, run_config: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    for name, value in _lab_env(tmp_path).items():
+        monkeypatch.setenv(name, value)
+    target = tmp_path / "project" / ".claude" / "skills"
+    assert main(["skill", "export", str(target), "--config", str(run_config)]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out == {"skill": str(target / "chiplab"), "tools_reference": True}
+    assert (target / "chiplab" / "SKILL.md").read_text() == _skill_md()
+    assert (target / "chiplab" / TOOLS_REFERENCE).read_text().rstrip().endswith(LAB_REFERENCE)
+    # Never into a tool folder of the home directory.
+    home = tmp_path / "home"
+    for folder in (home / ".claude" / "skills", home / ".agents" / "skills", home / ".openhands"):
+        assert main(["skill", "export", str(folder), "--config", str(run_config)]) == 2
+    assert not home.exists()
+    # With the lab off the skill is still written, without the lab's reference.
+    monkeypatch.delenv(CHIPLAB_BIN_ENV)
+    plain = tmp_path / "plain"
+    assert main(["skill", "export", str(plain), "--config", str(run_config)]) == 0
+    assert json.loads(capsys.readouterr().out)["tools_reference"] is False
+    assert (plain / "chiplab" / "SKILL.md").is_file()
