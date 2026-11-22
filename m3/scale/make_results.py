@@ -11,11 +11,16 @@ held window (L = 64 inputs, the 30k design's input count), at the process's D fl
 fmax estimate (no layout): 1000 / (logic depth x ns per generic-gate level), the ns per level measured on the
 M3 layouts (m3/layouts: critical path / depth of the same lab's chips), so it ignores the longer wires of a big die.
 
-Usage: python make_results.py <raw results.json> <out results.json> [--md <tables markdown out>]
+Several sweep runs merge per design (a later run's step replaces an earlier one unless the earlier one finished and
+the later one did not); --luts adds lut_retry.py's longer-cap LUT counts; --reaped adds reap_orphans.py's logs.
+
+Usage: python make_results.py --raw run1.json [--raw run2.json] [--luts lut_retry.json] [--reaped log ...]
+                              --out results.json [--md tables.md]
 """
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import math
 import re
@@ -111,13 +116,62 @@ def summary(rec: dict) -> dict:
     return out
 
 
+def merge(runs: list[dict]) -> dict:
+    base = copy.deepcopy(runs[0])
+    base["runs"] = []
+    by = {r["key"]: r for r in base["designs"]}
+    for i, run in enumerate(runs):
+        base["runs"].append({"run": i + 1, "elapsed_s": run.get("elapsed_s"), "final": run.get("final"),
+                             "open_jobs": run.get("open_jobs"), "settings": run.get("settings")})
+        if i == 0:
+            continue
+        for k in ("orphaned_solvers", "rss_guard_kills"):
+            base[k] = (base.get(k) or []) + (run.get(k) or [])
+        base["max_concurrent_yosys_rss_mb"] = max(base.get("max_concurrent_yosys_rss_mb") or 0,
+                                                  run.get("max_concurrent_yosys_rss_mb") or 0)
+        for rec in run["designs"]:
+            old = by.get(rec["key"])
+            if old is None:
+                by[rec["key"]] = rec
+                base["designs"].append(rec)
+                continue
+            for step, st in rec.get("steps", {}).items():
+                prev = old["steps"].get(step)
+                if prev is None or prev.get("status") != "ok" or st.get("status") == "ok":
+                    old["steps"][step] = st
+            for f in ("proof", "bit_exact", "sim_n", "sim_device", "sim_pairs"):
+                if rec.get(f) is not None:
+                    old[f] = rec[f]
+            ram = old.setdefault("peak_rss_mb_sampled", {})
+            for k, v in (rec.get("peak_rss_mb_sampled") or {}).items():
+                ram[k] = max(ram.get(k, 0), v)
+    return base
+
+
+def add_luts(raw: dict, luts: dict) -> None:
+    for rec in raw["designs"]:
+        r = luts.get(rec.get("design_id"))
+        if not r:
+            continue
+        rec["steps"]["count_luts_retry"] = {k: r.get(k) for k in ("state", "status", "cap_s", "run_s", "wall_s", "error")}
+        if r.get("status") == "ok":
+            rec.update(luts_xc7=r["luts"], carry4_xc7=r.get("carry4"), muxf_xc7=r.get("muxf"),
+                       luts_basis=f"synthesize target=xc7 with a {r['cap_s']} s cap (count-luts hit its 900 s cap)")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("raw", type=Path)
-    ap.add_argument("out", type=Path)
+    ap.add_argument("--raw", type=Path, action="append", required=True)
+    ap.add_argument("--luts", type=Path)
+    ap.add_argument("--reaped", type=Path, nargs="*", default=[])
+    ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--md", type=Path)
     a = ap.parse_args()
-    raw = scrub(json.loads(a.raw.read_text()))
+    raw = scrub(merge([json.loads(p.read_text()) for p in a.raw]))
+    if a.luts and a.luts.exists():
+        add_luts(raw, json.loads(a.luts.read_text()))
+    raw["orphans_reaped"] = [json.loads(ln) for p in a.reaped if p.exists()
+                             for ln in p.read_text().splitlines() if ln.startswith("{")]
     rows = [summary(r) for r in raw["designs"]]
     fitd, fit_rows = {}, []
     for style in ("ternary", "q4"):

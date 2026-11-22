@@ -15,6 +15,8 @@ results.json is rewritten after every finished job, so another reader sees the s
 
 Usage (lab environment set: CHIPLAB_HOME, CHIPLAB_CONFIG, CHIPLAB_USER_DIR, CHIPLAB_CPU_WORKERS ...):
     python sweep.py --models models --out results.json [--only ternary_1k,q4_1k] [--prove-timeout 1200]
+A rerun in the same lab home is served from the lab's result cache for every step that finished (status ok); the
+cached answers keep their original timings. --skip-steps count_luts leaves out a step that is known to time out.
 """
 from __future__ import annotations
 
@@ -102,9 +104,12 @@ class Sampler(threading.Thread):
             exe = Path(cmd.split()[0]).name
             if exe != "yosys-abc" or pid in owner:
                 continue
-            if ppid in keys:
-                owner[pid] = keys[ppid]
-            elif ppid == 1:  # its yosys is gone; only ours (working directory inside this lab home) count
+            up = ppid  # Yosys starts ABC as `sh -c yosys-abc ...`: walk up past the shell
+            while up in procs and up not in keys and up != 1 and Path(procs[up][3].split()[0]).name == "sh":
+                up = procs[up][0]
+            if up in keys:
+                owner[pid] = keys[up]
+            elif up == 1:  # its yosys is gone; only ours (working directory inside this lab home) count
                 if pid not in self.orphans:
                     cwd = self._cwd(pid)
                     if str(config.HOME) not in cwd:
@@ -160,6 +165,7 @@ class Sweep:
         self.designs: dict[str, dict] = {}    # key "<name>/<variant>" -> record
         self.t0 = time.time()
         self.sampler = Sampler(a.sample_s, a.rss_limit_gb * 1024)
+        self.skip = set(filter(None, a.skip_steps.split(",")))
         self.proof_wait: list[str] = []      # design keys whose proof waits for a free proof slot
 
     def key_order(self, key: str) -> tuple:
@@ -176,8 +182,9 @@ class Sweep:
         r = call("submit_batch", tool="synthesize", args_list=[{"design_id": d, "target": "generic",
                                                                 "timeout": self.a.synth_timeout}])
         self.track(r["job_ids"], "synthesize", [key])
-        r = call("submit_batch", tool="count_luts", args_list=[{"design_id": d, "family": "xc7"}])
-        self.track(r["job_ids"], "count_luts", [key])
+        if "count_luts" not in self.skip:
+            r = call("submit_batch", tool="count_luts", args_list=[{"design_id": d, "family": "xc7"}])
+            self.track(r["job_ids"], "count_luts", [key])
         r = call("submit_batch", tool="map_to_process", args_list=[{"design_id": d, "pdk": p} for p in PDKS])
         self.track(r["job_ids"], "map_to_process", [key] * len(PDKS), [{"pdk": p} for p in PDKS])
 
@@ -357,6 +364,7 @@ def main() -> None:
     ap.add_argument("--sample-s", type=float, default=2.0)
     ap.add_argument("--prove-concurrency", type=int, default=2)
     ap.add_argument("--rss-limit-gb", type=float, default=64.0)
+    ap.add_argument("--skip-steps", default="", help="comma list of steps not to submit, e.g. count_luts (a rerun)")
     Sweep(ap.parse_args()).run()
 
 
