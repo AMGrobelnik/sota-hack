@@ -16,6 +16,22 @@ read-and-confirm only. Paths are relative to the repository root.
 | 8 | Verilog checker runs on the host without the image | see 8 | Refuse unless opted in | none |
 | 9 | `timing-power` reports `status: ok` when layout failed | see 9 | Pass the error through | 01 |
 
+Status on b77cc76 (checked by reading the merged code, and for 8 and 9 by the re-check run in REPORT.md):
+
+| # | Status on b77cc76 | Where |
+| --- | --- | --- |
+| 1 | Open; f0c296c also writes `~/.local/bin/chiplab` | `scripts/install.sh:14,127,137` |
+| 2 | Fixed: pinned tag, sha256 checked first | `scripts/install.sh:19,81,85` |
+| 3 | Fixed: `uv sync --locked` | `scripts/install.sh:64` |
+| 4 | Fixed: pinned commit checked out | `scripts/install.sh:22,111` |
+| 5 | Fixed: protection on, loopback hosts only | `chiplab/mcp_server.py:96-97` |
+| 6 | Mitigated: pickle refused remotely by default | `chiplab/tools_hw.py:99-100` |
+| 7 | Fixed: `top` must be an identifier | `chiplab/verify/sandbox.py:74` |
+| 8 | Fixed: host run refused unless `allow_host` | `chiplab/verify/sandbox.py:52` |
+| 9 | Fixed: error passed through | `chiplab/tools_hw.py:386` |
+
+Line numbers in the sections below are from 021f68d.
+
 Patches are in `proposed/` (apply from the repo root with `git apply`); `git apply --check` passed on all four.
 
 ## 1. Install folder is a new folder in the home directory
