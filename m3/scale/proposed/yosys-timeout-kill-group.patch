@@ -1,0 +1,89 @@
+diff --git a/chiplab/chiplab/hw/yosys.py b/chiplab/chiplab/hw/yosys.py
+index ee8ccbd..e116350 100644
+--- a/chiplab/chiplab/hw/yosys.py
++++ b/chiplab/chiplab/hw/yosys.py
+@@ -2,7 +2,9 @@
+ from __future__ import annotations
+ 
+ import json
++import os
+ import re
++import signal
+ import subprocess
+ import time
+ from pathlib import Path
+@@ -20,19 +22,35 @@ class SynthError(RuntimeError):
+     pass
+ 
+ 
++def kill_group(p: subprocess.Popen) -> None:
++    """SIGKILL a process started with start_new_session=True and everything it spawned, then reap it."""
++    try:
++        os.killpg(p.pid, signal.SIGKILL)
++    except (ProcessLookupError, PermissionError):
++        pass
++    p.communicate()
++
++
+ def run(script: str, workdir: Path, timeout: int = 900, name: str = "yosys") -> dict:
+     workdir.mkdir(parents=True, exist_ok=True)
+     ys = workdir / f"{name}.ys"
+     ys.write_text(script)
+     log = workdir / f"{name}.log"
+     t0 = time.time()
++    # Own process group: on timeout the whole group is killed, so the yosys-abc (or other) child Yosys started
++    # does not outlive it (subprocess.run's timeout kills Yosys only; its ABC child kept running for hours).
++    p = subprocess.Popen([oss_bin("yosys"), "-q", "-l", str(log), "-s", str(ys)], cwd=workdir,
++                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+     try:
+-        p = subprocess.run([oss_bin("yosys"), "-q", "-l", str(log), "-s", str(ys)], cwd=workdir,
+-                           capture_output=True, text=True, timeout=timeout)
++        _, err = p.communicate(timeout=timeout)
+     except subprocess.TimeoutExpired:
++        kill_group(p)
+         raise SynthError(f"{name}: timed out after {timeout}s (see {log})")
++    except BaseException:  # interrupted: never leave the group running
++        kill_group(p)
++        raise
+     if p.returncode != 0:
+-        tail = (p.stderr or "")[-1500:] + (log.read_text()[-1500:] if log.exists() else "")
++        tail = (err or "")[-1500:] + (log.read_text()[-1500:] if log.exists() else "")
+         raise SynthError(f"{name}: yosys failed:\n{tail}")
+     return {"seconds": round(time.time() - t0, 2), "log": str(log)}
+ 
+diff --git a/chiplab/tests/test_yosys_timeout.py b/chiplab/tests/test_yosys_timeout.py
+new file mode 100644
+index 0000000..9d82f79
+--- /dev/null
++++ b/chiplab/tests/test_yosys_timeout.py
+@@ -0,0 +1,30 @@
++"""A timed-out Yosys run must not leave the processes it started (yosys-abc, shell commands) running."""
++import subprocess
++import time
++import uuid
++
++import pytest
++
++from chiplab import config
++from chiplab.hw.yosys import SynthError, run
++
++pytestmark = pytest.mark.skipif(not config.find_bin("yosys"), reason="yosys not installed")
++
++
++def _alive(marker: str) -> list[str]:
++    out = subprocess.run(["ps", "-Ao", "command="], capture_output=True, text=True, timeout=30).stdout
++    return [ln for ln in out.splitlines() if marker in ln and "ps -Ao" not in ln]
++
++
++def test_timeout_kills_yosys_children(tmp_path):
++    # Yosys `!` runs a shell command as its child, the same way its abc pass starts yosys-abc
++    secs = f"{37 + uuid.uuid4().int % 1000 / 1000:.3f}"
++    with pytest.raises(SynthError, match="timed out"):
++        run(f"! sleep {secs}\n", tmp_path, timeout=2, name="hang")
++    time.sleep(0.5)
++    assert _alive(f"sleep {secs}") == []
++
++
++def test_normal_run_unchanged(tmp_path):
++    r = run("! true\n", tmp_path, timeout=60, name="ok")
++    assert r["seconds"] >= 0 and (tmp_path / "ok.log").exists()
