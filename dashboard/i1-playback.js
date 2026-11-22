@@ -74,7 +74,7 @@
   css.textContent = [
     ".pb-row [hidden]{display:none!important}",
     ".top:has(+ .pb-row) #stp .spill.paused{display:none}",
-    "@media (max-width:767px){.rv-st{flex-wrap:wrap;gap:6px 0}.rv-st li{flex:0 0 33%;min-width:0}}",
+    "@media (max-width:767px){.rv-st{scrollbar-width:none}.rv-st::-webkit-scrollbar{display:none}.rv-st li{flex:none;min-width:0;padding:0 8px}}",
     ".pb-row{flex:none;display:flex;align-items:center;gap:6px;min-height:40px;padding:0 14px 0 12px;border-bottom:1px solid var(--hair);background:rgb(255 255 255/.66)}",
     ".pb-b{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;color:var(--i700);flex:none}",
     ".pb-b:hover{background:var(--i100)}.pb-b[disabled]{opacity:.35;cursor:default;background:none}",
@@ -122,7 +122,7 @@
     ".pb-src{font-size:11.5px;color:var(--i500);padding:10px 12px 4px}",
     /* recorded run view */
     ".rv{max-width:1320px;margin:0 auto;padding:18px 24px 72px;display:flex;flex-direction:column;gap:14px}",
-    ".rv-st{display:flex;gap:0;list-style:none;margin:0;padding:10px 6px;background:#fff;border:1px solid rgb(0 0 0/.07);border-radius:14px;overflow-x:auto}",
+    ".rv-st{position:relative;display:flex;gap:0;list-style:none;margin:0;padding:10px 6px;background:#fff;border:1px solid rgb(0 0 0/.07);border-radius:14px;overflow-x:auto}",
     ".rv-st li{flex:1;min-width:84px;padding:0 10px;font-size:12px;color:var(--i500);display:flex;align-items:center;gap:7px;white-space:nowrap}",
     ".rv-st li i{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--i300);flex:none}",
     ".rv-st li.started{color:var(--blue7);font-weight:600}.rv-st li.started i{border-color:var(--blue6);background:rgb(61 109 240/.15)}",
@@ -134,6 +134,7 @@
     ".rv-pan{padding:12px 14px}.rv-pan h2{font-size:13.5px;font-weight:650;margin:0 0 6px}",
     ".rv-pan .sub{font-size:12px;color:var(--i600);margin:0 0 8px;line-height:1.45}",
     ".rv-chip{font-family:var(--mono);font-size:11.5px;color:var(--i800)}",
+    "#rvTiles .rv-chip{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
     ".rv-sab .row{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--hair);font-size:12px;color:var(--i700)}",
     ".rv-sab .row:first-of-type{border-top:0}.rv-sab .row b{font-weight:600;min-width:72px}",
     ".rv-sab .dots{display:flex;gap:4px;flex-wrap:wrap}",
@@ -160,7 +161,9 @@
     ".rv-brief{font-size:13px;color:var(--i700);margin:6px 0 0;line-height:1.5;max-width:860px}",
     ".rv-empty{font-size:12.5px;color:var(--i500)}",
     "@media (max-width:1100px){.rv-grid{grid-template-columns:1fr}}",
-    "@media (max-width:767px){.pb-row{padding:0 6px;gap:2px}.pb-time .tot,.pb-time .sl{display:none}.pb-trk{margin:0 4px}.rv{padding:12px 12px 72px}.rv-logp,.rv-files{padding:12px 12px 72px}.pb-past .lbl{display:none}}",
+    /* touch: every control is a 44 px target; on a phone the track takes its own row above the buttons */
+    "@media (max-width:767px),(pointer:coarse){.pb-b{width:44px;height:44px}.pb-spd{height:44px;min-width:44px}.pb-live{height:44px;padding:0 12px}}",
+    "@media (max-width:767px){.pb-row{flex-wrap:wrap;padding:2px 6px 0;gap:0 2px}.pb-trk{order:-1;flex:1 0 calc(100% - 16px);height:32px;margin:0 8px}.pb-time{margin:0 auto 0 6px}.rv{padding:12px 12px 72px}.rv-logp,.rv-files{padding:12px 12px 72px}.pb-past .lbl{display:none}}",
     "@media (prefers-reduced-motion:reduce){.pb-trk.drag .pb-thumb{transform:translate(-50%,-50%)}}"
   ].join("\n");
   document.head.appendChild(css);
@@ -709,7 +712,8 @@
     var r = parse(); if (!r) return false;
     var main = $("#main"); if (!main) return false;
     document.body.classList.add("inrun");
-    var demo = $("#demo"); if (demo) { demo.textContent = "Recorded run, real events"; demo.className = "demo mea"; }
+    var demo = $("#demo"), known = RUNS[r.src + ":" + r.id], live = !!(known && known.running);
+    if (demo) { demo.textContent = live ? "Live run, real events" : "Recorded run, real events"; demo.className = "demo mea"; }
     var same = V && V.rec && V.rec.key === r.src + ":" + r.id;
     if (!same) { unmountBar(); main.innerHTML = '<div class="body"><div class="rv"><p class="rv-empty">Reading the recorded run…</p></div></div>'; }
     loadRun(r.src, r.id).then(function (rec) {
@@ -730,7 +734,7 @@
     } else { V.view = view; V.sig = {}; V.logN = 0; }
     main.innerHTML = '<div class="top"><nav class="tabs" aria-label="Run views">' + VIEWS.map(function (v) {
       return '<a class="tab' + (v[0] === view ? " on" : "") + '" href="#/rec/' + rec.src + "/" + encodeURIComponent(rec.id) + "/" + v[0] + '">' + v[1] + "</a>";
-    }).join("") + '</nav><span class="grow" style="flex:1"></span><div class="tright">' + pastLink("run") + '<span class="mk ' + (rec.running ? "sim" : "mea") + ' topbadge">' + (rec.running ? "Live run" : "Recorded run") + (rec.src === "mac" ? ", this computer" : "") + "</span></div></div>" +
+    }).join("") + '</nav><span class="grow" style="flex:1"></span><div class="tright">' + pastLink("run") + '<span class="mk topbadge"></span></div></div>' +
       '<div class="body" id="rvBody">' + (view === "overview" ? overviewHTML() : view === "log" ? '<div class="rv-logp"><h2>Log</h2><p>What the run said and did, up to the time on the bar. Tool calls are one line each.</p><ul class="rv-log" id="rvLog"></ul></div>' : '<div class="rv-files"><h2>Files</h2><p>Files the run had written by the time on the bar.</p><div id="rvFiles"></div></div>') + "</div>";
     var ctl = {
       clock: V.clock, marks: rec.marks, gaps: rec.gaps, kind: "recorded",
@@ -794,8 +798,17 @@
   var plain = function (s) { return String(s || "").replace(/\*\*([^*]+)\*\*/g, "$1").replace(/`([^`]+)`/g, "$1").replace(/^#+\s*/gm, ""); };
   function sizeOf(p) { return p.gates != null ? p.gates : p.est; }
 
+  // the labels that say whether the run is still going follow rec.running, so they flip when it ends
+  function paintLabels() {
+    var rec = V.rec, live = !!rec.running;
+    once("labels", String(live), function () {
+      var b = $("#main .topbadge"); if (b) { b.textContent = (live ? "Live run" : "Recorded run") + (rec.src === "mac" ? ", this computer" : ""); b.className = "mk " + (live ? "sim" : "mea") + " topbadge"; }
+      var demo = $("#demo"); if (demo) { demo.textContent = live ? "Live run, real events" : "Recorded run, real events"; demo.className = "demo mea"; }
+    });
+  }
   function paint(t) {
     if (!V) return;
+    paintLabels();
     var M = model(V.rec, t);
     V.last = M;
     if (V.view === "overview") paintOverview(M);
@@ -824,30 +837,34 @@
         var x = st.stages[s] || { state: "pending" };
         return '<li class="' + x.state + '" data-stage="' + s + '" data-state="' + x.state + '"' + (x.state === "started" ? ' aria-current="step"' : "") + ' title="' + esc(STAGE_N[s] + ": " + (x.state === "started" ? "in progress" : x.state) + (x.reason ? ", " + x.reason : "")) + '"><i></i><span>' + STAGE_N[s] + (x.state === "skipped" ? ' <span class="r">skipped</span>' : "") + "</span></li>";
       }).join("");
+      // a strip narrower than its stages (a phone) scrolls to keep the current one in view
+      var ol = $("#rvStages"), cur = $("[aria-current]", ol);
+      if (cur && ol.scrollWidth > ol.clientWidth) ol.scrollLeft = cur.offsetLeft - (ol.clientWidth - cur.offsetWidth) / 2;
     });
     var costTxt = st.costSum ? "$" + st.costSum.toFixed(2) : "–";
-    once("tiles", [M.pts.length, st.chosen, M.chosen && sizeOf(M.chosen), st.messages, st.toolN, st.artifacts.length, costTxt, st.subOrder.length].join("|"), function () {
+    var live = !!rec.running;
+    once("tiles", [M.pts.length, st.chosen, M.chosen && sizeOf(M.chosen), st.messages, st.toolN, st.artifacts.length, costTxt, st.subOrder.length, live].join("|"), function () {
       var ch = M.chosen, yk = pickY(M);
       var tiles = [
         ["designs", "Designs so far", M.pts.length ? fmtN(M.pts.length) : "–", M.pts.filter(function (p) { return p.gates != null; }).length + " compiled to gates"],
-        ["chosen", "Chosen chip", ch ? '<span class="rv-chip">' + esc(clip(ch.id, 16)) + "</span>" : "–", ch ? (sizeOf(ch) != null ? fmtN(sizeOf(ch)) + " gates" : "size not reported") + (yk && ch.m[yk] != null ? ", " + label(yk).toLowerCase() + " " + fmtM(yk, ch.m[yk], M.pts) : "") : "not chosen yet"],
+        ["chosen", "Chosen chip", ch ? '<span class="rv-chip" title="' + esc(ch.id) + '">' + esc(ch.id) + "</span>" : "–", ch ? (sizeOf(ch) != null ? fmtN(sizeOf(ch)) + " gates" : "size not reported") + (yk && ch.m[yk] != null ? ", " + label(yk).toLowerCase() + " " + fmtM(yk, ch.m[yk], M.pts) : "") : "not chosen yet"],
         ["tools", "Tool calls", fmtN(st.toolN), fmtN(st.messages) + " messages, " + fmtN(st.artifacts.length) + " files"],
         ["cost", "Agent cost", costTxt, st.cost ? fmtN((st.cost.tin || 0) + (st.cost.tout || 0)) + " tokens" : "reported at the end"]
       ];
       $("#rvTiles").innerHTML = tiles.map(function (x) {
         return '<div class="tile' + (x[2] === "–" ? " empty" : "") + '" data-k="' + x[0] + '"><div class="tl">' + x[1] + '</div><div class="tv">' + x[2] + '</div><div class="ts">' + x[3] + "</div></div>";
-      }).join("") + '<span class="mk mea" style="position:absolute;right:12px;top:-9px">recorded</span>';
+      }).join("") + (live ? '<span class="mk sim" style="position:absolute;right:12px;top:-9px">live</span>' : '<span class="mk mea" style="position:absolute;right:12px;top:-9px">recorded</span>');
       $("#rvTiles").style.position = "relative";
       $("#rvTiles").dataset.designs = String(M.pts.length); $("#rvTiles").dataset.chosen = st.chosen || "";
     });
     paintChart(M);
     once("sab", JSON.stringify([st.subs, st.merged]), function () { $("#rvSab").innerHTML = sabHTML(st); });
     once("last", [st.items.length, st.finished && 1].join("|"), function () { $("#rvLast").innerHTML = lastHTML(M); });
-    once("fun", [M.pts.length, M.chosen && M.chosen.id, M.pts.filter(function (p) { return p.ver; }).length, M.pts.filter(function (p) { return p.gates != null; }).length].join("|"), function () {
+    once("fun", [M.pts.length, M.chosen && M.chosen.id, M.pts.filter(function (p) { return p.ver; }).length, M.pts.filter(function (p) { return p.gates != null; }).length, live].join("|"), function () {
       var compiled = M.pts.filter(function (p) { return p.gates != null; }).length, ver = M.pts.filter(function (p) { return p.ver; }).length;
       var S = [["Designs proposed", M.pts.length], ["Compiled to gates", compiled], ["Verified against the model", ver], ["Chosen", st.chosen ? 1 : 0]];
       $("#rvFun").innerHTML = S.map(function (s, i) { return '<div class="fs' + (i === S.length - 1 ? " last" : "") + (!s[1] ? " mute" : "") + '" data-f="' + i + '"><div class="fn">' + fmtN(s[1]) + '</div><div class="fl">' + s[0] + "</div></div>"; }).join("");
-      $("#rvFunn").textContent = "Counted from this run's recorded events up to the time on the bar.";
+      $("#rvFunn").textContent = live ? "Counted from this run's events so far, up to the time on the bar; the run is still going." : "Counted from this run's recorded events up to the time on the bar.";
     });
   }
   function sabHTML(st) {
