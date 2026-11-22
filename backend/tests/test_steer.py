@@ -231,6 +231,78 @@ async def test_follow_up_costs_add_up(tmp_path: Path) -> None:
     assert log.since(1)[-1] == {**log.since(1)[-1], "type": "status", "message_id": "m3"}
 
 
+async def _recorded_run(config: BackendConfig, agent: str) -> tuple[str, int]:
+    """A finished run on disk, as if run by ``agent``: its id and the seq of its ``run.finished``."""
+    async with _client(config, 0.01) as client:
+        run_id = await _start(client)
+        events = await _read(await _stream(client, run_id))
+    record_path = config.resolved_runs_dir() / run_id / API_RECORD_FILE
+    record = json.loads(record_path.read_text())
+    record_path.write_text(json.dumps({**record, "agent": agent, "model": "made-up-model"}))
+    return run_id, events[-1]["seq"]
+
+
+def _no_claude(monkeypatch: pytest.MonkeyPatch) -> list[AgentSpec]:
+    """Record any start of the claude backend instead of starting it."""
+    started: list[AgentSpec] = []
+
+    async def run(self: Any, spec: AgentSpec, sink: Any) -> Any:
+        started.append(spec)
+        raise RuntimeError("the claude backend must not start here")
+
+    monkeypatch.setattr(claude_cli_module.ClaudeCliBackend, "run", run)
+    return started
+
+
+async def _follow_up(config: BackendConfig, agent: str | None, run_id: str, seq: int) -> list[dict[str, Any]]:
+    api = ApiConfig(keepalive_s=0.2, progress_poll_s=0.02, stub_step_s=0.01, run_timeout_s=60)
+    app = create_app(_config(config), api, token=TOKEN, agent=agent)  # type: ignore[arg-type]
+    async with TestClient(TestServer(app)) as client:
+        assert (await _say(client, run_id, "what next?"))["delivery"] == "follow_up"
+        events = await _read(await _stream(client, run_id, seq + 1))
+        detail = await (await client.get(f"/api/runs/{run_id}", headers=AUTH)).json()
+    assert detail["status"] == events[-1]["status"]
+    return events
+
+
+async def test_a_follow_up_uses_the_agent_the_server_was_started_with(
+    config: BackendConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_id, seq = await _recorded_run(config, "claude")
+    started = _no_claude(monkeypatch)
+    events = await _follow_up(config, "stub", run_id, seq)
+    assert started == [], "the recorded agent was not started"
+    assert any(e.get("role") == "agent" and "Follow-up answer" in e.get("text", "") for e in events)
+    assert events[-1]["type"] == "run.finished" and events[-1]["status"] == "succeeded"
+
+
+async def test_without_an_explicit_choice_a_follow_up_uses_the_recorded_agent(
+    config: BackendConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_id, seq = await _recorded_run(config, "stub")
+    started = _no_claude(monkeypatch)
+    events = await _follow_up(config, None, run_id, seq)  # no choice: the default would be claude
+    assert started == []
+    assert any(e.get("role") == "agent" and "Follow-up answer" in e.get("text", "") for e in events)
+    assert events[-1]["status"] == "succeeded"
+
+
+async def test_a_follow_up_whose_agent_raises_leaves_a_finished_run_as_it_was(
+    config: BackendConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_id, seq = await _recorded_run(config, "claude")
+    started = _no_claude(monkeypatch)
+    events = await _follow_up(config, None, run_id, seq)  # the recorded claude agent, which cannot start
+    assert len(started) == 1
+    errors = [e["message"] for e in events if e["type"] == "error"]
+    assert errors and "could not continue the conversation" in errors[-1]
+    assert events[-1]["type"] == "run.finished" and events[-1]["status"] == "succeeded"
+    assert events[-1]["follow_up_failed"] is True
+    folder = config.resolved_runs_dir() / run_id
+    assert json.loads((folder / API_RECORD_FILE).read_text())["status"] == "succeeded"
+    assert json.loads((folder / "run.json").read_text())["status"] == "succeeded"
+
+
 # ---- the claude_cli harness, against the fake CLI ----
 
 

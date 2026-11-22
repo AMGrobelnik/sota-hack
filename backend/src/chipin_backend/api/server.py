@@ -411,11 +411,11 @@ def create_app(
     api: ApiConfig,
     *,
     token: str,
-    agent: ApiAgent = "claude",
+    agent: ApiAgent | None = None,
     runner: ApiRunner = "local",
     frontend: Path | None = None,
 ) -> web.Application:
-    """The aiohttp application; ``token`` is the session token."""
+    """The aiohttp application; ``token`` is the session token, ``agent`` None: claude, not chosen."""
     app = web.Application(middlewares=[guard])
     app[MANAGER] = RunManager(config, api, agent=agent, runner=runner)
     app[TOKEN] = token

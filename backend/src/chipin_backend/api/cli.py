@@ -33,8 +33,9 @@ def add_serve_parser(
     serve_p.add_argument(
         "--agent",
         choices=["claude", "stub", "openrouter"],
-        default="claude",
-        help="stub: scripted, no model calls",
+        default=None,
+        help="default claude; stub: scripted, no model calls. A follow-up uses the agent chosen here, "
+        "or without a choice the run's own",
     )
     serve_p.add_argument(
         "--stub-step", type=float, default=None, help="seconds between the stub agent's steps (default 0.4)"
@@ -64,17 +65,16 @@ async def _serve(config: BackendConfig, api: ApiConfig, args: argparse.Namespace
     port = args.port if args.port is not None else api.port
     token = load_or_create_token(config.resolved_runs_dir(), rotate=args.new_token)
     app = create_app(config, api, token=token, agent=args.agent, runner=args.runner, frontend=args.frontend)
+    agent = args.agent or "claude"
     try:
         runner = await serve(app, port)
     except OSError as exc:
         logger.error("cannot listen on {}:{}: {}", HOST, port, exc)
         return 1
     bound = runner.addresses[0][1] if runner.addresses else port
-    print(
-        f"ChipIn backend ready (agent {args.agent}, runner {args.runner}): http://{HOST}:{bound}/#token={token}"
-    )
+    print(f"ChipIn backend ready (agent {agent}, runner {args.runner}): http://{HOST}:{bound}/#token={token}")
     print("Ctrl-C stops it.", flush=True)
-    logger.info("serving on {}:{} (agent {}, runner {})", HOST, bound, args.agent, args.runner)
+    logger.info("serving on {}:{} (agent {}, runner {})", HOST, bound, agent, args.runner)
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):

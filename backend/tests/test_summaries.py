@@ -362,6 +362,42 @@ async def test_work_after_a_stage_is_done_rewrites_its_summary() -> None:
     assert [x["final"] for x in out if x.get("id") == "run"][-1] is True
 
 
+class DearRun(Scripted):
+    """Run lines cost ``run_cost``, every other call ``cost``."""
+
+    def __init__(self, *, cost: float, run_cost: float) -> None:
+        super().__init__(cost=cost)
+        self.run_cost = run_cost
+
+    async def __call__(self, *, system: str, prompt: str, max_tokens: int) -> Summary:
+        reply = await super().__call__(system=system, prompt=prompt, max_tokens=max_tokens)
+        data = json.loads(prompt)
+        if isinstance(data, dict) and data.get("part") == "the whole run":
+            reply.cost_usd = self.run_cost
+        return reply
+
+
+async def test_a_reclosed_stage_the_budget_refuses_keeps_its_model_line() -> None:
+    s = Script()
+    s.stage("verify", "started")
+    s.tool("Ran simulate", detail="50 vectors, 0 mismatches")
+    s.say("Simulation matched the model on all vectors, so the verify stage is complete now.")
+    s.stage("verify", "done")
+    s.tool("Ran rtl-simulate", detail="2000 random inputs, bit-exact")
+    s.tool("Ran prove-equivalence", detail="proved")
+    s.add("run.finished", status="succeeded")
+    # the interim run line after the first close is dear: the rewrite of the closing line is refused
+    out = await run_replay(s, DearRun(cost=0.001, run_cost=0.03), max_usd_per_run=0.05)
+    assert "closing" in [x["reason"] for x in out if x["type"] == LIMIT], "the rewrite was refused"
+    verify = [x for x in out if x.get("id") == "stage:verify"]
+    assert len(verify) == 2 and verify[0]["source"] == "model" and verify[0]["final"]
+    last = verify[-1]
+    assert last["final"] and last["source"] == "model" and last["model"] == "scripted/model"
+    assert (last["text"], last["covers"]) == (verify[0]["text"], verify[0]["covers"])
+    assert latest(out)["stage:verify"]["source"] == "model"
+    check_tree(out, s.events)
+
+
 # ---- limits and failures ----
 
 

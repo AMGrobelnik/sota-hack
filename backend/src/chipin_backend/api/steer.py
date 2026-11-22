@@ -15,8 +15,10 @@
   resume_session``), the run goes back to ``running`` and ends with a new
   ``run.finished``; the ``cost`` event and the run's cost are the totals so
   far. The delivery status comes when the agent starts answering.
-* A follow-up whose agent cannot be started (after the backend's own retries)
-  ends with an ``error`` event and a ``run.finished`` that puts the run back
+* A follow-up uses the agent the server was started with when it was chosen
+  explicitly (``serve --agent``); otherwise the run's recorded agent.
+* A follow-up whose agent cannot be started (after the backend's own retries,
+  or raising before it answered) ends with an ``error`` event and a ``run.finished`` that puts the run back
   as it was (``succeeded`` or ``stopped``): the run is not failed, and the
   next message tries again, carrying the unanswered ones with it.
 * A failed run takes no messages (409); text is limited to
@@ -218,6 +220,9 @@ async def _inject(
 
 
 def _agent(manager: RunManager, item: ApiRun) -> str:
+    """The agent that answers: the server's explicit choice, else the run's recorded agent."""
+    if manager.agent_chosen:
+        return manager.agent
     return str(item.record.get("agent") or manager.agent)
 
 
@@ -298,6 +303,7 @@ def _spec_from_record(manager: RunManager, item: ApiRun) -> AgentSpec:
     from chipin_backend.api.manager import AGENT_BACKENDS
 
     agent = _agent(manager, item)
+    same = agent == item.record.get("agent")  # the recorded model and provider belong to its agent
     preset = item.record.get("preset")
     instructions = manager.instructions
     if (item.run.workspace / SPEC_FILE).is_file():
@@ -306,8 +312,8 @@ def _spec_from_record(manager: RunManager, item: ApiRun) -> AgentSpec:
         name="chipin",
         prompts=[],
         backend=AGENT_BACKENDS.get(agent, AGENT_BACKENDS[manager.agent]),  # type: ignore[arg-type]
-        model=item.record.get("model"),
-        provider=item.record.get("provider"),
+        model=item.record.get("model") if same else None,
+        provider=item.record.get("provider") if same else None,
         effort=manager.api.presets.get(preset) if preset else None,
         system_prompt=instructions,
         timeout_s=manager.api.run_timeout_s,
@@ -363,7 +369,9 @@ async def _drive_follow_up(
     except Exception as exc:
         logger.exception("run {}: follow-up failed in the runner", item.id)
         summary = f"{type(exc).__name__}: {exc}"
-        item.log.append("error", message=summary)
+        not_started = bool(st.answering)  # the agent never began to answer: the run stays as it was
+        message = NOT_STARTED_TEXT.format(reason=clip(summary, 300)) if not_started else summary
+        item.log.append("error", message=message)
     finally:
         await runner.close()
         follow.cancel()

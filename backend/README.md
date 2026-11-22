@@ -306,6 +306,8 @@ python -m chipin_backend serve           # the Claude agent, port 8797
   Mac's own Claude login; `--agent stub` runs a scripted agent with no model
   calls. Every run goes through `orchestrate.run_agent`, so it gets a
   `runs/<run_id>/` folder, a full `run.json` and the OpenRouter summary.
+- A follow-up uses the `--agent` given to `serve`, else the run's recorded agent; a
+  follow-up that cannot start leaves a finished run finished, with its own error event.
 - `--stub-step <seconds>` slows the stub's steps (default 0.4 s, about
   10 s a run) so a demo can be followed, messaged and stopped.
 

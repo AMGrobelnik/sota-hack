@@ -53,7 +53,10 @@ in tiers, so the lines a reader opens first are the last to go:
   final line per stage not yet closed, plus the run's), at most
   ``reserve_max_share`` of the cap;
 - the reserve is for the closing lines: each stage's final line and the
-  run's final line, written last, which may spend up to the cap.
+  run's final line, written last, which may spend up to the cap. A closing
+  line the model already wrote is never replaced by a fallback: when a stage
+  is closed again and the rewrite cannot be afforded, the earlier model line
+  stays, marked final.
 
 A tier that is spent writes one ``summary.limit`` event (``reason`` steps or
 parts, ``scope``) and its lines show their own words from then on; the tiers
@@ -836,6 +839,8 @@ class Writer:
         self.closing_dearest = 0.0
         self.closed_stages: set[str] = set()
         self.run_closed = False
+        #: The last model-written closing line per summary id: ``(text, covers, model)``.
+        self.model_closing: dict[str, tuple[str, list[str], str]] = {}
         self.tiers_out: set[str] = set()
         self.failures = 0
         self.off = ""
@@ -1050,11 +1055,15 @@ class Writer:
             text, source, model = await self._one(
                 "stage", data, lines, own, self.s.upper_max_chars, closing=final
             )
+        covers = [p[1] for p in parts]
+        text, source, covers, model = self._keep_model(
+            f"stage:{stage.name}", final, text, source, covers, model
+        )
         stage.line = text
         self._write(
             f"stage:{stage.name}",
             "stage",
-            [p[1] for p in parts],
+            covers,
             text,
             source,
             parent="run",
@@ -1082,15 +1091,22 @@ class Writer:
             )
         else:
             text, source, model = clip(own, self.s.run_max_chars), "verbatim", ""
-        self._write(
-            "run",
-            "run",
-            [g.id for g in orphans] + [f"stage:{s.name}" for s in stages],
-            text,
-            source,
-            model=model,
-            final=final,
-        )
+        covers = [g.id for g in orphans] + [f"stage:{s.name}" for s in stages]
+        text, source, covers, model = self._keep_model("run", final, text, source, covers, model)
+        self._write("run", "run", covers, text, source, model=model, final=final)
+
+    def _keep_model(
+        self, id_: str, final: bool, text: str, source: Source, covers: list[str], model: str
+    ) -> tuple[str, Source, list[str], str]:
+        """A closing line: a fallback gives way to the model line written for it before, if any."""
+        if not final:
+            return text, source, covers, model
+        if source == "model":
+            self.model_closing[id_] = (text, covers, model)
+        elif source == "fallback" and id_ in self.model_closing:
+            text, covers, model = self.model_closing[id_]
+            return text, "model", covers, model
+        return text, source, covers, model
 
     async def _one(
         self,

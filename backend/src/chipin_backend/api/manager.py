@@ -168,14 +168,17 @@ class RunManager:
         config: BackendConfig,
         api: ApiConfig,
         *,
-        agent: ApiAgent = "claude",
+        agent: ApiAgent | None = None,
         runner: ApiRunner = "local",
         summary: bool = True,
     ) -> None:
         register()
         self.config = config
         self.api = api
-        self.agent = agent
+        #: The agent new runs use (claude when none was chosen); ``agent_chosen``: the server was
+        #: started with an explicit choice, which a follow-up then uses over the run's recorded agent.
+        self.agent: ApiAgent = agent or "claude"
+        self.agent_chosen = agent is not None
         self.runner = runner
         self.runs: dict[str, ApiRun] = {}
         self.summary = summary

@@ -210,7 +210,7 @@ def test_serve_command_defaults() -> None:
     args = _parser().parse_args(["serve"])
     assert (args.command, args.agent, args.runner, args.port, args.frontend) == (
         "serve",
-        "claude",
+        None,  # no explicit choice: claude for new runs, a follow-up uses the run's own agent
         "local",
         None,
         None,
