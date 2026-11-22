@@ -917,7 +917,7 @@
     var co = F.cost(x.f), sm = co && num(co.summaries_usd) > 0 ? co.summaries_usd : 0, cost = co && num(co.usd) != null ? "Cost: $" + (co.usd + sm).toFixed(2) : ""; if (ch("cost", cost)) { $("#lvCost").textContent = cost; $("#lvCost").title = co ? (sm ? "Agent " + co.usd.toFixed(2) + ", summaries " + sm.toFixed(2) + "; " : "") + fmt(co.tokens_in || 0) + " tokens in, " + fmt(co.tokens_out || 0) + " out" : ""; }
     var cm = $("#lvCostM"); if (cm && cm.textContent !== cost) cm.textContent = cost; // the same figure, under the headline on phones
     var bt = M.running || M.status === "connecting" ? "Live run" : "Finished run"; if (ch("badge", bt)) { $("#lvBadge").textContent = bt; $("#lvBadge").className = "mk topbadge " + (bt === "Live run" ? "lv-live" : "no"); setDemo(bt); }
-    var setT = (M.r.preset ? "Run size: " + cap(M.r.preset) + " · " : "") + "Model: " + usedModel(M); if (ch("set", setT)) $("#lvSetT").textContent = setT;
+    var setT = (M.r.preset ? "Run size: " + (cap(M.r.preset) === "Pro" ? "Large" : cap(M.r.preset)) + " · " : "") + "Model: " + usedModel(M); if (ch("set", setT)) $("#lvSetT").textContent = setT;
     var stop = $("#lvStop"); stop.hidden = !M.running;
     if (M.lost || V.wasLost) { var lb = [stop, $("#lvCxStop")].filter(Boolean); lb.forEach(function (b) { b.disabled = !!M.lost; if (!M.lost && b.lastChild.textContent === "Stopping") b.lastChild.textContent = b === stop ? "Stop" : "Stop the run"; }); V.wasLost = !!M.lost; }
     if (!M.running && stop.disabled) { stop.disabled = false; stop.lastChild.textContent = "Stop"; var cs = $("#lvCxStop"); if (cs) { cs.disabled = false; cs.lastChild.textContent = "Stop the run"; } }
@@ -1118,7 +1118,7 @@
   }
   function settingsModal(M) {
     var bg = document.createElement("div"); bg.className = "mbg";
-    var rows = [["Run", M.id], ["Backend", C.base || "not connected"], ["Preset", M.r.preset ? cap(M.r.preset) : "the backend's default"], ["Model", usedModel(M)]].concat(specRows(M.spec));
+    var rows = [["Run", M.id], ["Backend", C.base || "not connected"], ["Preset", M.r.preset ? (cap(M.r.preset) === "Pro" ? "Large" : cap(M.r.preset)) : "the backend's default"], ["Model", usedModel(M)]].concat(specRows(M.spec));
     bg.innerHTML = '<div class="modal" role="dialog" aria-label="Run settings"><button class="mx" aria-label="Close">' + I("x", "s16") + '</button><h3>Run settings</h3><p style="margin:0 0 10px">Sent with the run when it started.</p>' +
       rows.map(function (r) { return '<div class="kv"><span>' + esc(r[0]) + "</span><span>" + esc(r[1]) + "</span></div>"; }).join("") + ((M.r.notes || []).length ? '<p class="lv-mute">' + esc(M.r.notes.join(" ")) + "</p>" : "") + "</div>";
     bg.onclick = function (e) { if (e.target === bg || e.target.closest(".mx")) bg.remove(); };

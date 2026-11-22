@@ -743,11 +743,11 @@ select.gfin{padding:0 10px}
 <script src="../i1-messages.js?v=mr1"></script><!-- MESSAGES HOOK: messages and levels of summaries for live runs (window.ChipInMessages) -->
 <script src="../i1-msgrow.js?v=mr5"></script><!-- MSGROW HOOK: one row per message with its one-line summary, click to expand (window.ChipInMsgRow) -->
 <script src="../i1-connect.js?v=1"></script><!-- CONNECT HOOK: #backend=...&token=... link stores a local backend for this browser, before i1-live.js reads it -->
-<script src="../i1-live.js?v=pb2"></script>
+<script src="../i1-live.js?v=pb3"></script>
 <!-- PLAYBACK HOOK: one clock and one playback bar for example and recorded runs, in ../i1-playback.js -->
-<script src="../i1-playback.js?v=nm1"></script>
+<script src="../i1-playback.js?v=nm2"></script>
 <!-- CHIPPY HOOK: the helper panel (corner button, side panel, example prompts, page actions) lives in ../i1-chippy.js -->
-<script src="../i1-chippy.js?v=20261122-avatar"></script>
+<script src="../i1-chippy.js?v=20261122-large"></script>
 <script src="../i1-designs.js?v=nm1"></script><!-- DESIGNS HOOK: the designs a run tried, in the Chip view (window.ChipInDesigns) -->
 <script src="../i1-questions.js"></script>
 <script src="../i1-search.js"></script><!-- SEARCH HOOK: the five search steps between Run and the run view, replayed on examples (window.ChipInSearch) --><!-- QUESTIONS HOOK: follow-up questions from a connected backend, one extra step before the spec card (window.ChipInQuestions) -->
@@ -935,6 +935,7 @@ const PRESETS = [
   { n: "Ultra", i: "atom", rounds: 5, cands: 16384, per: 260, min: 360, k: 1.22 }
 ];
 const preset = n => PRESETS.find(p => p.n === n) || PRESETS[0];
+const plab = n => (n === "Pro" ? "Large" : n); // shown label; the key "Pro" stays internal (backend gets "pro")
 // the model a run uses: one of four, by name (RUN_MODELS in ../chipin-models.js); run.agent keeps
 // { backend, model } so a live run knows which backend agent runs it
 const RUN_MODELS = window.ChipInModels.RUN_MODELS;
@@ -1568,10 +1569,10 @@ function toast(msg) { $(".toast")?.remove(); const t = document.createElement("d
    The pattern follows AI Inventor's composer: a 24px pill showing the current choice, opening a small
    popover above it; rows with a check on the current one, a quiet secondary column for figures. */
 const ck = I("check", "s14");
-function presetPillHTML(sel) { const p = preset(sel); return `<button class="cpill" id="pPre" aria-haspopup="dialog" aria-expanded="false" aria-label="Preset: ${p.n}"><span class="mark">${I(p.i, "s13")}</span><span class="pv">${p.n}</span>${I("down", "s12 cv")}</button>`; }
+function presetPillHTML(sel) { const p = preset(sel); return `<button class="cpill" id="pPre" aria-haspopup="dialog" aria-expanded="false" aria-label="Preset: ${plab(p.n)}"><span class="mark">${I(p.i, "s13")}</span><span class="pv">${plab(p.n)}</span>${I("down", "s12 cv")}</button>`; }
 function agentPillHTML(a) { return `<button class="cpill" id="pAg" aria-haspopup="dialog" aria-expanded="false" aria-label="Model: ${esc(modelName(a))}"><span class="pv">${esc(modelName(a))}</span>${I("down", "s12 cv")}</button>`; }
 function presetPopover(anchor, sel, onPick) {
-  const html = `<div class="ph">Preset</div>${PRESETS.map(p => `<button class="prow${p.n === sel ? " on" : ""}" data-pr="${p.n}">${I(p.i, "s14")}<span class="rn">${p.n}</span><span class="rs">${p.rounds} rounds, ${fmt(p.cands)}</span>${p.n === sel ? `<span class="ck">${ck}</span>` : ""}</button>`).join("")}`;
+  const html = `<div class="ph">Preset</div>${PRESETS.map(p => `<button class="prow${p.n === sel ? " on" : ""}" data-pr="${p.n}">${I(p.i, "s14")}<span class="rn">${plab(p.n)}</span><span class="rs">${p.rounds} rounds, ${fmt(p.cands)}</span>${p.n === sel ? `<span class="ck">${ck}</span>` : ""}</button>`).join("")}`;
   openPop(anchor, html, (e) => { const b = e.target.closest("[data-pr]"); if (b) { closePop(); onPick(b.dataset.pr); } }, { width: 212 });
 }
 const agentPopover = (anchor, cur, onPick) => flowAgentPop(anchor, cur, onPick);
@@ -1945,7 +1946,7 @@ function cardHTML(s) {
   const noM = window.ChipInModels.unavailableReason(window.ChipInModels.runModel(s.agent && s.agent.model), liveDefaults());
   const af = s.case === "af" && !liveOn() ? `<p class="gfr">${MEASURED.af ? tp("AF patch case: Run replays its real search.", "This brief is the AF patch case: Run replays its real search with your targets.") : tp("AF patch case: Run opens its measured run.", "This brief is the AF patch case: Run opens its measured run with your targets.")}</p>` : "";
   return `<p class="gfl">Check it, change anything, then run.</p><div class="gsc">${rows}${window.ChipInQuestions?.cardRows(s, flowSave) || "" /* QUESTIONS HOOK: the answers, editable */}${window.ChipInIntake?.cardRows(s) || "" /* INTAKE HOOK: the scripted answers */}</div>
-    <div class="gsq">${sizeUsable(s) ? `<div class="gsqi"><span id="gRs">Run size</span><div class="gseg" role="radiogroup" aria-labelledby="gRs">${PRESETS.map(x => `<button type="button" role="radio" aria-checked="${x.n === s.preset}" data-c="preset" data-v="${x.n}">${x.n}</button>`).join("")}</div>
+    <div class="gsq">${sizeUsable(s) ? `<div class="gsqi"><span id="gRs">Run size</span><div class="gseg" role="radiogroup" aria-labelledby="gRs">${PRESETS.map(x => `<button type="button" role="radio" aria-checked="${x.n === s.preset}" data-c="preset" data-v="${x.n}">${plab(x.n)}</button>`).join("")}</div>
       <span class="gfx" aria-live="polite">${SUBAGENTS[s.preset]} subagents per stage</span></div>` : ""}
       <div class="gsqi"><span>Model</span>${agentPill(s.agent)}${noM ? `<span class="gfx">${esc(noM)}; pick another</span>` : ""}</div></div>${af}`;
 }
@@ -2056,7 +2057,7 @@ function startFromSpec() {
   targets = targets.filter(t => !dropped.includes(t));
   const primary = targets.some(t => t.metric === s.primary) ? s.primary : targets[0] ? targets[0].metric : (TASKS[s.task] ? TASKS[s.task].def[0] : "sensitivity");
   const k = s.cons, constraints = { channels: k.findBest ? null : k.channels, findBest: k.findBest, batteryHours: k.batN * (k.batU === "days" ? 24 : 1), reusable: k.reusable };
-  const common = { place: s.place, group: s.group, constraints, width: SUBAGENTS[s.preset], specCard: specLines(s).map(r => [r.k, r.v]).concat(sizeUsable(s) ? [["Run size", `${s.preset}, ${SUBAGENTS[s.preset]} subagents per stage`]] : [], [["Model", modelName(s.agent)]]) };
+  const common = { place: s.place, group: s.group, constraints, width: SUBAGENTS[s.preset], specCard: specLines(s).map(r => [r.k, r.v]).concat(sizeUsable(s) ? [["Run size", `${plab(s.preset)}, ${SUBAGENTS[s.preset]} subagents per stage`]] : [], [["Model", modelName(s.agent)]]) };
   if (dropped.length) toast(`${andList(dropped.map(t => MET[t.metric].name))} is not in the measured results yet, so this run leaves it out.`);
   if (s.case === "af" && MEASURED.af) {
     // the real search replays on the demo clock, judged against the typed targets
@@ -2107,7 +2108,7 @@ function renderRun() {
       <nav class="tabs" aria-label="Run views">${VIEWS.map(([k, n]) => `<a class="tab${route.view === k ? " on" : ""}" href="#/run/${run.id}/${k}">${n}</a>`).join("")}</nav>
       <span id="stp"></span>
       ${!plays(run) || window.ChipInPlayback /* PLAYBACK HOOK: the bar goes under the header */ ? '<span class="grow" style="flex:1"></span>' : `<div class="pbar"><button class="pbtn" id="pbtn" aria-label="Pause"></button><span class="clk" id="clk"></span><div class="track" id="trk"><i></i><b></b></div><span class="left2" id="left2"></span></div>`}
-      <div class="tright">${window.ChipInReport?.linkHTML() || "" /* REPORT HOOK: Assumptions and limits, always in the top bar */}<span class="mk ${isSim(run) ? "sim" : "mea"} topbadge">${esc(badgeText(run))}</span><button class="cpill rset" id="rset" title="Run settings"><span class="pv">${isMea(run) ? "Measured run" : esc(`Run size: ${run.preset} · Model: ${modelName(run.agent)}`)}</span></button><button class="ib" id="rmenu" aria-label="Run menu">${I("hdots", "s16")}</button></div>
+      <div class="tright">${window.ChipInReport?.linkHTML() || "" /* REPORT HOOK: Assumptions and limits, always in the top bar */}<span class="mk ${isSim(run) ? "sim" : "mea"} topbadge">${esc(badgeText(run))}</span><button class="cpill rset" id="rset" title="Run settings"><span class="pv">${isMea(run) ? "Measured run" : esc(`Run size: ${plab(run.preset)} · Model: ${modelName(run.agent)}`)}</span></button><button class="ib" id="rmenu" aria-label="Run menu">${I("hdots", "s16")}</button></div>
     </div><div class="body" id="body"></div>`;
   cur = { id: run.id, view: route.view, sig: "" };
   if ($("#pbtn")) $("#pbtn").onclick = () => {
@@ -2132,11 +2133,11 @@ function renderRun() {
 function runSettings(run) {
   const pr = preset(run.preset), c = caseOf(run);
   openModal(`<h3>Run settings</h3><p style="margin:0 0 10px">Stored with the run when it started.</p>
-    ${isMea(run) ? `<div class="kv"><span>Run</span><span>${run.case === "af" ? "The measured AF feasibility run" : "Measured on open data, from the results file for this case"}</span></div>` : `<div class="kv"><span>Preset</span><span>${pr.n}: ${pr.rounds} rounds, ${fmt(pr.cands)} designs trained per round, ${pr.per} compiled per round</span></div>
-    <div class="kv"><span>Subagents per stage</span><span>${widthOf(run)}, set by the ${pr.n} preset; the batches are simulated</span></div>
+    ${isMea(run) ? `<div class="kv"><span>Run</span><span>${run.case === "af" ? "The measured AF feasibility run" : "Measured on open data, from the results file for this case"}</span></div>` : `<div class="kv"><span>Preset</span><span>${plab(pr.n)}: ${pr.rounds} rounds, ${fmt(pr.cands)} designs trained per round, ${pr.per} compiled per round</span></div>
+    <div class="kv"><span>Subagents per stage</span><span>${widthOf(run)}, set by the ${plab(pr.n)} preset; the batches are simulated</span></div>
     <div class="kv"><span>Model</span><span>${esc(modelName(run.agent))}<br><span style="color:#4a5062;font-size:12px">${isSim(run) ? "Labels only: this simulated run called no model" : ""}</span></span></div>
     <div class="kv"><span>Demo length</span><span>${clock(timeline(run).T)} on the demo clock</span></div>
-    <div class="kv"><span>A real run</span><span>${estSpan(estTxt(pr.min), `Assumes the ${pr.n} preset's ${pr.rounds} rounds of ${fmt(pr.cands)} designs at the team's planned throughput; not measured`)}</span></div>`}
+    <div class="kv"><span>A real run</span><span>${estSpan(estTxt(pr.min), `Assumes the ${plab(pr.n)} preset's ${pr.rounds} rounds of ${fmt(pr.cands)} designs at the team's planned throughput; not measured`)}</span></div>`}
     <div class="kv"><span>Judged on</span><span>${run.judge === "pooled" ? `All unseen ${c.whoP} pooled` : `The worst unseen ${c.who}, where the data allows`}</span></div>
     <div class="kv"><span>Data</span><span>${isMea(run) ? "Measured" : { own: "Own recordings chosen; this run is simulated", public: "Public data chosen; this run is simulated", sim: "Simulated" }[run.data.mode] || "Simulated"}</span></div>${specRowsHTML(run)}`);
 }
@@ -2189,7 +2190,7 @@ function headHTML(run, v) {
   else h1 = v.done || isMea(run) ? "No design in this family clears your bar on this data." : "No design clears every target yet.";
   const near = v.ev.chosen || v.ev.nearest[0];
   const chips = run.targets.map((t, i) => { const s = near ? targetState(run, near)[i] : null; return `<button class="tgt${t.metric === run.primary ? " pri" : ""}" data-t="${i}" aria-haspopup="dialog" aria-expanded="false" title="Change this target">${esc(MET[t.metric].kind === "rate" ? tName(t.metric) : MET[t.metric].name)} ${fmtTarget(t)} ${s ? pfHTML(s.ok) : ""}</button>`; }).join("");
-  return `<div class="tx"><p class="k0"><span>${esc(run.case === "custom" ? "Your device" : CASES[run.case].title)}</span>${runMark(run)}<span>${isMea(run) ? "" : esc(`Run size: ${pr.n} · Model: ${modelName(run.agent)}`)}</span></p>
+  return `<div class="tx"><p class="k0"><span>${esc(run.case === "custom" ? "Your device" : CASES[run.case].title)}</span>${runMark(run)}<span>${isMea(run) ? "" : esc(`Run size: ${plab(pr.n)} · Model: ${modelName(run.agent)}`)}</span></p>
     <h1>${h1}</h1>
     <p class="k1">Device: ${notGiven(run.device)}. Signal: ${notGiven(run.signal)}. Detects: ${notGiven(run.detect)}.</p>
     <div class="tgts" id="tgts">${chips}${run.targets.length < MET_KEYS.length ? `<button class="tgt add" id="addTgt" aria-haspopup="dialog" aria-expanded="false">${I("plus", "s12")} Add a target</button>` : ""}</div></div>`;

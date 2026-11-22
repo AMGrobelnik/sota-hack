@@ -473,7 +473,7 @@
   }
   function proposalText(p) {
     var b = p.request && p.request.body || {};
-    if (p.kind === "start_run") return "Start a new " + cap(b.preset || "lite") + " run with this brief:\n" + (b.prompt || "");
+    if (p.kind === "start_run") return "Start a new " + cap(String(b.preset || "lite").replace(/^pro$/i, "large")) + " run with this brief:\n" + (b.prompt || "");
     if (p.kind === "message_agent") return "Send this to the agent of run " + shortId(p.run_id) + ":\n" + (b.text || "");
     if (p.kind === "stop_run") return "Stop run " + shortId(p.run_id) + ". What it has done so far stays.";
     return p.label || "A proposed action";
