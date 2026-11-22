@@ -15,7 +15,7 @@
       map-to-process tiles per process; estimate-cost routes.
   - origin/main: backend/README.md
       Fan-out: spec and report are the orchestrator's own; five batch stages; batch size
-      Lite 3, Pro 10, Ultra 20; effort low, high, max. Levels of summaries (item, group, agent,
+      Lite 5, Pro 15, Max 50 subagents per run (dashboard i1); effort low, high, xhigh. Levels of summaries (item, group, agent,
       batch, stage, run), fallback chain, cost per agent and per run, talking to the agent,
       Chippy, playback, training Python; compile-stream listed with compile.
   - origin/main: backend/src/chipin_backend/api/helper_facts.md
@@ -106,7 +106,7 @@ window.COPY = {
     { key: 'run', title: 'You choose the models and the size of the run',
       lines: ['Models are automatic by default: a large Claude model runs the orchestrator, a smaller one the subagents.',
               'Or pick a backend and model, such as Inkling 2 through OpenRouter.',
-              'Run size is a preset. It sets the effort and the subagents in each stage batch.'] },
+              'Run size is a preset. It sets the effort and the subagents in the run.'] },
     { key: 'agent', title: 'What an agent is',
       lines: ['The orchestrator and every subagent are built from the same four layers.',
               'Agents do not write chip code from scratch. They call tools. Every number on the dashboard comes from a tool’s answer.',
@@ -196,9 +196,9 @@ window.COPY = {
     ],
     selects: [['Backend', 'OpenRouter'], ['Model', 'Inkling 2 Small']],
     sizeLabel: 'Run size: a preset',
-    presetHead: ['Preset', 'Effort', 'Subagents per stage batch'],
-    presets: [['Lite', 'low', '3'], ['Pro', 'high', '10'], ['Ultra', 'max', '50']],
-    sizeNote: 'With fan-out on, each of the five batch stages starts this many subagents at once. A larger run tries more and costs more.',
+    presetHead: ['Preset', 'Effort', 'Subagents per run'],
+    presets: [['Lite', 'low', '5'], ['Pro', 'high', '15'], ['Max', 'xhigh', '50']],
+    sizeNote: 'With fan-out on, the run starts this many subagents across its five batch stages. A larger run tries more and costs more.',
     link: 'Sets up the agents'
   },
 
@@ -207,7 +207,7 @@ window.COPY = {
     orchSub: 'Runs the seven stages in order. In five of them it starts a batch of subagents, waits for all, and merges the best on the lab’s numbers.',
     stageWord: 'Stage {i} of 7',
     fanWord: 'Subagents in parallel',
-    batchLine: 'One batch of subagents, one strategy each: 3 in Lite, 10 in Pro, 50 in Ultra.',
+    batchLine: 'One batch of subagents, one strategy each: 5 in Lite, 15 in Pro, 50 in Max per run.',
     soloLine: 'No subagents here. The orchestrator does this stage itself.',
     skillsWord: 'Main skills',
     outWord: 'Returns',
@@ -227,35 +227,35 @@ window.COPY = {
     { name: 'Reference', lead: 'A full-precision model with no chip limits. It sets the accuracy to beat and never goes on a chip.',
       does: 'Trains full-precision models on the same data, when the server has a Python that can train.',
       fanLabel: 'one model family per subagent.',
-      fan: ['Model family A', 'Model family B', 'Model family C', 'Up to 50 in Ultra'],
+      fan: ['Model family A', 'Model family B', 'Model family C', '50 per run in Max'],
       skills: ['load-data', 'train-batch'],
       out: 'The reference scores per patient.',
       keeps: 'The best reference, as the score the small designs are compared with.' },
     { name: 'Propose', lead: 'Many small designs, each with a size estimate before any training. The lab’s gate estimator ranks them.',
       does: 'Proposes candidate designs and ranks them by estimated gates, labelled as estimates.',
       fanLabel: 'one design family per subagent.',
-      fan: ['Feature sets', 'Sensor budgets', 'Network shapes', 'Up to 50 in Ultra'],
+      fan: ['Feature sets', 'Sensor budgets', 'Network shapes', '50 per run in Max'],
       skills: ['propose-designs', 'estimate-batch'],
       out: 'A pool of candidate designs with estimated sizes.',
       keeps: 'The candidates worth training, smallest first.' },
     { name: 'Fine-tune', lead: 'The agent trains the models itself when the server has a Python that can train. Otherwise this stage is skipped.',
       does: 'Trains the candidates and scores their detections per event, on unseen patients, with the lab’s referee.',
       fanLabel: 'one training strategy per subagent.',
-      fan: ['Family A', 'Family B', 'Bit widths', 'Up to 50 in Ultra'],
+      fan: ['Family A', 'Family B', 'Bit widths', '50 per run in Max'],
       skills: ['train-batch', 'score-events', 'submit-job', 'job-result'],
       out: 'Trained integer models, scored per patient and per event.',
       keeps: 'The smallest models that clear the bar on validation.' },
     { name: 'Compile', lead: 'A trained model becomes a fixed circuit. Several heads can share one chip, joined by a vote or by score fusion.',
       does: 'Turns each design into gates with the weights wired in, wraps it for streaming input, then gives gates, depth, area and tiles per process.',
       fanLabel: 'compile options per subagent.',
-      fan: ['Plain compile', 'Shift-add optimiser', 'Heads fused on one chip', 'Up to 50 in Ultra'],
+      fan: ['Plain compile', 'Shift-add optimiser', 'Heads fused on one chip', '50 per run in Max'],
       skills: ['ingest-model', 'compile-ir', 'compose-chip', 'compile-stream', 'synthesize', 'count-luts', 'map-to-process', 'synthesize-batch'],
       out: 'A netlist per design, with gate count, logic depth and area.',
       keeps: 'The smallest netlist for each design.' },
     { name: 'Verify', lead: 'A design goes forward only if its gates match the model bit for bit, and the proof holds.',
       does: 'Checks the gates bit for bit, proves them equal, and tests the streaming chip, with its alarm smoothing or channel-serial input.',
       fanLabel: 'one set of checks per subagent.',
-      fan: ['Bit-exact and proof', 'Streaming wrapper', 'Events scored on the chip', 'Up to 50 in Ultra'],
+      fan: ['Bit-exact and proof', 'Streaming wrapper', 'Events scored on the chip', '50 per run in Max'],
       skills: ['simulate', 'prove-equivalence', 'rtl-simulate', 'prove-sequential', 'verification-level', 'simulate-batch', 'score-events'],
       out: 'Zero mismatches, or the design is dropped. A verification level, and the chip’s own detections scored.',
       keeps: 'Only designs with zero mismatches, ranked by size and score.' },
@@ -368,7 +368,7 @@ window.COPY = {
       cardTitle: 'Start a run',
       cardSub: 'From the dashboard, or from the command line',
       rows: [['Brief', 'Your brief, sent as the prompt'],
-             ['Preset', 'Lite, Pro or Ultra: effort low, high or max'],
+             ['Preset', 'Lite, Pro or Max: effort low, high or xhigh'],
              ['Agent', 'Claude Code, or OpenHands on an OpenRouter model'],
              ['Models', 'Automatic, or chosen per run']],
       treeTitle: 'A fresh folder for the run',
@@ -417,7 +417,7 @@ window.COPY = {
     },
     lim: {
       title: 'Limits, and what happens at each',
-      rows: [['Each subagent', '10, 20 or 30 min', 'Lite, Pro, Ultra. Past it the subagent ends as timed out. That is not a run error and does not block the merge.'],
+      rows: [['Each subagent', '10, 20 or 25 min', 'Lite, Pro, Max. Past it the subagent ends as timed out. That is not a run error and does not block the merge.'],
              ['Each wait', '100 s at most', './subagent wait returns and says what is still running.'],
              ['Starts per run', 'Capped', 'A start past the cap is refused, and the helper says why.'],
              ['Each run', '4 h', 'Past it the run fails. When a run ends or is stopped, its queued and running subagents are stopped first.'],
@@ -834,7 +834,7 @@ html.cam { scroll-snap-type: y mandatory; }
         });
       }
     });
-    // run size panel: the preset sets effort and subagents per stage batch
+    // run size panel: the preset sets effort and subagents per run
     T(g, X2, y0, RU.sizeLabel, { size: 17, cls: 'c3' });
     R(g, X2, py, W2, ph, 'bx2', 12);
     var ty = py + 26, pcx = [X2 + 26, X2 + 150, X2 + 290];
