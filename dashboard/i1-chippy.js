@@ -1,8 +1,8 @@
 /* ChipIn i1 Chippy: the helper panel of dashboard/variants/i1.html.
  *
  * Classic script, no dependencies; i1.html loads it from one line marked CHIPPY HOOK. It adds
- * window.ChipInChippy and draws everything it needs itself (a corner button and a side panel,
- * a sheet on phones), outside #main, so the page underneath is not touched while it is closed.
+ * window.ChipInChippy and draws everything it needs itself (a round avatar at the bottom right and a
+ * chat card above it, a sheet on phones), outside #main, so the page underneath is not touched while it is closed.
  *
  *   ChipInChippy.open() / close() / toggle()   the panel (also Ctrl or Cmd + /, Escape closes)
  *   ChipInChippy.ask(text)                     sends a question as if typed
@@ -53,7 +53,21 @@
       (function poll() { var v = null; try { v = test(); } catch (e) { v = null; } if (v) return res(v); if (Date.now() - t0 > (ms || 6000)) return res(null); setTimeout(poll, 60); })();
     });
   }
-  var MARK = '<svg class="chp-mark" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="4" width="10" height="16" rx="2.5"/><path d="M4 8.5h3M4 12h3M4 15.5h3M17 8.5h3M17 12h3M17 15.5h3"/><rect class="core" x="10" y="9.5" width="4" height="5" rx="1"/></svg>';
+  // Chippy himself: a small blue chip with two pins a side and a face on its white die (blinks and hops in CSS)
+  var FACE_INNER =
+    '<g fill="#dfe6fb" stroke="#1d2756" stroke-width="1.5"><rect x="4" y="16.4" width="6.5" height="4.4" rx="2.2"/><rect x="4" y="27.2" width="6.5" height="4.4" rx="2.2"/>' +
+    '<rect x="37.5" y="16.4" width="6.5" height="4.4" rx="2.2"/><rect x="37.5" y="27.2" width="6.5" height="4.4" rx="2.2"/><rect x="16.4" y="4" width="4.4" height="6.5" rx="2.2"/>' +
+    '<rect x="27.2" y="4" width="4.4" height="6.5" rx="2.2"/><rect x="16.4" y="37.5" width="4.4" height="6.5" rx="2.2"/><rect x="27.2" y="37.5" width="4.4" height="6.5" rx="2.2"/></g>' +
+    '<rect x="8.5" y="8.5" width="31" height="31" rx="8.5" fill="#3d6df0" stroke="#1d2756" stroke-width="2"/>' +
+    '<rect x="12.5" y="12.5" width="23" height="23" rx="6.5" fill="#fff"/>' +
+    '<g class="eyes"><ellipse cx="19.4" cy="22.4" rx="2.4" ry="3" fill="#141a2e"/><ellipse cx="28.6" cy="22.4" rx="2.4" ry="3" fill="#141a2e"/>' +
+    '<circle cx="20.2" cy="21.3" r=".8" fill="#fff"/><circle cx="29.4" cy="21.3" r=".8" fill="#fff"/></g>' +
+    '<g fill="#ff8aa6" opacity=".55"><ellipse cx="16" cy="28" rx="2" ry="1.25"/><ellipse cx="32" cy="28" rx="2" ry="1.25"/></g>' +
+    '<path d="M20.8 27.9q3.2 2.8 6.4 0" fill="none" stroke="#141a2e" stroke-width="2.1" stroke-linecap="round"/>';
+  var face = function (cls) { return '<svg class="chp-face' + (cls ? " " + cls : "") + '" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" aria-hidden="true" focusable="false">' + FACE_INNER + "</svg>"; };
+  var MARK = face();
+  var FACE_URL = 'url("data:image/svg+xml,' + encodeURIComponent(face()) + '")';
+  var K_HELLO = "chipin-chippy-hello";
   var SVG = {
     x: '<path d="M18 6 6 18M6 6l12 12"/>', send: '<path d="M12 19V5M5 12l7-7 7 7"/>', stop: '<rect x="7" y="7" width="10" height="10" rx="2"/>',
     fresh: '<path d="M12 5v14M5 12h14"/>', undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>'
@@ -125,37 +139,52 @@
   }
   function viewKey() { var v = view(); return [v.route, v.design_id || "", v.flow_step || ""].join("|"); }
 
-  /* ---------- styles: the page's tokens, one quiet corner button, a side panel ---------- */
-  var W = 380;
+  /* ---------- styles: the page's tokens, a round avatar at the bottom right, a chat card above it ---------- */
+  var W = 380, GAP = 20, BUB = 52;
   var STYLE = [
-    ".chp-btn{position:fixed;left:154px;bottom:12px;z-index:45;height:30px;display:inline-flex;align-items:center;gap:6px;padding:0 11px 0 8px;border-radius:99px;border:1px solid rgb(0 0 0/.09);background:rgb(255 255 255/.94);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);color:var(--i700,#3a4052);font:500 12.5px/1 var(--sans,system-ui);box-shadow:0 1px 3px rgb(0 0 0/.06);cursor:pointer;transition:border-color .12s,color .12s}",
-    ".chp-btn:hover{border-color:rgb(61 109 240/.45);color:var(--i900,#141a2e)}",
+    // the avatar: above the page (its column, sidebar and phone header) and below every scrim, drawer and dialog
+    ".chp-btn{position:fixed;right:" + GAP + "px;bottom:" + GAP + "px;z-index:34;width:" + BUB + "px;height:" + BUB + "px;padding:0;display:grid;place-items:center;border-radius:50%;border:1px solid rgb(61 109 240/.2);background:#fff;box-shadow:0 6px 18px rgb(14 21 48/.15),0 1px 3px rgb(14 21 48/.1);cursor:pointer;transition:box-shadow .15s,border-color .15s}",
+    ".chp-btn:hover{border-color:rgb(61 109 240/.45);box-shadow:0 8px 24px rgb(14 21 48/.2),0 1px 3px rgb(14 21 48/.1)}",
     ".chp-btn:focus-visible,.chp-p button:focus-visible,.chp-p a:focus-visible{outline:2px solid var(--blue,#3d6df0);outline-offset:2px}",
-    ".chp-btn[aria-expanded=true]{border-color:rgb(61 109 240/.5);color:var(--blue7,#2b55d0);background:#fff}",
-    "@media (min-width:768px){body.col .chp-btn{left:9px;bottom:64px;width:34px;height:34px;padding:0;justify-content:center}body.col .chp-btn .lbl{display:none}}",
-    ".chp-mark{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}",
-    ".chp-mark .core{fill:var(--blue,#3d6df0);stroke:none;transform-origin:12px 12px}",
-    ".chp-busy .chp-mark .core{animation:chpPulse 1.1s ease-in-out infinite}",
-    "@keyframes chpPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}",
+    ".chp-btn[aria-expanded=true]{border-color:var(--blue,#3d6df0);box-shadow:0 0 0 3px rgb(61 109 240/.16),0 6px 18px rgb(14 21 48/.15)}",
+    ".chp-btn .chp-face{width:40px;height:40px}",
+    ".chp-face{display:block;flex:none;overflow:visible}",
+    ".chp-face .eyes{transform-box:fill-box;transform-origin:center;animation:chpBlink 5.2s infinite}",
+    "@keyframes chpBlink{0%,93%,100%{transform:none}95.5%{transform:scaleY(.12)}}",
+    ".chp-btn:hover .chp-face{animation:chpHop .55s var(--ease,ease)}",
+    "@keyframes chpHop{0%,100%{transform:none}35%{transform:translateY(-4px)}65%{transform:translateY(1px)}}",
+    ".chp-busy .chp-h .chp-face{animation:chpBob 1.1s ease-in-out infinite}",
+    "@keyframes chpBob{0%,100%{transform:none}50%{transform:translateY(-2px)}}",
+    // a hello beside the avatar, once a session
+    ".chp-hello{position:fixed;right:" + (GAP + BUB + 12) + "px;bottom:" + (GAP + BUB / 2 - 15) + "px;z-index:34;height:30px;display:flex;align-items:center;padding:0 12px;border-radius:10px;background:#fff;border:1px solid rgb(61 109 240/.2);box-shadow:0 6px 18px rgb(14 21 48/.12);font:500 12.5px/1 var(--sans,system-ui);color:var(--i800,#262c40);white-space:nowrap;pointer-events:none;opacity:0;transform:translateX(6px);transition:opacity .35s,transform .35s}",
+    ".chp-hello::after{content:'';position:absolute;right:-5px;top:50%;width:8px;height:8px;margin-top:-4px;background:#fff;border:solid rgb(61 109 240/.2);border-width:1px 1px 0 0;transform:rotate(45deg)}",
+    ".chp-hello.on{opacity:1;transform:none}",
+    "body.chp-open .chp-hello{display:none}",
     ".chp-i{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}",
-    ".chp-p{position:fixed;top:0;right:0;bottom:0;width:" + W + "px;z-index:60;background:#fff;border-left:1px solid rgb(0 0 0/.08);box-shadow:-8px 0 30px rgb(14 21 48/.06);display:flex;flex-direction:column;font-family:var(--sans,system-ui);color:var(--i900,#141a2e);animation:chpIn .18s var(--ease,ease)}",
-    "@keyframes chpIn{from{transform:translateX(16px);opacity:0}to{transform:none;opacity:1}}",
-    "@media (min-width:1100px){body.chp-open .main{right:" + W + "px}}",
+    // the panel: a chat card anchored above the avatar that grows upward with the conversation
+    ".chp-p{position:fixed;right:" + GAP + "px;bottom:" + (GAP + BUB + 12) + "px;width:" + W + "px;max-width:calc(100vw - " + 2 * GAP + "px);min-height:min(360px,70vh);max-height:70vh;z-index:60;background:#fff;border:1px solid rgb(0 0 0/.08);border-radius:16px;overflow:hidden;box-shadow:0 18px 50px rgb(14 21 48/.18),0 2px 8px rgb(14 21 48/.07);display:flex;flex-direction:column;font-family:var(--sans,system-ui);color:var(--i900,#141a2e);transform-origin:100% 100%;animation:chpIn .18s var(--ease,ease)}",
+    "@keyframes chpIn{from{transform:translateY(10px) scale(.97);opacity:0}to{transform:none;opacity:1}}",
     ".chp-scrim{display:none}",
-    // the page's file drawer and the panel coexist: the drawer (and its scrim) stop at the panel's edge
-    "@media (min-width:768px){body.chp-open .drawer{right:" + W + "px;max-width:calc(100vw - " + W + "px)}body.chp-open .dscrim{right:" + W + "px}}",
-    // the sidebar's account row leaves room for the pill beside it
-    "@media (min-width:768px){body:not(.col) .acct{padding-right:104px}.acct button .hc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}",
+    // the page's file drawer and the card coexist: the drawer (and its scrim) stop at the card's column
+    "@media (min-width:768px){body.chp-open .drawer{right:" + (W + 2 * GAP) + "px;max-width:calc(100vw - " + (W + 2 * GAP) + "px)}body.chp-open .dscrim{right:" + (W + 2 * GAP) + "px}}",
+    // the page's demo label sits at the bottom right on wide screens: it moves left of the avatar
+    "@media (min-width:768px){.demo{right:" + (GAP + BUB + 12) + "px}}",
+    // the page's scrolling column ends with room for the avatar, so its last line can scroll clear of it
+    // (not the Chat tab: it fills the column with its own composer at the bottom)
+    ".main .body:not(:has(> .chat))::after{content:'';display:block;height:" + (BUB + 12) + "px}",
     // no backend: nothing can be asked, so no new conversation and no microphone
     ".chp-p.chp-nomode #chpNew,.chp-p.chp-nomode .cv-mic{display:none}",
     ".chp-p[hidden],.chp-scrim[hidden]{display:none!important}",
-    ".chp-h{display:flex;align-items:center;gap:8px;padding:12px 10px 10px 16px;border-bottom:1px solid var(--hair,rgb(0 0 0/.07))}",
-    ".chp-h .chp-mark{width:20px;height:20px;color:var(--navy,#0e1530)}",
+    ".chp-h{display:flex;align-items:center;gap:9px;padding:11px 10px 10px 14px;border-bottom:1px solid var(--hair,rgb(0 0 0/.07))}",
+    ".chp-h .chp-face{width:26px;height:26px}",
     ".chp-h h2{font:400 18px/1.1 var(--serif,Georgia,serif);margin:0;letter-spacing:-.01em}",
     ".chp-h .grow{flex:1}",
     ".chp-ib{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--i600,#4a5062);background:none;border:0;cursor:pointer}",
     ".chp-ib:hover{background:var(--i100,#f1f2f6);color:var(--i900,#141a2e)}",
-    ".chp-log{flex:1;overflow:auto;padding:14px 16px 8px;display:flex;flex-direction:column;gap:12px;overscroll-behavior:contain}",
+    ".chp-log{flex:1 1 auto;min-height:0;overflow:auto;padding:14px 16px 8px;display:flex;flex-direction:column;gap:12px;overscroll-behavior:contain}",
+    // his own lines carry his face at 20 px
+    ".chp-hi,.chp-a,.chp-off{position:relative;padding-left:28px}",
+    ".chp-hi::before,.chp-a::before,.chp-off::before{content:'';position:absolute;left:0;top:0;width:20px;height:20px;background:" + FACE_URL + " center/contain no-repeat}",
     ".chp-hi{font-size:13px;line-height:1.5;color:var(--i600,#4a5062);margin:0}",
     ".chp-u{align-self:flex-end;max-width:86%;background:var(--i100,#f1f2f6);border-radius:12px 12px 4px 12px;padding:8px 11px;font-size:13.5px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}",
     ".chp-a{font-size:13.5px;line-height:1.55;color:var(--i800,#262c40);overflow-wrap:anywhere}",
@@ -205,10 +234,14 @@
     ".chp-ring{position:fixed;z-index:58;pointer-events:none;border:2px solid var(--blue,#3d6df0);border-radius:10px;box-shadow:0 0 0 4px rgb(61 109 240/.16);animation:chpRing 2.6s var(--ease,ease) forwards}",
     "@keyframes chpRing{0%{opacity:0}10%{opacity:1}75%{opacity:1}100%{opacity:0}}",
     "@media (max-width:767px){",
-    "  .chp-btn{padding:0;width:34px;height:34px;justify-content:center;left:auto;right:8px;top:7px;bottom:auto;z-index:32;box-shadow:none}",
-    "  .chp-btn .lbl{display:none}",
-    "  #demo{right:50px}",
-    "  .chp-p{top:auto;left:0;width:auto;height:min(78vh,680px);border-left:0;border-radius:16px 16px 0 0;box-shadow:0 -10px 40px rgb(14 21 48/.16);animation:chpUp .2s var(--ease,ease)}",
+    "  .chp-btn{right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px))}",
+    "  .chp-hello{right:" + (14 + BUB + 12) + "px;bottom:calc(" + (14 + BUB / 2 - 15) + "px + env(safe-area-inset-bottom,0px))}",
+    // a run's Chat tab pins its composer to the bottom of the screen: the avatar rises above it
+    "  body:has(.main .lv-cxw) .chp-btn{bottom:calc(128px + env(safe-area-inset-bottom,0px))}",
+    "  body:has(.main .lv-cxw) .chp-hello{bottom:calc(" + (128 + BUB / 2 - 15) + "px + env(safe-area-inset-bottom,0px))}",
+    // the sidebar drawer is open: the avatar steps aside until it closes
+    "  body.drawer .chp-btn,body.drawer .chp-hello{display:none}",
+    "  .chp-p{top:auto;left:0;right:0;bottom:0;width:auto;max-width:none;min-height:0;max-height:none;height:min(78vh,680px);border:0;border-radius:16px 16px 0 0;box-shadow:0 -10px 40px rgb(14 21 48/.16);padding-bottom:env(safe-area-inset-bottom,0px);animation:chpUp .2s var(--ease,ease)}",
     "  .chp-scrim{display:block;position:fixed;inset:0;z-index:59;background:rgb(20 20 40/.14)}",
     // a file was opened by Chippy: the sheet shrinks to a bar under the drawer that keeps the line and its Undo
     "  .chp-p.chp-mini{height:auto;max-height:30vh;z-index:80;animation:none}",
@@ -219,7 +252,7 @@
     "  .chp-h{padding-top:10px}",
     "}",
     "@keyframes chpUp{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}",
-    "@media (prefers-reduced-motion:reduce){.chp-p,.chp-ring,.chp-busy .chp-mark .core{animation:none}}"
+    "@media (prefers-reduced-motion:reduce){.chp-p,.chp-ring,.chp-face,.chp-face .eyes,.chp-btn:hover .chp-face,.chp-busy .chp-h .chp-face{animation:none}.chp-hello{transition:none;transform:none}}"
   ].join("\n");
 
   /* ---------- state ---------- */
@@ -229,16 +262,26 @@
   };
   var UI = {};
 
-  /* ---------- the corner button ---------- */
+  /* ---------- the avatar at the bottom right ---------- */
   function mountButton() {
     var b = el("button", "chp-btn"); b.type = "button"; b.id = "chpBtn";
-    b.setAttribute("aria-label", "Ask Chippy, the guide to ChipIn (" + MOD + " /)");
-    b.title = "Ask Chippy (" + MOD + " /)";
-    b.innerHTML = MARK + '<span class="lbl">Chippy</span>';
+    b.setAttribute("aria-label", "Open Chippy");
+    b.title = "Chippy, the guide to ChipIn (" + MOD + " /)";
+    b.innerHTML = MARK;
     b.setAttribute("aria-expanded", "false"); b.setAttribute("aria-controls", "chpPanel");
     b.onclick = function () { toggle(); };
     document.body.appendChild(b);
     UI.btn = b;
+    hello();
+  }
+  // the first page load of a session: a short "Ask Chippy" beside the avatar that fades out by itself
+  function hello() {
+    if (ssGet(K_HELLO)) return;
+    ssSet(K_HELLO, 1);
+    var h = el("div", "chp-hello", "Ask Chippy"); h.setAttribute("aria-hidden", "true");
+    document.body.appendChild(h);
+    setTimeout(function () { h.classList.add("on"); }, 700);
+    setTimeout(function () { h.classList.remove("on"); setTimeout(function () { h.remove(); }, 400); }, 5200);
   }
 
   /* ---------- the panel ---------- */
@@ -286,7 +329,6 @@
     if (!UI.p) mountPanel();
     UI.p.hidden = false; UI.scrim.hidden = false;
     document.body.classList.add("chp-open"); UI.btn.setAttribute("aria-expanded", "true");
-    relayout();
     refresh();
   }
   function close() {
@@ -295,7 +337,6 @@
     UI.p.hidden = true; UI.scrim.hidden = true;
     mini(false);
     document.body.classList.remove("chp-open"); UI.btn.setAttribute("aria-expanded", "false");
-    relayout();
     if (UI.btn) UI.btn.focus({ preventScroll: true });
   }
   function toggle() { if (S.open) close(); else open(); }
@@ -309,8 +350,6 @@
     UI.p.classList.toggle("chp-mini", m); UI.scrim.classList.toggle("chp-mini", m); document.body.classList.toggle("chp-mini", m);
     if (m) requestAnimationFrame(function () { document.documentElement.style.setProperty("--chp-bar", UI.p.offsetHeight + "px"); });
   }
-  // the page column narrows beside the panel on wide screens; charts redraw on resize
-  function relayout() { if (innerWidth >= 1100) requestAnimationFrame(function () { dispatchEvent(new Event("resize")); }); }
 
   /* ---------- the panel's state: connected, no backend, no model on the backend ---------- */
   function refresh() {
