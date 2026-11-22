@@ -22,6 +22,8 @@ from chipin_backend.api.events import EventLog
 from chipin_backend.runs import JsonlEventSink
 
 AUTHOR = "ChipIn"
+#: The status line when a run's agent starts.
+READING_BRIEF = "ChipIn is reading your brief"
 SUMMARY_MAX = 120
 DETAIL_MAX = 300
 
@@ -89,10 +91,24 @@ class Translator:
     Thread-safe; never raises into the agent (a failure is logged).
     """
 
-    def __init__(self, log: EventLog, raw: JsonlEventSink, workdir: Path | None = None) -> None:
+    def __init__(
+        self,
+        log: EventLog,
+        raw: JsonlEventSink,
+        workdir: Path | None = None,
+        *,
+        start_status: str | None = READING_BRIEF,
+        errors: bool = True,
+    ) -> None:
         self.log = log
         self.raw = raw
         self.workdir = workdir
+        #: The status line written when the agent starts (``None``: none).
+        self.start_status = start_status
+        #: False: the agent's errors are kept (``error_text``) but not written
+        #: as ``error`` events; a subagent's failure is not the run's.
+        self.errors = errors
+        self.error_text: str | None = None
         self._lock = threading.Lock()
         self._calls: dict[str, tuple[str, str]] = {}  # call_id -> (tool name, summary)
         self._hidden: set[str] = set()
@@ -127,15 +143,23 @@ class Translator:
                 "usd": data.get("usd"),
                 "tokens_in": data.get("input_tokens"),
                 "tokens_out": data.get("output_tokens"),
+                # a follow-up's total keeps its parts: its own turn, the subagents, the summaries
+                **{
+                    k: data[k]
+                    for k in ("turn_usd", "subagents_usd", "summaries_usd")
+                    if data.get(k) is not None
+                },
             }
             self.log.append("cost", **self.cost)
         elif kind == "status" and data.get("message"):
             self.log.append("status", text=clip(data["message"], 200))
         elif kind == "error":
-            self.error_emitted = True
-            self.log.append("error", message=str(data.get("message", "the agent failed")))
-        elif kind == "agent_start":
-            self.log.append("status", text="ChipIn is reading your brief")
+            self.error_text = str(data.get("message", "the agent failed"))
+            if self.errors:
+                self.error_emitted = True
+                self.log.append("error", message=self.error_text)
+        elif kind == "agent_start" and self.start_status:
+            self.log.append("status", text=self.start_status)
 
     def _tool_call(self, data: dict[str, Any]) -> None:
         tool = str(data.get("tool", ""))
@@ -168,4 +192,11 @@ class Translator:
         )
 
 
-__all__ = ["AUTHOR", "Translator", "clip", "is_progress_call", "tool_summary"]
+__all__ = [
+    "AUTHOR",
+    "READING_BRIEF",
+    "Translator",
+    "clip",
+    "is_progress_call",
+    "tool_summary",
+]

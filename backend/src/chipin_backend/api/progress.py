@@ -8,27 +8,34 @@ The helper appends one JSON line per call to the run's ``progress.jsonl``::
     ./progress chosen <design_id>
     ./progress status "ChipIn is wiring the weights into gates"
     ./progress artifact report.md [file|report|chip]
+    ./progress design design_a.json      # one design record (see designs.py)
 
 :class:`ProgressTailer` reads new lines from that file and writes ``stage``,
-``metric``, ``chosen``, ``status`` and ``artifact`` events. A metric's
-optional ``chip`` names the design it measures; ``chosen`` names the run's
-chosen chip, and a later one replaces an earlier one. A malformed line is skipped
-with a warning; the helper itself rejects bad arguments with exit status 2,
+``metric``, ``chosen``, ``status``, ``artifact`` and ``design`` events. A metric's
+optional ``chip`` names the design it measures (for the chip lab's own untagged
+metrics, the design its latest status line names; see :data:`LAB_DESIGN_METRICS`); the
+lab's ``score-events`` figures also carry ``source`` (see :data:`LAB_EVENT_METRICS`);
+``chosen`` names the run's chosen chip, and a later one replaces an earlier one. A
+malformed line is skipped with a warning; the helper itself rejects bad arguments with exit status 2,
 so the agent learns at once.
 """
 
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import math
+import re
 import stat
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
+from chipin_backend.api.designs import emit_design, validate_design
 from chipin_backend.api.events import STAGES, EventLog
 from chipin_backend.api.translate import clip
 
@@ -36,6 +43,57 @@ PROGRESS_FILE = "progress.jsonl"
 HELPER_NAME = "progress"
 ARTIFACT_KINDS = ("file", "report", "chip")
 STAGE_STATES = ("started", "done", "skipped")
+
+#: The chip lab reports through this helper by itself. With ``CHIPIN_PROGRESS_CHIP=1`` it adds
+#: ``--chip <design_id>`` to every figure of one chip; an older lab sends none. Before a tool
+#: about one design it writes a status line naming it ("ChipIn is synthesising chip
+#: <design_id>", its ``VERB`` table), then that tool's metrics. These are the lab's metric
+#: keys about one design and the unit it always sends with each (its ``METRIC_KEYS`` less
+#: the run counters ``candidates``, ``vectors_checked`` and ``mismatches``, which count over
+#: the whole run, and the event scores of ``score-events``, see :data:`LAB_EVENT_METRICS`). An
+#: untagged metric with such a key and unit takes the design of the lab's latest status
+#: line; a lab status line about no one design (a batch, an import) clears it, so a metric
+#: about no design stays untagged. The agent's own status lines change nothing.
+LAB_DESIGN_METRICS: dict[str, str] = {
+    "gates": "gates",
+    "depth": "levels",
+    "transistors": "transistors",
+    "luts_ice40": "LUT4",
+    "luts_xc7": "LUT6",
+    "area_um2": "um2",
+    "ge": "GE",
+    "tt_tiles": "tiles",
+    "cost_eur": "EUR",
+    "verification_level": "level",
+    "timing_slack_ns": "ns",
+    "fmax_mhz": "MHz",
+    "energy_pj": "pJ",
+    "leakage_uw": "uW",
+    "power_uw_at_rate": "uW",
+}
+#: The event scores the lab's ``score-events`` sends (with ``progress_metrics: true``), with
+#: their units. Given a ``design_id`` it tags them ``--chip <design_id>``; without one they stay
+#: untagged (a status line never tags them). A metric with such a key and unit gets
+#: ``source: "score-events"``, so the lab's event-level figure never passes for the agent's own
+#: figure of the same key (which the agent sends in the spec's unit, e.g. ``/h``).
+LAB_EVENT_METRICS: dict[str, str] = {
+    "event_sensitivity": "fraction",
+    "fa_per_hour": "FA/h",
+    "worst_patient_sensitivity": "fraction",
+    "auc": "AUC",
+}
+SCORE_EVENTS_SOURCE = "score-events"
+#: The lab's status lines (its ``VERB`` table, after "ChipIn is" or "ChipIn <went wrong> while").
+_LAB_LEAD = r"^ChipIn (?:is|(?:found a problem|ran out of time|hit an error|stopped) while) "
+_LAB_DESIGN = re.compile(
+    _LAB_LEAD + r"(?:synthesising|counting LUTs for|mapping|checking|proving|proving the clocked|"
+    r"simulating the streaming|laying out|timing|building an FPGA bitstream for|packaging|"
+    r"writing the report for|measuring gate activity of) chip(?: (\w[\w.-]*))?\b"
+)
+_LAB_NO_DESIGN = re.compile(
+    _LAB_LEAD + r"(?:bringing a model in|compiling a design|composing a multi-head chip|"
+    r"checking submitted Verilog|ranking candidate chips|synthesising candidate chips)\s*$"
+)
 
 _HELPER = '''\
 """ChipIn progress helper: tells the dashboard what this run is doing.
@@ -47,13 +105,17 @@ usage:
   ./progress chosen <design_id>
   ./progress status "<one present-tense line>"
   ./progress artifact <path in this folder> [{kinds}]
+  ./progress design <design.json | '{{json object}}'>
 """
+from __future__ import annotations
 import json, math, sys
 from datetime import datetime, timezone
 
 OUT = {out!r}
 STAGES = {stages_t!r}
 KINDS = {kinds_t!r}
+
+{validator}
 
 
 def fail(msg):
@@ -110,9 +172,23 @@ elif cmd == "status":
         fail("status needs a line of text")
     line["text"] = " ".join(rest)
 elif cmd == "artifact":
-    if len(rest) not in (1, 2) or (len(rest) == 2 and rest[1] not in KINDS):
+    if len(rest) not in (1, 2):
         fail("artifact needs a path and optionally a kind")
+    if len(rest) == 2 and rest[1] not in KINDS:
+        fail("unknown artifact kind " + repr(rest[1]) + "; use one of {kinds}")
     line.update(path=rest[0], kind=rest[1] if len(rest) == 2 else "file")
+elif cmd == "design":
+    if len(rest) != 1:
+        fail("design needs one JSON object, or the path of a .json file holding one")
+    try:
+        if rest[0].lstrip().startswith("{{"):
+            record = json.loads(rest[0])
+        else:
+            with open(rest[0], encoding="utf-8") as handle:
+                record = json.load(handle)
+        line.update(validate_design(record))
+    except (OSError, ValueError) as exc:
+        fail("design record refused: " + str(exc))
 else:
     fail("unknown command " + repr(cmd))
 with open(OUT, "a", encoding="utf-8") as handle:
@@ -127,15 +203,51 @@ def _interpreter() -> str:
     return exe if exe and " " not in exe else "/usr/bin/env python3"
 
 
-def write_helper(workspace: Path, progress_file: Path) -> Path:
-    """Write the executable ``progress`` helper into ``workspace``; returns its path."""
+#: Added to a subagent's helper: the orchestrator owns the stages and the chosen chip.
+_SUBAGENT_REFUSAL = """\
+if cmd in ("stage", "chosen"):
+    sys.stderr.write("progress: a subagent does not mark stages or the chosen chip; "
+                     "the orchestrator does. Report your numbers with metric ... --chip <design_id>.\\n")
+    sys.exit(2)
+"""
+_DISPATCH = 'line = {"ts": datetime.now(timezone.utc).isoformat(), "type": cmd}\n'
+#: Added to a fan-out orchestrator's helper: a subagent that calls it (a lab tool run from the
+#: orchestrator's folder finds it in its working folder) is passed to the subagent's own helper,
+#: so its lines carry its id and it cannot mark the orchestrator's stages.
+_REDIRECT = """\
+import os
+_sub = os.environ.get("CHIPIN_SUBAGENT_ID", "")
+if _sub:
+    _own = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agents", _sub, "progress")
+    if _sub[:1] == "a" and _sub[1:].isdigit() and os.path.isfile(_own):
+        os.execv(_own, [_own] + sys.argv[1:])
+    sys.stderr.write("progress: a subagent reports through its own ./progress\\n")
+    sys.exit(2)
+"""
+_ARGS = "a = sys.argv[1:]\n"
+
+
+def write_helper(
+    workspace: Path, progress_file: Path, *, subagent: bool = False, orchestrator: bool = False
+) -> Path:
+    """Write the executable ``progress`` helper into ``workspace``; returns its path.
+
+    ``subagent``: the helper refuses ``stage`` and ``chosen`` (exit 2).
+    ``orchestrator`` (fan-out on): a call from a subagent's environment goes to
+    that subagent's own helper.
+    """
     source = _HELPER.format(
         out=str(progress_file),
         stages="|".join(STAGES),
         stages_t=STAGES,
         kinds="|".join(ARTIFACT_KINDS),
         kinds_t=ARTIFACT_KINDS,
+        validator=inspect.getsource(validate_design),
     )
+    if subagent:
+        source = source.replace(_DISPATCH, _SUBAGENT_REFUSAL + _DISPATCH, 1)
+    if orchestrator:
+        source = source.replace(_ARGS, _REDIRECT + _ARGS, 1)
     helper = workspace / HELPER_NAME
     helper.write_text(f"#!{_interpreter()}\n{source}", encoding="utf-8")
     helper.chmod(helper.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
@@ -145,13 +257,35 @@ def write_helper(workspace: Path, progress_file: Path) -> Path:
 class ProgressTailer:
     """Turns new lines of ``progress.jsonl`` into contract events."""
 
-    def __init__(self, path: Path, log: EventLog, run_path: Path, workspace: Path) -> None:
+    def __init__(
+        self,
+        path: Path,
+        log: EventLog,
+        run_path: Path,
+        workspace: Path,
+        *,
+        marks: bool = True,
+        on_stage: Callable[[str, str], None] | None = None,
+        agent: str | None = None,
+    ) -> None:
         self.path = path
         self.log = log
         self.run_path = run_path
         self.workspace = workspace
+        #: False for a subagent: ``stage`` and ``chosen`` lines are skipped.
+        self.marks = marks
+        #: Called with ``(stage, state)`` before each ``stage`` event (fan-out closes merged stages).
+        self.on_stage = on_stage
+        #: The fan-out subagent whose lines these are; its design records carry its id.
+        self.agent = agent
         self._offset = 0
         self.artifacts: set[str] = set()
+        #: The design the lab's latest status line names (``None``: none); see :data:`LAB_DESIGN_METRICS`.
+        self.lab_design: str | None = None
+
+    def skip_to_end(self) -> None:
+        """Start after the lines already in the file (a follow-up of a finished run)."""
+        self._offset = self.path.stat().st_size if self.path.is_file() else 0
 
     async def follow(self, poll_s: float) -> None:
         """Read new lines every ``poll_s`` until cancelled."""
@@ -189,6 +323,8 @@ class ProgressTailer:
 
     def _emit(self, item: dict[str, Any]) -> None:
         kind = item.get("type")
+        if kind in ("stage", "chosen") and not self.marks:
+            raise ValueError(f"a subagent does not mark {kind}")
         if kind == "stage":
             if item["name"] not in STAGES or item["state"] not in STAGE_STATES:
                 raise ValueError("unknown stage or state")
@@ -196,6 +332,8 @@ class ProgressTailer:
             if item["state"] == "skipped" and not reason:
                 raise ValueError("a skipped stage needs a reason")
             round_ = item.get("round")
+            if self.on_stage is not None:
+                self.on_stage(item["name"], item["state"])
             self.log.append(
                 "stage",
                 name=item["name"],
@@ -208,20 +346,28 @@ class ProgressTailer:
             value = item["value"]
             if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
                 raise ValueError("metric value is not a finite number")
+            key = str(item["key"])
             chip = item.get("chip")
-            self.log.append(
-                "metric",
-                key=str(item["key"]),
-                value=value,
-                unit=item.get("unit"),
-                chip=_chip(chip) if chip is not None else None,
-            )
+            if chip is not None:
+                chip = _chip(chip)
+            elif key in LAB_DESIGN_METRICS and item.get("unit") == LAB_DESIGN_METRICS[key]:
+                chip = self.lab_design
+            from_lab = key in LAB_EVENT_METRICS and item.get("unit") == LAB_EVENT_METRICS[key]
+            source = SCORE_EVENTS_SOURCE if from_lab else None
+            self.log.append("metric", key=key, value=value, unit=item.get("unit"), chip=chip, source=source)
         elif kind == "chosen":
             self.log.append("chosen", chip=_chip(item["chip"]))
         elif kind == "status":
-            self.log.append("status", text=clip(str(item["text"]), 200))
+            text = str(item["text"])
+            if found := _LAB_DESIGN.match(text):
+                self.lab_design = clip(found.group(1), 200) if found.group(1) else None
+            elif _LAB_NO_DESIGN.match(text):
+                self.lab_design = None
+            self.log.append("status", text=clip(text, 200))
         elif kind == "artifact":
             self.add_artifact(str(item["path"]), str(item.get("kind", "file")))
+        elif kind == "design":
+            emit_design(self.log, self.run_path, item, agent=self.agent)
         else:
             raise ValueError(f"unknown type {kind!r}")
 

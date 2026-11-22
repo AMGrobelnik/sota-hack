@@ -1,4 +1,4 @@
-"""Command line: ``chipin-backend run``, ``ask``, ``serve`` and ``config``.
+"""Command line: ``run``, ``ask``, ``serve``, ``evidence``, ``summarise``, ``export`` and ``config``.
 
 Examples::
 
@@ -6,8 +6,14 @@ Examples::
     chipin-backend run --backend stub --prompt "hello"
     chipin-backend run --config config/example.yaml --prompt-file examples/seizure_eeg_prompt.md
     chipin-backend run --preset pro --prompt-file examples/seizure_eeg_prompt.md
+    chipin-backend run --preset lite --fanout --prompt "..."     # 3 subagents per stage batch
     chipin-backend ask --model cheap "Name one low-power EEG seizure feature"
     chipin-backend serve --agent stub
+    chipin-backend evidence 20261122-001507-0ef5bb --json
+    chipin-backend summarise 20261122-001507-0ef5bb --items
+    chipin-backend export 20261122-001507-0ef5bb --out site/dashboard/data/runs/r1.json \
+        --index site/dashboard/data/runs/index.json
+    chipin-backend skill export <project>/.claude/skills
 
 ``python -m chipin_backend`` is the same command.
 """
@@ -30,11 +36,16 @@ from chipin_backend.agents.types import AgentSpec, utc_now
 from chipin_backend.api.cli import add_serve_parser, run_serve
 from chipin_backend.api.config import Preset, load_api_config
 from chipin_backend.api.manager import ApiAgent, RequestError, RunManager
+from chipin_backend.api.summaries import ModelSummariser, load_level_settings, outline, summarise_folder
+from chipin_backend.chiplab import SKILL_NAME, TOOLS_REFERENCE, chiplab_available, write_skill
 from chipin_backend.config import BackendConfig, ComputeTier, RunMode, load_config
+from chipin_backend.evidence import build_evidence, render_markdown
+from chipin_backend.export import ARTIFACT_MAX_BYTES, MAX_BYTES, ExportError, export_run
 from chipin_backend.llm import MissingKeyError, OpenRouterClient, expand_preset
 from chipin_backend.llm.providers import ProviderError, resolve_provider
 from chipin_backend.log import setup_logging
 from chipin_backend.orchestrate import LLM_CALLS_ENV, run_agent
+from chipin_backend.runs import is_safe_run_id
 
 
 def _common() -> argparse.ArgumentParser:
@@ -82,12 +93,83 @@ def _parser() -> argparse.ArgumentParser:
         help="run it as the dashboard does, on this Mac: standing instructions, ./progress, "
         "contract events.jsonl; the prompts are joined into one brief",
     )
+    run.add_argument(
+        "--fanout",
+        type=int,
+        nargs="?",
+        const=0,
+        default=None,
+        metavar="WIDTH",
+        help="the agent orchestrates one batch of parallel subagents per stage; WIDTH subagents "
+        "per batch, or the preset's batch size when left out (implies the dashboard run of --preset)",
+    )
+    run.add_argument(
+        "--subagent-agent",
+        choices=["claude", "openrouter", "stub"],
+        default=None,
+        help="the subagents' harness (default: the orchestrator's)",
+    )
+    run.add_argument("--subagent-model", default=None, help="the subagents' model id or preset")
+    run.add_argument(
+        "--subagent-max-usd",
+        type=float,
+        default=None,
+        help="lower the subagents' API-model spending limit for this run (USD)",
+    )
+    run.add_argument(
+        "--spec-file",
+        type=Path,
+        default=None,
+        help="with --preset or --fanout: the run's spec as a JSON file (see README)",
+    )
     ask = sub.add_parser("ask", parents=[common], help="one OpenRouter chat call; prints the answer")
     ask.add_argument("question")
     ask.add_argument("--model", default=None, help="preset name or model id of the provider")
     ask.add_argument("--provider", default=None, help="model provider from the config (default openrouter)")
     ask.add_argument("--max-tokens", type=int, default=4096)
+    evidence = sub.add_parser(
+        "evidence",
+        parents=[common],
+        help="check the report numbers against their sources, weight bytes per decision, stage timings",
+    )
+    evidence.add_argument("run", help="a run id under the runs folder, or a run folder")
+    evidence.add_argument("--json", action="store_true", help="print JSON instead of markdown")
+    export = sub.add_parser(
+        "export",
+        parents=[common],
+        help="write a recorded run as one static JSON file a page can play back (private details removed)",
+    )
+    export.add_argument("run", help="a run id under the runs folder, or a run folder")
+    export.add_argument("--out", type=Path, required=True, help="the JSON file to write")
+    export.add_argument("--index", type=Path, default=None, help="index JSON to add the run's line to")
+    export.add_argument(
+        "--max-bytes", type=int, default=MAX_BYTES, help=f"bound on the file (default {MAX_BYTES})"
+    )
+    export.add_argument(
+        "--artifact-max-bytes",
+        type=int,
+        default=ARTIFACT_MAX_BYTES,
+        help=f"bound on each artifact's text (default {ARTIFACT_MAX_BYTES})",
+    )
+    summ = sub.add_parser(
+        "summarise",
+        parents=[common],
+        help="write every level of summaries for a recorded run into its summaries.jsonl",
+    )
+    summ.add_argument("run", help="a run id under the runs folder, or a run folder")
+    summ.add_argument("--items", action="store_true", help="show the item lines in the outline too")
+    summ.add_argument("--no-model", action="store_true", help="own first lines only: no model calls")
+    summ.add_argument("--max-usd", type=float, default=None, help="model spend cap (default: summaries.yaml)")
     add_serve_parser(sub, common)
+    skill = sub.add_parser("skill", parents=[common], help="the chip-lab agent skill")
+    skill_sub = skill.add_subparsers(dest="skill_command", required=True)
+    skill_export = skill_sub.add_parser(
+        "export",
+        parents=[common],
+        help="write the chiplab skill folder into FOLDER (as FOLDER/chiplab), with the installed "
+        "lab's reference when the lab is on",
+    )
+    skill_export.add_argument("folder", type=Path, help="where to write it, e.g. <project>/.claude/skills")
     return parser
 
 
@@ -119,6 +201,23 @@ def _main(argv: list[str] | None) -> int:
         return 0
     if args.command == "serve":
         return run_serve(args, config)
+    if args.command == "evidence":
+        return _evidence(config, args.run, as_json=args.json)
+    if args.command == "export":
+        return _export(
+            config,
+            args.run,
+            args.out,
+            index=args.index,
+            max_bytes=args.max_bytes,
+            artifact_max_bytes=args.artifact_max_bytes,
+        )
+    if args.command == "summarise":
+        return asyncio.run(
+            _summarise(config, args.run, items=args.items, no_model=args.no_model, max_usd=args.max_usd)
+        )
+    if args.command == "skill":
+        return _skill_export(args.folder)
     if args.command == "ask":
         return asyncio.run(
             _ask(config, args.question, model=args.model, max_tokens=args.max_tokens, provider=args.provider)
@@ -128,8 +227,14 @@ def _main(argv: list[str] | None) -> int:
         logger.error("give at least one --prompt or --prompt-file")
         return 2
     backend = args.backend
-    if args.preset is not None:
+    if args.spec_file is not None and args.preset is None and args.fanout is None:
+        logger.error("--spec-file needs --preset or --fanout (it runs the way the dashboard does)")
+        return 2
+    if args.preset is not None or args.fanout is not None:
         return asyncio.run(_dashboard_run(config, args, prompts))
+    if any(v is not None for v in (args.subagent_agent, args.subagent_model, args.subagent_max_usd)):
+        logger.error("--subagent-agent, --subagent-model and --subagent-max-usd need --fanout")
+        return 2
     if args.provider is not None:
         if backend not in (None, "openrouter"):
             logger.error("--provider needs the openrouter backend, not {}", backend)
@@ -153,6 +258,99 @@ def _main(argv: list[str] | None) -> int:
         return 2
     print(json.dumps({"run_dir": str(run.path), **result.to_dict()}, indent=2))
     return 1 if result.failed else 0
+
+
+def _run_folder(config: BackendConfig, run: str) -> Path | None:
+    """``run`` as a folder, or as a run id under the runs folder; ``None`` (logged) if neither."""
+    folder = Path(run).expanduser()
+    if folder.is_dir():
+        return folder
+    if not is_safe_run_id(run):
+        logger.error("no run folder {}", run)
+        return None
+    folder = config.resolved_runs_dir() / run
+    if not folder.is_dir():
+        logger.error("no run folder {} (nor {} under {})", run, run, config.resolved_runs_dir())
+        return None
+    return folder
+
+
+def _evidence(config: BackendConfig, run: str, *, as_json: bool) -> int:
+    """``evidence``: compute it, write ``evidence.json`` and ``evidence.md`` into the run, print one."""
+    folder = _run_folder(config, run)
+    if folder is None:
+        return 2
+    evidence = build_evidence(folder)
+    print(json.dumps(evidence, indent=2, ensure_ascii=False) if as_json else render_markdown(evidence))
+    return 0
+
+
+def _export(
+    config: BackendConfig, run: str, out: Path, *, index: Path | None, max_bytes: int, artifact_max_bytes: int
+) -> int:
+    """``export``: one static, scrubbed JSON file of a recorded run; prints a short report as JSON."""
+    folder = _run_folder(config, run)
+    if folder is None:
+        return 2
+    try:
+        report = export_run(
+            folder, out, index=index, max_bytes=max_bytes, artifact_max_bytes=artifact_max_bytes
+        )
+    except ExportError as exc:
+        logger.error("{}", exc)
+        return 2
+    print(json.dumps(report, ensure_ascii=False))
+    return 0
+
+
+class _NoModel:
+    """``summarise --no-model``: every line is its own first line."""
+
+    def unavailable(self) -> str:
+        return "--no-model"
+
+    async def __call__(self, *, system: str, prompt: str, max_tokens: int) -> Any:
+        raise RuntimeError("no model calls")
+
+
+async def _summarise(
+    config: BackendConfig, run: str, *, items: bool, no_model: bool, max_usd: float | None = None
+) -> int:
+    """``summarise``: replay the run's events into every level; print the outline, then the stats."""
+    folder = _run_folder(config, run)
+    if folder is None:
+        return 2
+    settings = load_level_settings()
+    if max_usd is not None:
+        settings = settings.model_copy(update={"max_usd_per_run": max_usd})
+    summariser = _NoModel() if no_model else ModelSummariser(settings)
+    try:
+        summaries, stats = await summarise_folder(folder, settings, summariser)
+    except FileNotFoundError as exc:
+        logger.error("{}", exc)
+        return 2
+    print(outline(summaries, items=items))
+    print(json.dumps({"summaries": len(summaries), **stats}, indent=2))
+    return 0
+
+
+def _skill_export(folder: Path) -> int:
+    """``skill export FOLDER``: write the chip-lab skill to ``FOLDER/chiplab``; print its path.
+
+    Refuses a folder inside a hidden folder of the home directory (``~/.claude``,
+    ``~/.agents``, ``~/.openhands`` and the like): those make the skill global for
+    every session of a tool, and this command only writes where a project asks.
+    """
+    target = (folder.expanduser() / SKILL_NAME).resolve()
+    home = Path.home().resolve()
+    if target.is_relative_to(home) and target.relative_to(home).parts[0].startswith("."):
+        logger.error("refusing to write into {}: a tool folder in the home directory", folder)
+        return 2
+    if not chiplab_available():
+        logger.warning("the chip lab is off here; the skill is written without the lab's tool reference")
+    dest = write_skill(target)
+    print(json.dumps({"skill": str(dest), "tools_reference": (dest / TOOLS_REFERENCE).is_file()}))
+    return 0
 
 
 #: ``run --backend`` -> the dashboard's agent name.
@@ -180,6 +378,23 @@ async def _dashboard_run(config: BackendConfig, args: argparse.Namespace, prompt
         api = api.model_copy(update={"run_timeout_s": args.timeout})
     body: dict[str, Any] = {"prompt": "\n\n".join(prompts), "preset": args.preset}
     body.update({k: v for k, v in (("provider", args.provider), ("model", args.model)) if v is not None})
+    if args.fanout is not None:
+        sub = {
+            k: v for k, v in (("agent", args.subagent_agent), ("model", args.subagent_model)) if v is not None
+        }
+        fanout: dict[str, Any] = {"enabled": True}
+        if args.fanout:
+            fanout["width"] = args.fanout
+        if args.subagent_max_usd is not None:
+            fanout["max_usd"] = args.subagent_max_usd
+        if sub:
+            fanout["subagent"] = sub
+        body["fanout"] = fanout
+    elif any(v is not None for v in (args.subagent_agent, args.subagent_model, args.subagent_max_usd)):
+        logger.error("--subagent-agent, --subagent-model and --subagent-max-usd need --fanout")
+        return 2
+    if args.spec_file is not None:
+        body["spec"] = json.loads(args.spec_file.read_text(encoding="utf-8"))
     manager = RunManager(config, api, agent=agent, summary=not args.no_summary)
     try:
         item = manager.start(body)

@@ -66,12 +66,23 @@ class RunRecord:
     finished_at: str | None = None
     duration_s: float | None = None  # wall clock of the whole run
     agent_cost_usd: float | None = None  # as the agent backend reported it
-    llm_cost_usd: float | None = None  # OpenRouter calls the agent made via ``ask``
+    #: OpenRouter spend: the agent's ``ask`` calls, the end-of-run summary and the level summaries.
+    llm_cost_usd: float | None = None
     llm_calls: int = 0
+    #: Fan-out runs only (left out of the file otherwise): one entry per
+    #: subagent, and what they cost together.
+    subagents: list[dict[str, Any]] | None = None
+    subagent_cost_usd: float | None = None
+    #: The level summaries' share of ``llm_cost_usd`` (live API runs; left out otherwise).
+    summaries_usd: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        """Plain JSON-ready dict."""
-        return asdict(self)
+        """Plain JSON-ready dict; the fan-out fields only when set."""
+        data = asdict(self)
+        for name in ("subagents", "subagent_cost_usd", "summaries_usd"):
+            if data[name] is None:
+                del data[name]
+        return data
 
 
 def event_summary(event: AgentEvent, *, width: int = 160) -> str:
@@ -150,6 +161,12 @@ class RunDir:
     def workspace(self) -> Path:
         """The agent's default working folder."""
         return self.path / WORKSPACE_DIR
+
+    @property
+    def owned_path(self) -> Path:
+        """The folder this run owns: the runner prepares a working folder (the chip-lab skill)
+        only inside it."""
+        return self.path
 
     @property
     def llm_calls_path(self) -> Path:

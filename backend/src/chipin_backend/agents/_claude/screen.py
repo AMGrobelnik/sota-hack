@@ -2,7 +2,7 @@
 
 The CLI renders a
 blocking dialog on a config dir that has not answered it yet (the Bypass
-Permissions warning, the auto-mode offer). A prompt typed into a dialog never
+Permissions warning, the auto-mode offer, the folder trust prompt). A prompt typed into a dialog never
 runs, so :class:`DialogPilot` answers each known dialog by its LABEL and the
 start fails on any dialog it does not know.
 """
@@ -43,6 +43,9 @@ class _Dialog:
 
 
 _STARTUP_DIALOGS = (
+    # The folder trust prompt, when the trust granted before the spawn did not hold
+    # (another CLI on the same login rewrote its config in between).
+    _Dialog("trust", ("Accessingworkspace", "Yes,Itrustthisfolder"), accept="Yes,Itrustthisfolder"),
     _Dialog("bypass", ("BypassPermissionsmode", "Yes,Iaccept"), accept="Yes,Iaccept"),
     _Dialog("auto-mode-offer", ("No,keepbypasspermissions",), keys=ESCAPE),
 )

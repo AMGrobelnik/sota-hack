@@ -61,6 +61,9 @@ class LlmConfig(_Section):
     default_model: str = "deepseek/deepseek-v4-flash-0731"
     #: Short names for OpenRouter model ids, e.g. ``cheap: openai/gpt-5-nano``.
     presets: dict[str, str] = Field(default_factory=dict)
+    #: Overrides the bundled ``llm/summaries.yaml`` (same shape: model, provider
+    #: tiers, timeouts) for every summary. None = the bundled chain.
+    summaries_file: Path | None = None
 
 
 class ProviderConfig(_Section):

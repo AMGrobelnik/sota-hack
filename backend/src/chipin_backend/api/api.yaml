@@ -10,12 +10,59 @@ stub_step_s: 0.4          # pause between the stub agent's steps; --stub-step ov
 max_files: 200            # GET /api/runs/{id}/files lists at most this many
 file_max_bytes: 524288    # GET /api/runs/{id}/file returns at most this (512 KB)
 
+# Browser origins allowed to call the API (CORS); ":*" means any port.
+allowed_origins:
+  - https://chipin.space
+  - http://127.0.0.1:*
+  - http://localhost:*
+  - http://[::1]:*
+
+# Public datasets a spec may name (data.mode public): name -> local folder.
+# Nothing is set up by default: such a run falls back to synthetic data.
+datasets: {}
+
 # Dashboard preset -> agent effort (claude_cli effort levels).
 presets:
   lite: low
   pro: high
   max: xhigh
   ultra: max
+
+# Fan-out: the run's agent becomes an orchestrator. In each of reference,
+# propose, finetune, compile and verify it runs ONE batch of subagents that
+# try different strategies in parallel, waits for all of them and merges the
+# best (./subagent in its folder); spec and report are its own. Off by
+# default; turn it on per run with POST /api/runs {"fanout": true} or
+# `run --fanout`. The preset is the run-size control: it sets the effort
+# (presets above) and the batch size (widths below).
+fanout:
+  enabled: false
+  width: null               # batch size for every run; null = the preset's below
+  widths:                   # subagents per stage batch, per preset
+    lite: 3
+    pro: 10
+    max: 15                 # ASSUMPTION to confirm: the owner did not name Max
+    ultra: 20
+  default_width: 3          # a run with no preset
+  max_parallel: null        # running at once; null = the batch size (no queue below it)
+  max_total: null           # per run; null = five batches (5 x width) + spare_starts
+  spare_starts: null        # retries beyond five batches; null = width / 5, at least 2
+  usd_per_subagent: 0.05    # API-model budget per allowed start
+  max_usd: null             # API-model spend of a run's subagents; null = usd_per_subagent x max_total
+  wait_timeout_s: 100       # ./subagent wait default, under the agents' 120 s command limit
+  subagent:
+    agent: null             # claude | openrouter | stub; null = the orchestrator's
+    model: claude-sonnet-5-5  # automatic model of claude subagents (the orchestrator: agents.claude_cli.model)
+    openrouter_model: null  # automatic model of openrouter subagents; null = agents.openrouter.model
+    provider: null          # openrouter harness only; null = openrouter
+    effort: null            # null = the orchestrator's effort (the preset's)
+    timeout_s: null         # wall clock per subagent; null = the preset's below
+    timeouts:               # higher presets think longer
+      lite: 600
+      pro: 1200
+      max: 1500
+      ultra: 1800
+    default_timeout_s: 1200 # a run with no preset
 
 # POST /api/transcribe: one spoken phrase to text through OpenRouter
 # (needs OPENROUTER_API_KEY). Model names are OpenRouter ids.
@@ -29,3 +76,33 @@ transcribe:
   hourly_audio_s: 1800      # audio seconds per rolling hour, then 429
   timeout_s: 30             # per provider call
   silence_rms: 200          # a quieter WAV is silence: empty text, no call
+
+# Chippy, the dashboard's helper agent (POST /api/helper/messages). Keys by
+# variable NAME only. The rungs are walked in order, each provider pinned with
+# fallbacks off; prices are used only when OpenRouter reports no cost.
+helper:
+  enabled: true
+  key_env: OPENROUTER_API_KEY
+  rungs:
+    - model: z-ai/glm-5.3-flash
+      providers: [DigitalOcean, Together]
+      budget_s: 30
+      usd_per_m_in: 0.0399
+      usd_per_m_out: 0.0784
+    - model: deepseek/deepseek-v4.1-flash
+      providers: [CoreWeave, Wafer]
+      budget_s: 25
+      usd_per_m_in: 0.0498
+      usd_per_m_out: 0.1992
+  attempt_timeout_s: 30     # one provider attempt
+  turn_budget_s: 240        # wall clock of one answer
+  max_tool_roundtrips: 8    # then one closing call with tools off
+  max_identical_calls: 3    # the same tool call repeated this often ends the turn
+  max_result_bytes: 4096    # one tool result, as JSON, at most
+  file_window_bytes: 3000   # one read of a file or the report
+  max_text_chars: 4000      # one user message
+  max_body_bytes: 65536     # one request body, view context included
+  history_messages: 24      # kept per conversation, in memory only
+  max_conversations: 200    # oldest dropped past this
+  conversation_usd: 0.05    # spending cap per conversation
+  daily_usd: 0.50           # spending cap per UTC day
