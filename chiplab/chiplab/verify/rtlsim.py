@@ -76,6 +76,12 @@ async def stream_vectors(dut):
     assert mism == 0, f"{mism} mismatching frames, first: {first}"
 '''
 
+#: The same testbench for the post-processing and channel-serial wrappers: an expected value of None means "no
+#: decision after this frame" (an intermediate channel frame), and `valid` must then stay low.
+_TB_SEQ = _TB.replace("        if not ok or got != exp:\n",
+                      "        if (ok if exp is None else (not ok or got != exp)):\n")
+assert _TB_SEQ != _TB
+
 
 def lint(verilog: Path, top: str) -> dict:
     try:
@@ -96,12 +102,17 @@ def random_inputs(ir: dict, n: int, seed: int = 0) -> dict:
 
 
 def rtl_simulate(ir: dict, workdir: Path, X: dict | None = None, n: int = 1000, tt: bool = True, seed: int = 0, core_text: str | None = None,
-                 timeout: int = 900, reference: dict | None = None, expected: dict | None = None) -> dict:
+                 timeout: int = 900, reference: dict | None = None, expected: dict | None = None,
+                 postproc: dict | None = None, channel_serial: dict | None = None) -> dict:
     """Stream vectors through the wrapper in Icarus via cocotb; compare with the integer model. Level 3.
 
     reference: another chipir/1 whose interpreter gives the expected outputs (default: ir itself).
     expected:  the scientist's expected outputs {output name: int [N, lanes]} instead of an interpreter.
+    postproc / channel_serial: simulate the wrapper with these blocks (emit/postproc.py) against the pure-Python
+    sequence model; X is then the frame sequence in streaming order (n random decisions if None: n * C frames).
     """
+    if postproc or channel_serial:
+        return _rtl_simulate_seq(ir, workdir, X, n, tt, seed, core_text, timeout, postproc, channel_serial)
     workdir = Path(workdir); workdir.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
     text, info = emit_stream(ir, tt=tt, core_text=core_text)
@@ -128,6 +139,46 @@ def rtl_simulate(ir: dict, workdir: Path, X: dict | None = None, n: int = 1000, 
             "first_mismatches": res.get("first_mismatches"), "lint": li, "top": info["top"], "tt": tt,
             "transfers_per_frame": info["transfers_per_frame"], "visible_output_bits": info["visible_output_bits"],
             "truncated": info["truncated"], "verilog": str(vpath), "error": err,
+            "verification_level": 3 if passed and li["ok"] else None, "seconds": round(time.time() - t0, 1),
+            "simulator": "icarus via cocotb runner" + (" (OSS CAD Suite python)" if _oss_python() else " (lab venv)")}
+
+
+def _rtl_simulate_seq(ir: dict, workdir: Path, X: dict | None, n: int, tt: bool, seed: int, core_text: str | None,
+                      timeout: int, postproc: dict | None, channel_serial: dict | None) -> dict:
+    from chiplab.emit.postproc import reference as seq_reference
+    workdir = Path(workdir); workdir.mkdir(parents=True, exist_ok=True)
+    t0 = time.time()
+    text, info = emit_stream(ir, tt=tt, core_text=core_text, postproc=postproc, channel_serial=channel_serial)
+    vpath = workdir / f"{info['top']}.v"
+    vpath.write_text(text)
+    li = lint(vpath, info["top"])
+    C = info["frames_per_decision"]
+    if X is None:
+        X = random_inputs(ir, n * C, seed)
+    elif not isinstance(X, dict):
+        X = {ir["inputs"][0]["name"]: np.asarray(X)}
+    N = len(next(iter(X.values())))
+    ref = seq_reference(info["core"], interp(ir, X), postproc, channel_serial)
+    mask = (1 << info["visible_output_bits"]) - 1
+    exp: list = [None] * N
+    for f, v in zip(ref["event_frames"], ref["packed"]):
+        exp[f] = int(v) & mask
+    cfgp, resp = workdir / "tb_vectors.json", workdir / "tb_result.json"
+    cfgp.write_text(json.dumps({"tt": tt, "words": frame_words(info["core"], X).tolist(), "expected": exp, "result": str(resp)}))
+    (workdir / "chiplab_stream_tb.py").write_text(_TB_SEQ)
+    if resp.exists():
+        resp.unlink()
+    err = _run_cocotb(vpath, info["top"], workdir, cfgp, timeout)
+    res = json.loads(resp.read_text()) if resp.exists() else {"vectors": N, "mismatches": None, "first_mismatches": []}
+    passed = res.get("mismatches") == 0 and res.get("vectors") == N
+    alarm = ref["fields"].get("alarm")
+    return {"passed": bool(passed), "vectors": res.get("vectors"), "decisions": len(ref["event_frames"]),
+            "frames_per_decision": C, "mismatches": res.get("mismatches"),
+            "first_mismatches": res.get("first_mismatches"), "lint": li, "top": info["top"], "tt": tt,
+            "alarm_on_fraction": round(sum(alarm) / len(alarm), 4) if alarm else None,
+            "transfers_per_frame": info["transfers_per_frame"], "visible_output_bits": info["visible_output_bits"],
+            "truncated": info["truncated"], "verilog": str(vpath), "error": err, "reference": "emit.postproc.reference",
+            "postproc": info.get("postproc"), "channel_serial": info.get("channel_serial"),
             "verification_level": 3 if passed and li["ok"] else None, "seconds": round(time.time() - t0, 1),
             "simulator": "icarus via cocotb runner" + (" (OSS CAD Suite python)" if _oss_python() else " (lab venv)")}
 
@@ -169,13 +220,16 @@ def _run_cocotb(vpath: Path, top: str, workdir: Path, cfgp: Path, timeout: int) 
         (workdir / "run_tb.py").write_text(_RUNNER)
         env = {k: v for k, v in os.environ.items() if k not in ("VIRTUAL_ENV", "PYTHONPATH", "PYTHONHOME")}
         env["PATH"] = f"{Path(py).parent.parent / 'bin'}:{env.get('PATH', '')}"
+        from chiplab.verify.eqy import _kill_group
+        p = subprocess.Popen([py, str(workdir / "run_tb.py"), str(vpath), top, str(workdir), str(cfgp)], cwd=workdir,
+                             env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
         try:
-            p = subprocess.run([py, str(workdir / "run_tb.py"), str(vpath), top, str(workdir), str(cfgp)], cwd=workdir,
-                               env=env, capture_output=True, text=True, timeout=timeout)
+            out, err = p.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
+            _kill_group(p)            # the simulator (vvp) is a child of the runner: kill the whole group
             return f"timed out after {timeout}s"
-        (workdir / "runner.log").write_text(p.stdout + p.stderr)
-        return None if p.returncode == 0 else f"runner exit {p.returncode}: {(p.stderr or p.stdout)[-400:]}"
+        (workdir / "runner.log").write_text(out + err)
+        return None if p.returncode == 0 else f"runner exit {p.returncode}: {(err or out)[-400:]}"
     from cocotb_tools.runner import get_runner  # fallback: the lab's own Python
     old_path = os.environ.get("PATH", "")
     os.environ["PATH"] = f"{Path(os.sys.executable).parent}:{old_path}"

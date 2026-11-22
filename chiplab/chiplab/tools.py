@@ -502,6 +502,39 @@ def evaluate_clinical(design_id: str, split: str = "val") -> dict:
     return out
 
 
+@tool("Fair event-level referee (timescoring 0.0.7): your detections vs reference labels per recording. Returns "
+      "per-recording tp/fp/refTrue/numSamples, per-patient sums, SzCORE per-patient averages and pooled figures, "
+      "false alarms per hour and per 24 h, sensitivity at fixed FA/h (0.1, 0.36, 1) from a threshold sweep over "
+      "scores, worst case, 1 s ROC AUC, patient bootstrap 95% CIs and provenance. profile=szcore (tolerance "
+      "30/60 s, merge <90 s, split >300 s; SzCORE-comparable) or neonatal (any overlap, no merge, no split).",
+      {"recordings": "list — [{patient_id, recording_id, fs, labels (0/1 per sample), decisions (0/1) and/or scores "
+                     "(float), timestamps (s, optional: gaps split the recording)}] (or give path)",
+       "path": "str — JSON file with that list (or {recordings: [...]})",
+       "profile": "str — szcore|neonatal (szcore)",
+       "params": "dict — overrides: tolerance_start_s, tolerance_end_s, min_overlap, merge_s (null: never), "
+                 "split_s (null: never), collar_s",
+       "nan_policy": "str — omit|zero: undefined per-patient values left out (SzCORE) or counted as 0 (omit)",
+       "score_threshold": "float — decisions = scores >= this where decisions are missing (0.5)",
+       "fa_targets": "list[float] — FA/h targets for the sweep (0.1, 0.36, 1.0)",
+       "thresholds": "dict — {target: threshold} chosen on other data; skips the same-data sweep",
+       "n_thresholds": "int — score quantiles in the sweep, at most 200; each one rescores every recording, so "
+                       "lower it for many long recordings with noisy scores (200)",
+       "n_bootstrap": "int — patient-level bootstrap resamples (2000)", "seed": "int — bootstrap seed (0)",
+       "progress_metrics": "bool — send event_sensitivity, fa_per_hour, worst_patient_sensitivity, auc to ./progress "
+                           "(false)"}, lane="cpu")
+def score_events(recordings: list | None = None, path: str | None = None, profile: str = "szcore",
+                 params: dict | None = None, nan_policy: str = "omit", score_threshold: float = 0.5,
+                 fa_targets: list | None = None, thresholds: dict | None = None, n_thresholds: int = 200,
+                 n_bootstrap: int = 2000, seed: int = 0, progress_metrics: bool = False) -> dict:
+    from chiplab.referee.events import score
+    if (recordings is None) == (path is None):
+        raise ValueError("give exactly one of recordings or path")
+    data = recordings if path is None else json.loads(Path(path).expanduser().read_text())
+    return score(data, profile=profile, params=params, nan_policy=nan_policy, score_threshold=score_threshold,
+                 fa_targets=fa_targets, thresholds=thresholds, n_thresholds=n_thresholds, n_bootstrap=n_bootstrap,
+                 seed=seed)
+
+
 # ------------------------------------------------------------------------------------------------ overview
 
 @tool("Leaderboard of compiled designs: gates, depth, bit-exact status and validation metrics.", {"task_id": "str (optional)"}, lane="inline")
