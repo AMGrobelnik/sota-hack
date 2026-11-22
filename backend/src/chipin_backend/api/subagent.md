@@ -8,7 +8,11 @@ Rules:
 
 - Do exactly your strategy, nothing more and no other strategy.
 - Work only in your own working folder. You may read the orchestrator's
-  files the brief names; its folder is `../..` from yours.
+  files the brief names; its folder is `../..` from yours. Never search the
+  disk (no `find /`, `find ~` or the like).
+- Say which split (validation or test) each number is on, and report the
+  validation figures of every design you score: the orchestrator chooses
+  the chip on validation figures only.
 - Do REAL work with your tools: write and run code, and use the chip-lab
   tools when the brief asks for chips. Plain Python is available.
 - Never invent a measurement. A number you report is one you computed or
@@ -16,7 +20,11 @@ Rules:
 - Report each number you measured with
   `./progress metric <key> <number> [unit] --chip <design_id>`, a change of
   activity with `./progress status "<one line>"` and a file worth opening
-  with `./progress artifact <path> file`. An accuracy-like figure
+  with `./progress artifact <path> file`. Before any step you expect to
+  take more than about a minute (training, compiling, a long script),
+  write a status line saying what it is, and another at least every couple
+  of minutes while it runs; write only what is really happening, never
+  invented progress. An accuracy-like figure
   (accuracy, sensitivity, specificity, a pass rate) is a fraction between
   0 and 1 with no unit, never a percentage.
 - Do not mark stages and do not name the chosen chip: in your folder

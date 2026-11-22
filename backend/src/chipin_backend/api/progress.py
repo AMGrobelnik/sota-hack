@@ -8,9 +8,10 @@ The helper appends one JSON line per call to the run's ``progress.jsonl``::
     ./progress chosen <design_id>
     ./progress status "ChipIn is wiring the weights into gates"
     ./progress artifact report.md [file|report|chip]
+    ./progress design design_a.json      # one design record (see designs.py)
 
 :class:`ProgressTailer` reads new lines from that file and writes ``stage``,
-``metric``, ``chosen``, ``status`` and ``artifact`` events. A metric's
+``metric``, ``chosen``, ``status``, ``artifact`` and ``design`` events. A metric's
 optional ``chip`` names the design it measures; ``chosen`` names the run's
 chosen chip, and a later one replaces an earlier one. A malformed line is skipped
 with a warning; the helper itself rejects bad arguments with exit status 2,
@@ -20,6 +21,7 @@ so the agent learns at once.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import math
 import stat
@@ -30,6 +32,7 @@ from typing import Any
 
 from loguru import logger
 
+from chipin_backend.api.designs import emit_design, validate_design
 from chipin_backend.api.events import STAGES, EventLog
 from chipin_backend.api.translate import clip
 
@@ -48,13 +51,17 @@ usage:
   ./progress chosen <design_id>
   ./progress status "<one present-tense line>"
   ./progress artifact <path in this folder> [{kinds}]
+  ./progress design <design.json | '{{json object}}'>
 """
+from __future__ import annotations
 import json, math, sys
 from datetime import datetime, timezone
 
 OUT = {out!r}
 STAGES = {stages_t!r}
 KINDS = {kinds_t!r}
+
+{validator}
 
 
 def fail(msg):
@@ -116,6 +123,18 @@ elif cmd == "artifact":
     if len(rest) == 2 and rest[1] not in KINDS:
         fail("unknown artifact kind " + repr(rest[1]) + "; use one of {kinds}")
     line.update(path=rest[0], kind=rest[1] if len(rest) == 2 else "file")
+elif cmd == "design":
+    if len(rest) != 1:
+        fail("design needs one JSON object, or the path of a .json file holding one")
+    try:
+        if rest[0].lstrip().startswith("{{"):
+            record = json.loads(rest[0])
+        else:
+            with open(rest[0], encoding="utf-8") as handle:
+                record = json.load(handle)
+        line.update(validate_design(record))
+    except (OSError, ValueError) as exc:
+        fail("design record refused: " + str(exc))
 else:
     fail("unknown command " + repr(cmd))
 with open(OUT, "a", encoding="utf-8") as handle:
@@ -169,6 +188,7 @@ def write_helper(
         stages_t=STAGES,
         kinds="|".join(ARTIFACT_KINDS),
         kinds_t=ARTIFACT_KINDS,
+        validator=inspect.getsource(validate_design),
     )
     if subagent:
         source = source.replace(_DISPATCH, _SUBAGENT_REFUSAL + _DISPATCH, 1)
@@ -192,6 +212,7 @@ class ProgressTailer:
         *,
         marks: bool = True,
         on_stage: Callable[[str, str], None] | None = None,
+        agent: str | None = None,
     ) -> None:
         self.path = path
         self.log = log
@@ -201,6 +222,8 @@ class ProgressTailer:
         self.marks = marks
         #: Called with ``(stage, state)`` before each ``stage`` event (fan-out closes merged stages).
         self.on_stage = on_stage
+        #: The fan-out subagent whose lines these are; its design records carry its id.
+        self.agent = agent
         self._offset = 0
         self.artifacts: set[str] = set()
 
@@ -281,6 +304,8 @@ class ProgressTailer:
             self.log.append("status", text=clip(str(item["text"]), 200))
         elif kind == "artifact":
             self.add_artifact(str(item["path"]), str(item.get("kind", "file")))
+        elif kind == "design":
+            emit_design(self.log, self.run_path, item, agent=self.agent)
         else:
             raise ValueError(f"unknown type {kind!r}")
 

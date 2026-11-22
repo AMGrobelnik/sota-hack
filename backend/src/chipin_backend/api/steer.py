@@ -37,6 +37,7 @@ from chipin_backend.agents.types import AgentEvent, AgentResult, AgentSpec, utc_
 from chipin_backend.api.events import EventLog
 from chipin_backend.api.progress import PROGRESS_FILE, ProgressTailer
 from chipin_backend.api.scripted import STEP_ENV
+from chipin_backend.api.spec import SPEC_FILE, spec_instructions
 from chipin_backend.api.translate import Translator, clip
 from chipin_backend.compute.factory import runner_for
 from chipin_backend.evidence import emit_evidence
@@ -295,6 +296,9 @@ def _spec_from_record(manager: RunManager, item: ApiRun) -> AgentSpec:
 
     agent = _agent(manager, item)
     preset = item.record.get("preset")
+    instructions = manager.instructions
+    if (item.run.workspace / SPEC_FILE).is_file():
+        instructions = f"{instructions.rstrip()}\n\n{spec_instructions()}"
     return AgentSpec(
         name="chipin",
         prompts=[],
@@ -302,7 +306,7 @@ def _spec_from_record(manager: RunManager, item: ApiRun) -> AgentSpec:
         model=item.record.get("model"),
         provider=item.record.get("provider"),
         effort=manager.api.presets.get(preset) if preset else None,
-        system_prompt=manager.instructions,
+        system_prompt=instructions,
         timeout_s=manager.api.run_timeout_s,
         env={STEP_ENV: str(manager.api.stub_step_s)} if agent == "stub" else {},
     )

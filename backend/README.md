@@ -169,7 +169,7 @@ skips it too.
 agent run on this Mac and follow it live.
 
 ```bash
-python -m chipin_backend serve --agent stub --frontend <site folder>
+python -m chipin_backend serve --agent stub --site <site folder>
 python -m chipin_backend serve           # the Claude agent, port 8797
 ```
 
@@ -178,21 +178,62 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 - It prints one link, `http://127.0.0.1:8797/#token=<token>`. The token is
   new at every start and is never written to disk. A page sends it in the
   `X-ChipIn-Token` header; the event stream may pass it as `?token=`.
-- Browsers may call it from `https://chipin.space` and from
-  `http://127.0.0.1` or `http://localhost` on any port; any other origin is
-  refused. `--frontend <folder>` serves a static site at `/`, so a page
-  opened through the link needs no other setup; open a dashboard as
+- Browsers may call it from the origins in `allowed_origins` in
+  `src/chipin_backend/api/api.yaml`: by default `https://chipin.space` and
+  `http://127.0.0.1`, `http://localhost` and `http://[::1]` on any port
+  (`:*`); any other origin is refused (403). `--site <folder>` (also
+  `--frontend`) serves a checkout of the site at `/`, so the dashboard and
+  the API share one loopback origin and a page opened through the link
+  needs no other setup; open a dashboard as
   `http://127.0.0.1:8797/dashboard/variants/g1.html#token=<token>`.
-- A page on `https://chipin.space` reaches this server with
-  `?api=http://127.0.0.1:8797` plus the token. Chrome asks first with a
-  Private Network Access preflight; the server answers it with
-  `Access-Control-Allow-Private-Network: true`.
+- A page on `https://chipin.space` may call this server with
+  `?api=http://127.0.0.1:8797` plus the token: the server answers Chrome's
+  Private Network Access preflight with
+  `Access-Control-Allow-Private-Network: true`, but the browsers still
+  stand in the way (see the demo below).
 - `--agent claude` (the default) runs the `claude_cli` backend on the
   Mac's own Claude login; `--agent stub` runs a scripted agent with no model
   calls. Every run goes through `orchestrate.run_agent`, so it gets a
   `runs/<run_id>/` folder, a full `run.json` and the OpenRouter summary.
 - `--stub-step <seconds>` slows the stub's steps (default 0.4 s, about
   10 s a run) so a demo can be followed, messaged and stopped.
+
+### Demo: a real run from the dashboard
+
+The demo path is the same-origin one: the backend serves the site, so the
+dashboard and the API share one loopback address. From `backend/`:
+
+```bash
+uv sync --extra dev
+# optional, the chip lab and training (paths, not secrets; see "Chip lab")
+export CHIPIN_CHIPLAB_BIN=<lab>/.venv/bin CHIPLAB_CONFIG=<lab config.json>
+export CHIPLAB_USER_DIR=<lab tool folder> CHIPIN_TRAIN_PYTHON=<lab>/.venv/bin/python
+.venv/bin/chipin-backend serve --site <site checkout> --env-file <keys file>
+```
+
+1. It prints `http://127.0.0.1:8797/#token=<token>` (`--port` changes
+   the port). Open the dashboard on that origin with the same fragment:
+   `http://127.0.0.1:8797/dashboard/variants/i1.html#token=<token>`.
+   The page keeps the token in this browser, removes it from the address
+   bar, and the sidebar reads "Connected to local backend". With the token
+   lost, paste the printed link under Configure, Backend, Token, then Test.
+2. Type a brief and press Chip in. Walk the five steps (device, who and
+   where, targets, constraints, data: Simulate means synthetic data), pick
+   Lite on the "Your spec" card and press Run.
+3. The run opens at `#/live/<run id>/overview`: stages, the agent's log,
+   designs on the chart as their records arrive (hollow while the size is
+   the agent's estimate, solid once the lab measured it), tiles and pass or
+   fail against the spec's targets, the funnel, files and the report, cost
+   and elapsed time. "Where it fails", "Chip", "Chat" and "Sources" are the
+   other views. A reload resumes the run from its first event.
+
+The published page (`https://chipin.space/dashboard/...?api=http://127.0.0.1:<port>`)
+is not the demo path. Chrome refuses its calls to a loopback address
+("Permission was denied for this request to access the loopback address
+space") until the user allows local network access for the site; Safari
+blocks them as mixed content (an https page asking for http). The server
+side is ready for it (CORS, the Private Network Access header), the
+browsers are not.
 
 | Route or event                 | What it is                   |
 | ------------------------------ | ---------------------------- |
@@ -204,6 +245,7 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 | `POST /api/runs/{id}/messages` | `text` to the agent          |
 | `POST /api/runs/{id}/stop`     | stop the run                 |
 | `GET /api/runs/{id}/evidence`  | run evidence, once finished  |
+| `GET /api/runs/{id}/designs`   | latest record per design     |
 | `GET /api/runs/{id}/files`     | `path`, `size` per file      |
 | `GET /api/runs/{id}/file`      | `?path=`: one file as text   |
 | `POST /api/transcribe`         | one spoken phrase to text    |
@@ -215,6 +257,7 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 | `tool`                         | a tool call, started or done |
 | `metric`                       | `key`, `value`, opt. `chip`  |
 | `chosen`                       | `chip`: the run's chosen one |
+| `design`                       | one candidate design record  |
 | `artifact`                     | a file, such as the report   |
 | `cost`                         | agent cost and tokens        |
 | `error`                        | what went wrong              |
@@ -491,6 +534,118 @@ their `subagent.finished` events come before `run.finished`. Spend is
 counted when a subagent ends, so subagents already running can carry the
 total a little past `max_usd`. With fan-out off nothing changes: no
 helper, no extra instructions, no new events or fields.
+
+## Run spec and design records
+
+A dashboard may send the user's structured spec with a run and plot every
+candidate design the agent scores. Both are optional: a request without
+`spec` gives the same instructions, agent input and events as before.
+
+### The spec
+
+`POST /api/runs` (and `run --preset ... --spec-file spec.json`) takes an
+optional `spec` object:
+
+```json
+{
+  "brief": "A two-electrode patch that flags seizures at home.",
+  "device": "behind-the-ear EEG patch",
+  "signal": "EEG, 2 channels",
+  "detect": "seizure onset",
+  "task_types": ["monitoring"],
+  "patient_group": "adults with focal epilepsy",
+  "place": "home",
+  "fa_unit": "night",
+  "targets": [
+    {"metric": "sensitivity", "op": "at_least", "value": 0.8, "unit": null},
+    {"metric": "fa_per_hour", "op": "at_most", "value": 0.5, "unit": "/h"}
+  ],
+  "primary": "sensitivity",
+  "constraints": {"channels": 2, "find_best": false,
+                  "battery_hours": 24, "reusable": true},
+  "data": {"mode": "simulate", "dataset": null}
+}
+```
+
+- Required: `device`, `signal`, `detect`, `targets` (1 to 12), `primary`
+  and `data.mode`. `task_types` takes `monitoring`, `screening`,
+  `grading`; `place` takes `ward`, `home`, `patient`; `fa_unit` takes
+  `hour`, `night` (12 hours), `day` (24 hours), default `hour`, and the
+  agent's block states the hours; `op` takes `at_least` or
+  `at_most`; `data.mode` takes `public`, `own` or `simulate`. An unknown
+  field or a bad value is a 400 whose `error` names the field, for example
+  `spec.fa_unit must be one of hour, night, day`; no run is started.
+- The run gets `workspace/spec.json` (the spec plus `data_used`), a short
+  "The user's spec" block at the top of the agent's first message,
+  `spec` on the `run.started` event, and the paragraph in `api/spec.md`
+  added to the standing instructions: the spec stage restates and checks
+  this spec, every target is a bar the chosen design is judged against,
+  the primary metric and false-alarm unit are the user's, the channel
+  budget decides which budgets to explore, and every result on synthetic
+  data says so.
+- Data: `simulate` is synthetic data. `public` uses a dataset only when
+  `datasets` in `api.yaml` maps its name to a local folder (nothing is set
+  up by default); otherwise the agent is told it is not available and uses
+  synthetic data. `own` is not available in this build. `data_used` is
+  `{"use": "synthetic" | "public:<name>", "folder", "reason"}`.
+
+### Design records
+
+For every candidate design it scores, the agent sends one record with the
+helper in its working folder; the helper checks it and answers `ok`, or
+exit status 2 with the reason (then nothing is recorded):
+
+```bash
+./progress design design_a.json        # a file holding one JSON object
+./progress design '{"id": "a", ...}'   # or the object itself
+```
+
+```json
+{
+  "id": "lr-2ch", "label": "logistic, 2 features",
+  "budget": {"channels": 2, "name": "2 electrodes"},
+  "gates": 1450, "gates_est": 900, "depth": null,
+  "metrics": {"sensitivity": 0.9, "specificity": 0.95, "fa_per_hour": 0.2},
+  "basis": "test",
+  "counts": {"events_caught": 9, "events_total": 10,
+             "negatives_correct": 380, "negatives_total": 400,
+             "hours": 10, "patients": 2},
+  "per_patient": [
+    {"id": "p1", "caught": 5, "total": 5, "false_alarms": 1, "hours": 5},
+    {"id": "p2", "caught": 4, "total": 5, "false_alarms": 1, "hours": 5}
+  ],
+  "verified": {"vectors": 512, "mismatches": 0,
+               "level": "bit-exact", "proved": true},
+  "data": "synthetic",
+  "note": "synthetic data",
+  "previous_id": "own-lr-2ch"
+}
+```
+
+- Required: `id`, `label`, `budget` (`channels` or `sensors`, and
+  `name`), `metrics`, `basis` (`validation` or `test`), `data`
+  (`synthetic` or `public:<dataset>`). `gates` is the lab's measured
+  count or `null`; `gates_est` the agent's estimate or `null`.
+- Checks: types and ranges (sensitivity, specificity, agreement and the
+  like are fractions from 0 to 1; counts are whole and not negative), the
+  per-patient sums equal `counts`, sensitivity and specificity agree with
+  `counts`, `fa_per_hour` agrees with the false alarms over `hours`, and
+  `mismatches` is at most `vectors`. Unknown fields are refused.
+- A later record with the same `id` replaces the earlier one;
+  `previous_id` moves an earlier record to a new id (the lab's
+  `design_id` once compiled). The tailer checks each record again, emits
+  a `design` event (`design`: the record, `revision`: 1 for the first
+  report of that design), and keeps the latest per design in
+  `runs/<run_id>/designs.json`.
+- `GET /api/runs/{id}/designs` returns
+  `{"designs": [...], "chosen": "<id>" | null}`, designs in the order they
+  were first reported, each with `revision` and `ts`.
+- With fan-out on, a subagent sends records through its own `./progress`;
+  its `design` event and stored record carry its id as `agent`. Each
+  subagent gets the spec block and `spec.json` too.
+- The instructions ask for a record for every scored candidate, sent again
+  when it is compiled (measured gates) and when it is verified, and the
+  chosen one marked with `./progress chosen <id>`.
 
 ## Chip lab
 
