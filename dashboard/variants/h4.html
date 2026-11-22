@@ -1215,7 +1215,7 @@ let seq = 7;
 function mkRun(o) {
   const r = Object.assign({ k: 1, rounds: 3, notes: [], compute: "GPU Basic", preset: "Lite", cands: 2048, ui: {}, later: {} }, o);
   r.data = mkData(o.data || {});
-  if (!r.data.asm.length) r.data.asm = deriveAsm(r.uc, r.data.mode, r.data.ans || {}, null, r.data.checkN);
+  if (!r.data.asm.length) r.data.asm = deriveAsm(r.uc, r.data.mode, r.data.ans || {}, null, r.data.checkN, r.title);
   r.seed = [...r.id].reduce((a, c) => a * 31 + c.charCodeAt(0), 7) >>> 0;
   if (o.finished) { r.base = total(r); r.playing = false; } else { r.base = o.elapsed || 0; r.anchor = now(); r.playing = true; }
   r.startedAt = o.startedAt || new Date(Date.now() - (o.finished ? (o.ago || 2) * 3600e3 : r.base * 1000));
@@ -1275,21 +1275,32 @@ function guessKind(t) {
   return "people";
 }
 const SIM_KIND = { brain: ["rec", "rec", "rec"], nb: ["bar", "bar", "rec"], gen: ["rec", "rec", "rec"] };
-function deriveAsm(uc, mode, ans, edf, checkN) {
+// which age groups a text names (none named = unknown); every reason and assumption below cites only these or an answer given
+const POP_RE = [["newborn", /newborn|neonat|preterm|\bbab(?:y|ies)\b/], ["infant", /infant|toddler/], ["child", /child|paediatric|pediatric|\bkids?\b/], ["elderly", /elderly|older adult|older people|senior|geriatric/], ["adult", /\badults?\b/]];
+const POP_NAME = { newborn: "newborns", infant: "infants", child: "children", elderly: "older adults", adult: "adults" };
+const popsOf = t => { const s = String(t || "").toLowerCase(); return POP_RE.filter(([k, re]) => re.test(k === "adult" ? s.replace(/older adults?/g, "") : s)).map(([k]) => k); };
+const popList = a => a.map(k => POP_NAME[k]).join(" and ");
+const capFirst = s => s.charAt(0).toUpperCase() + s.slice(1);
+function deriveAsm(uc, mode, ans, edf, checkN, text) {
+  const pops = popsOf(text), named = popList(pops);
   const u = UC[uc], out = [], A = (q, w, from, kind) => out.push({ q, w, from, kind });
+  const grp = (ans.who && ans.who.v) || (pops.length ? capFirst(named) : null);
+  const nbOnly = pops.filter(k => k === "newborn" || k === "infant");
+  const nbQ = nbOnly.length ? `${capFirst(popList(nbOnly))}, assumed in intensive care and born at 28 to 40 weeks` : "Assumed newborns in intensive care, born at 28 to 40 weeks";
+  const nbW = nbOnly.length ? `Your description names ${popList(nbOnly)}; the ward and the age range are assumed. Sets skin and skull thickness, which decide how deep the light reaches.` : pops.length ? `Your description names ${named}, but this demo's brain-oxygen patch covers newborns only. Change it if that is wrong.` : "Your description does not name an age group; newborns are assumed. Sets skin and skull thickness, which decide how deep the light reaches.";
   const who = ans.who && ans.who.v, v = k => ans[k] && ans[k].v;
   if (uc === "brain") {
-    A(who ? `${who} ${mode === "own" ? "were recorded" : "will wear the band"}` : `Adults will wear the band`, who ? "From your answer; sets head size and where the electrodes sit." : "Most seizure headbands are for adults. Change it if yours is not.", who ? "answer" : "idea", "people");
+    A(grp ? `${grp} ${mode === "own" ? "were recorded" : "will wear the band"}` : "Assumed adults will wear the band", who ? "From your answer; sets head size and where the electrodes sit." : pops.length ? `Your description names ${named}; sets head size and where the electrodes sit.` : "Your description does not name an age group. Change it if yours is not.", who ? "answer" : pops.length ? "description" : "idea", "people");
     if (edf && edf.picked && edf.picked.length) A(`The band reads ${edf.picked.length} channels: ${edf.picked.join(", ")}`, "You picked them from your file; the chip is designed to read exactly these.", "file", "device");
     else if (v("chans")) A(`The band's electrodes sit: ${v("chans").toLowerCase()}`, "From your answer; the chip may use fewer if it can.", "answer", "device");
     else A("The band has up to 8 electrodes around the head, at the standard 10-20 ring", "Matches a headband; the chip may end up reading fewer.", "idea", "device");
     A(v("detect") ? `The chip must flag: ${v("detect").toLowerCase()}` : "The chip must flag each seizure within 10 seconds of onset", "Sets what counts as caught when each chip is checked.", v("detect") ? "answer" : "idea", "bar");
   } else if (uc === "nb") {
-    A(who ? `${who}, in intensive care` : "Newborns in intensive care, born at 28 to 40 weeks", "Sets skin and skull thickness, which decide how deep the light reaches.", who ? "answer" : "idea", "people");
+    A(who ? `${who}, in intensive care` : nbQ, who ? "Sets skin and skull thickness, which decide how deep the light reaches." : nbW, who ? "answer" : "idea", "people");
     A(v("chans") ? `The patch has ${v("chans").toLowerCase()}` : "The patch has 2 light sources and 4 detectors", v("chans") ? "From your answer; the chip may use fewer light paths." : "A common layout for a forehead patch; the chip may use fewer light paths.", v("chans") ? "answer" : "idea", "device");
     A(v("detect") ? `The chip must warn of: ${v("detect").toLowerCase()}` : "Warn a minute before brain oxygen crosses the alarm line", "Sets what counts as flagged early.", v("detect") ? "answer" : "idea", "bar");
   } else {
-    A(who ? `${who} ${mode === "own" ? "were recorded" : "will use the device"}` : "Adult patients will use the device", who ? "From your answer." : "Change it if your users are children or newborns.", who ? "answer" : "idea", "people");
+    A(grp ? `${grp} ${mode === "own" ? "were recorded" : "will use the device"}` : "Assumed adults will use the device", who ? "From your answer." : pops.length ? `Your description names ${named}.` : "Your description does not name an age group. Change it if yours is not.", who ? "answer" : pops.length ? "description" : "idea", "people");
     A(v("chans") ? `The device has ${v("chans").toLowerCase()} sensor channels` : "The device records a few sensor channels", "The chip may use fewer if it can.", v("chans") ? "answer" : "idea", "device");
     A(v("detect") ? `The chip must flag: ${v("detect").toLowerCase()}` : "The chip must flag the event in your description as it starts", "Sets what counts as caught.", "idea", "bar");
   }
@@ -1699,8 +1710,15 @@ const newbornText = t => /newborn|neonat|preterm|baby|babies|infant/.test(t.toLo
 function searchPlan() {
   const uc = IN.uc, nbEEG = uc === "brain" && newbornText(IN.text);
   const no = (k, why) => ({ k, ok: false, why: why || DS[k].note });
-  if (uc === "brain" && nbEEG) return { arch: ["PhysioNet", "Zenodo", "Temple University", "VitalDB"], what: "newborn EEG with seizures marked", looked: 142, steps: [no("chbmit", "Scalp EEG, but not newborns."), no("siena", "Adults, not newborns."), no("tusz", "Needs a signed form, then rsync over an SSH key."), { k: "helsinki", ok: true, why: "Newborn EEG with seizures marked, open on Zenodo." }], result: { train: "helsinki", check: "helsinki" } };
-  if (uc === "brain") return { arch: ["PhysioNet", "Zenodo", "Temple University", "VitalDB"], what: "scalp EEG with seizures marked", looked: 128, steps: [no("sleepedf"), no("tusz", "Needs a signed form, then rsync over an SSH key; not open."), no("helsinki", "Newborns; your device is for adults."), no("vitaldb", "Surgical cases with an EEG-based monitor, no seizure marks."), { k: "chbmit", ok: true, why: "Scalp EEG with every seizure marked, open with no account." }, { k: "siena", ok: true, why: "A second open set, held out for the final check." }], result: { train: "chbmit", check: "siena" } };
+  const pops = popsOf(IN.text), named = popList(pops), adultish = pops.includes("adult") || pops.includes("elderly");
+  const open = "Needs a signed form, then rsync over an SSH key; not open.";
+  if (uc === "brain" && nbEEG) return { arch: ["PhysioNet", "Zenodo", "Temple University", "VitalDB"], what: "newborn EEG with seizures marked", looked: 142, steps: [no("chbmit", `Scalp EEG, but recorded in children and adults, not newborns; your description names ${named}.`), no("siena", `Adults only; your description names ${named}.`), no("tusz", "Needs a signed form, then rsync over an SSH key."), { k: "helsinki", ok: true, why: `Newborn EEG with seizures marked, open on Zenodo; your description names ${named}.` }], result: { train: "helsinki", check: "helsinki" } };
+  if (uc === "brain") {
+    // the age-specific sets: judged on the description when it names an age group, a neutral mark when it names none
+    const hel = !pops.length ? { k: "helsinki", ok: null, why: "Newborns only: fits if your device is for newborns." } : no("helsinki", `Newborns only; your description names ${named}.`);
+    const sie = !pops.length ? { k: "siena", ok: null, why: "A second open set for the final check. Adults only: fits if your device is for adults." } : adultish ? { k: "siena", ok: true, why: `A second open set, held out for the final check; adults only, and your description names ${named}.` } : no("siena", `Adults only; your description names ${named}.`);
+    return { arch: ["PhysioNet", "Zenodo", "Temple University", "VitalDB"], what: "scalp EEG with seizures marked", looked: 128, steps: [no("sleepedf"), no("tusz", open), hel, no("vitaldb", "Surgical cases with an EEG-based monitor, no seizure marks."), { k: "chbmit", ok: true, why: "Scalp EEG with every seizure marked, open with no account." }, sie], result: { train: "chbmit", check: sie.ok === false ? "chbmit" : "siena" } };
+  }
   if (uc === "nb") return { arch: ["PhysioNet", "Zenodo", "VitalDB"], what: "newborn brain-oxygen recordings with drops marked", looked: 96, steps: [no("helsinki"), no("vitaldb"), no("chbmit", "Scalp EEG, not brain oxygen."), no("sleepedf", "Sleep recordings, not brain oxygen.")], result: null };
   return { arch: ["PhysioNet", "Zenodo", "VitalDB"], what: "recordings from a device like yours with events marked", looked: 87, steps: [no("vitaldb", "Surgical cases; not recorded during your device's use."), no("chbmit", "Brain recordings, not your device's signal."), no("siena", "Brain recordings, not your device's signal."), no("sleepedf", "Sleep recordings, no events like yours.")], result: null };
 }
@@ -1723,7 +1741,7 @@ function runSearch() {
   };
   setTimeout(tick2, 400);
 }
-const searchRow = s => `<li><span class="${s.ok ? "k" : "x"}" aria-label="${s.ok ? "Fits" : "Dropped"}">${s.ok ? "✓" : "✕"}</span><span><s>${esc(DS[s.k].n)}</s>: ${esc(s.why)}</span><em>${s.ok ? "fits" : "dropped"}</em></li>`;
+const searchRow = s => `<li><span class="${s.ok === null ? "d" : s.ok ? "k" : "x"}" aria-label="${s.ok === null ? "Depends on your answer" : s.ok ? "Fits" : "Dropped"}">${s.ok === null ? "?" : s.ok ? "✓" : "✕"}</span><span><s>${esc(DS[s.k].n)}</s>: ${esc(s.why)}</span><em>${s.ok === null ? "depends" : s.ok ? "fits" : "dropped"}</em></li>`;
 function searchLog(S) {
   const p = S.plan, frac = S.done ? 1 : (S.arch + S.shown) / (p.arch.length + p.steps.length);
   return `<div class="slog" id="slog" aria-live="polite"><div class="sh"><span class="sic">${I(S.done ? "check" : "search", "s16")}</span><span>${S.done ? "Search finished" : `Searching open archives for ${esc(p.what)}`}</span><span id="slooked" style="margin-left:auto;font-weight:500;color:#4a5062;font-size:12.5px">${S.looked} records looked at</span></div>
@@ -1820,7 +1838,7 @@ function answer(v) {
 }
 function toAsm() {
   const e = IN.files.find(f => f.edf)?.edf;
-  IN.asm = deriveAsm(IN.uc, IN.mode || defaultMode(), IN.ans, e, IN.mode === "own" ? 8 : null).map(a => Object.assign({}, a));
+  IN.asm = deriveAsm(IN.uc, IN.mode || defaultMode(), IN.ans, e, IN.mode === "own" ? 8 : null, IN.text).map(a => Object.assign({}, a));
   ikStep("asm");
 }
 function defaultMode() { return IN.uc === "brain" ? "public" : "sim"; }
@@ -1963,7 +1981,7 @@ function finishIntake() {
   if (!mode) mode = defaultMode();
   const pub = mode === "public" ? (IN.pub || IN.search?.plan?.result || { train: "chbmit", check: "siena" }) : null;
   const e = IN.files.find(f => f.edf)?.edf;
-  const asm = (IN.asm || deriveAsm(IN.uc, mode, IN.ans, e, mode === "own" ? 8 : null)).map(x => ({ q: x.q, w: x.w, v: x.v, from: x.from, kind: x.kind || guessKind(x.v || x.q), changed: !!x.changed, mine: !!x.mine, ok: !!x.ok }));
+  const asm = (IN.asm || deriveAsm(IN.uc, mode, IN.ans, e, mode === "own" ? 8 : null, IN.text)).map(x => ({ q: x.q, w: x.w, v: x.v, from: x.from, kind: x.kind || guessKind(x.v || x.q), changed: !!x.changed, mine: !!x.mine, ok: !!x.ok }));
   const data = { mode, ans: IN.ans, skipped: IN.skipped, asm, files: mode === "own" ? IN.files.map(f => ({ n: f.n, s: f.s, edf: f.edf })) : [] };
   if (pub) Object.assign(data, { train: pub.train, check: pub.check });
   let title = text.split(/[.!?\n]/)[0].trim();

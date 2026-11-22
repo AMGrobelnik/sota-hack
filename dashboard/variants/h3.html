@@ -694,6 +694,7 @@ canvas.sig{display:block;width:100%;height:360px}
 .cands li b{color:var(--i900);font-weight:650}
 .cands li em{font-style:normal;font-size:12px;font-weight:600;white-space:nowrap}
 .cands li.ok em{color:var(--ok-t)}.cands li.no em{color:var(--bad-t)}
+.cands li.neu .m{background:var(--i100);color:var(--i600);font-weight:700;font-size:12px}.cands li.neu em{color:var(--i600)}
 /* assumptions, grouped and coloured by what they are about */
 .asg{margin-top:14px}
 .asg h4{display:flex;align-items:center;gap:8px;margin:14px 0 6px;font-size:12.5px;font-weight:650;color:var(--kc)}
@@ -1102,6 +1103,12 @@ const PAPERS = {
   ]
 };
 PAPERS.gen = [PAPERS.eeg[4], PAPERS.nirs[1]];
+/* Age groups: what a text names (none named = unknown). Every reason and assumption cites only this or an answer given. */
+const POP_RE = [['newborn', /newborn|neonat|preterm|\bbab(?:y|ies)\b/], ['infant', /infant|toddler/], ['child', /child|paediatric|pediatric|\bkids?\b/], ['elderly', /elderly|older adult|older people|senior|geriatric/], ['adult', /\badults?\b/]];
+const POP_NAME = { newborn: 'newborns', infant: 'infants', child: 'children', elderly: 'older adults', adult: 'adults' };
+const popsOf = t => { const x = String(t || '').toLowerCase(); return POP_RE.filter(([k, re]) => re.test(k === 'adult' ? x.replace(/older adults?/g, '') : x)).map(([k]) => k); };
+const popList = a => a.map(k => POP_NAME[k]).join(' and ');
+const capFirst = x => x.charAt(0).toUpperCase() + x.slice(1);
 /* What ChipIn assumes while nobody has said otherwise. k: what it is about (people, rec = the recordings,
    dev = the device, bar = the clinical bar). redo: what a change to it re-runs. */
 const KINDS = { people: 'About the people', rec: 'About the recordings', dev: 'About the device', bar: 'The clinical bar' };
@@ -1161,17 +1168,52 @@ function ownAssume(uc, nfiles) {
 const modeOf = run => run.data.mode !== 'pending' ? run.data.mode : run.uc === 'eeg' ? 'public' : 'sim';
 const guessed = run => run.data.mode === 'pending';
 /* Answers to the questions shape the assumptions: who it is for replaces the people line, and so on. */
-function shaped(a, ans, uc) {
-  const who = ans && ans.who && ans.who.state === 'done' ? ans.who.label : '';
-  if (a.id === 'p1' && who) return Object.assign({}, a, { v: `${who}${uc === 'eeg' ? ' with focal seizures' : ''}, ${uc === 'nirs' ? 'lying in an incubator' : 'as you described'}`, why: 'From your answer. Sets who every chip is checked on.' });
+function shaped(a, ans, uc, text) {
+  const got = k => ans && ans[k] && ans[k].state === 'done' ? ans[k].label : '';
+  const who = got('who'), chans = got('chans'), det = got('detect'), fa = got('fa'), pops = popsOf(text), named = popList(pops);
+  const none = 'Your description does not name an age group.';
+  if (a.id === 'p1') {
+    if (uc === 'nirs') {
+      const incub = /incubator/i.test(text || ''), place = incub ? ', lying in an incubator' : ', assumed lying in an incubator', tail = incub ? '' : ' The incubator is assumed.';
+      const nb = pops.filter(k => k === 'newborn' || k === 'infant');
+      if (who) return Object.assign({}, a, { v: `${who}${place}`, why: 'From your answer.' + tail + ' ' + a.why });
+      if (nb.length) return Object.assign({}, a, { v: `${capFirst(popList(nb))}${place}`, why: `Your description names ${popList(nb)}.` + tail + ' ' + a.why });
+      if (pops.length) return Object.assign({}, a, { v: `Assumed newborns${place}`, why: `Your description names ${named}, but this demo's brain-oxygen patch covers newborns only.` + tail });
+      return Object.assign({}, a, { v: `Assumed newborns${place}`, why: none + tail + ' ' + a.why });
+    }
+    const where = ', recorded on a ward', sets = 'Sets who every chip is checked on.';
+    if (who) return Object.assign({}, a, { v: `${who}, assumed recorded on a ward`, why: 'From your answer. The ward is assumed. ' + sets });
+    if (pops.length) return Object.assign({}, a, { v: `${capFirst(named)}, assumed recorded on a ward`, why: `Your description names ${named}. The ward is assumed. ` + sets });
+    return Object.assign({}, a, { v: 'Assumed adults' + where, why: none + ' ' + sets });
+  }
+  if (a.id === 'd1') {
+    const n = (String(text || '').match(/(\d+)[- ]?(?:channel|electrode)/i) || [])[1];
+    if (uc === 'eeg') {
+      if (chans) return Object.assign({}, a, { v: `${chans}, read 256 times a second`, why: 'From your answer. The reading rate is assumed; a chip can only use what the band records.' });
+      if (n) return Object.assign({}, a, { v: `${n} scalp channels, read 256 times a second`, why: `Your description names ${n} channels. The reading rate is assumed; a chip can only use what the band records.` });
+      return Object.assign({}, a, { v: 'Assumed 4 scalp channels, read 256 times a second', why: 'Your description does not say how many channels. A chip can only use what the band records.' });
+    }
+    if (uc === 'nirs') {
+      if (chans) return Object.assign({}, a, { v: `A forehead patch with ${chans.toLowerCase()}, read once a second`, why: 'From your answer. The reading rate is assumed. Sets which light paths a chip can choose from.' });
+      return Object.assign({}, a, { v: 'Assumed forehead patch with 2 light sources and 4 detectors, read once a second', why: 'Your description does not say how many. Sets which light paths a chip can choose from.' });
+    }
+    if (chans) return Object.assign({}, a, { v: `${chans[0].toUpperCase() + chans.slice(1)} from the device, read 100 times a second`, why: 'From your answer. The reading rate is assumed.' });
+    return Object.assign({}, a, { v: 'Assumed two signals from the device, read 100 times a second', why: 'Your description does not say how many. A chip can only use the signals the device records.' });
+  }
+  if (a.id === 'b1' && (det || fa)) {
+    const faTxt = fa ? `false alarms: ${fa.toLowerCase()}` : null;
+    const ev = uc === 'eeg' ? 'seizures' : uc === 'nirs' ? 'drops' : 'events', who2 = uc === 'nirs' ? 'newborn' : 'patient';
+    return Object.assign({}, a, { v: `${det ? `For ${det.toLowerCase()}: c` : 'C'}atch at least 90% of ${ev} for every unseen ${who2}${faTxt ? `; ${faTxt}` : ''}`, why: `From your answer${det && fa ? 's' : ''}. The 90% line is assumed. It counts the worst ${who2}, not the average.` });
+  }
+  if (a.id === 'b1') return Object.assign({}, a, { why: 'The 90% line and the false-alarm limit are assumed; you have not set them. ' + a.why });
   return a;
 }
-function asmBase(uc, mode, nfiles, ans) {
-  return (mode === 'own' ? ownAssume(uc, nfiles) : ASSUME[uc]).map(a => shaped(a, ans, uc));
+function asmBase(uc, mode, nfiles, ans, text) {
+  return (mode === 'own' ? ownAssume(uc, nfiles) : ASSUME[uc]).map(a => shaped(a, ans, uc, text));
 }
 function asmList(run, opts = {}) {
   const all = opts.all, t = elapsed(run);
-  const base = asmBase(run.uc, run.data.mode, run.data.files.length, run.ans).map(a => Object.assign({ key: a.id, arrive: 0 }, a));
+  const base = asmBase(run.uc, run.data.mode, run.data.files.length, run.ans, run.prompt || run.title).map(a => Object.assign({ key: a.id, arrive: 0 }, a));
   const later = LATER[run.uc].map(a => Object.assign({ key: a.id, arrive: a.at(), later: true }, a)).filter(a => all || a.arrive <= t);
   return base.concat(later).map(a => { const s = run.asm[a.key]; return Object.assign(a, s ? { v: s.v || a.v, state: s.state } : { state: '' }); })
     .concat(run.extra.map((x, i) => ({ key: 'x' + i, k: x.k || 'bar', v: x.v, why: 'Added by you.', state: 'added', redo: 'next', arrive: 0 })));
@@ -1711,7 +1753,7 @@ function addAsmHTML() {
 }
 function intakeAsm() {
   const mode = IN.data === 'own' ? 'own' : 'x';
-  return asmBase(IN.uc, mode, IN.files.length, IN.ans).map(a => Object.assign({ key: a.id }, a, IN.asm[a.id] ? { v: IN.asm[a.id].v || a.v, state: IN.asm[a.id].state } : { state: '' }))
+  return asmBase(IN.uc, mode, IN.files.length, IN.ans, IN.text).map(a => Object.assign({ key: a.id }, a, IN.asm[a.id] ? { v: IN.asm[a.id].v || a.v, state: IN.asm[a.id].state } : { state: '' }))
     .concat(IN.extra.map((x, i) => ({ key: 'x' + i, k: x.k, v: x.v, why: 'Added by you.', state: 'added' })));
 }
 function asmBlockIntake() {
@@ -1805,12 +1847,18 @@ function edfPanel(f) {
 function searchPlanFor(uc, text) {
   const D = DATASETS, nb = uc === 'eeg' && /newborn|neonat|baby|infant/i.test(text || '');
   const no = (k, why) => ({ k, ok: false, why }), yes = (k, why) => ({ k, ok: true, why });
+  // age-specific sets: judged on what the description names; with no age group named they get a neutral mark and a condition
+  const pops = popsOf(text), named = popList(pops);
+  const hel = !pops.length ? { k: 'helsinki', ok: null, why: 'Newborns only: fits if your device is for newborns.' } : no('helsinki', `Newborns only; your description names ${named}.`);
+  const sie = !pops.length ? { k: 'siena', ok: null, why: 'A second open set for a separate check. Adults only: fits if your device is for adults.' }
+    : pops.includes('adult') || pops.includes('elderly') ? yes('siena', `A second open set, kept back for a separate check; adults only, and your description names ${named}.`)
+    : yes('siena', `A second open set, kept back for a separate check. Adults only, so it shows how the chip carries over to adults; your description names ${named}.`);
   if (uc === 'eeg' && nb) return { what: 'newborn EEG with seizures marked', arch: ['PhysioNet', 'Zenodo', 'Temple University', 'VitalDB'], looked: 142, found: 'helsinki',
-    rows: [no('chbmit', 'Scalp EEG, but recorded in children and adults, not newborns.'), no('siena', 'Adults, not newborns.'), no('tusz', 'Needs a signed form before download.'), yes('helsinki', 'Newborn EEG with seizures marked, open on Zenodo.')] };
+    rows: [no('chbmit', `Scalp EEG, but recorded in children and adults, not newborns; your description names ${named}.`), no('siena', `Adults only; your description names ${named}.`), no('tusz', 'Needs a signed form before download.'), yes('helsinki', `Newborn EEG with seizures marked, open on Zenodo; your description names ${named}.`)] };
   if (uc === 'eeg') return { what: 'scalp EEG with seizures marked', arch: ['PhysioNet', 'Zenodo', 'Temple University', 'VitalDB'], looked: 128, found: 'chbmit',
-    rows: [no('tusz', 'Needs a signed form, then rsync over an SSH key; not open.'), no('helsinki', 'Newborns; your device is for adults.'), no('vitaldb', 'Surgical monitoring with no seizure marks.'), yes('chbmit', 'Scalp EEG with every seizure marked; open, no account.'), yes('siena', 'A second open set, kept back for a separate check.')] };
+    rows: [no('tusz', 'Needs a signed form, then rsync over an SSH key; not open.'), hel, no('vitaldb', 'Surgical monitoring with no seizure marks.'), yes('chbmit', 'Scalp EEG with every seizure marked; open, no account.'), sie] };
   if (uc === 'nirs') return { what: "newborns' brain oxygen with drops marked", arch: ['PhysioNet', 'Zenodo', 'VitalDB'], looked: 96, found: null,
-    rows: [no('helsinki', 'Newborns, but it records EEG, not brain oxygen.'), no('vitaldb', 'Adult surgery, not newborns.'), no('chbmit', 'Scalp EEG, not brain oxygen.')] };
+    rows: [no('helsinki', 'It records EEG, not brain oxygen.'), no('vitaldb', 'Surgery monitoring, not brain oxygen in a newborn patch.'), no('chbmit', 'Scalp EEG, not brain oxygen.')] };
   return { what: 'recordings from a device like yours with events marked', arch: ['PhysioNet', 'Zenodo', 'VitalDB'], looked: 87, found: null,
     rows: [no('vitaldb', 'Surgical cases, not recorded with your device.'), no('chbmit', 'Brain recordings, not your device\'s signal.'), no('siena', 'Brain recordings, not your device\'s signal.')] };
 }
@@ -1835,7 +1883,7 @@ function startSearch() {
   setTimeout(tick, 120);
 }
 function candRow(r, seen) {
-  return `<li class="${r.ok ? 'ok' : 'no'}${seen ? ' seen' : ''}"><span class="m">${ic(r.ok ? 'check' : 'x')}</span><span><b>${esc(DATASETS[r.k].name)}</b>, ${esc(DATASETS[r.k].people)}. ${esc(r.why)}</span><em>${r.ok ? 'fits' : 'dropped'}</em></li>`;
+  return `<li class="${r.ok === null ? 'neu' : r.ok ? 'ok' : 'no'}${seen ? ' seen' : ''}"><span class="m">${r.ok === null ? '?' : ic(r.ok ? 'check' : 'x')}</span><span><b>${esc(DATASETS[r.k].name)}</b>, ${esc(DATASETS[r.k].people)}. <span class="cwhy">${esc(r.why)}</span></span><em>${r.ok === null ? 'depends on you' : r.ok ? 'fits' : 'dropped'}</em></li>`;
 }
 function searchBlock() {
   const Sx = IN.search, P = Sx.plan, me = PRODUCT.short, k = Sx.done ? 1 : Math.min(1, (now() - Sx.t0) / Sx.total);

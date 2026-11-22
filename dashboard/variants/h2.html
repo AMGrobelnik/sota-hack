@@ -192,6 +192,7 @@ svg.ic{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;str
 .cands em{font-style:normal;font-size:12px;font-weight:600;border-radius:99px;padding:2px 9px;white-space:nowrap}
 .cands li.fit em{background:var(--okbg);color:var(--okt)}
 .cands li.out em{background:var(--i100);color:var(--i600)}
+.cands li.neu .mk2,.cands li.neu em{background:var(--i100);color:var(--i600)}
 .simhow{font-size:13px;color:var(--i700);line-height:1.55;background:#fbfcfe;border:1px solid var(--hair8);border-radius:14px;padding:12px 14px;margin-top:12px}
 .simhow ul{margin:6px 0 0;padding-left:18px}
 /* assumptions, grouped by kind */
@@ -913,24 +914,48 @@ const defaults = { preset: "lite", mach: "gpu", line: "90", maxGates: "5000", fa
 function estSec(preset, mach) { const p = PRESETS[preset]; return (36 + 48 * p.rounds) * SCALE * MACH[mach].speed * p.tf; }
 function fmtEst(sec) { const m = Math.max(5, Math.round(sec / 60 / 5) * 5), h = Math.floor(m / 60), mm = m % 60; return h ? `${h} h${mm ? " " + mm + " min" : ""}` : `${mm} min`; }
 
+/* ---- Age groups: what a text names (none named = unknown). Every reason and assumption cites only this or an answer given ---- */
+const POP_RE = [["newborn", /newborn|neonat|preterm|\bbab(?:y|ies)\b/], ["infant", /infant|toddler/], ["child", /child|paediatric|pediatric|\bkids?\b/], ["elderly", /elderly|older adult|older people|senior|geriatric/], ["adult", /\badults?\b/]];
+const POP_NAME = { newborn: "newborns", infant: "infants", child: "children", elderly: "older adults", adult: "adults" };
+const popsOf = t => { const x = String(t || "").toLowerCase(); return POP_RE.filter(([k, re]) => re.test(k === "adult" ? x.replace(/older adults?/g, "") : x)).map(([k]) => k); };
+const popList = a => a.map(k => POP_NAME[k]).join(" and ");
+const capFirst = x => x.charAt(0).toUpperCase() + x.slice(1);
+/* the "Who" assumption: the answer if given, else the description, else a labelled assumption */
+function whoRow(uc, text, who) {
+  const pops = popsOf(text), named = popList(pops), none = "Your description does not name an age group. Change it if your users differ.";
+  if (uc === "eeg") {
+    const age = " The public sets were recorded in different age groups; check they match your users.";
+    return who ? { v: `${who} with epilepsy`, why: "From your answer." + age }
+      : pops.length ? { v: `${capFirst(named)} with epilepsy`, why: `Your description names ${named}.` + age }
+      : { v: "Assumed adults with epilepsy", why: none + age };
+  }
+  const icu = /nicu|intensive care|incubator/i.test(text || ""), place = icu ? ", in intensive care" : ", assumed in intensive care", tail = icu ? "" : " Intensive care is assumed.", ask = " Tell us if your unit sees only one group.";
+  const nb = pops.filter(k => k === "newborn" || k === "infant");
+  return who ? { v: `${who}${place}`, why: "From your answer." + tail + ask }
+    : nb.length ? { v: `${capFirst(popList(nb))}${place}`, why: `Your description names ${popList(nb)}.` + tail + ask }
+    : pops.length ? { v: `Assumed newborns${place}`, why: `Your description names ${named}, but this demo's brain-oxygen sensor covers newborns only.` + tail }
+    : { v: `Assumed newborns${place}`, why: none + tail + ask };
+}
+const withWho = (list, uc, text) => list.map(a => a.k === "Who" && a.g === "people" && !/recordings|file/.test(a.v) ? Object.assign({}, a, whoRow(uc, text, null)) : a);
+
 /* ---- Assumptions, one set per device and data path; each has a kind ---- */
 const KINDS = { people: "About the people", rec: "About the recordings", dev: "About the device", bar: "The clinical bar" };
 const ASM = {
   "eeg-public": [
-    { g: "people", k: "Who", v: "Adults with epilepsy, wearing the band at home", why: "CHB-MIT was recorded mostly in children in hospital; the check on Siena is closer to adults." },
+    { g: "people", k: "Who", v: "Assumed adults with epilepsy", why: "Your description does not name an age group. Change it if your users differ. The public sets were recorded in different age groups; check they match your users." },
     { g: "rec", k: "Recordings", v: "Learn from CHB-MIT; Siena's 14 patients are never trained on", why: "Testing on a second archive shows how the chip does on people recorded elsewhere." },
     { g: "rec", k: "What counts as a seizure", v: "The seizure start and end times marked in the archives", why: "The chip is scored against them. Tell us if your clinicians mark seizures differently." },
     { g: "dev", k: "Channels", v: "Only the channels the band reaches: F7 to T7 and F8 to T8", why: "The archive was recorded with a full cap; your band reaches the temples only." },
     { g: "bar", k: "The clinical line", v: "Catch 9 in 10 seizures on every unseen patient, fewer than 2 false alarms a day", why: "A common bar for home seizure alarms. Change it to your own." }],
   "eeg-sim": [
-    { g: "people", k: "Who", v: "Adults with epilepsy, recorded at home", why: "Your description says adults at home. Tell us if your clinic sees children too." },
+    { g: "people", k: "Who", v: "Assumed adults with epilepsy", why: "Your description does not name an age group. Change it if your users differ." },
     { g: "rec", k: "Seizures", v: "Focal seizures lasting 10 seconds to 2 minutes", why: "This sets what simulated seizures look like. Tell us the types and lengths you see." },
     { g: "rec", k: "Disturbances", v: "Chewing, blinking, walking and a loose electrode", why: "Home recordings are noisy; the chip must not raise an alarm on them." },
     { g: "rec", k: "How much", v: "60 people, 3 days each; 12 kept aside for the check", why: "Enough variety to train on and still test on people the chip never saw." },
     { g: "dev", k: "Sensors", v: "Two electrode pairs at the temples: F7 to T7 and F8 to T8", why: "A forehead band can only reach the forehead and the temples." },
     { g: "bar", k: "The clinical line", v: "Catch 9 in 10 seizures on every unseen patient, fewer than 2 false alarms a day", why: "A common bar for home seizure alarms. Change it to your own." }],
   "nirs-sim": [
-    { g: "people", k: "Who", v: "Newborns in intensive care, term and preterm", why: "Your description says intensive care. Tell us if your unit sees only one group." },
+    { g: "people", k: "Who", v: "Assumed newborns, in intensive care", why: "Your description does not name an age group; intensive care is assumed. Tell us if your unit sees only one group." },
     { g: "rec", k: "Disturbances", v: "Movement, handling and the sensor lifting off, several times an hour", why: "A chip trained without them would raise false alarms on the ward." },
     { g: "rec", k: "How much", v: "80 newborns, 24 hours each; 12 kept aside for the check", why: "Enough variety to train on and still test on babies the chip never saw." },
     { g: "dev", k: "Sensor", v: "One light source, detectors 10 mm and 30 mm away on the forehead", why: "Two distances let the chip tell scalp from brain. Change this if your probe differs." },
@@ -1020,10 +1045,10 @@ function mkRun(o) {
   if (!r.improve.length) r.improve = (r.skipped || []).map(x => Object.assign({ at: 0, ans: null }, x)).concat(RAISED[r.uc].map(x => Object.assign({ ans: null }, x)));
   return r;
 }
-const nicuAsm = ASM["nirs-sim"].map(a => Object.assign({}, a));
+const nicuAsm = withWho(ASM["nirs-sim"], "nirs", "A soft forehead sensor for newborns in intensive care");
 nicuAsm[4] = Object.assign({}, nicuAsm[4], { v: "Brain oxygen below 55% for at least 60 seconds" });
 const runs = [
-  mkRun({ id: "seizure-band", title: "Seizure alarm band for adults at home", uc: "eeg", acc: 30, data: mkData("eeg", "public"),
+  mkRun({ id: "seizure-band", title: "Seizure alarm band for adults at home", uc: "eeg", acc: 30, data: mkData("eeg", "public", { asm: withWho(ASM["eeg-public"], "eeg", "A forehead EEG band for adults with epilepsy at home") }),
     prompt: "A forehead EEG band for adults with epilepsy at home. The chip should flag a seizure as it starts, use as few electrodes as possible, and run for weeks on a coin cell.",
     brief: [["Device", "Forehead EEG band, worn at home"], ["Detects", "Seizure onset, within 10 seconds"], ["Data", "Public: CHB-MIT, checked on Siena"], ["Wearer", "Adults with epilepsy"], ["Channels", "Left and right temple"]],
     skipped: [{ id: "battery", from: 2, k: "Battery", q: "How long must it run on one coin cell?", why: "Sets how much power the chip may use. Skipped at the start.", opts: ["1 week", "2 weeks", "4 weeks"], def: "4 weeks" }] }),
@@ -1365,7 +1390,7 @@ let draft = "";
 const IN = {};
 function resetIntake() { Object.assign(IN, { open: false, stage: "data", data: null, dataDone: false, reopen: null, file: null, edf: null, edfErr: "", picked: [], search: null, pubOk: undefined, uc: "eeg", known: true, qi: 0, answers: {}, skipped: {}, asm: [], editing: -1, fresh: "", lastKey: "" }); }
 resetIntake();
-function ucFromText(s) { s = s.toLowerCase(); if (/newborn|neonat|infant|nicu|oxygen|near-infrared|nirs/.test(s)) return { uc: "nirs", known: true }; if (/eeg|seizure|epilep|brainwave|brain wave/.test(s)) return { uc: "eeg", known: true }; return { uc: "eeg", known: false }; }
+function ucFromText(s) { s = s.toLowerCase(); if (/newborn|neonat|preterm|baby|babies|infant|nicu|oxygen|near-infrared|nirs/.test(s)) return { uc: "nirs", known: true }; if (/eeg|seizure|epilep|brainwave|brain wave/.test(s)) return { uc: "eeg", known: true }; return { uc: "eeg", known: false }; }
 function topicOf(s) { const w = s.replace(/[.,;:!?\n].*$/s, "").replace(/^(a|an|the|i need|we need|design|build)\s+/i, "").trim().split(/\s+/).slice(0, 6).join(" "); return w || "your device"; }
 
 function renderStart(V) {
@@ -1454,8 +1479,14 @@ function onFile(f) {
 /* ---- The search for a public dataset: steady steps that end in a ticked and crossed list ---- */
 function searchPlan() {
   const no = (k, why) => ({ k, ok: false, why }), yes = (k, why) => ({ k, ok: true, why });
+  // age-specific sets: judged on what the description names; with no age group named they get a neutral mark and a condition
+  const pops = popsOf(draft), named = popList(pops);
+  const popRow = (k, label) => pops.length ? no(k, `${label}; your description names ${named}.`) : { k, ok: null, why: `${label}: fits if your device is for newborns.` };
+  const sienaRow = () => !pops.length ? { k: "siena", ok: null, why: "A second open archive for the final check. Adults only: fits if your device is for adults." }
+    : pops.includes("adult") || pops.includes("elderly") ? yes("siena", `A second open archive, kept back for the final check; adults only, and your description names ${named}.`)
+    : yes("siena", `A second open archive, kept back for the final check. Adults only, so it shows how the chip carries over to adults; your description names ${named}.`);
   if (IN.known && IN.uc === "eeg") return { found: true, what: "scalp EEG with seizures marked", arch: ["PhysioNet", "Zenodo", "Temple University", "VitalDB"], looked: 128,
-    steps: [no("sleepedf", "Sleep studies; no seizures marked."), no("tusz", "Needs a signed form before access."), no("helsinki", "Newborns; your device is for adults."), no("vitaldb", "Surgical cases; no seizure marks."), yes("chbmit", "Scalp EEG with every seizure marked; open, no account."), yes("siena", "A second open archive, kept back for the final check.")] };
+    steps: [no("sleepedf", "Sleep studies; no seizures marked."), no("tusz", "Needs a signed form before access."), popRow("helsinki", "Newborns only"), no("vitaldb", "Surgical cases; no seizure marks."), yes("chbmit", "Scalp EEG with every seizure marked; open, no account."), sienaRow()] };
   if (IN.known && IN.uc === "nirs") return { found: false, what: "newborn brain-oxygen recordings with drops marked", arch: ["PhysioNet", "Zenodo", "VitalDB"], looked: 96,
     steps: [no("helsinki", "Newborns, but brainwaves, not brain oxygen."), no("vitaldb", "Surgical cases; no near-infrared light readings."), no("chbmit", "Scalp EEG, not brain oxygen."), no("sleepedf", "Sleep recordings, not brain oxygen.")] };
   return { found: false, what: `recordings that match "${topicOf(draft)}"`, arch: ["PhysioNet", "Zenodo", "VitalDB"], looked: 87,
@@ -1465,7 +1496,8 @@ let searchT = null;
 function clearSearch() { clearTimeout(searchT); searchT = null; }
 const okSvg = `<svg viewBox="0 0 24 24" class="ic" aria-hidden="true"><path d="M20 6 9 17l-5-5" fill="none" stroke="currentColor"/></svg>`;
 const xSvg = `<svg viewBox="0 0 24 24" class="ic" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" fill="none" stroke="currentColor"/></svg>`;
-function candLI(s) { const d = DS[s.k]; return `<li class="${s.ok ? "fit" : "out"}"><span class="mk2">${s.ok ? okSvg : xSvg}</span><span><b>${esc(d.name)}</b><br><span class="rs">${esc(s.why)}</span></span><em>${s.ok ? "fits" : "dropped"}</em></li>`; }
+const dashSvg = `<svg viewBox="0 0 24 24" class="ic" aria-hidden="true"><path d="M6 12h12" fill="none" stroke="currentColor"/></svg>`;
+function candLI(s) { const d = DS[s.k], k = s.ok === null ? "neu" : s.ok ? "fit" : "out"; return `<li class="${k}"><span class="mk2">${s.ok === null ? dashSvg : s.ok ? okSvg : xSvg}</span><span><b>${esc(d.name)}</b><br><span class="rs">${esc(s.why)}</span></span><em>${s.ok === null ? "depends on you" : s.ok ? "fits" : "dropped"}</em></li>`; }
 function searchHTML() {
   const S = IN.search; if (!S) return "";
   const p = S.plan;
@@ -1519,7 +1551,7 @@ const ansText = id => { const a = IN.answers[id]; return a ? a.join(", ") : ""; 
 /* ---- Assumptions: derived from the description and the answers, grouped by kind ---- */
 function deriveAsm() {
   const A = id => ansText(id), uc = IN.uc, pl = pickedLabels(), mode = dataMode(), eeg = uc === "eeg";
-  const sub = (list, map) => list.map(a => Object.assign({ s: null }, a, map[a.k] ? { v: map[a.k] } : {}));
+  const sub = (list, map) => list.map(a => { const m = map[a.k]; return Object.assign({ s: null }, a, m ? (typeof m === "string" ? { v: m } : m) : {}); });
   const faTxt = A("fa") ? `${A("fa").toLowerCase()} false alarms ${UC[uc].faUnit}` : null;
   const line = faTxt ? (eeg ? `Catch 9 in 10 seizures on every unseen patient, ${faTxt}` : null) : null;
   const who = A("who"), noise = A("noise") || A("care");
@@ -1534,8 +1566,8 @@ function deriveAsm() {
       { g: "dev", k: "Channels", v: A("ch") && !/I picked/.test(A("ch")) ? `The device has: ${A("ch").toLowerCase()}. The matching channels in your file are used` : `The device reads ${pl.join(", ")}`, why: "You picked these. The chip is trained only on them; the others are dropped." },
       { g: "bar", k: "The clinical line", v: line || "Catch 9 in 10 seizures on every unseen patient, fewer than 2 false alarms a day", why: "A common bar for home seizure alarms. Change it to your own." }];
   } else if (mode === "own") L = sub(ASM.own, { Who: who ? `${who}, like the people in your recordings` : null, "Sensor positions": A("ch") ? `The device has: ${A("ch").toLowerCase()}, as in your recordings` : null, Labels: A("marks") ? `Events in your files were marked by: ${A("marks").toLowerCase()}` : null, "The clinical line": line });
-  else if (mode === "public") L = sub(ASM["eeg-public"], { Who: who ? `${who} with epilepsy, wearing the band at home` : null, Channels: A("ch") ? `Only the channels the band reaches: ${A("ch").toLowerCase()}` : null, "The clinical line": line });
-  else L = sub(ASM[uc + "-sim"], { Who: who ? `${who}${eeg ? ", recorded at home" : ", in intensive care"}` : null, Sensors: A("ch") || null, Sensor: A("ch") || null, Disturbances: noise ? `${noise}, and a loose ${eeg ? "electrode" : "pad"}` : null, "The clinical line": line, "False alarms": A("fa") && !eeg ? `${A("fa")} false alarm an hour` : null });
+  else if (mode === "public") L = sub(ASM["eeg-public"], { Who: whoRow("eeg", draft, who), Channels: A("ch") ? `Only the channels the band reaches: ${A("ch").toLowerCase()}` : null, "The clinical line": line });
+  else L = sub(ASM[uc + "-sim"], { Who: whoRow(eeg ? "eeg" : "nirs", draft, who), Sensors: A("ch") || null, Sensor: A("ch") || null, Disturbances: noise ? `${noise}, and a loose ${eeg ? "electrode" : "pad"}` : null, "The clinical line": line, "False alarms": A("fa") && !eeg ? `${A("fa")} false alarm an hour` : null });
   return L.map(a => Object.assign({ s: null }, a));
 }
 function dataMode() {
