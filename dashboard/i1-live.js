@@ -387,7 +387,7 @@
 
   /* ---------- the view ---------- */
   var V = null; // { id, view, sel, y, follow, logN, chatN, cfgMounted }
-  var VIEWS = [["overview", "Overview"], ["patients", "Where it fails"], ["signal", "Signal"], ["chip", "Chip"], ["chat", "Chat"], ["sources", "Sources"]];
+  var VIEWS = [["overview", "Overview"], ["chip", "Chip"], ["chat", "Chat"], ["sources", "Sources"]];
   function parse() {
     var m = location.hash.match(/^#\/live\/([^/]+)(?:\/([a-z]+))?/);
     if (!m) return null;
@@ -616,7 +616,7 @@
       '<p class="is">' + esc(d.data === "synthetic" ? "Scored on synthetic data" : /^public:/.test(d.data || "") ? "Scored on public data: " + d.data.slice(7) : d.data ? String(d.data) : "") + "</p>" + F.variantHTML(d) +
       rows.map(function (r) { return '<div class="irow"><span>' + r[0] + "</span><b>" + r[1] + "</b></div>"; }).join("") +
       (d.note ? '<p class="inote">' + esc(d.note) + "</p>" : "") +
-      '<div class="ilinks">' + (d.per_patient.length ? '<a class="qbtn" href="#/live/' + encodeURIComponent(M.id) + '/patients">' + I("right", "s13") + "Where it fails</a>" : "") +
+      '<div class="ilinks">' +
       files.slice(0, 3).map(function (f) { return '<button class="qbtn" data-open="' + esc(f.path) + '">' + I("file", "s13") + esc(f.name) + "</button>"; }).join("") + "</div>";
   }
   function chipFiles(M, id) {
@@ -1049,9 +1049,7 @@
   /* ----- the other tabs ----- */
   function paintTab(M) {
     var el = $("#lvTab"); if (!el) return;
-    if (V.view === "patients") el.innerHTML = patientsHTML(M);
-    else if (V.view === "signal") el.innerHTML = '<div class="vh"><h2>Signal</h2><p class="vs">A live run streams results, not recordings, so there is no trace to draw here. ' + (M.spec && M.spec.data && M.spec.data.mode === "simulate" ? "This run designs on synthetic data that the agent generates and describes in its report." : "The data this run uses is described in its report.") + "</p></div>" + filesBlock(M, function (a) { return /data|\.py$/i.test(a.name); }, "Data files the agent reported");
-    else if (V.view === "chip") el.innerHTML = chipHTML(M);
+    if (V.view === "chip") el.innerHTML = chipHTML(M);
     else el.innerHTML = sourcesHTML(M);
     el.onclick = function (e) { var b = e.target.closest("[data-open]"); if (b) { openFile(b.dataset.open); return; } var s = e.target.closest("[data-pick]"); if (s) { V.sel = s.dataset.pick; keepPrefs(); V.sig.tab = ""; update(true); } };
   }
@@ -1060,7 +1058,6 @@
     var sz = M.x.files || {};
     return '<div class="stage"><h3 class="lv-h3">' + esc(title) + '</h3><ul class="lv-fl">' + list.map(function (a) { return '<li><span class="lv-fn">' + I("file", "s14") + "<b>" + esc(fname(a)) + '</b><span class="lv-fp">' + esc(a.path.replace(/^workspace\//, "")) + '</span></span><span class="lv-fs">' + esc(bytes(sz[a.path])) + '</span><button class="qbtn" data-open="' + esc(a.path) + '">Open</button></li>'; }).join("") + "</ul></div>";
   }
-  function patientsHTML(M) { return F.patientsHTML({ f: M.x.f, spec: M.spec, T: M.T, chosenId: M.chosenId, selId: V.sel, final: M.x.final, running: M.running }); }
   function chipHTML(M) {
     var id = M.chosenId || (selected(M) && selected(M).id);
     return F.chipHTML({ f: M.x.f, spec: M.spec, T: M.T, id: id, chosenId: M.chosenId, running: M.running }) + (id ? filesBlock(M, function (a) { return a.path.indexOf("/chips/" + id + "/") >= 0 || a.kind === "chip"; }, "Chip files") : "");
@@ -1142,7 +1139,7 @@
   /* ---------- sidebar: the chip and the backend's runs, under Recents ---------- */
   function recents() {
     var cur = parse(), s = C.state;
-    var txt = s === "on" ? "Connected to local backend" : s === "checking" ? "Checking the backend" : s === "found" ? "Backend found: add its token" : (liveOpen() || C.lost) && C.base ? "Not connected to the backend" : "Not connected: runs are examples";
+    var txt = s === "on" ? "Connected to local backend" : s === "checking" ? "Checking the backend" : s === "found" ? "Backend found: add its token" : (liveOpen() || C.lost) && C.base ? "Not connected to the backend" : "Not connected to a backend";
     var rows = shownRuns().slice(0, 8).map(function (r) {
       var g = r.status === "running" ? '<span class="spin"></span>' : r.status === "succeeded" ? I("check", "s12 ok") : r.status === "failed" ? I("x", "s12 lv-bad") : r.status === "stopped" ? I("minus", "s12") : "";
       return '<a class="rrow lv-rrow' + (cur && cur.id === r.id ? " on" : "") + '" href="#/live/' + encodeURIComponent(r.id) + "/" + (cur ? cur.view : "overview") + '" title="' + esc(r.title + " (run " + r.id + ", " + r.status + ")") + '"><span class="g">' + g + '</span><span class="t">' + esc(r.title || r.id) + "</span></a>";

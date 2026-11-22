@@ -12,7 +12,7 @@
  *   ChipInFold.cost(f)             { usd, tokens_in, tokens_out, summaries_usd } or null
  *   ChipInFold.funnel(f, T)        { proposed, scored, compiled, verified, clear, chosen }
  *   ChipInFold.heldOut(f, id, fin) the held-out figures for chip id, or null
- *   ChipInFold.subsHTML(f, spec, open), chipHTML(m), patientsHTML(m): the shared panels
+ *   ChipInFold.subsHTML(f, spec, open), chipHTML(m): the shared panels
  *   ChipInFold.variantHTML(d)      the "Variant of <id>" line for a record with variant_of, else ""
  *   ChipInFold.targetsOf, fmtV, fmtT, meets, passAll, metaOf, dataMark, metricText, sizeOf
  *   ChipInFold.humanKeys(s)        a sentence with any raw metric key in it read as that key's label
@@ -50,7 +50,6 @@
   var cap = function (s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; };
   var clip = function (s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n - 1).replace(/\s+\S*$/, "") + "…" : s; };
   var pl = function (n, w) { return n + " " + w + (n === 1 ? "" : "s"); };
-  var dur = function (h) { return h >= 1 ? +h.toFixed(1) + " h" : +(h * 60).toFixed(1) + " min"; };
   var STAGES = ["spec", "reference", "propose", "finetune", "compile", "verify", "report"];
   var STAGE_N = { spec: "Spec", reference: "Reference", propose: "Propose", finetune: "Fine-tune", compile: "Compile", verify: "Verify", report: "Report" };
 
@@ -319,48 +318,6 @@
     var v = d && typeof d.variant_of === "string" ? d.variant_of : "";
     return v ? '<p class="cf-var" data-variant-of="' + esc(v) + '">Variant of <span class="cf-vid">' + esc(v) + "</span></p>" : "";
   }
-  function barsHTML(rows, t) {
-    return rows.slice().sort(function (a, b) { return a.caught / (a.total || 1) - b.caught / (b.total || 1); }).map(function (p) {
-      var r = p.total ? p.caught / p.total : 0, ok = t ? r >= t.value - 1e-12 : true, fa = num(p.false_alarms);
-      return '<div class="cf-pr"><span class="cf-pid">' + esc(p.id) + '</span><span class="cf-pb"><i style="width:' + (r * 100).toFixed(1) + "%;background:" + (ok ? "var(--caught)" : "var(--missed)") + '"></i>' + (t ? '<s style="left:' + (t.value * 100).toFixed(1) + '%"></s>' : "") + '</span><span class="cf-pv">' + p.caught + " of " + p.total + " caught, " + (r * 100).toFixed(1) + "%</span>" +
-        '<span class="cf-pf">' + (fa != null ? pl(fa, "false alarm") + (num(p.hours) ? " in " + dur(p.hours) : "") : "") + "</span></div>";
-    }).join("");
-  }
-  var basisName = function (b) { return b === "validation" ? "validation" : b === "test" ? "held-out test" : b ? String(b) : ""; };
-  // Where it fails. m: { f, spec, T, chosenId, selId, final, running }
-  function patientsHTML(m) {
-    var f = m.f, T = m.T || targetsOf(m.spec), ds = designs(f), withPP = ds.filter(function (d) { return d.per_patient.length; });
-    var d = m.selId ? f.designs[m.selId] : null;
-    if (!d || !d.per_patient.length) d = (m.chosenId && f.designs[m.chosenId] && f.designs[m.chosenId].per_patient.length ? f.designs[m.chosenId] : null) || withPP[withPP.length - 1] || null;
-    var held = heldOut(f, m.chosenId, m.final), t = T.filter(function (x) { return x.metric === "sensitivity"; })[0];
-    if (!d && !held) return '<div class="vh"><h2>Where it fails</h2><p class="vs">' + (m.running ? "No per-patient results yet. They appear when the agent reports a design with its per-patient results." : "This run reported no per-patient results.") + "</p></div>";
-    var out = '<div class="vh"><h2>Where it fails</h2><p class="vs">' + (held ? "The held-out patients first: the chosen chip never saw them while it was designed and picked. Then the patients each design was scored on." : "One bar per patient, worst first.") + "</p></div>";
-    if (held) {
-      var hc = f.designs[held.id], mark = dataMark(m.spec, hc ? [hc] : []);
-      out += '<section class="stage cf-sec" data-sec="heldout"><p class="cf-k">Chip ' + esc(held.id) + ", the chosen chip " + mark + '</p><h3 class="cf-h3">Held-out patients</h3>';
-      if (held.rows.length) {
-        var below = t ? held.rows.filter(function (p) { return p.total && p.caught / p.total < t.value; }).length : null;
-        out += '<p class="cf-sub">One bar per held-out patient, worst first.' + (t ? " The line is your bar, " + esc(fmtT(t, m.spec)) + "; " + below + " of " + pl(held.rows.length, "patient") + (below === 1 ? " falls" : " fall") + " below it." : "") + "</p>" + barsHTML(held.rows, t);
-      }
-      var pk = ["sensitivity", "fa_per_hour", "specificity"].filter(function (k) { return held.pooled[k] != null; });
-      if (pk.length) out += '<div class="cf-kv">' + pk.map(function (k) {
-        var tg = T.filter(function (x) { return x.metric === k; })[0], v = held.pooled[k];
-        return '<div class="irow"><span>' + esc(metaOf(k).n) + ", held-out, pooled</span><b>" + esc(fmtV(k, v, m.spec)) + (tg ? '<span class="cf-tg">target ' + esc(fmtT(tg, m.spec)) + "</span>" + pf(meets(tg, v)) : "") + "</b></div>";
-      }).join("") + "</div>";
-      if (!held.rows.length) out += '<p class="cf-sub">Per-patient held-out data was not reported for this chip; these are the pooled figures the agent reported.</p>';
-      out += "</section>";
-    }
-    if (d && !(held && held.sameRecord && held.id === d.id)) {
-      var rows = d.per_patient.slice().sort(function (a, b) { return a.caught / (a.total || 1) - b.caught / (b.total || 1); });
-      var w = rows[0], wr = w.total ? w.caught / w.total : null, below2 = t ? rows.filter(function (p) { return p.total && p.caught / p.total < t.value; }).length : null;
-      var bn = basisName(d.basis), title = d.basis === "validation" ? "Validation patients" : d.basis === "test" ? "Held-out test patients" : "Patients";
-      var picks = withPP.length > 1 ? '<div class="ptiles2">' + withPP.map(function (x) { var s = sizeOf(x); return '<button class="ptb' + (x.id === d.id ? " on" : "") + '" data-pick="' + esc(x.id) + '"><i' + (passAll(T, x) ? "" : ' style="background:var(--missed)"') + "></i>" + esc(x.id) + (s ? ", " + fmt(s.g) + " gates" : "") + "</button>"; }).join("") + "</div>" : "";
-      out += '<section class="stage cf-sec" data-sec="' + esc(d.basis || "patients") + '"><p class="cf-k">Design ' + esc(d.id) + (d.id === m.chosenId ? ", the chosen chip" : "") + " " + dataMark(m.spec, [d]) + '</p><h3 class="cf-h3">' + title + ": worst " + esc(w.id) + ", " + (wr == null ? "no events" : (wr * 100).toFixed(1) + "% caught") + "</h3>" +
-        '<p class="cf-sub">One bar per patient, worst first' + (bn ? ", on the " + esc(bn) + " set" : "") + "." + (t ? " The line is your bar, " + esc(fmtT(t, m.spec)) + "; " + below2 + " of " + pl(rows.length, "patient") + (below2 === 1 ? " falls" : " fall") + " below it." : "") + "</p>" + picks + barsHTML(rows, t) + "</section>";
-    }
-    return out;
-  }
-
   // Chip. m: { f, spec, T, id, chosenId, running }
   function chipHTML(m) {
     var f = m.f, id = m.id;
@@ -463,9 +420,6 @@
     ".cf-sub{font-size:12.5px;color:var(--i600);margin:4px 0 8px;line-height:1.5}",
     ".cf-kv{max-width:620px}.cf-kv .irow b{display:inline-flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:4px 8px;text-align:right}",
     ".cf-tg{font-weight:400;color:var(--i600);font-size:12px}",
-    ".cf-pr{display:grid;grid-template-columns:64px minmax(0,1fr) 170px 150px;gap:12px;align-items:center;padding:5px 0;border-top:1px solid var(--hair);font-size:12.5px}.cf-pr:first-of-type{border-top:0}",
-    ".cf-pid{font-weight:600}.cf-pb{position:relative;height:12px;border-radius:3px;background:var(--i100)}.cf-pb i{position:absolute;left:0;top:0;bottom:0;border-radius:3px}.cf-pb s{position:absolute;top:-4px;bottom:-4px;border-left:1.5px dashed var(--i900)}",
-    ".cf-pv,.cf-pf{color:var(--i700);font-variant-numeric:tabular-nums}.cf-pf{color:var(--falsea-t)}",
     ".cf-subs{padding:10px 16px 8px}.cf-subh{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:0 0 4px}.cf-subh h2{font-size:13px;font-weight:650;margin:0}.cf-subh .cf-sub{margin:0}",
     ".cf-sb{border-top:1px solid var(--hair)}.cf-sb summary{display:grid;grid-template-columns:90px auto minmax(0,1fr);gap:4px 12px;align-items:center;padding:6px 0;cursor:pointer;list-style:none;font-size:12.5px}.cf-sb summary::-webkit-details-marker{display:none}",
     ".cf-sb summary b{font-weight:600}.cf-sb summary b::before{content:'';display:inline-block;width:0;height:0;border:4px solid transparent;border-left:5px solid var(--i500);margin-right:6px;vertical-align:1px;transition:transform .15s}.cf-sb[open] summary b::before{transform:rotate(90deg);transform-origin:2px 4px}",
@@ -477,13 +431,13 @@
     ".cf-why{margin:0 0 4px;font-size:12px;color:var(--i700);line-height:1.5;overflow-wrap:anywhere}",
     ".cf-se{display:grid;grid-template-columns:34px minmax(0,1fr);gap:2px 10px;font-size:12px;line-height:1.45;color:var(--i800)}.cf-sid{font-family:var(--mono);font-size:11px;color:var(--i600)}",
     ".cf-st{overflow-wrap:anywhere}.cf-sm{grid-column:2;color:var(--i600);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}",
-    "@media (max-width:767px){.cf-pr{grid-template-columns:44px minmax(0,1fr);row-gap:2px}.cf-pv,.cf-pf{grid-column:2;font-size:11.5px}.cf-sb summary{grid-template-columns:auto minmax(0,1fr)}.cf-line{grid-column:1/-1;white-space:normal}.cf-sbb{padding-left:0}.cf-kv .irow{flex-wrap:wrap}}"
+    "@media (max-width:767px){.cf-sb summary{grid-template-columns:auto minmax(0,1fr)}.cf-line{grid-column:1/-1;white-space:normal}.cf-sbb{padding-left:0}.cf-kv .irow{flex-wrap:wrap}}"
   ].join("\n");
   document.head.appendChild(css);
 
   window.ChipInFold = {
     version: 1, scrub: scrub, scrubEvent: scrubEvent, create: create, fold: fold, designs: designs, cost: cost, funnel: funnel, heldOut: heldOut,
-    subsHTML: subsHTML, wireSubs: wireSubs, chipHTML: chipHTML, patientsHTML: patientsHTML, variantHTML: variantHTML,
+    subsHTML: subsHTML, wireSubs: wireSubs, chipHTML: chipHTML, variantHTML: variantHTML,
     targetsOf: targetsOf, fmtV: fmtV, fmtT: fmtT, meets: meets, passAll: passAll, metaOf: metaOf, MET: MET, FAU: FAU, faUnit: faUnit,
     dataMark: dataMark, metricText: metricText, humanKeys: humanKeys, keyInfo: keyInfo, sizeOf: sizeOf, ratio: ratio, normDesign: normDesign
   };

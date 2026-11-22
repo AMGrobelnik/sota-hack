@@ -7,7 +7,9 @@
  *   ChipInPlayback.render()              draws that run into #main
  *   ChipInPlayback.mountExample(run, P)  puts the bar under an example run's header; P gives the page's
  *                                        elapsed(run), timeline(run), tick() and saveRuns()
- *   ChipInPlayback.pastLink(where)       the quiet "Past runs" button for the start page or a run header
+ *   ChipInPlayback.recents(skip)         sidebar rows for the recorded runs (the site's copies and, when
+ *                                        connected, the backend's), newest first; skip: ids already listed
+ *   ChipInPlayback.sig()                 changes when those rows would change (the sidebar redraws on it)
  *   ChipInPlayback.cleanHash(h)          the address without its ?t=&speed= part (the page routes on the rest)
  *   ChipInPlayback.state()               what the open recorded run shows now (for tests)
  *   ChipInPlayback.seek(s, seq)          moves the bar to s seconds (fractions kept) and pauses; with seq, a
@@ -46,7 +48,7 @@
   var VIEW_MS = 100;
   var STAGES = ["spec", "reference", "propose", "finetune", "compile", "verify", "report"];
   var STAGE_N = { spec: "Spec", reference: "Reference", propose: "Propose", finetune: "Fine-tune", compile: "Compile", verify: "Verify", report: "Report" };
-  var VIEWS = [["overview", "Overview"], ["patients", "Where it fails"], ["chip", "Chip"], ["log", "Log"], ["files", "Files"]];
+  var VIEWS = [["overview", "Overview"], ["chip", "Chip"], ["log", "Log"], ["files", "Files"]];
   var F = window.ChipInFold; // ../i1-fold.js: the figures, the same reducer as the live view
   var K_CONN = "chipin-i1-backend";
   var RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -68,7 +70,7 @@
   var SVG = {
     play: '<path d="M7 5v14l11-7z"/>', pause: '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>',
     prev: '<path d="M6 5v14"/><path d="M19 5 9 12l10 7z"/>', next: '<path d="M18 5v14"/><path d="M5 5l10 7-10 7z"/>',
-    end: '<path d="M5 5l9 7-9 7z"/><path d="M18 5v14"/>', hist: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/>',
+    end: '<path d="M5 5l9 7-9 7z"/><path d="M18 5v14"/>',
     x: '<path d="M18 6 6 18M6 6l12 12"/>', file: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/>'
   };
   var icon = function (n, fill) { return '<svg viewBox="0 0 24 24" aria-hidden="true" class="' + (fill ? "pb-fi" : "pb-si") + '">' + SVG[n] + "</svg>"; };
@@ -106,28 +108,18 @@
     ".pb-live i{width:7px;height:7px;border-radius:50%;background:var(--i300)}",
     ".pb-live.on{color:var(--badt);background:rgb(239 68 68/.08);border-color:transparent}.pb-live.on i{background:#ef4444}",
     ".pb-live:not(.on):hover{border-color:var(--i300);color:var(--i900)}",
-    ".pb-past{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:8px;font-size:12px;font-weight:500;color:var(--i600);flex:none;white-space:nowrap}",
-    ".pb-past:hover{background:var(--i100);color:var(--i900)}.pb-past svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}",
-    ".pb-pastw{display:flex;justify-content:center;margin:14px 0 0}.pb-pastw .pb-past{font-size:13px;color:var(--i600)}",
     ".pb-scrim{position:fixed;inset:0;background:rgb(14 21 48/.28);z-index:80;display:flex;align-items:flex-start;justify-content:center;padding:9vh 16px 16px}",
     ".pb-dlg{background:#fff;border-radius:16px;box-shadow:0 24px 64px -24px rgb(0 0 0/.45);width:min(600px,100%);max-height:80vh;display:flex;flex-direction:column;outline:0}",
     ".pb-dlg header{display:flex;align-items:flex-start;gap:10px;padding:18px 18px 10px}",
     ".pb-dlg h2{font-family:var(--serif);font-weight:400;font-size:22px;margin:0;letter-spacing:-.01em}",
     ".pb-dlg header p{margin:3px 0 0;font-size:12.5px;color:var(--i600);line-height:1.45}",
-    ".pb-list{overflow:auto;padding:0 8px 10px}",
-    ".pb-run{display:grid;grid-template-columns:1fr auto;gap:2px 12px;width:100%;text-align:left;padding:10px 10px;border-radius:10px;border-top:1px solid var(--hair)}",
-    ".pb-run:first-child{border-top:0}.pb-run:hover,.pb-run:focus-visible{background:var(--i100);outline:0}",
-    ".pb-run .t{font-size:13.5px;font-weight:550;color:var(--i900);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}",
-    ".pb-run .d{font-size:12px;color:var(--i600);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}",
-    ".pb-run .m{grid-column:1/-1;font-size:12px;color:var(--i600);display:flex;gap:6px 12px;flex-wrap:wrap;align-items:center}",
-    ".pb-run .m b{font-weight:600;color:var(--i800);font-family:var(--mono);font-size:11px}",
-    ".pb-run .c,.pb-run .x{grid-column:1/-1;font-size:12px;line-height:1.45;color:var(--i600)}.pb-run .x{color:var(--i800)}",
+    ".pb-rrow{height:auto;min-height:28px;padding-top:4px;padding-bottom:4px;align-items:flex-start}.pb-rrow .g{margin-top:3px}",
+    ".pb-rrow .t{display:flex;flex-direction:column;min-width:0}.pb-rrow .t b{font-weight:500;overflow:hidden;text-overflow:ellipsis}",
+    ".pb-rrow .t small{font-size:11px;font-weight:400;color:var(--i550);overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}",
+    ".pb-rrow .g svg{width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}.pb-rrow .g .ok{color:var(--okt)}.pb-rrow .g .bad{color:var(--missed)}",
     ".rv-data{font-size:12.5px;color:var(--i600);margin:8px 0 0;line-height:1.5;max-width:860px}",
     ".rv-note{font-size:13px;color:var(--i800);margin:10px 0 0;line-height:1.5;max-width:860px;padding:8px 12px;border-left:3px solid var(--missed,#b45309);background:var(--i100)}#rvTab>.rv-note{margin:0 0 16px}",
     ".rv-miss{display:block;margin-top:3px;color:var(--i800)}.rv-miss .pf{margin-left:4px}",
-    "@media(max-width:640px){.pb-run{grid-template-columns:1fr}.pb-run .t{white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow-wrap:anywhere}.pb-run .d{text-align:left}}",
-    ".pb-note{font-size:12.5px;color:var(--i600);padding:8px 12px 14px;line-height:1.5}",
-    ".pb-src{font-size:11.5px;color:var(--i500);padding:10px 12px 4px}",
     /* recorded run view */
     ".rv{max-width:1320px;margin:0 auto;padding:18px 24px 72px;display:flex;flex-direction:column;gap:14px}",
     ".rv-st{position:relative;display:flex;gap:0;list-style:none;margin:0;padding:10px 6px;background:#fff;border:1px solid rgb(0 0 0/.07);border-radius:14px;overflow-x:auto}",
@@ -468,7 +460,7 @@
   }
 
   /* ---------- recorded runs: sources ---------- */
-  var REC = { site: null, siteErr: "", mac: null, macErr: "", loading: false };
+  var REC = { site: null, siteErr: "", mac: null, macErr: "", loading: false, key: null, n: 0 };
   function conn() {
     var L = window.ChipInLive, base = null, token = null;
     try { if (L && L.base && L.token) { base = L.base; token = L.token; } } catch (e) { /* older reader */ }
@@ -511,62 +503,38 @@
     return Promise.all(jobs);
   }
 
-  /* ---------- the picker ---------- */
-  function pastLink(where) {
-    var b = '<button type="button" class="pb-past" data-past-runs title="Play back a recorded run">' + '<svg viewBox="0 0 24 24" aria-hidden="true">' + SVG.hist + '</svg><span class="lbl">Past runs</span></button>';
-    return where === "start" ? '<div class="pb-pastw">' + b + "</div>" : b;
+  /* ---------- the sidebar: recorded runs under Recents ---------- */
+  // the lists load once, and again whenever the backend connection changes
+  var connKey = function () { var c = conn(); return c ? c.base + "|" + c.token : ""; };
+  function listsFor(key) {
+    if (REC.loading || REC.key === key) return;
+    REC.loading = true; REC.key = key;
+    loadLists().then(function () { REC.loading = false; REC.n++; }, function () { REC.loading = false; REC.n++; });
   }
-  document.addEventListener("click", function (e) { if (e.target.closest && e.target.closest("[data-past-runs]")) { e.preventDefault(); openPicker(e.target.closest("[data-past-runs]")); } });
-  var pickerFrom = null;
-  function openPicker(from) {
-    closePicker();
-    pickerFrom = from || null;
-    var s = document.createElement("div");
-    s.className = "pb-scrim";
-    s.innerHTML = '<div class="pb-dlg" role="dialog" aria-modal="true" aria-labelledby="pbDlgH" tabindex="-1"><header><div style="flex:1"><h2 id="pbDlgH">Past runs</h2><p>Recorded runs, played back from their own events. Nothing is run again and no model is called.</p></div><button class="pb-b" data-x aria-label="Close">' + icon("x", false) + '</button></header><div class="pb-list" id="pbList"><p class="pb-note">Reading the recorded runs…</p></div></div>';
-    document.body.appendChild(s);
-    $(".pb-dlg", s).focus();
-    s.addEventListener("click", function (e) {
-      if (e.target === s || e.target.closest("[data-x]")) { closePicker(); return; }
-      var r = e.target.closest("[data-open]"); if (r) { closePicker(true); location.hash = "#/rec/" + r.dataset.src + "/" + encodeURIComponent(r.dataset.open) + "/overview"; }
-    });
-    s.addEventListener("keydown", function (e) {
-      if (e.key === "Escape") { e.stopPropagation(); closePicker(); return; }
-      if (e.key === "Tab") { var f = s.querySelectorAll("button"), a = f[0], z = f[f.length - 1]; if (e.shiftKey && document.activeElement === a) { e.preventDefault(); z.focus(); } else if (!e.shiftKey && document.activeElement === z) { e.preventDefault(); a.focus(); } }
-    });
-    loadLists().then(paintPicker);
-  }
-  function closePicker(nav) { var s = $(".pb-scrim"); if (s) s.remove(); if (!nav && pickerFrom && pickerFrom.isConnected) pickerFrom.focus(); pickerFrom = null; }
   // the model a recorded run really used: the one it recorded, else its agent's default
   function usedModel(r) { return window.ChipInModels.usedModelName(r.agent, r.model); }
-  function rowHTML(r) {
-    var c = r.counts || {}, bits = [];
-    bits.push('<span class="mk mea">recorded</span>');
-    bits.push("<span>" + (r.src === "mac" ? "on this computer" + (r.alsoSite ? ", copy on the site" : "") : "copy on this site") + "</span>");
-    if (r.state && r.state !== "succeeded") bits.push("<span>" + esc(r.state) + "</span>");
-    if (r.preset) bits.push("<span>Run size: " + esc(String(r.preset).charAt(0).toUpperCase() + String(r.preset).slice(1)) + "</span>");
-    if (r.agent || r.model) bits.push("<span>Model: " + esc(usedModel(r)) + "</span>");
-    if (r.chosen) bits.push("<span>chosen <b>" + esc(clip(r.chosen, 18)) + "</b></span>");
-    if (c.designs) bits.push("<span>" + fmtN(c.designs) + " designs</span>");
-    if (c.subagents) bits.push("<span>" + fmtN(c.subagents) + " subagents</span>");
-    if (c.events) bits.push("<span>" + fmtN(c.events) + " events</span>");
-    // a run on a public dataset names it with its licence; a line's note is a caveat added after the run
-    return '<button class="pb-run" data-open="' + esc(r.id) + '" data-src="' + r.src + '"><span class="t">' + esc(r.title || r.id) + '</span><span class="d">' + esc(dateTxt(r.started_at)) + " · " + esc(durTxt(r.duration_s)) + '</span><span class="m">' + bits.join("") + "</span>" +
-      (r.data && r.data.name ? '<span class="c">Data: ' + esc(r.data.name) + (r.data.licence ? ", " + esc(r.data.licence) : "") + "</span>" : "") +
-      (r.note ? '<span class="x">' + esc(r.note) + "</span>" : "") + "</button>";
-  }
-  function paintPicker() {
-    var el = $("#pbList"); if (!el) return;
+  function recorded() {
     var macIds = {}; (REC.mac || []).forEach(function (r) { macIds[r.id] = r; });
     var all = (REC.mac || []).concat((REC.site || []).filter(function (r) { if (macIds[r.id]) { macIds[r.id].alsoSite = true; return false; } return true; }));
-    all.sort(function (a, b) { return String(b.started_at || "").localeCompare(String(a.started_at || "")); });
-    var html = all.length ? all.map(rowHTML).join("") : '<p class="pb-note">No recorded runs yet.</p>';
-    var notes = [];
-    if (REC.mac == null) notes.push("Runs on this computer appear here once the page is connected to its ChipIn backend.");
-    if (REC.macErr) notes.push(REC.macErr);
-    if (REC.siteErr) notes.push(REC.siteErr);
-    el.innerHTML = html + (notes.length ? '<p class="pb-note">' + esc(notes.join(" ")) + "</p>" : "");
+    return all.sort(function (a, b) { return String(b.started_at || "").localeCompare(String(a.started_at || "")); });
   }
+  var MARK = { ok: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', bad: '<path d="M18 6 6 18M6 6l12 12"/>' };
+  function recRow(r, on) {
+    var c = r.counts || {}, st = r.state || "succeeded";
+    var g = st === "running" ? '<span class="spin"></span>' : st === "succeeded" ? '<svg viewBox="0 0 24 24" class="ok" aria-hidden="true">' + MARK.ok + "</svg>" : st === "failed" ? '<svg viewBox="0 0 24 24" class="bad" aria-hidden="true">' + MARK.bad + "</svg>" : "";
+    var sub = [dateTxt(r.started_at), r.duration_s ? durTxt(r.duration_s).trim() : "", c.designs ? fmtN(c.designs) + " designs" : ""].filter(Boolean).join(" · ");
+    var tip = [r.title || r.id, "Recorded run, " + (r.src === "mac" ? "on this computer" + (r.alsoSite ? ", copy on the site" : "") : "copy on this site"), st !== "succeeded" ? st : "",
+      r.preset ? "Run size: " + String(r.preset).charAt(0).toUpperCase() + String(r.preset).slice(1) : "", r.agent || r.model ? "Model: " + usedModel(r) : "",
+      r.chosen ? "chosen " + r.chosen : "", c.subagents ? fmtN(c.subagents) + " subagents" : "", c.events ? fmtN(c.events) + " events" : "",
+      r.data && r.data.name ? "Data: " + r.data.name + (r.data.licence ? ", " + r.data.licence : "") : "", r.note || ""].filter(Boolean).join("\n");
+    return '<a class="rrow pb-rrow' + (on ? " on" : "") + '" href="#/rec/' + r.src + "/" + encodeURIComponent(r.id) + '/overview" title="' + esc(tip) + '"><span class="g">' + g + '</span><span class="t"><b>' + esc(r.title || r.id) + "</b>" + (sub ? "<small>" + esc(sub) + "</small>" : "") + "</span></a>";
+  }
+  function recents(skip) {
+    listsFor(connKey());
+    var cur = parse(), no = {}; (skip || []).forEach(function (id) { no[id] = 1; });
+    return recorded().filter(function (r) { return !no[r.id]; }).map(function (r) { return recRow(r, cur && cur.src === r.src && cur.id === r.id); }).join("");
+  }
+  function sig() { listsFor(connKey()); var cur = parse(); return REC.n + "|" + (cur ? cur.src + cur.id : ""); }
 
   /* ---------- a recorded run: events, active time, snapshots ---------- */
   var RUNS = {}; // key "site:<id>" | "mac:<id>" -> rec
@@ -725,7 +693,7 @@
     if (!same) { unmountBar(); main.innerHTML = '<div class="body"><div class="rv"><p class="rv-empty">Reading the recorded run…</p></div></div>'; }
     loadRun(r.src, r.id).then(function (rec) {
       if (!parse() || parse().id !== r.id) return;
-      if (rec.err) { unmountBar(); V = null; main.innerHTML = '<div class="body"><div class="rv"><h1 style="font-family:var(--serif);font-weight:400;font-size:24px;margin:0">This run could not be opened</h1><p class="rv-brief">' + esc(rec.err) + "</p><p>" + pastLink("run") + "</p></div></div>"; return; }
+      if (rec.err) { unmountBar(); V = null; main.innerHTML = '<div class="body"><div class="rv"><h1 style="font-family:var(--serif);font-weight:400;font-size:24px;margin:0">This run could not be opened</h1><p class="rv-brief">' + esc(rec.err) + "</p></div></div>"; return; }
       mountView(rec, r.view, same);
     });
     return true;
@@ -742,7 +710,7 @@
     } else { V.view = view; V.sig = {}; }
     main.innerHTML = '<div class="top"><nav class="tabs" aria-label="Run views">' + VIEWS.map(function (v) {
       return '<a class="tab' + (v[0] === view ? " on" : "") + '" href="#/rec/' + rec.src + "/" + encodeURIComponent(rec.id) + "/" + v[0] + '">' + v[1] + "</a>";
-    }).join("") + '</nav><span class="grow" style="flex:1"></span><div class="tright">' + pastLink("run") + '<span class="mk topbadge"></span></div></div>' +
+    }).join("") + '</nav><span class="grow" style="flex:1"></span><div class="tright"><span class="mk topbadge"></span></div></div>' +
       '<div class="lv-lost" id="rvLost" role="alert" hidden></div>' +
       '<div class="body" id="rvBody">' + (view === "overview" ? overviewHTML() : view === "log" ? "" : view === "files" ? '<div class="rv-files"><h2>Files</h2><p>Files the run had written by the time on the bar.</p><div id="rvFiles"></div></div>' : '<div class="vis" id="rvTab"></div>') + "</div>";
     var ctl = {
@@ -755,7 +723,6 @@
     if (view === "overview") wireOverview();
     mountMessages(view);
     if (view === "files") $("#rvFiles").addEventListener("click", function (e) { var b = e.target.closest("[data-path]"); if (b) openFile(b.dataset.path); });
-    if (view === "patients" || view === "chip") $("#rvTab").addEventListener("click", function (e) { var b = e.target.closest("[data-pick]"); if (b) { V.sel = b.dataset.pick; V.sig.tab = ""; kick(); } });
     loadFinal(rec);
     kick();
   }
@@ -855,7 +822,7 @@
     feedMessages(M);
     paintLost();
     if (V.view === "overview") paintOverview(M);
-    else if (V.view === "patients" || V.view === "chip") paintTab(M);
+    else if (V.view === "chip") paintTab(M);
     else paintFiles(M);
   }
   function once(key, sig, fn) { if (V.sig[key] !== sig) { V.sig[key] = sig; fn(); } }
@@ -868,14 +835,13 @@
     if (el.textContent !== t) el.textContent = t;
   }
   setInterval(function () { if (V && V.rec) paintLost(); }, 1000); // a paused bar draws nothing, so the note has its own beat
-  // Where it fails and Chip: the live view's panels, from the same fold
+  // Chip: the live view's panel, from the same fold
   function paintTab(M) {
     var el = $("#rvTab"); if (!el) return;
     var sel = V.sel && M.f.designs[V.sel] ? V.sel : null;
     once("tab", [V.view, M.n, sel || "", V.rec.final ? 1 : 0].join("|"), function () {
       var note = V.rec.line && V.rec.line.note ? '<p class="rv-note" role="note">' + esc(V.rec.line.note) + "</p>" : "";
-      el.innerHTML = note + (V.view === "chip" ? F.chipHTML({ f: M.f, spec: M.spec, T: M.T, id: M.st.chosen || (M.pts.length ? M.pts[M.pts.length - 1].id : null), chosenId: M.st.chosen, running: !M.ended })
-        : F.patientsHTML({ f: M.f, spec: M.spec, T: M.T, chosenId: M.st.chosen, selId: sel, final: V.rec.final, running: !M.ended }));
+      el.innerHTML = note + F.chipHTML({ f: M.f, spec: M.spec, T: M.T, id: M.st.chosen || (M.pts.length ? M.pts[M.pts.length - 1].id : null), chosenId: M.st.chosen, running: !M.ended });
     });
   }
   function paintOverview(M) {
@@ -1026,7 +992,6 @@
   }
   function openFile(path) {
     var rec = V.rec, show = function (text, note) {
-      closePicker();
       var s = document.createElement("div"); s.className = "pb-scrim";
       s.innerHTML = '<div class="pb-dlg" role="dialog" aria-modal="true" aria-label="' + esc(path) + '" tabindex="-1" style="width:min(820px,100%)"><header><div style="flex:1"><h2 style="font-size:18px">' + esc(path.split("/").pop()) + '</h2><p>' + esc(path) + (note ? ". " + esc(note) : "") + '</p></div><button class="pb-b" data-x aria-label="Close">' + icon("x", false) + '</button></header><pre class="rv-pre"></pre></div>';
       $(".rv-pre", s).textContent = text; document.body.appendChild(s); $(".pb-dlg", s).focus();
@@ -1077,8 +1042,8 @@
   }
 
   window.ChipInPlayback = {
-    version: 1, SPEEDS: SPEEDS.slice(), owns: owns, render: render, mountExample: mountExample, pastLink: pastLink, cleanHash: cleanHash,
-    state: state, openPicker: openPicker, seek: seek,
+    version: 1, SPEEDS: SPEEDS.slice(), owns: owns, render: render, mountExample: mountExample, recents: recents, sig: sig, cleanHash: cleanHash,
+    state: state, seek: seek,
     clock: function () { return BAR ? { t: BAR.ctl.clock.now(), total: BAR.ctl.clock.total, speed: BAR.ctl.clock.speed, playing: BAR.ctl.clock.playing, live: BAR.ctl.clock.live && BAR.ctl.clock.atLive, kind: BAR.ctl.kind } : null; }
   };
 })();

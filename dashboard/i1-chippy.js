@@ -38,7 +38,8 @@
   var K_CONN = "chipin-i1-backend", K_VIEW = "chipin-i1-live-view", K_FLOW = "chipin-i1-flow";
   var K_CONV = "chipin-chippy-conv", K_ITEMS = "chipin-chippy-items";
   var RUN_RE = /\b\d{8}-\d{6}-[0-9a-f]{6}\b/;
-  var TABS = { overview: "Overview", patients: "Where it fails", signal: "Signal", chip: "Chip", chat: "Chat", sources: "Sources" };
+  // a removed or unknown tab name falls back to the overview wherever TABS is consulted
+  var TABS = { overview: "Overview", chip: "Chip", chat: "Chat", sources: "Sources" };
   var STEPS = { "1": "The device", "2": "Who and where", "3": "Targets", "4": "Constraints", "5": "Data", spec: "Your spec" };
   var el = function (tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = window.ChipInFold ? window.ChipInFold.scrub(String(text)) : text; return n; };
   var ssGet = function (k) { try { return JSON.parse(sessionStorage.getItem(k) || "null"); } catch (e) { return null; } };
@@ -604,8 +605,8 @@
     var r = a.run_id ? "run " + shortId(a.run_id) : "the run";
     switch (a.kind) {
       case "go_to": return "Went to " + routeName(a.route) + ".";
-      case "open_run": return "Opened " + r + (a.tab && a.tab !== "overview" ? " on " + (TABS[a.tab] || a.tab) : "") + ".";
-      case "switch_tab": return "Switched to " + (TABS[a.tab] || a.label || a.tab) + ".";
+      case "open_run": return "Opened " + r + (TABS[a.tab] && a.tab !== "overview" ? " on " + TABS[a.tab] : "") + ".";
+      case "switch_tab": return "Switched to " + (TABS[a.tab] || "Overview") + ".";
       case "select_design": return "Selected design " + a.design_id + " in " + r + ".";
       case "set_playback": return "Moved the clock of " + r + " to " + clock(a.seconds) + ".";
       case "open_file": return "Opened " + String(a.path || "").split("/").pop() + " from " + r + ".";
@@ -619,7 +620,7 @@
     if (!h || h === "#/" || h === "#") return "the start page";
     if ((m = h.match(/^#\/new\/([1-5]|spec)/))) return m[1] === "spec" ? "Your spec" : "step " + m[1] + " of the guided flow, " + STEPS[m[1]];
     if (/^#\/configure/.test(h)) return "Configure";
-    if ((m = h.match(/^#\/run\/([^/]+)\/([a-z]+)/))) return "run " + shortId(m[1]) + ", " + (TABS[m[2]] || m[2]);
+    if ((m = h.match(/^#\/run\/([^/]+)\/([a-z]+)/))) return "run " + shortId(m[1]) + ", " + (TABS[m[2]] || "Overview");
     return h;
   }
   function clock(s) { s = Math.max(0, Math.round(+s || 0)); var h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = String(s % 60).padStart(2, "0"); return h ? h + ":" + String(m).padStart(2, "0") + ":" + x : m + ":" + x; }
