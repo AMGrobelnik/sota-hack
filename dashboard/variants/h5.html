@@ -1280,18 +1280,22 @@ function result(r, k) {
   if (r.data.mode === "sim") scores = scores.map(v => Math.min(.99, r2(v + 0.01)));
   if (m === "smaller") { gates = Math.round(gates * 0.62); scores = scores.map(v => r2(v - 0.01)); fa = r2(fa * 1.2); used = Math.min(used, 2); q += "s"; warn = r.uc === "eeg" ? warn + 1 : warn - 6; }
   if (m === "accuracy") { gates = Math.round(gates * 1.3); scores = scores.map(v => Math.min(.99, r2(v + 0.02))); fa = r2(fa * 0.85); q += "a"; }
-  const pass = scores.filter(v => v >= LINE).length;
-  let worst = 0; scores.forEach((v, i) => { if (v < scores[worst]) worst = i; });
-  const mean = scores.reduce((a, v) => a + v, 0) / scores.length;
-  return { k, gates, scores, fa, used, pass, worst, mean, q, H, warn: Math.round(warn) };
+  /* Every figure below is counted from the same per-person tallies the Patients tab shows */
+  const o = { k, gates, scores, fa, used, q, H, warn: Math.round(warn) };
+  let caught = 0, n = 0, pass = 0, worst = 0, worstRate = 2;
+  for (let i = 0; i < H; i++) { const t = ptOutcome(r, o, i), v = t.caught / t.n; caught += t.caught; n += t.n; if (v >= LINE) pass++; if (v < worstRate) { worstRate = v; worst = i; } }
+  const mean = caught / Math.max(1, n);
+  return Object.assign(o, { pass, worst, worstRate, mean, caught, n, clears: clearsBar(mean, fa) });
 }
+/* The one clinical bar: at least 90% of events caught, pooled over every unseen person, and fewer than 2 false alarms a day */
+function clearsBar(rate, fa) { return rate >= LINE && fa < 2; }
 function bestAt(r, t) { let best = null; for (let k = 0; k < r.rounds; k++) if (t >= 68 + 48 * k) best = result(r, k); return best; }
 function prevBest(r, t) { let p = null, b = null; for (let k = 0; k < r.rounds; k++) if (t >= 68 + 48 * k) { p = b; b = result(r, k); } return p; }
 function trainedAt(r, t) { const N = candN(r); let n = 0; for (let k = 0; k < r.rounds; k++) n += Math.round(N * Math.max(0, Math.min(1, (t - (26 + 48 * k)) / 22))); return n; }
 function cost(r, t) { return (t * SCALE / 3600) * MACHINES[r.machine].rate + t * 0.004; }
 function fmtClock(sec) { sec = Math.floor(sec); const h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, s = sec % 60; return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`; }
 const nf = n => Math.round(n).toLocaleString("en-GB");
-const pct = v => Math.round(v * 100) + "%";
+const pct = v => Math.floor(v * 100 + 1e-9) + "%"; /* never rounds a rate up across the 90% bar */
 const word = n => ["zero", "one", "two", "three", "four", "five", "six"][n] || String(n);
 const Word = n => { const w = word(n); return w[0].toUpperCase() + w.slice(1); };
 /* One unseen person's recording: when each event happened, whether the chip caught it, and why a miss was missed.
@@ -1321,7 +1325,7 @@ function stats(r, b) {
   if (!b) return null;
   let n = 0, c = 0, fa = 0;
   for (let i = 0; i < b.H; i++) { const o = ptOutcome(r, b, i); n += o.n; c += o.caught; fa += o.fa.length; }
-  return { n, c, miss: n - c, rate: c / Math.max(1, n), fa: b.fa, faSeen: fa, warn: b.warn, H: b.H, pass: c / Math.max(1, n) >= LINE && b.fa < 2 };
+  return { n, c, miss: n - c, rate: c / Math.max(1, n), fa: b.fa, faSeen: fa, warn: b.warn, H: b.H, pass: clearsBar(c / Math.max(1, n), b.fa) };
 }
 
 function replyFor(r, mode, from) {
@@ -1343,14 +1347,14 @@ function events(r) {
   const add = (t, who, text, tags, tool, act) => E.push({ id: `${who}-${t}`, t, who, text, tags: tags || [], tool, act });
   const fa = "2 false alarms " + U.faUnit;
   const ans = r.answers || {};
-  add(1, "lead", `Brief read. The chip sits inside the ${U.device} and answers "${U.predict.toLowerCase()}" for each of the ${U.window}. It passes only if it catches at least 90% of ${U.events} on ${U.people} it has never seen, with fewer than ${fa}.`, ["brief"], null, ["Read your description" + (Object.keys(ans).length ? " and your " + Object.keys(ans).length + " answers" : ""), "Set the goal: the smallest chip that clears the clinical bar", "Set the bar: 90% of " + U.events + " caught on unseen " + U.people + ", fewer than " + fa, "Asked the others to start on the data and the papers"]);
+  add(1, "lead", `Brief read. The chip sits inside the ${U.device} and answers "${U.predict.toLowerCase()}" for each of the ${U.window}. It passes only if it catches at least 90% of ${U.events}, pooled over ${U.people} it has never seen, with fewer than ${fa}.`, ["brief"], null, ["Read your description" + (Object.keys(ans).length ? " and your " + Object.keys(ans).length + " answers" : ""), "Set the goal: the smallest chip that clears the clinical bar", "Set the bar: 90% of " + U.events + " caught on unseen " + U.people + ", fewer than " + fa, "Asked the others to start on the data and the papers"]);
   const said = Object.entries({ who: "recorded", chans: "channels", detect: "detect" }).filter(([k]) => ans[k]).map(([k]) => ans[k]);
   if (said.length) add(2, "tool", "Wrote down your answers", ["ans"], Object.entries(ans).map(([k, v]) => k + ": " + v));
   const chg = A.filter(a => a.st === "chg"), un = A.filter(a => a.st === "un");
   if (m === "public") add(3, "lead", `Data: no recordings of your own, so we use the public sets you accepted. ${D[0].short} for fine-tuning, ${D[1].short} locked away for the check.${un.length ? ` ${word(un.length)[0].toUpperCase() + word(un.length).slice(1)} assumption${un.length > 1 ? "s" : ""} about them are unchecked; they are listed under Improve this run.` : ""}`, ["ans", "ds:chbmit", "ds:siena"]);
   else if (m === "own") add(3, "lead", `Data: your recordings. Nothing is uploaded in this demo; the run's numbers are simulated stand-ins.${chg.length ? ` You changed ${word(chg.length)} assumption${chg.length > 1 ? "s" : ""}.` : ""}`, ["ans", "ds:own"]);
   else add(3, "lead", `Data: we simulate recordings from ${word(A.length)} stated assumptions${chg.length ? `, ${word(chg.length)} changed by you (${chg.map(a => a.cur.charAt(0).toLowerCase() + a.cur.slice(1)).join("; ")})` : ""}.`, ["ans"].concat(A.slice(0, 3).map(a => "asm:" + a.id)));
-  add(5, "tool", "Wrote the goal and the clinical line", ["brief"], ["goal: smallest chip that meets the line", "line: 90% of " + U.events + " caught, per " + U.person, "false alarms: fewer than 2 " + U.faUnit, "held-out " + U.people + ": " + H]);
+  add(5, "tool", "Wrote the goal and the clinical line", ["brief"], ["goal: smallest chip that meets the line", "line: 90% of " + U.events + " caught, pooled over the held-out " + U.people, "false alarms: fewer than 2 " + U.faUnit, "held-out " + U.people + ": " + H]);
   if (m === "public") {
     add(9, "tool", `Downloading ${D[0].name} from ${D[0].where}`, ["ds:chbmit"], ["source: " + D[0].url, D[0].people + ", " + D[0].size, "licence: " + D[0].licence + ", " + D[0].access.toLowerCase(), "use: fine-tuning"]);
     add(11, "tool", `Downloading ${D[1].name} from ${D[1].where}`, ["ds:siena"], ["source: " + D[1].url, D[1].people + ", " + D[1].size, "licence: " + D[1].licence, "use: held out for the check, never trained on"]);
@@ -1389,11 +1393,11 @@ function events(r) {
     add(b + 37, "tool", `Compiled ${KEEP} circuits`, ["run"], [`smallest that meets the line in training: ${nf(res.gates)} gates`, `largest: ${nf(Math.round(res.gates * 3.4))} gates`, `bits per weight: ${k ? 2 : 4}`]);
     add(b + 39, "check", `Checking each circuit bit for bit against its model, then on the ${H} held-out ${U.people} of ${D[1].short}.`, ["ds:" + D[1].id]);
     add(b + 44, "tool", "Bit-for-bit check passed", ["run"], [`circuits checked: ${KEEP}`, `test windows per circuit: ${nf(r.uc === "eeg" ? 86400 : 21600)}`, "mismatches: 0"]);
-    add(b + 47, "check", `Round ${k + 1} best: ${nf(res.gates)} gates, ${res.used} sensors, catches ${pct(res.mean)} of ${U.events}. Meets the line on ${res.pass} of ${H} held-out ${U.people}. Weakest is ${U.person} ${res.worst + 1} at ${pct(res.scores[res.worst])}; ${U.weakWhy}.`, ["run", "ds:" + D[1].id]);
+    add(b + 47, "check", `Round ${k + 1} best: ${nf(res.gates)} gates, ${res.used} sensors, catches ${res.caught} of ${res.n} ${U.events} (${pct(res.mean)}), pooled. ${res.pass} of ${H} held-out ${U.people} reach 90% on their own. Weakest is ${U.person} ${res.worst + 1} at ${pct(res.worstRate)}; ${U.weakWhy}.`, ["run", "ds:" + D[1].id]);
   }
   const R0 = 20 + 48 * r.rounds, fin = result(r, r.rounds - 1);
   add(R0 + 2, "lead", `Writing the report: the chip, the sensors it needs, every ${U.person}'s result, and the sources behind each number.`, ["run"], null, ["Collected the best chip from every round", "Listed every source behind each number", "Marked the estimates as estimates"]);
-  let done = `${APP.name} is done. The smallest chip that does the job has ${nf(fin.gates)} gates and uses ${word(fin.used)} sensors. It meets the clinical line on ${fin.pass} of ${H} held-out ${U.people}.`;
+  let done = `${APP.name} is done. The smallest chip that does the job has ${nf(fin.gates)} gates and uses ${word(fin.used)} sensors. On the ${H} held-out ${U.people} it catches ${fin.caught} of ${fin.n} ${U.events} (${pct(fin.mean)}), ${fin.clears ? "which clears" : "still below"} the clinical bar; ${fin.pass} of the ${H} reach 90% on their own.`;
   if (m === "sim") done += ` Every ${U.person} here is simulated: check the chip on real recordings before any clinical use.`;
   if (r.uc === "eeg") done += " For scale, the SOUL chip reports 1.5 nJ per classification on silicon; our power figure is an estimate, not a measurement.";
   add(total(r) - 0.5, "lead", done, m === "sim" ? ["run", "ds:sim"] : r.uc === "eeg" ? ["run", "p:soul"] : ["run"]);
@@ -2280,7 +2284,7 @@ function updOverview(force) {
   setH("wellsub", b ? `On ${b.H} ${esc(U.people)} it never trained on${done ? "" : `, round ${b.k + 1} chip`}` : `After round 1`);
   setH("barst", S ? `<span class="barpill ${S.pass ? "ok" : "no"}">${S.pass ? ic("check") + "Clears the clinical bar" : "Below the clinical bar"}</span>` : "");
   const cell = (v, l, sub, cls = "") => `<div class="cell ${cls}"><div class="cv2">${v}</div><div class="cl2">${l}</div>${sub ? `<div class="cs2">${sub}</div>` : ""}</div>`;
-  setH("cells", S ? [cell(`${S.c} <small>of ${S.n}</small>`, `${esc(U.events)} caught`, `${pct(S.rate)}; the bar is 90%`),
+  setH("cells", S ? [cell(`${S.c} <small>of ${S.n}</small>`, `${esc(U.events)} caught`, `${pct(S.rate)}, all ${b.H} pooled; the bar is 90%`),
     cell(`${S.miss}`, "missed", `<button class="lnk" data-govis="patients">See each one and why</button>`, S.miss ? "miss" : ""),
     cell(`${b.fa} <small>${esc(U.faUnit)}</small>`, "false alarms", "The bar: fewer than 2"),
     cell(r.uc === "eeg" ? `${S.warn} s` : `${S.warn} s`, r.uc === "eeg" ? "after a seizure starts, it flags it" : `before brain oxygen crosses ${alarmLine(r)}%, it warns`, `<button class="lnk" data-govis="signal">See how</button>`)].join("")
@@ -2438,22 +2442,29 @@ function patientsHTML(r, b, U) {
       ${stripSVG(r, b, sel, innerWidth < 768 ? 360 : 1000)}
       <div class="ptkey"><span><svg width="14" height="14"><circle cx="7" cy="7" r="6" fill="#2B56D6"/></svg>Caught</span><span><svg width="14" height="14"><circle cx="7" cy="7" r="5.5" fill="#fff" stroke="#b91c1c" stroke-width="2"/></svg>Missed, numbered below</span><span><svg width="14" height="14"><path d="M7 2l6 10H1z" fill="#b45309"/></svg>False alarm</span><span>Hover a mark for the time and reason</span></div>
       ${missList(r, b, sel)}<p class="rule">${esc(caughtRule(r))}</p></div>
+    <p class="note pbar">The clinical bar: at least 90% of ${esc(U.events)} caught, pooled over all ${b.H} ${esc(U.people)} (${b.caught} of ${b.n} here), and fewer than 2 false alarms ${esc(U.faUnit)}. ${b.pass} of ${b.H} reach 90% on their own.</p>
     <div class="pts">${tiles}</div>
     ${r.data.mode === "sim" ? `<div class="pnote">These ${U.people} are simulated from the stated assumptions. Real ${U.people} may do worse.</div>` : `<div class="note" style="margin-top:12px">${/^Held-out/.test(dsList(r)[1].name) ? esc(dsList(r)[1].name) : `Held-out ${U.people} from ${esc(dsList(r)[1].name)}`}. ${tagHTML(r, ["ds:" + dsList(r)[1].id])}</div>`}`;
 }
 function winsHTML(r, b, g, U) {
   if (!b) return `<p class="empty2">No chip has been checked yet. After round 1, the best chip is compared here with the designs it beat, on the clinical bar and on size.</p>`;
   const S = stats(r, b), done = g.k === "done", G = b.gates, R = rng(hashStr(r.id + b.q));
+  /* The search keeps the smallest design that clears the bar, so every smaller design it checked fails it on a shown figure,
+     and while the best fails, every bigger one checked this round fails too. Rates are whole percents, the precision shown. */
+  const pc = v => Math.floor(v * 100 + 1e-9) / 100, below = LINE - 0.01;
+  const big = v => S.pass ? Math.min(.99, v) : Math.min(below, v);
   const C = [
-    { g: Math.round(G * 0.71), rate: S.rate - 0.06 - 0.01 * R(), fa: r2(b.fa * 1.3) },
-    { g: Math.round(G * 0.88), rate: Math.min(.99, S.rate + 0.002), fa: 2.4 },
+    { g: Math.round(G * 0.71), rate: pc(Math.min(S.rate - 0.06, below - 0.01) - 0.02 * R()), fa: r2(b.fa * 1.3) },
+    { g: Math.round(G * 0.88), rate: pc(big(S.rate + 0.002)), fa: 2.4 },
     { g: G, rate: S.rate, fa: b.fa, chosen: true },
-    { g: Math.round(G * 1.46), rate: Math.min(.99, S.rate + 0.008), fa: r2(b.fa * 0.92) },
-    { g: Math.round(G * 2.3), rate: Math.min(.99, S.rate + 0.016), fa: r2(b.fa * 0.85) },
-  ].map((c, i) => Object.assign(c, { id: "ABCDE"[i], okRate: c.rate >= LINE, okFa: c.fa < 2 }));
-  C.forEach(c => { c.pass = c.okRate && c.okFa; c.verdict = c.chosen ? (c.pass ? "Chosen: the smallest that clears the bar" : "Best so far, still below the bar") : !c.okRate ? `Misses too many ${U.events}` : !c.okFa ? "Too many false alarms" : `Clears the bar, ${(c.g / G).toFixed(1)} times bigger`; });
-  const gm = Math.max(...C.map(c => c.g)), bigger = C.filter(c => c.g > G && c.pass);
-  const lead = S.pass ? `It is the smallest chip that clears the clinical bar. Design A is smaller but misses too many ${U.events}; design B is nearly as small but raises ${C[1].fa} false alarms ${U.faUnit}; ${bigger.length ? `designs ${bigger.map(c => c.id).join(" and ")} clear the bar too, but are ${bigger.map(c => (c.g / G).toFixed(1)).join(" and ")} times bigger` : "nothing else clears it"}.` : `No design clears the clinical bar yet; this is the closest so far. The next round keeps trying smaller and better ones.`;
+    { g: Math.round(G * 1.46), rate: pc(big(S.rate + 0.008)), fa: r2(b.fa * 0.92) },
+    { g: Math.round(G * 2.3), rate: pc(big(S.rate + 0.016)), fa: r2(b.fa * 0.85) },
+  ].map((c, i) => Object.assign(c, { id: "ABCDE"[i], okRate: c.rate >= LINE, okFa: c.fa < 2, pass: clearsBar(c.rate, c.fa) }));
+  const times = c => (c.g > G ? `${(c.g / G).toFixed(1)} times bigger` : `${(G / c.g).toFixed(1)} times smaller`);
+  const why = c => !c.okRate ? `misses too many ${U.events} (${pct(c.rate)})` : `raises ${c.fa} false alarms ${U.faUnit}`;
+  C.forEach(c => { c.verdict = c.chosen ? (c.pass ? "Chosen: the smallest that clears the bar" : "Best so far, still below the bar") : !c.okRate ? `Misses too many ${U.events}` : !c.okFa ? "Too many false alarms" : `Clears the bar, ${times(c)}`; });
+  const gm = Math.max(...C.map(c => c.g)), smaller = C.filter(c => c.g < G), bigger = C.filter(c => c.g > G && c.pass);
+  const lead = S.pass ? `It is the smallest chip that clears the clinical bar. ${smaller.map(c => `Design ${c.id} is smaller but ${why(c)}`).join("; ")}; ${bigger.length ? `design${bigger.length > 1 ? "s" : ""} ${bigger.map(c => c.id).join(" and ")} clear${bigger.length > 1 ? "" : "s"} the bar too, but ${bigger.length > 1 ? "are" : "is"} ${bigger.map(c => (c.g / G).toFixed(1)).join(" and ")} times bigger` : "nothing else clears it"}.` : `No design clears the clinical bar yet; this is the closest so far. The next round keeps trying smaller and better ones.`;
   const xr = v => clamp((v - 0.7) / 0.3, 0, 1) * 100;
   const rows = C.map(c => `<div class="wrow2 ${c.chosen ? "chosen" : ""}" role="row"><span class="wid" role="cell"><b>${c.chosen ? (done ? "Chosen" : "Best so far") : "Design " + c.id}</b><small>${c.chosen ? `Round ${b.k + 1}` : `Round ${b.k + 1}, checked`}</small></span>
     <span class="wbar" role="cell"><span class="tr"><i style="width:${c.g / gm * 100}%"></i></span><b>${nf(c.g)}</b></span>
@@ -2461,7 +2472,7 @@ function winsHTML(r, b, g, U) {
     <span class="wfa ${c.okFa ? "" : "bad"}" role="cell">${c.fa}</span>
     <span class="wv ${c.chosen && c.pass ? "win" : c.pass ? "ok" : "bad"}" role="cell">${c.chosen && c.pass ? ic("check") : ""}${esc(c.verdict)}</span></div>`).join("");
   return `<div class="whyl"><span class="wtk">${S.pass ? ic("check") : ""}</span><p><b>${done ? "This chip wins" : "The best chip so far"}: ${nf(G)} gates.</b> ${esc(lead)}</p></div>
-    <div class="wtab" role="table" aria-label="The chosen chip and the designs it beat"><div class="wrow2 head" role="row"><span role="columnheader">Design</span><span role="columnheader">Size, in gates (smaller is better)</span><span role="columnheader">${esc(U.Events)} caught on unseen ${esc(U.people)}<em>the line is the 90% bar</em></span><span role="columnheader">False alarms ${esc(U.faUnit)}<em>bar: under 2</em></span><span role="columnheader">Verdict</span></div>${rows}</div>
+    <div class="wtab" role="table" aria-label="The chosen chip and the designs it beat"><div class="wrow2 head" role="row"><span role="columnheader">Design</span><span role="columnheader">Size, in gates (smaller is better)</span><span role="columnheader">${esc(U.Events)} caught on unseen ${esc(U.people)}<em>bar: 90%, all ${b.H} pooled</em></span><span role="columnheader">False alarms ${esc(U.faUnit)}<em>bar: under 2</em></span><span role="columnheader">Verdict</span></div>${rows}</div>
     <p class="note" style="margin-top:12px">All five were compiled to gates, matched their model bit for bit, and were checked on the same ${b.H} unseen ${esc(U.people)}. <button class="lnk" data-govis="patients">See each ${esc(U.person)}</button></p>`;
 }
 function chipFacts(r, b) {
