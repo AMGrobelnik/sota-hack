@@ -294,6 +294,33 @@ section 2 of the guide), each with its unit. Chip files land under
 `workspace/chips/<design_id>/`. The helper and the tailer refuse a metric
 that is not a finite number; the lab treats a refused line as non-fatal.
 
+## Training Python
+
+The agent's own `python3` may have no numpy or torch, and then the
+reference and finetune stages are skipped. Name a Python that can train
+(a path, not a secret):
+
+| Name                  | What it is                             |
+| --------------------- | -------------------------------------- |
+| `CHIPIN_TRAIN_PYTHON` | a Python interpreter that can train    |
+
+- It passes to the agent as `CHIPIN_TRAIN_PYTHON`; it is not put on the
+  agent's `PATH`. The chip lab's `.venv/bin/python` will do: it has
+  numpy, torch, scikit-learn and xgboost, the libraries behind the lab's
+  `ingest-model` formats.
+- When it is set, the standing instructions get the training paragraph
+  (`api/training.md`): run training and data scripts with
+  `"$CHIPIN_TRAIN_PYTHON"`; with no recordings attached, simulate them and
+  write the assumptions down; split by patient before training; score
+  sensitivity and false alarms per hour on held-out patients only, per
+  patient and pooled, labelled "synthetic data"; hand the trained weights
+  to the lab with `ingest-model`. The pooled figures of the chosen design
+  arrive as the metrics `synthetic_sensitivity_pct` and
+  `synthetic_false_alarms_per_h`, with `patients_pass` / `patients_total`.
+- Unset, or not an executable file (one warning in the log), training is
+  off: the environment and instructions are as before, and the agent
+  skips reference and finetune with its reason.
+
 ## Layout
 
 ```text
@@ -308,6 +335,7 @@ backend/
     orchestrate.py           run_agent(spec, config): one run end to end
     cli.py                   chipin-backend run / ask / serve / config
     chiplab.py               the optional chip lab: agent PATH and settings
+    training.py              the optional training Python for the agent
     api/                     the local API server for the dashboards
     llm/                     OpenRouter client, key, retry, presets, summaries
     agents/                  AgentBackend interface and the backends
@@ -360,16 +388,17 @@ retried, so one answer is never paid for twice.
 
 Names only; values go in the gitignored `backend/.env`.
 
-| Name                 | Needed for                          |
-| -------------------- | ----------------------------------- |
-| `OPENROUTER_API_KEY` | `ask`, summaries, `openrouter`      |
-| `RUNPOD_API_KEY`     | `on_demand` mode and RunPod checks  |
-| `CLAUDE_CONFIG_DIR`  | optional: another CLI login folder  |
-| `CHIPIN_CONFIG`    | optional: another config file       |
-| `HF_TOKEN`           | optional: passed to agents          |
-| `CHIPIN_CHIPLAB_BIN` | optional: the chip lab, see above   |
-| `CHIPLAB_CONFIG`     | optional: the lab's config file     |
-| `CHIPLAB_USER_DIR`   | optional: the lab's tool folder     |
+| Name                  | Needed for                          |
+| --------------------- | ----------------------------------- |
+| `OPENROUTER_API_KEY`  | `ask`, summaries, `openrouter`      |
+| `RUNPOD_API_KEY`      | `on_demand` mode and RunPod checks  |
+| `CLAUDE_CONFIG_DIR`   | optional: another CLI login folder  |
+| `CHIPIN_CONFIG`       | optional: another config file       |
+| `HF_TOKEN`            | optional: passed to agents          |
+| `CHIPIN_CHIPLAB_BIN`  | optional: the chip lab, see above   |
+| `CHIPLAB_CONFIG`      | optional: the lab's config file     |
+| `CHIPLAB_USER_DIR`    | optional: the lab's tool folder     |
+| `CHIPIN_TRAIN_PYTHON` | optional: training Python, above    |
 
 The backend sets two more itself: `CHIPIN_LLM_CALLS` (where `ask` logs a
 call) and `CHIPIN_WORKER_TOKEN` (a pod's worker token).
