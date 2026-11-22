@@ -321,6 +321,36 @@ def test_malformed_and_repeated_questions_are_dropped() -> None:
     assert parse_questions('{"questions": "nope"}', config) == []
 
 
+def test_questions_off_the_chip_design_are_dropped() -> None:
+    def item(qid: str, question: str) -> dict[str, Any]:
+        return {"id": qid, "question": question, "why": "x", "kind": "text", "default": "n/a"}
+
+    reply = json.dumps(
+        {
+            "questions": [
+                item("reg", "Which regulatory class should the device target?"),
+                item("radio", "Which wireless interface should it use?"),
+                item("size", "What is the maximum module size?"),
+                item("cert", "Does it need certification for home use?"),
+                item("price", "What unit price is acceptable?"),
+                item("alert", "How fast must it alert after onset?"),
+                item("miss", "Which matters more, a missed event or a false alarm?"),
+                item("drop", "What should the chip do when a sensor drops out?"),
+            ]
+        }
+    )
+    out = parse_questions(reply, QuestionsConfig())
+    assert [q["id"] for q in out] == ["alert", "miss", "drop"]
+
+
+def test_the_prompt_names_what_to_ask_and_what_to_skip() -> None:
+    from chipin_backend.api.questions import system_prompt
+
+    text = system_prompt(QuestionsConfig())
+    for needle in ("how fast the chip must alert", "sampling rate", "drops out", "regulatory class"):
+        assert needle in text
+
+
 # ---- the answers on the run ----
 
 

@@ -17,7 +17,8 @@ on its own::
 - The model is the one the level summaries use (``ModelSummariser``: the model
   and provider walk of ``llm/summaries.yaml``). Its reply must be one JSON
   object; every question is checked, cut to length, and dropped when it is
-  malformed or asks again what the fixed steps asked.
+  malformed, asks again what the fixed steps asked, or is about regulation,
+  connectivity, size, price or branding (none of which change the chip's model or logic).
 - With the scripted stub agent the questions are canned, derived from the
   brief, and nothing is called. With no key, the route off, the daily cap
   spent, a failing model or no answer within ``timeout_s``, the list is empty
@@ -66,9 +67,19 @@ _ID = re.compile(r"[a-z][a-z0-9_]{0,31}")
 #: What the fixed steps already asked; a generated question about any of these is dropped.
 FIXED_TOPICS = re.compile(
     r"battery|reusable|disposable|data ?set|public data|own recordings|simulat|synthetic"
-    r"|sensitivity|specificity|false alarm|electrode|how many (?:channels|sensors)"
+    r"|sensitivity|specificity|false alarms? (?:rate|limit|target|per)"
+    r"|electrode|how many (?:channels|sensors)"
     r"|patient group|age group|newborn|which patients|who (?:is it|it is) for|who responds"
     r"|\bward\b|at home|task type|what (?:must|should) it detect|which signal|what device",
+    re.IGNORECASE,
+)
+#: Topics that never change the chip's model or logic; a generated question about any is dropped.
+EXCLUDED_TOPICS = re.compile(
+    r"regulat|\bfda\b|\bmdr\b|\bce[- ]?mark|certif|complian|clearance|approval"
+    r"|class (?:i|ii|iii|iia|iib|2|3)\b"
+    r"|wireless|bluetooth|\bble\b|wi-?fi|connectivity|cellular|\bnfc\b|zigbee|radio|telemetry"
+    r"|module size|form factor|\bsize of the (?:module|device|chip|package)|packag|enclosure|housing"
+    r"|footprint|dimension|\bweight\b|\bprice|\bcosts?\b|budget|brand|logo|marketing|\bcolou?r\b",
     re.IGNORECASE,
 )
 
@@ -172,9 +183,18 @@ The fixed questions already asked: the device and its signal or sensors, what it
 task type, the patient group, where it is used and who responds to an alert, the target metrics
 and their values (sensitivity, specificity, false alarms), which metric the chart plots, how many
 electrodes or sensors, battery life, disposable or reusable, and where the data comes from. Never
-ask any of these again. Ask only what changes how the agent designs, trains or judges the chip
-and is not already clear from the brief or the answers. Use the past runs only to skip what they
-settled and to choose sensible defaults.
+ask any of these again, and never ask what the brief or the answers already say.
+
+Ask only about inputs that change the chip's model or its logic, or how the design is judged.
+Good topics, when the brief leaves them open: how fast the chip must alert after the event; how
+much movement or noise the recordings carry; which mistake matters most, a missed event or a false
+alarm; the sampling rate or signal band; how the population varies (age, skin, sensor placement);
+how long one decision window may be; what the chip does when a sensor drops out. Pick the three
+that matter most for this brief.
+
+Never ask about: regulatory class or pathway, certification or approval of any kind, wireless
+links or connectivity, mechanical size or packaging, price or cost, branding, or marketing. They
+do not change the model or the logic, so the agent has no use for the answer.
 
 Each question is one plain sentence, answerable with a click or a few words, with a default the
 agent can use when the person does not change it. "why" is one short line: what the answer
@@ -223,7 +243,9 @@ def _question(raw: Any, config: QuestionsConfig) -> dict[str, Any] | None:
     text = _one_line(raw.get("question"), config.question_max_chars)
     why = _one_line(raw.get("why"), config.why_max_chars)
     kind = raw.get("kind")
-    if not qid or not text or not why or kind not in KINDS or FIXED_TOPICS.search(text):
+    if not qid or not text or not why or kind not in KINDS:
+        return None
+    if FIXED_TOPICS.search(text) or EXCLUDED_TOPICS.search(text):
         return None
     default = _one_line(raw.get("default"), config.default_max_chars)
     out: dict[str, Any] = {"id": qid, "question": text, "why": why, "kind": kind}
@@ -531,6 +553,7 @@ def add_questions_route(
 
 
 __all__ = [
+    "EXCLUDED_TOPICS",
     "FIXED_TOPICS",
     "QUESTIONS",
     "QUESTIONS_LEDGER",
