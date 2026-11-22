@@ -16,7 +16,7 @@ DECIM = 4            # 256 Hz -> 64 Hz after the 30 Hz low-pass
 FS = FS_IN // DECIM
 WIN_S = 8            # window length, seconds
 HOP_S = 1            # hop, seconds
-BG_TAU_S = 120       # time constant of the causal background average for relative line length
+BG_TAU_S = 900       # time constant of the causal background average for the relative features
 
 # Standard neonatal 18-channel bipolar "double banana" montage (the full montage).
 DOUBLE_BANANA = [
@@ -34,7 +34,7 @@ BUDGETS: dict[int, list[tuple[str, str]]] = {
     18: DOUBLE_BANANA,
 }
 ALL_DERIVS = sorted({d for ds in BUDGETS.values() for d in ds})
-FEATURES = ["line_length", "mean_abs", "zero_cross", "hf_abs", "ll_rel_bg", "hf_rel_bg"]
+FEATURES = ["line_length", "zero_cross_low", "ll_rel_bg", "low_ll_rel_bg", "amp_rel_bg", "hf_rel_bg"]
 
 
 def read_consensus(ann_dir: Path, baby: int, *, min_agree: int = 2) -> tuple[np.ndarray, np.ndarray]:
@@ -109,10 +109,12 @@ def window_features(x: np.ndarray) -> np.ndarray:
     x = x[:, : n_sec * FS]
     dx = np.abs(np.diff(x, axis=1, prepend=x[:, :1]))
     ax = np.abs(x)
-    zc = (np.signbit(x[:, 1:]) != np.signbit(x[:, :-1])).astype(np.float64)
-    zc = np.concatenate([np.zeros((x.shape[0], 1)), zc], axis=1)
     box = signal.lfilter(np.ones(4) / 4.0, [1.0], x, axis=1)          # 4-sample moving average
     hf = np.abs(x - box)
+    low = signal.lfilter(np.ones(16) / 16.0, [1.0], x, axis=1)        # 16-sample moving average: ~0.5-4 Hz
+    dlow = np.abs(np.diff(low, axis=1, prepend=low[:, :1]))
+    zc = (np.signbit(low[:, 1:]) != np.signbit(low[:, :-1])).astype(np.float64)
+    zc = np.concatenate([np.zeros((x.shape[0], 1)), zc], axis=1)
 
     def per_sec(v):
         return v.reshape(v.shape[0], n_sec, FS).sum(axis=2)
@@ -121,7 +123,7 @@ def window_features(x: np.ndarray) -> np.ndarray:
         c = np.cumsum(np.pad(s, ((0, 0), (1, 0))), axis=1)
         return (c[:, WIN_S:] - c[:, :-WIN_S]) / (WIN_S * FS)
 
-    ll, am, z, h = (per_win(per_sec(v)) for v in (dx, ax, zc, hf))
+    ll, am, z, h, lll = (per_win(per_sec(v)) for v in (dx, ax, zc, hf, dlow))
     # causal background: exponential average of earlier windows' values (the first window seeds it)
     def rel(v):
         alpha = 1.0 / BG_TAU_S
@@ -131,7 +133,7 @@ def window_features(x: np.ndarray) -> np.ndarray:
             bg[:, k] = (1 - alpha) * bg[:, k - 1] + alpha * v[:, k - 1]
         return v / np.maximum(bg, 1e-6)
 
-    feats = np.stack([ll, am, z * FS, h, rel(ll), rel(h)], axis=2)   # [deriv, win, feat]; zc as crossings/s
+    feats = np.stack([ll, z * FS, rel(ll), rel(lll), rel(am), rel(h)], axis=2)   # [deriv, win, feat]
     return np.transpose(feats, (1, 0, 2))
 
 

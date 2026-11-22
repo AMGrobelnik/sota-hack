@@ -30,10 +30,10 @@ No recording, feature or excerpt is stored in this repository. `scripts/download
 | Model | one tiny network per channel (shared), max over channels, score > t |
 | Threshold | on validation babies only, at most 1 false alarm per hour |
 
-- Features: line length, mean absolute amplitude, zero crossings, high-frequency residual (signal minus a
-  4-sample moving average), and line length and residual relative to a causal 120 s background average.
-  Scaling uses the training babies only.
-- Networks: a single linear unit, or 1 to 32 hidden units with 4-bit activations; weights of 3, 5 or 15
+- Features: line length; zero crossings of the 0.5-4 Hz signal (16-sample moving average); and line
+  length, 0.5-4 Hz line length, amplitude and high-frequency residual (signal minus a 4-sample moving
+  average), each relative to a causal 15-minute background average. Scaling uses the training babies only.
+- Networks: a single linear unit, or 1 to 32 hidden units with 4-bit activations; weights of 3, 7 or 15
   levels. They are trained with the integer arithmetic in the loop, and every figure is computed from the
   exact chipir/1 document the lab compiles.
 - Event scoring: consensus runs closer than 10 s are merged, and events under 10 s are not scored. An event

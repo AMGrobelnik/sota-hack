@@ -166,9 +166,8 @@ def build(stage_dir: Path, out: Path, verify_path: Path | None) -> None:
     headline = (f"Result in one line: the best pooled figure is {bestp['counts']['events_caught']}/"
                 f"{bestp['counts']['events_total']} held-out events ({bestp['id']}, {bestp['gates']} gates, "
                 f"{bestp['metrics']['false_alarms_per_hour']} false alarms per hour); the best worst-baby figure is "
-                f"{bestw:.2f}" + (", so every design misses every event in at least one held-out baby. These simple "
-                "amplitude features do not separate seizures well across babies; the cloud shows that, not a working "
-                "detector." if bestw == 0 else "."))
+                f"{bestw:.2f}" + (", so every design misses every event in at least one held-out baby; the cloud shows "
+                "that, not a working detector." if bestw == 0 else "."))
     eligible = sum(1 for n in test_ev if n >= min_ev)
     b = next(r for r in rows if r["role"] == "baseline")
     stage_note = (f"Stage {meta['stage']}: this file uses a SUBSET of the record, babies numbered 1 to {meta['babies_used']} "
@@ -202,8 +201,9 @@ def build(stage_dir: Path, out: Path, verify_path: Path | None) -> None:
             f"{sorted([n for n in test_ev if n >= min_ev])}. With so few babies it rests on one baby's count.",
             f"Each design's threshold is set on the validation babies only: the best mean per-baby sensitivity with at "
             f"most {meta['rules']['FA_BUDGET']} false alarm per hour on validation; held-out false alarm rates can differ.",
-            "Design: 6 integer features per channel (line length, mean absolute amplitude, zero crossings, high-frequency "
-            "residual, and line length and residual relative to a causal 120 s background), 6-bit log-scaled; one tiny "
+            "Design: 6 integer features per channel (line length; zero crossings of the 0.5-4 Hz signal; and line length, "
+            "0.5-4 Hz line length, amplitude and high-frequency residual each relative to a causal 15-minute background "
+            "average), 6-bit log-scaled; one tiny "
             f"network shared by the channels (a single linear unit, or {hid} hidden units with 4-bit activations), "
             f"weights of {lev} levels, {n_seeds} training seeds each; alarm when the maximum score over channels passes the threshold. "
             "Channels: 1 = C3-C4; 2 = C3-P3, C4-P4; 4 = adds T3-O1, T4-O2; 18 = double banana. Band-pass 0.5-30 Hz, 64 Hz.",
@@ -217,9 +217,11 @@ def build(stage_dir: Path, out: Path, verify_path: Path | None) -> None:
             f"proved equal to an independent model of the design for every input (level 2).",
             "Development: the training recipe was revised once after a first stage-1 run (baby-balanced sampling, the "
             "validation threshold rule, one added feature), judged on validation figures, but that run's held-out "
-            "figures had been printed in its log; nothing was selected on them afterwards. The false-alarm rule was "
-            "then tightened once, because under the first rule an alarm that stayed on for long stretches scored as "
-            "perfect; the run was repeated from training with the stricter rule, and no other change was made.",
+            "figures had been printed in its log. The false-alarm rule was then tightened once, because under the first "
+            "rule an alarm that stayed on for long stretches scored as perfect. A full run with the earlier features "
+            "was published (all designs had worst-baby 0, best pooled 16/113); the feature set was then changed once, "
+            "chosen from a scan of single features on training and validation babies only (15-minute background, "
+            "0.5-4 Hz band), declared final before this run. The held-out babies had been scored by earlier runs.",
             f"Baseline, scored the same way: line length of C3-C4 against a threshold set on validation babies: "
             f"worst-baby {b['metrics']['sensitivity_worst']}, pooled {b['counts']['events_caught']}/{b['counts']['events_total']}, "
             f"{b['metrics']['false_alarms_per_hour']} false alarms per hour.",
