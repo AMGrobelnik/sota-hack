@@ -1,0 +1,42 @@
+# Fast chip-lab tests (no Docker, no datasets) on Linux x86_64 and macOS Apple Silicon.
+name: chiplab-tests
+concurrency:
+  group: chiplab-tests-${{ github.ref }}
+  cancel-in-progress: false   # let a running macOS job finish; only the newest pending run is kept
+on:
+  push:
+    paths: ["chiplab/**", ".github/workflows/chiplab-tests.yaml"]
+  pull_request:
+    paths: ["chiplab/**"]
+  workflow_dispatch:
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: chiplab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - uses: YosysHQ/setup-oss-cad-suite@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: OpenMP runtime for XGBoost (macOS)
+        if: runner.os == 'macOS'
+        run: brew install libomp
+      - name: Python environment (CPU torch on Linux to keep the runner small)
+        run: |
+          uv venv -p 3.12 .venv
+          if [ "$RUNNER_OS" = Linux ]; then uv pip install -p .venv/bin/python torch --index-url https://download.pytorch.org/whl/cpu; fi
+          uv pip install -p .venv/bin/python --no-sources -e ".[dev,sim,ingest]"
+      - name: chiplab doctor
+        run: .venv/bin/chiplab doctor || true
+      - name: Tests
+        timeout-minutes: 25
+        run: .venv/bin/python -m pytest -v --durations=15 -m "not docker and not slow and not data"

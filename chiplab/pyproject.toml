@@ -1,0 +1,53 @@
+[project]
+name = "chiplab"
+version = "0.1.0"
+description = "chipin.space chip lab: the toolbox an AI scientist calls to design, train, compile, verify, measure and package tiny chips for medical sensing devices"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "torch>=2.5",
+    "pyyaml>=6",
+    "scikit-learn>=1.4",
+    "huey>=3.5.4",
+    "diskcache>=5.6.3",
+    "jinja2>=3.1.6",
+    "pyvcd>=0.5.1",
+    "xgboost>=3.2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+mcp = ["mcp>=1.2", "sse-starlette>=3.7.0", "uvicorn>=0.54.0"]
+data = ["wfdb>=4.1"]
+sim = ["cocotb>=1.9"]
+ingest = [
+    "alkaid>=0.8.2",
+    "torchlogix>=0.2.2",
+]
+
+[project.scripts]
+chiplab = "chiplab.cli:main"
+
+[tool.uv.sources]
+# Linux: CUDA 13 wheels (also run on CPU-only Linux). macOS: PyPI wheels with Apple MPS.
+torch = [{ index = "pytorch-cu130", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["chiplab*"]
+
+[tool.setuptools.package-data]
+chiplab = ["referee/*.yaml", "hw/*.yaml", "ir/*.json", "*.j2"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["data: needs downloaded datasets", "slow: long-running", "docker: needs the LibreLane image"]

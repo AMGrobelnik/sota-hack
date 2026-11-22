@@ -1,0 +1,43 @@
+# Harden a chip-lab Tiny Tapeout project in GitHub's cloud (tt-gds-action): GDS, precheck, gate-level test.
+# The lab writes the project folder (tool tt_package); commit it, then run:
+#   gh workflow run tt-gds.yaml -f project_dir=chiplab/tt_projects/<design_id> -f pdk=sky130A
+name: tt-gds
+on:
+  workflow_dispatch:
+    inputs:
+      project_dir:
+        description: "Tiny Tapeout project folder made by `chiplab tt-package` (relative to the repo root)"
+        required: true
+      pdk:
+        description: "sky130A | gf180mcuD | ihp-sg13g2"
+        default: sky130A
+jobs:
+  gds:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Put the project at the repository root (tt-gds-action expects info.yaml there)
+        run: |
+          cp -r "${{ inputs.project_dir }}" "$RUNNER_TEMP/proj"
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -r "$RUNNER_TEMP/proj/." .
+          ls
+      - uses: TinyTapeout/tt-gds-action@ttsky26d
+        with:
+          pdk: ${{ inputs.pdk }}
+  precheck:
+    needs: gds
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: TinyTapeout/tt-gds-action/precheck@ttsky26d
+  gl_test:
+    needs: gds
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Put the project at the repository root
+        run: |
+          cp -r "${{ inputs.project_dir }}" "$RUNNER_TEMP/proj"
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -r "$RUNNER_TEMP/proj/." .
+      - uses: TinyTapeout/tt-gds-action/gl_test@ttsky26d
