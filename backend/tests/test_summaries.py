@@ -34,6 +34,7 @@ from chipin_backend.api.summaries import (
     read_jsonl,
     redact,
     replay,
+    summarise_export,
     unknown_numbers,
 )
 from chipin_backend.config import BackendConfig
@@ -734,3 +735,70 @@ async def test_an_interim_run_line_may_name_the_chip_once_it_is_chosen() -> None
     out = await run_replay(script, summariser)
     runs = [x for x in out if x.get("id") == "run" and not x["final"]]
     assert runs[0]["text"] == "Built the final chip." and runs[0]["source"] == "model"
+
+
+# ---- a model line per message, naming who wrote it ----
+
+
+def _message_run() -> Script:
+    s = fanout_run()
+    finished = s.events.pop()
+    s.say("Spec stage first, then the reference.")
+    s.say("Done.")
+    s.add("run.finished", status=finished["status"])
+    return s
+
+
+async def test_every_agent_message_but_a_trivial_one_gets_a_model_line_naming_its_author() -> None:
+    script = _message_run()
+    summariser = Scripted()
+    by_id = check_tree(await run_replay(script, summariser), script.events)
+    seqs = {e["seq"]: e for e in script.events if e["type"] == "message"}
+    lines = {seq: by_id[f"i{seq}"] for seq in seqs}
+    assert all(s["covers"] == [f"e{seq}"] for seq, s in lines.items())
+    short = next(s for seq, s in lines.items() if seqs[seq]["text"].startswith("Spec stage"))
+    assert short["source"] == "model" and short["author"] == "ChipIn"
+    done = next(s for seq, s in lines.items() if seqs[seq]["text"] == "Done.")
+    assert done["source"] == "verbatim" and done["text"] == "Done."
+    subs = {s["agent"]: s["author"] for s in lines.values() if s.get("agent")}
+    assert subs == {"a1": "linelen", "a2": "intlin"}
+    sent = [
+        d for sys_, p in summariser.calls if sys_.startswith("You write the entries") for d in json.loads(p)
+    ]
+    assert {d["by"] for d in sent} == {"ChipIn", "linelen", "intlin"}
+    assert "Done." not in {d["item"] for d in sent}
+    tool = next(s for s in by_id.values() if s["level"] == "item" and len(s["covers"]) == 2)
+    assert tool["source"] == "verbatim" and tool["author"]
+
+
+async def test_items_only_writes_item_lines_and_nothing_above_them() -> None:
+    script = _message_run()
+    summariser = Scripted()
+    out, stats = await replay(script.events, settings(), summariser, items_only=True)
+    assert out and {s["level"] for s in out} == {"item"}
+    assert all(sys_.startswith("You write the entries") for sys_, _ in summariser.calls)
+    assert stats["levels"]["group"]["calls"] == 0
+
+
+async def test_summarise_export_maps_each_message_seq_to_its_line(tmp_path: Path) -> None:
+    script = _message_run()
+    script.add("message", role="user", author="you", text="Thanks, now make it smaller.")
+    old = {"seq": 999, "type": SUMMARY, "level": "item", "id": "i5", "text": "stale"}
+    export = tmp_path / "r.json"
+    export.write_text(json.dumps({"run": {"id": "r1"}, "events": [*script.events, old]}), encoding="utf-8")
+    data, _ = await summarise_export(export, settings(), Scripted())
+    seqs = [e["seq"] for e in script.events if e["type"] == "message"]
+    assert data["run_id"] == "r1" and sorted(data["messages"]) == sorted(str(s) for s in seqs)
+    line = data["messages"][str(seqs[0])]
+    assert line["id"] == f"i{seqs[0]}" and line["author"] == "linelen" and line["source"] == "model"
+    assert line["text"].startswith("L ")
+
+
+def test_cli_summarise_writes_an_export_s_message_lines(tmp_path: Path) -> None:
+    export = tmp_path / "r.json"
+    export.write_text(json.dumps({"run": {"id": "r1"}, "events": _message_run().events}), encoding="utf-8")
+    out = tmp_path / "lines.json"
+    assert cli.main(["summarise", str(export), "--no-model", "--out", str(out)]) == 0
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert data["run_id"] == "r1" and len(data["messages"]) == 4
+    assert {m["source"] for m in data["messages"].values()} <= {"fallback", "verbatim"}

@@ -18,6 +18,9 @@ stream, and a line in ``summaries.jsonl``::
      "parent": "stage:propose", "agent": "a2", "stage": "propose", "text": "...",
      "model": "openai/gpt-oss-120b", "final": true, "source": "model"}
 
+An item line also carries ``author``: the display name of who wrote or did it
+(the lead, ``ChipIn``, a subagent's name such as ``logreg``, or ``you``).
+
 Ids: ``e<seq>`` is a stream event; ``i<seq>`` an item (the seq of the event
 that completes it: a tool's ``done``); ``g<n>`` a group; ``agent:<id>``,
 ``batch:<stage>:<k>``, ``stage:<name>`` and ``run``. A summary's ``parent``
@@ -43,10 +46,11 @@ Model calls go one at a time per run: items waiting for a line go together
 ``max_calls_per_minute``. Spend is capped at ``max_usd_per_run`` and spent
 in tiers, so the lines a reader opens first are the last to go:
 
-- steps (item lines) use their own words wherever those are short: tool,
-  saved-file, metric, chosen and error rows never call the model, nor does a
-  message of at most ``verbatim_max_chars``. The model is asked only for a
-  long message, and step calls may spend at most ``step_share`` of the cap;
+- steps (item lines): every agent or subagent message gets a model line that
+  names who wrote it (``author``) and says what they did or decided; only a
+  trivial message of at most ``trivial_max_words`` words ("Done.") keeps its
+  own words. Tool, saved-file, metric, chosen and error rows never call the
+  model. Step calls may spend at most ``step_share`` of the cap;
 - group, subagent, batch, interim stage and interim run lines may spend up
   to the cap less a reserve: the dearest closing call so far (before one,
   the dearest stage or run call) times the closing lines still owed (a
@@ -100,6 +104,7 @@ SUMMARIES_FILE = "summaries.jsonl"
 SUMMARY = "summary"
 LIMIT = "summary.limit"
 LEVELS = ("item", "group", "agent", "batch", "stage", "run")
+LEAD = "ChipIn"  # the author of the lead agent's lines
 
 Level = Literal["item", "group", "agent", "batch", "stage", "run"]
 Source = Literal["model", "verbatim", "fallback"]
@@ -122,7 +127,7 @@ class LevelSettings(BaseModel):
     finish_timeout_s: float = 90.0
     item_batch_max: int = 20
     item_batch_wait_s: float = 3.0
-    verbatim_max_chars: int = 135
+    trivial_max_words: int = 3
     item_input_chars: int = 1500
     item_max_chars: int = 135
     group_max_items: int = 12
@@ -219,9 +224,11 @@ writes code, trains small models and runs chip tools.
 
 {_DATA_RULE}
 
-The user message is a JSON list of items, each with a "key". For each item write one line of at
-most {{max_chars}} characters: what was done and, if the item shows it, what came of it.
-{_STYLE_RULE}
+The user message is a JSON list of items, each with a "key", the "item" text and "by", the name
+of who wrote it (the lead agent or one of its subagents). For each item write one line of about
+15 words and at most {{max_chars}} characters that starts with the "by" name and says what they
+did or decided and, if the item shows it, what came of it ("logreg trained a 4-feature model:
+held-out accuracy 0.97"). {_STYLE_RULE}
 
 Reply with one JSON object only: {{{{"<key>": "<line>", ...}}}}, one entry per key."""
 
@@ -425,6 +432,7 @@ class Item:
     queued_at: float = 0.0
     line: str = ""
     source: Source = "verbatim"
+    author: str = ""  # who wrote or did it: the lead, a subagent's name, or the user
 
 
 @dataclass
@@ -571,10 +579,10 @@ class Levels:
             self._add(item, event, closes=True)
             return
         flat = " ".join(text.split())
-        if len(flat) > self.s.verbatim_max_chars:
+        if len(flat.split()) > self.s.trivial_max_words:
             item.text = clip(text, self.s.item_input_chars)
         else:
-            item.own = cut(flat, self.s.item_max_chars)  # short: its own words are the line
+            item.own = cut(flat, self.s.item_max_chars)  # trivial ("Done."): its own words are the line
         self._add(item, event, opens=True)
 
     def _tool(self, event: Mapping[str, Any], seq: int, agent: str | None) -> None:
@@ -597,6 +605,8 @@ class Levels:
         self, item: Item, event: Mapping[str, Any], *, opens: bool = False, closes: bool = False
     ) -> None:
         ts = _event_time(event)
+        sub = self.subs.get(item.agent or "")
+        item.author = sub.name if sub is not None else str(event.get("author") or LEAD)
         group = self.open.get(item.agent)
         if group is not None and (
             group.stage != item.stage
@@ -982,7 +992,8 @@ class Writer:
         model = ""
         if ask:
             payload = json.dumps(
-                [{"key": str(n), "item": i.text} for n, i in enumerate(ask)], ensure_ascii=False
+                [{"key": str(n), "by": i.author, "item": i.text} for n, i in enumerate(ask)],
+                ensure_ascii=False,
             )
             system = ITEM_SYSTEM.format(max_chars=_aim(self.s.item_max_chars))
             reply = await self._call("item", system, payload, 60 * len(ask) + 300)
@@ -1006,6 +1017,7 @@ class Writer:
                 agent=item.agent,
                 stage=item.stage,
                 model=model if item.source == "model" else "",
+                author=item.author,
             )
 
     # ---- level 2 ----
@@ -1401,6 +1413,7 @@ class Writer:
         stage: str | None = None,
         model: str = "",
         final: bool = True,
+        author: str = "",
     ) -> None:
         self.stats[level].lines[source] = self.stats[level].lines.get(source, 0) + 1
         if final and level == "stage" and stage:
@@ -1415,6 +1428,7 @@ class Writer:
                 "covers": covers,
                 "parent": parent,
                 "agent": agent,
+                "author": author or None,
                 "stage": stage,
                 "text": text,
                 "model": model or None,
@@ -1555,9 +1569,17 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 async def replay(
-    events: Iterable[Mapping[str, Any]], settings: LevelSettings, summariser: Summariser
+    events: Iterable[Mapping[str, Any]],
+    settings: LevelSettings,
+    summariser: Summariser,
+    *,
+    items_only: bool = False,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Every summary of a recorded run, in the order a live run writes them, and the stats."""
+    """Every summary of a recorded run, in the order a live run writes them, and the stats.
+
+    ``items_only``: only the item lines (one per message, tool, metric...), so a backfill
+    pays for the message lines and nothing above them.
+    """
     out: list[dict[str, Any]] = []
 
     def emit(type_: str, fields: dict[str, Any]) -> None:
@@ -1568,24 +1590,67 @@ async def replay(
     for event in events:
         levels.feed(event)
     levels.end("")  # a record without run.finished (a crash) still closes
+    if items_only:
+        levels.queue = deque(e for e in levels.queue if isinstance(e, Item))
     while await writer.step():
         pass
     return out, writer.report()
 
 
 async def summarise_folder(
-    folder: Path, settings: LevelSettings, summariser: Summariser | None = None
+    folder: Path, settings: LevelSettings, summariser: Summariser | None = None, *, items_only: bool = False
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Replay ``folder/events.jsonl`` into ``folder/summaries.jsonl`` (rewritten whole)."""
+    """Replay ``folder/events.jsonl`` into ``folder/summaries.jsonl``.
+
+    Rewritten whole; with ``items_only`` the new item lines replace the old ones and every
+    summary above them is kept as it was.
+    """
     events = read_jsonl(folder / API_EVENTS_FILE)
     if not events:
         raise FileNotFoundError(f"no events in {folder / API_EVENTS_FILE}")
-    summaries, stats = await replay(events, settings, summariser or ModelSummariser(settings))
+    summaries, stats = await replay(
+        events, settings, summariser or ModelSummariser(settings), items_only=items_only
+    )
     target = folder / SUMMARIES_FILE
+    if items_only:
+        kept = [s for s in read_jsonl(target) if s.get("level") != "item"]
+        summaries = kept + summaries
     tmp = target.with_suffix(".jsonl.tmp")
     tmp.write_text("".join(json.dumps(s, ensure_ascii=False) + "\n" for s in summaries), encoding="utf-8")
     tmp.replace(target)
     return summaries, stats
+
+
+async def summarise_export(
+    path: Path, settings: LevelSettings, summariser: Summariser | None = None
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Message lines for a run export (``chipin-backend export``), written by the model.
+
+    Returns ``{"run_id", "messages": {"<seq>": {"id", "covers", "author", "agent",
+    "stage", "text", "source", "model"}}}`` keyed by the seq of each message event, and
+    the stats. Only item lines are written; nothing in the export is changed.
+    """
+    data = json.loads(path.read_text(encoding="utf-8"))
+    # Without run.finished, so follow-up chat after the run's end gets its lines too.
+    events = [
+        e
+        for e in data.get("events") or []
+        if not str(e.get("type", "")).startswith(SUMMARY) and e.get("type") != "run.finished"
+    ]
+    if not events:
+        raise FileNotFoundError(f"no events in {path}")
+    summaries, stats = await replay(
+        events, settings, summariser or ModelSummariser(settings), items_only=True
+    )
+    message_seqs = {int(e["seq"]) for e in events if e.get("type") == "message" and e.get("seq")}
+    messages: dict[str, Any] = {}
+    for s in latest(summaries).values():
+        seq = int(str(s["id"])[1:])
+        if s.get("level") == "item" and seq in message_seqs:
+            fields = ("id", "covers", "author", "agent", "stage", "text", "source", "model")
+            messages[str(seq)] = {k: s[k] for k in fields if k in s}
+    run_id = str((data.get("run") or {}).get("id") or events[0].get("run_id") or "")
+    return {"run_id": run_id, "messages": messages}, stats
 
 
 def latest(summaries: Iterable[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -1645,5 +1710,6 @@ __all__ = [
     "read_jsonl",
     "redact",
     "replay",
+    "summarise_export",
     "summarise_folder",
 ]
