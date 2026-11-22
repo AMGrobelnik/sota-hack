@@ -22,9 +22,19 @@
      on main.
    - the 44 chip-lab tools: chiplab/AGENT.md on ant/chip-lab.
    - 2,330 gates, 3,880 of 3,880 windows, 256 trained in one batch, 119
-     under the cap: dashboard/data/af-candidates.json on gh-pages.
+     under the cap, and search_rate batched_per_min 1625.5 against
+     single_per_min 27.6 (1,625.5 / 27.6 = 58.9, about 59 times; one run,
+     one machine): dashboard/data/af-candidates.json on gh-pages.
+   - five recorded runs, duration_s 235.516 to 1896.954 (4 to 32 minutes):
+     dashboard/data/runs/index.json on gh-pages.
+   - 12 to 36 months: OpenROAD: Toward a Self-Driving, Open-Source Digital
+     Layout Implementation Tool Chain, GOMACTech 2019, introduction.
+     https://vlsicad.ucsd.edu/Publications/Conferences/370/c370.pdf
+   - compile-stream in the compile stage: backend/README.md on main.
+   - summaries by a smaller model through a fallback chain:
+     backend/src/chipin_backend/llm/summaries.yaml on main.
    - the recorded run (events, counts, summary lines, strategies, the two
-     messages and replies, 1,897 s, 45 gates, 100,000 vectors, level 2,
+     messages and replies, 1,897 s, 45 gates, 100,000 vectors, level 3,
      held-out 0.714 and 6.67 per hour): dashboard/data/runs/
      20261122-050322-2c7896.json on gh-pages. Counts per summary level are
      distinct summary ids in that file.
@@ -75,7 +85,7 @@ window.COPY = {
               'Most item lines keep their own words. Only a message longer than 135 characters goes to a model.'] },
     { key: 'sumUp', kicker: 'Levels of summary, 2 of 2', title: 'Lines for the lines',
       lines: ['Each batch, each stage and the whole run get a line built from the lines below. The run also gets three bullets.',
-              'A smaller, cheaper model writes them, through a fallback chain. A summary never blocks a run.',
+              'A smaller model writes them, through a fallback chain. A summary never blocks a run.',
               'On the dashboard you read one line per level and open any line down to its message or tool call.'] },
     { key: 'talk', kicker: 'Upper layer: what you say', title: 'Talking to the agent',
       lines: ['During a run you can message the orchestrator: steer it, ask it something, or stop the run. Your message takes priority over its plan.',
@@ -89,7 +99,10 @@ window.COPY = {
               'That shows the gates equal the model. It says nothing about clinical performance.',
               'Patients are split so none is in two sets. Designs are judged on the worst unseen patient.'] },
     { key: 'meas', title: 'Measured so far',
-      lines: ['Only these three figures are stated as measured, each with its scope.'] },
+      lines: ['Only these three figures are stated as measured, each with its scope.',
+              'Typical hardware design cycle without a large team: 12 to 36 months (OpenROAD, 2019). Our runs, brief to verified gates only: 4 to 32 minutes.',
+              'Different scopes: our minutes cover only brief to verified gate-level design on synthetic data; layout, signoff, fabrication, testing and clinical approval are not included.'],
+      link: { text: 'The OpenROAD paper (2019)', href: 'https://vlsicad.ucsd.edu/Publications/Conferences/370/c370.pdf' } },
     { key: 'limits', title: 'Limits', lines: [] }
   ],
 
@@ -176,7 +189,7 @@ window.COPY = {
       lead: 'A trained model becomes a fixed circuit, with the weights wired in.',
       does: 'Turns each kept design into logic gates with the weights wired in as constants, so the chip has no weight memory to read.',
       fan: ['The lead linear design', 'The runner-up linear design', 'Two threshold designs'],
-      tools: ['ingest-model', 'ingest-batch', 'compile-ir', 'synthesize', 'synthesize-batch', 'count-luts', 'map-to-process'],
+      tools: ['ingest-model', 'ingest-batch', 'compile-ir', 'compile-stream', 'synthesize', 'synthesize-batch', 'count-luts', 'map-to-process'],
       out: 'Gate count, logic depth and a netlist per design.',
       merge: 'Keeps the smallest netlist for each design.' },
     { name: 'Verify',
@@ -216,7 +229,7 @@ window.COPY = {
         ['ingest-model', 'Trained model to chip design', ['compile']],
         ['compile-ir', 'Compile a chipir/1 document', ['compile']],
         ['compile-verilog', 'Verilog, weights wired in', []],
-        ['compile-stream', 'Wrap for streaming input', []],
+        ['compile-stream', 'Wrap for streaming input', ['compile']],
         ['compose-chip', 'One chip from several heads', []],
         ['submit-verilog', 'Check hand-written Verilog', []],
         ['synthesize', 'Gate count, depth, netlist', ['compile']],
@@ -277,7 +290,7 @@ window.COPY = {
     title: 'Levels of summary',
     sub: 'One line per level. Any line opens down to the lines it was built from, and finally to the event.',
     writerTitle: 'Who writes the lines',
-    writer: ['A smaller, cheaper hosted model, through a fallback chain: when one provider fails, the next is tried.',
+    writer: ['A smaller model, through a fallback chain: when one provider fails, the next is tried.',
              'Short lines keep their own words. At most $0.05 of model spend per run. A summary never blocks or fails a run.'],
     byWord: { model: 'smaller model', own: 'own words', stream: 'the event' },
     countWord: '{c} in the run',
@@ -371,13 +384,19 @@ window.COPY = {
     rows: [
       { fig: '2,330 gates. Outputs identical to the model on 3,880 of 3,880 test windows.',
         scope: 'One atrial-fibrillation feasibility circuit.' },
-      { fig: '256 candidate models trained together in one GPU batch; 119 came in under the size cap.',
-        scope: 'The same feasibility run, one seed.' },
-      { fig: 'One recorded run with subagent batches: 15 subagents in five batches of three, 139 tool calls, 1,765 events, 31 min 37 s. The chosen chip: 45 gates, 0 mismatches on 100,000 vectors, formally proved (level 2).',
+      { fig: '256 candidate models trained as one batch on one GPU, about 59 times faster than one at a time; 119 came in under the size cap.',
+        scope: 'The same feasibility run, one seed: 1,625.5 against 27.6 candidates a minute, one run on one machine.' },
+      { fig: 'One recorded run with subagent batches: 15 subagents in five batches of three, 139 tool calls, 1,765 events, 31 min 37 s. The chosen chip: 45 gates, 0 mismatches on 100,000 vectors, formally proved, verification level 3.',
         scope: 'Synthetic data. On held-out patients the chip missed both targets: sensitivity 0.714 against 0.8, and 6.67 false alarms an hour against at most 1.' }
     ],
     note: 'Nothing else on this page is stated as measured.',
-    sources: 'Sources on this site: dashboard/data/af-candidates.json and dashboard/data/runs/20261122-050322-2c7896.json.'
+    sources: 'Sources on this site: dashboard/data/af-candidates.json and dashboard/data/runs/20261122-050322-2c7896.json.',
+    time: {
+      label: 'How long it takes',
+      text: 'Teams without large design staffs typically see hardware design cycles of 12 to 36 months (OpenROAD, 2019). Our five recorded runs went from a one-paragraph brief to verified logic gates in 4 to 32 minutes, on synthetic data. Layout, fabrication and approval are not included.',
+      caveat: 'Different scopes: our minutes cover only brief to verified gate-level design on synthetic data; layout, signoff, fabrication, testing and clinical approval are not included.',
+      source: 'Run times: dashboard/data/runs/index.json.'
+    }
   },
 
   limits: {
@@ -431,6 +450,7 @@ main { padding-top: var(--bar); }
 .step .kick { font-size: 16px; color: var(--dusk); font-weight: 600; margin-bottom: 10px; }
 .step .kick.g { color: var(--signal); }
 .step .hint { color: var(--mute); font-size: 15px; margin-top: 18px; }
+.step p.src a { color: var(--signal); font-weight: 600; text-underline-offset: 4px; }
 .legend { list-style: none; margin: 4px 0 8px; padding: 0; }
 .legend li { display: flex; align-items: center; gap: 12px; margin: 8px 0; font-size: 17px; color: #dfe8f1; }
 .legend i { flex: none; width: 18px; height: 18px; border-radius: 5px; border: 2px solid; }
@@ -1096,7 +1116,17 @@ html.cam { scroll-snap-type: y mandatory; }
     });
     y += 18;
     y += T(g, x, y, ME.note, { size: 18, cls: 'c1' }) + 12;
-    y += T(g, x, y, ME.sources, { size: 17, w: iw, lh: 23, cls: 'c3' }) + PAD;
+    y += T(g, x, y, ME.sources, { size: 17, w: iw, lh: 23, cls: 'c3' }) + 28;
+    // design time: the comparison with its scope caveat beside it
+    var tm = ME.time, tw = iw - 48;
+    var th = 20 + 24 + 12 + TH(tm.text, 21, 600, false, tw, 29) + 16 + TH(tm.caveat, 18, 500, false, tw, 25) + 12 + 22 + 20;
+    R(g, x, y, iw, th, 'bxa', 12);
+    var ty = y + 20;
+    ty += T(g, x + 24, ty, tm.label, { size: 18, weight: 650, cls: 'ca' }) + 12;
+    ty += T(g, x + 24, ty, tm.text, { size: 21, weight: 600, w: tw, lh: 29, cls: 'c1' }) + 16;
+    ty += T(g, x + 24, ty, tm.caveat, { size: 18, weight: 500, w: tw, lh: 25, cls: 'ca' }) + 12;
+    T(g, x + 24, ty, tm.source, { size: 16, cls: 'c3' });
+    y += th + PAD;
     fr.setAttribute('height', y - Y);
     REG.meas = { x: X, y: Y, w: RW, h: y - Y };
     PINS.push({ n: 19, x: X, y: Y });
@@ -1159,7 +1189,7 @@ html.cam { scroll-snap-type: y mandatory; }
       o.stage = si; o.kicker = PI.stageWord.replace('{i}', si + 1); o.title = sd.name; o.lines = [sd.lead];
       o.focus = ['p' + si]; o.rect = REG['p' + si];
     } else {
-      o.title = fill(s.title); o.lines = s.lines.map(fill); o.kicker = s.kicker;
+      o.title = fill(s.title); o.lines = s.lines.map(fill); o.kicker = s.kicker; o.link = s.link;
       o.focus = FOC[s.key] || [s.key]; o.rect = REG[RECT[s.key]];
     }
     o.upper = !!UPPER[s.key];
@@ -1231,6 +1261,7 @@ html.cam { scroll-snap-type: y mandatory; }
       H('h3', '', CK.splitTitle, box); H('p', '', CK.splitNote + ' ' + CK.worst, box);
     } else if (k === 'meas') {
       dl(box, ME.rows.map(function (r) { return [r.fig, ME.head[1] + ': ' + r.scope]; })); H('p', '', ME.note, box); H('p', '', ME.sources, box);
+      H('h3', '', ME.time.label, box); H('p', '', ME.time.text, box); H('p', '', ME.time.caveat, box); H('p', '', ME.time.source, box);
     }
   }
   var sections = STEPS.map(function (st, i) {
@@ -1247,6 +1278,7 @@ html.cam { scroll-snap-type: y mandatory; }
       ul(sec, C.limits.items).className = 'lim';
     } else {
       st.lines.forEach(function (l) { H('p', '', l, sec); });
+      if (st.link) { var la = H('a', '', st.link.text, H('p', 'src', null, sec)); la.href = st.link.href; la.rel = 'noopener'; }
     }
     if (st.key === 'limits') {
       var a = H('div', 'acts', null, sec);
