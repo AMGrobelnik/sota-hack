@@ -239,6 +239,14 @@ select.fin2{padding:0 8px}
 .tile .tv small{font-family:var(--sans);font-size:12.5px;color:var(--i600);margin-left:3px}
 .tile .ts{font-size:12px;color:var(--i700);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .tile.empty .tv{color:var(--i300)}
+.tiles:has(.tbest){display:flex;flex-wrap:wrap;row-gap:10px}
+.tiles:has(.tbest) .tile{flex:1 1 170px}
+.tbest,.tnote{flex:1 1 100%}
+.tbest{grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--i600);margin:0 0 8px}
+.tbest b{font-size:13.5px;font-weight:650;color:var(--i900)}
+.tbest+.tile{border-left:0;padding-left:0}
+.tnote{grid-column:1/-1;font-size:12px;line-height:1.5;color:var(--i700);margin:10px 0 0;max-width:980px}
+.tnote b{font-weight:650;color:var(--i900)}
 .fun{display:flex;align-items:stretch;gap:0;background:#fff;border:1px solid rgb(0 0 0/.07);border-radius:14px;padding:9px 6px;overflow:hidden}
 .fun .fs{flex:1;min-width:0;padding:0 10px;position:relative}
 .fun .fs+.fs::before{content:"";position:absolute;left:-4px;top:50%;width:7px;height:7px;border-top:1.5px solid var(--i300);border-right:1.5px solid var(--i300);transform:translateY(-50%) rotate(45deg)}
@@ -351,6 +359,14 @@ svg.lead{position:absolute;inset:0;pointer-events:none;overflow:visible}
 .miss li i{font-style:normal;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff;background:var(--missed)}
 .miss li.fa i{background:var(--falsea);border-radius:5px}
 .miss li b{color:var(--i900);font-weight:600}
+.wf-tk{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--i600);margin:6px 0 10px}
+.wf-sq{display:flex;flex-wrap:wrap;gap:4px;max-width:640px;margin:0 0 8px}
+.wf-sq i,.wf-sql i{width:12px;height:12px;border-radius:3px;display:inline-block;flex:none}
+.wf-sq i.c,.wf-sql i.c{background:var(--caught)}
+.wf-sq i.m,.wf-sql i.m{background:#fff;box-shadow:inset 0 0 0 2px var(--missed)}
+.wf-sql{display:flex;flex-wrap:wrap;gap:6px 16px;margin:0 0 6px;font-size:12.5px;color:var(--i700);font-variant-numeric:tabular-nums}
+.wf-sql span{display:inline-flex;align-items:center;gap:6px}
+.wf-sql span:last-child:not(:first-child){color:var(--i550)}
 .chat{display:flex;flex-direction:column;height:100%}
 .feed{flex:1;overflow:auto;min-height:0;padding:24px 20px 12px}
 .fin{max-width:760px;margin:0 auto;padding:6px 0 16px}
@@ -1088,14 +1104,27 @@ function shortfall(run, d) {
   return targetState(run, d).reduce((a, s) => a + (s.ok === true ? 0 : s.v == null ? 1 : Math.abs(s.v - s.t.value) / (MET[s.t.metric].kind === "frac" ? 0.05 : Math.max(0.5, s.t.value))), 0);
 }
 // a design with 0 gates is a constant output (it never alarms): shown nowhere and never chosen
+// A results file's baseline (role "baseline") is scored the same way but is not a design of ours: it is never
+// chosen, never "nearest" and never on a frontier; the chart draws it apart and names it.
+// For a measured results file with no design clearing the bar, the designs shown in its place are the team's
+// best by the pooled result on held-out patients (the file's own figures), not the smallest shortfall.
+const mFile = run => run.case !== "af" && !!designsOf(run).file;
+// which scope the overview chart plots: the user's pick, else pooled for a measured file (its worst-patient figures
+// can all sit at zero), else the run's own judging rule; pass and fail always follow the run's rule
+const yScope = run => run.ui.ys || (mFile(run) ? "pooled" : run.judge);
+const pooledOf = (run, d) => good({ ...run, judge: "pooled" }, d, run.primary) ?? -Infinity;
 function evaluate(run, ds) {
-  ds = ds.filter(d => d.gates > 0);
+  const base = ds.find(d => d.role === "baseline") || null;
+  ds = ds.filter(d => d.gates > 0 && d.role !== "baseline");
   const pass = new Set(ds.filter(d => passesAll(run, d)).map(d => d.id));
   let chosen = null;
   for (const d of ds) if (pass.has(d.id) && (!chosen || d.gates < chosen.gates || (d.gates === chosen.gates && good(run, d, run.primary) > good(run, chosen, run.primary)))) chosen = d;
-  const nearest = chosen ? [] : ds.slice().sort((a, b) => shortfall(run, a) - shortfall(run, b) || a.gates - b.gates).slice(0, 3);
+  const fa = d => d.metrics.false_alarms_per_hour ?? Infinity;
+  const nearest = chosen ? [] : mFile(run)
+    ? ds.slice().sort((a, b) => pooledOf(run, b) - pooledOf(run, a) || fa(a) - fa(b) || a.gates - b.gates).slice(0, 3)
+    : ds.slice().sort((a, b) => shortfall(run, a) - shortfall(run, b) || a.gates - b.gates).slice(0, 3);
   const fronts = budgetsOf(run).map(b => ({ b, pts: frontier(run, ds.filter(d => d.channels === b.ch), run.primary) }));
-  return { pass, chosen, nearest, fronts };
+  return { pass, chosen, nearest, fronts, base, best: !chosen && mFile(run) };
 }
 
 /* ---------------- 5. BRIEF PARSER ----------------
@@ -2128,6 +2157,7 @@ function headHTML(run, v) {
   else if (!v.vis.length) h1 = "Searching. No design has been checked yet.";
   else if (ch) h1 = `${v.done || isMea(run) ? "The smallest chip that clears every target" : "Smallest chip so far that clears every target"}: ${fmt(ch.gates)} gates, ${esc(budgetLabel(run, ch.channels).toLowerCase())}.`;
   else if (run.case === "af") { const st = targetState(run, AF_DESIGN), no = st.filter(x => x.ok === false).map(x => MET[x.t.metric].name.toLowerCase()), yes = st.filter(x => x.ok === true).map(x => MET[x.t.metric].name.toLowerCase()); h1 = `The measured ${fmt(AF_DESIGN.gates)}-gate circuit misses your ${andList(no)} target${yes.length ? ` and clears ${andList(yes)}` : ""}. The gap is in the model, not the hardware.`; }
+  else if (v.ev.best) h1 = `No design clears your bar on this data. ${mWorstLine(run)}`;
   else h1 = v.done || isMea(run) ? "No design in this family clears your bar on this data." : "No design clears every target yet.";
   const near = v.ev.chosen || v.ev.nearest[0];
   const chips = run.targets.map((t, i) => { const s = near ? targetState(run, near)[i] : null; return `<button class="tgt${t.metric === run.primary ? " pri" : ""}" data-t="${i}" aria-haspopup="dialog" aria-expanded="false" title="Change this target">${esc(MET[t.metric].kind === "rate" ? tName(t.metric) : MET[t.metric].name)} ${fmtTarget(t)} ${s ? pfHTML(s.ok) : ""}</button>`; }).join("");
@@ -2137,7 +2167,49 @@ function headHTML(run, v) {
     <div class="tgts" id="tgts">${chips}${run.targets.length < MET_KEYS.length ? `<button class="tgt add" id="addTgt" aria-haspopup="dialog" aria-expanded="false">${I("plus", "s12")} Add a target</button>` : ""}</div></div>`;
 }
 const pfHTML = ok => ok === true ? '<span class="pf ok">Pass</span>' : ok === false ? '<span class="pf no">Fail</span>' : '<span class="pf na">Not measured</span>';
+// the worst-patient line for a measured file: the best any design does on its worst held-out patient
+function mWorstLine(run) {
+  const c = caseOf(run), f = MET[run.primary].fields.find(x => /_worst$/.test(x)); if (!f) return "";
+  const vals = designsOf(run).designs.filter(d => d.role !== "baseline" && d.gates > 0).map(d => d.metrics[f]).filter(x => x != null);
+  if (!vals.length) return "";
+  const top = Math.max(...vals);
+  if (run.primary === "sensitivity" && top === 0) return `Every design misses every ${c.event} in at least one held-out ${c.who}.`;
+  return `The best any design does on its worst held-out ${c.who} is ${fmtVal(run.primary, top)}.`;
+}
+// a note in the results file that matches a pattern, or null
+const fileNote = (run, re) => { const f = designsOf(run).file; const n = f && (f.notes || []).find(x => re.test(x)); return n ? n.match(re) : null; };
+// measured file, no design clears the bar: the team's best design by the pooled result, headed as such and marked
+// as missing the bar, then the baseline named as the baseline and the file's caveats
+function tilesBest(run, v) {
+  const c = caseOf(run), d = v.ev.nearest[0], B = v.ev.base, N = designsOf(run).designs.filter(x => x.role !== "baseline").length;
+  const out = [`<div class="tbest"><b>Best design so far: ${esc(d.id)}</b><span class="pf no">Misses the bar</span><span>the most held-out ${esc(c.events)} caught, all ${esc(c.whoP)} pooled</span></div>`];
+  for (const t of run.targets) {
+    const m = metricOf(run, d, t.metric), sc = m.f ? scopeText(run, t.metric, m.f) : "", pv = metricOf({ ...run, judge: "pooled" }, d, t.metric).v;
+    if (t.metric === "sensitivity" && d.counts.events_total) {
+      out.push(`<div class="tile"><div class="tl">${esc(capFirst(c.events))} caught, ${fmt(d.counts.patients)} held-out ${esc(c.whoP)} pooled</div><div class="tv">${fmt(d.counts.events_caught)}<small>of ${fmt(d.counts.events_total)}, ${fmtVal("sensitivity", pv)}</small></div><div class="ts">${sc && !/pooled/.test(sc) ? `${esc(capFirst(sc))}: ${fmtVal(t.metric, m.v)}. ` : ""}Target ${fmtTarget(t)} ${pfHTML(meets(t, m.v))}</div></div>`);
+      continue;
+    }
+    const val = m.v == null ? '<small style="margin:0">not measured</small>' : MET[t.metric].kind === "frac" ? (m.v * 100).toFixed(1) + "<small>%</small>" : `<span title="${faTip()}">${faNum(m.v)}</span><small>${faWord()}</small>`;
+    out.push(`<div class="tile"><div class="tl">${esc(MET[t.metric].name)}${sc ? `, ${esc(sc)}` : ""}</div><div class="tv">${val}</div><div class="ts">Target ${fmtTarget(t)} ${pfHTML(meets(t, m.v))}</div></div>`);
+  }
+  const front = fileNote(run, /classifier only/i);
+  out.push(`<div class="tile"><div class="tl">Chip size</div><div class="tv">${fmt(d.gates)}<small>gates</small></div><div class="ts">${esc(budgetLabel(run, d.channels))}, logic depth ${d.depth}${front ? "; classifier only" : ""}</div></div>`);
+  if (d.metrics.lead_time_s != null) out.push(`<div class="tile"><div class="tl">Time to alarm</div><div class="tv">${d.metrics.lead_time_s.toFixed(1)}<small>s</small></div><div class="ts">median, after each ${esc(c.event)} starts</div></div>`);
+  const seeds = fileNote(run, /(\d+) training seeds each/), spread = fileNote(run, /pooled sensitivity differs by a median of ([\d.]+) \(max ([\d.]+)\)/);
+  const bWhat = fileNote(run, /Baseline, scored the same way: ([^:]+):/);
+  const notes = [];
+  if (B) notes.push(`<b>Baseline, not a design of ours:</b> ${esc(bWhat ? bWhat[1] : B.id)}. ${B.counts.events_total ? `${fmt(B.counts.events_caught)} of ${fmt(B.counts.events_total)} ${esc(c.events)} caught pooled, ` : ""}${B.metrics.false_alarms_per_hour != null ? `${faNum(B.metrics.false_alarms_per_hour)} false alarms ${faWord()}, ` : ""}${fmt(B.gates)} gates.`);
+  notes.push(`Picked here by its result on the held-out ${esc(c.whoP)}, the best of ${fmt(N)} designs${seeds ? ` (each shape trained with ${seeds[1]} seeds)` : ""}, so the figure flatters it${spread ? `: training seeds alone move the pooled share by a median of ${Math.round(+spread[1] * 100)} points (at most ${Math.round(+spread[2] * 100)})` : ""}.`);
+  if (front) notes.push("Gates cover the classifier only; the feature front end is not included.");
+  return out.join("") + `<p class="tnote">${notes.join(" ")}</p><span class="mk mea" style="position:absolute;right:12px;top:-9px">measured</span>`;
+}
+function bestNote(v) {
+  const b = d => `<button class="lnk2" data-sel="${esc(d.id)}" style="color:#7c2d12;font-weight:600;text-decoration:underline">${esc(d.id)} (${fmt(d.gates)} gates)</button>`;
+  const [d, ...rest] = v.ev.nearest;
+  return `<p class="nopass">Ringed on the chart: the best design so far, ${b(d)}${rest.length ? `, and the next by the pooled result, ${andList(rest.map(b))}` : ""}. None of them clears your bar.</p>`;
+}
 function tilesHTML(run, v) {
+  if (v.ev.best && v.ev.nearest[0]) return tilesBest(run, v);
   const c = caseOf(run), d = v.ev.chosen || v.ev.nearest[0], fails = !v.ev.chosen && d;
   const lab = run.case === "af" ? "the measured circuit" : fails ? `nearest design, fails` : v.done || isMea(run) ? "chosen chip" : "best so far";
   const out = run.targets.map(t => {
@@ -2178,6 +2250,8 @@ function inspHTML(run, v) {
   else if (d.source === "measured" && run.case !== "af") rows.push(["Circuit against its model", "not checked for this design"]);
   let note = "";
   if (run.case === "af") note = `<p class="inote gap">The circuit is less accurate than the full-precision model it came from (sensitivity ${fmtVal("sensitivity", AF_BASE.sensitivity_pooled)} and specificity ${fmtVal("specificity", AF_BASE.specificity)} per recording). That is a model gap, not a hardware gap: the circuit matched its own model on every test window.</p>`;
+  else if (d.role === "baseline") note = `<p class="inote">The baseline, scored the same way as the designs. It is a reference, not a design of ours.</p>`;
+  else if (v.ev.best && v.ev.nearest[0] === d) note = `<p class="inote">No design passes every target. This is the best so far by the pooled result on held-out ${esc(c.whoP)}.</p>`;
   else if (!v.ev.chosen && run.targets.length && v.done) note = `<p class="inote">No design passes every target, so this is the nearest. ${isSim(run) ? "Loosen a target, or try a bigger preset." : "Loosen a target to see which designs clear it."}</p>`;
   return `<h2>${d.role === "baseline" ? "Baseline" : "Design"} ${esc(d.id)} ${mark}${isCh ? '<span class="pf ok">Chosen</span>' : ""}</h2><p class="is">${esc(budgetLabel(run, d.channels))}${d.round ? `, round ${d.round}` : ""}</p>
     ${rows.map(([a, b]) => `<div class="irow"><span>${a}</span><b>${b}</b></div>`).join("")}${note}
@@ -2215,7 +2289,7 @@ function renderOverview(run, force) {
     </div>`;
     cur.sig = ""; cur.chartSig = "";
     $("#srcLink").onclick = () => openSources(run);
-    $("#ysel").onchange = e => { run.primary = e.target.value; saveRuns(); cur.sig = ""; updOverview(run); };
+    $("#ysel").onchange = e => { const [k, sc] = e.target.value.split("|"); run.primary = k; run.ui.ys = sc || null; saveRuns(); cur.sig = ""; cur.chartSig = ""; updOverview(run); };
     $("#ovh").addEventListener("click", e => {
       const t = e.target.closest("[data-t]"); if (t) { editTarget(run, t, +t.dataset.t); return; }
       const a = e.target.closest("#addTgt"); if (a) addTarget(run, a);
@@ -2241,9 +2315,12 @@ function updOverview(run) {
     $("#chMark").innerHTML = runMark(run);
     const avail = MET_KEYS.filter(k => run.targets.some(t => t.metric === k) || v.all.some(d => metricOf(run, d, k).v != null));
     const ord = [...run.targets.map(t => t.metric), ...avail.filter(k => !run.targets.some(t => t.metric === k))];
-    $("#ysel").innerHTML = ord.map(k => `<option value="${k}"${k === run.primary ? " selected" : ""}>${MET[k].name}${run.targets.some(t => t.metric === k) ? "" : " (no target)"}</option>`).join("");
+    const ys = yScope(run), cw = caseOf(run), opt = (k, sc, txt) => `<option value="${k}${sc ? "|" + sc : ""}"${k === run.primary && (!sc || sc === ys) ? " selected" : ""}>${txt}${run.targets.some(t => t.metric === k) ? "" : " (no target)"}</option>`;
+    // a measured file offers both scopes where it holds both: the pooled share (the default) and the worst patient
+    const both = k => mFile(run) && MET[k].fields.length > 1 && MET[k].fields.every(f => v.all.some(d => d.metrics[f] != null));
+    $("#ysel").innerHTML = ord.map(k => both(k) ? opt(k, "pooled", `${MET[k].name}, all held-out ${cw.whoP} pooled`) + opt(k, "worst", `${MET[k].name}, worst held-out ${cw.who}`) : opt(k, "", MET[k].name)).join("");
     const np = $("#nopass");
-    np.innerHTML = A ? nopassAF(run, v) : run.case === "af" && run.targets.length && !v.ev.chosen ? `<p class="nopass"><b>One circuit was measured, so there is no family to choose from yet.</b> ${afBaseLine(run)}</p>` : run.targets.length && !v.ev.chosen && (v.done || isMea(run)) && v.vis.length ? `<p class="nopass">The nearest ${v.ev.nearest.length === 1 ? "is" : "are"} ${v.ev.nearest.map(d => `<button class="lnk2" data-sel="${esc(d.id)}" style="color:#7c2d12;font-weight:600;text-decoration:underline">${esc(d.id)} (${fmt(d.gates)} gates)</button>`).join(", ")}, ringed on the chart.</p>` : "";
+    np.innerHTML = A ? nopassAF(run, v) : run.case === "af" && run.targets.length && !v.ev.chosen ? `<p class="nopass"><b>One circuit was measured, so there is no family to choose from yet.</b> ${afBaseLine(run)}</p>` : v.ev.best && v.ev.nearest[0] ? bestNote(v) : run.targets.length && !v.ev.chosen && (v.done || isMea(run)) && v.vis.length ? `<p class="nopass">The nearest ${v.ev.nearest.length === 1 ? "is" : "are"} ${v.ev.nearest.map(d => `<button class="lnk2" data-sel="${esc(d.id)}" style="color:#7c2d12;font-weight:600;text-decoration:underline">${esc(d.id)} (${fmt(d.gates)} gates)</button>`).join(", ")}, ringed on the chart.</p>` : "";
     np.onclick = e => { const b = e.target.closest("[data-sel]"); if (b) { run.ui.sel = b.dataset.sel; saveRuns(); updOverview(run); } };
   }
   const stTxt = !plays(run) ? "" : A && v.done ? `Replay finished: ${fmt(v.all.length)} candidates and ${v.tl.af.steps.length} steps, ${clock(v.T)} on the demo clock.` : v.done ? `Done.${v.all.length.toLocaleString("en-GB")} designs checked, ${clock(v.T)} on the demo clock.` : run.clock.playing ? v.stage.txt : "Paused. " + v.stage.txt;
@@ -2315,9 +2392,10 @@ const niceTicksLog = (a, b) => { const out = []; for (let e = Math.floor(Math.lo
 function drawChart(run, v) {
   if (afFile(run)) return drawChartAF(run, v);
   const cv = $("#tchart"); if (!cv) return;
+  const judged = run.judge; run = { ...run, judge: yScope(run) }; // the chart's Y scope; pass and fail (v.ev) keep the run's rule
   const wrap = $("#cwrap"), W = Math.max(280, wrap.clientWidth), H = chartFitH(W, Math.round(clamp(W * 0.5, 300, 470))), dpr = Math.min(2, devicePixelRatio || 1);
   const newest = v.vis.reduce((a, d) => Math.max(a, d.at || 0), 0), flash = !v.done && v.t - newest < 1.2;
-  const sig = [W, H, v.ev.key, run.ui.sel, CH.hover, flash ? Math.floor(v.t * 4) : 0].join("|");
+  const sig = [W, H, v.ev.key, run.judge, run.ui.sel, CH.hover, flash ? Math.floor(v.t * 4) : 0].join("|");
   if (sig === cur.chartSig) return; cur.chartSig = sig;
   if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.height = H + "px"; }
   const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
@@ -2334,13 +2412,17 @@ function drawChart(run, v) {
   if (M.kind === "frac") { const extra = [tgt ? tgt.value : 1, run.case === "af" ? AF_BASE[key === "specificity" ? "specificity" : "sensitivity_pooled"] : 1]; vLo = Math.max(0, Math.floor((Math.min(...vals, ...extra) - 0.03) * 20) / 20); vHi = 1; if (run.case === "af") vLo = Math.min(vLo, 0.7); }
   else { vLo = 0; vHi = Math.max(...vals, tgt ? tgt.value * 1.3 : 0, 1) * 1.05; }
   if (!vals.length) { vLo = 0; vHi = 1; }
+  // a measured file whose designs all sit far below the bar: the axis stops above the best design, so the cloud
+  // and frontiers are readable, and the bar is named at the top instead of drawn far above them
+  let barAbove = false;
+  if (vals.length && mFile(run) && M.kind === "frac" && M.up && tgt && tgt.value > Math.max(...vals) + 0.3) { vHi = Math.min(1, Math.ceil((Math.max(...vals) + 0.06) * 10) / 10); vLo = 0; barAbove = true; }
   const X = gt => x0 + (Math.log(Math.max(gt, gLo)) - Math.log(gLo)) / (Math.log(gHi) - Math.log(gLo)) * (x1 - x0);
   const Yr = val => M.up ? y1 - (val - vLo) / (vHi - vLo) * (y1 - y0) : y0 + (val - vLo) / (vHi - vLo) * (y1 - y0);
   const Y = val => clamp(Yr(val), y0 - 6, y1 + 6);
   const font = (w, s) => `${w} ${s}px Inter, system-ui, -apple-system, sans-serif`;
   // grid and axes
   g.font = font(500, 11.5); g.fillStyle = "#4a5062"; g.strokeStyle = "#eceef2"; g.lineWidth = 1;
-  for (const t of niceTicksLog(gLo, gHi)) { const x = X(t); g.beginPath(); g.moveTo(x, y0); g.lineTo(x, y1); g.stroke(); g.textAlign = "center"; g.fillText(t >= 1000 ? (t / 1000) + "k" : String(t), x, y1 + 16); }
+  for (const t of niceTicksLog(gLo, gHi).filter(t => !narrow || gHi / gLo < 300 || /^1/.test(String(t)))) { const x = X(t); g.beginPath(); g.moveTo(x, y0); g.lineTo(x, y1); g.stroke(); g.textAlign = "center"; g.fillText(t >= 1000 ? (t / 1000) + "k" : String(t), x, y1 + 16); }
   const yStep = M.kind === "frac" ? (vHi - vLo > 0.4 ? 0.1 : 0.05) : (vHi > 4 ? 1 : 0.5);
   g.textAlign = "right"; g.textBaseline = "middle";
   for (let y = Math.ceil(vLo / yStep - 1e-9) * yStep; y <= vHi + 1e-9; y += yStep) { const yy = Yr(y); g.beginPath(); g.moveTo(x0, yy); g.lineTo(x1, yy); g.stroke(); g.fillText(M.kind === "frac" ? Math.round(y * 100) + "%" : (y * FA.h).toFixed(1), x0 - 8, yy); }
@@ -2357,7 +2439,7 @@ function drawChart(run, v) {
   // dots: failing ones first, grey; passing ones on top in their budget's colour and shape
   const pass = v.ev.pass, ok = d => pass.has(d.id), pts = [];
   const shape = (x, y, i, r) => { g.beginPath(); if (i % 4 === 0) g.arc(x, y, r, 0, 7); else if (i % 4 === 1) g.rect(x - r * 0.9, y - r * 0.9, r * 1.8, r * 1.8); else if (i % 4 === 2) { g.moveTo(x, y - r * 1.15); g.lineTo(x + r * 1.1, y + r * 0.8); g.lineTo(x - r * 1.1, y + r * 0.8); g.closePath(); } else { g.moveTo(x, y - r * 1.2); g.lineTo(x + r * 1.2, y); g.lineTo(x, y + r * 1.2); g.lineTo(x - r * 1.2, y); g.closePath(); } };
-  const ordered = v.vis.filter(d => d.gates > 0).sort((a, b) => (ok(a) ? 1 : 0) - (ok(b) ? 1 : 0));
+  const ordered = v.vis.filter(d => d.gates > 0 && d.role !== "baseline").sort((a, b) => (ok(a) ? 1 : 0) - (ok(b) ? 1 : 0));
   const big = run.case === "af" ? 7 : narrow ? 2.6 : 3.3;
   for (const d of ordered) {
     const val = metricOf(run, d, key).v; if (val == null) continue;
@@ -2367,10 +2449,17 @@ function drawChart(run, v) {
     if (fresh) { g.globalAlpha = 0.5; g.strokeStyle = p ? BCOL[bi] : "#8a90a0"; g.lineWidth = 1; shape(x, y, bi, big + 4); g.stroke(); }
     g.globalAlpha = 1; pts.push({ x, y, d });
   }
+  // the file's baseline: scored the same way, not a design of ours, so drawn hollow and named
+  const bd = v.ev.base, bval = bd && v.vis.includes(bd) ? metricOf(run, bd, key).v : null;
+  if (bval != null) {
+    const x = X(bd.gates), y = Y(bval); g.strokeStyle = "#3a4052"; g.lineWidth = 1.6; g.fillStyle = "#fff"; g.beginPath(); g.rect(x - 4.5, y - 4.5, 9, 9); g.fill(); g.stroke();
+    g.font = font(600, 11.5); g.fillStyle = "#3a4052"; g.textAlign = "left"; g.fillText(narrow ? "Baseline" : "Baseline, not ours", x + 9, y - 7);
+    pts.push({ x, y, d: bd });
+  }
   CH.pts = pts;
-  // frontiers, one per channel budget, with direct labels at their right ends
-  const labels = [];
-  if (run.case !== "af") for (const f of v.ev.fronts) {
+  // frontiers, one per channel budget, on the chart's scope, with direct labels at their right ends
+  const labels = [], fronts = run.judge === judged ? v.ev.fronts : budgetsOf(run).map(b => ({ b, pts: frontier(run, v.vis.filter(d => d.gates > 0 && d.role !== "baseline" && d.channels === b.ch), key) }));
+  if (run.case !== "af") for (const f of fronts) {
     if (f.pts.length < 2) continue;
     const bi = budgetIdx(run, f.b.ch), hi = budgetHi(run, f.b.ch); g.strokeStyle = BCOL[bi]; g.lineWidth = hi < 1 ? 1.2 : run.constraints && !run.constraints.findBest ? 2.6 : 1.8; g.globalAlpha = 0.95 * hi; g.beginPath();
     f.pts.forEach((d, i) => { const x = X(d.gates), y = Y(metricOf(run, d, key).v); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); g.globalAlpha = 1;
@@ -2383,9 +2472,13 @@ function drawChart(run, v) {
     for (const l of labels) { g.strokeStyle = l.c; g.globalAlpha = 0.5; g.lineWidth = 1; g.beginPath(); g.moveTo(l.x + 4, l.y + (l.y > 0 ? 0 : 0)); g.lineTo(x1 + 6, l.y); g.stroke(); g.globalAlpha = 1; g.fillStyle = l.c; g.fillText(l.t, x1 + 10, l.y + 4); }
   }
   // the user's bar
-  if (tgt) {
+  if (tgt && barAbove) {
+    g.font = font(700, 12); const lt = narrow ? `Your bar, ${fmtTarget(tgt)}, is above this chart` : `Your bar, ${fmtTarget(tgt)}${run.judge !== judged && judged !== "pooled" ? ` on the worst ${caseOf(run).who}` : ""}, is far above this chart`, tw = g.measureText(lt).width;
+    g.textAlign = "left"; g.fillStyle = "rgb(255 255 255 / .9)"; g.fillRect(x1 - tw - 8, y0 - 1, tw + 8, 17); g.fillStyle = "#141a2e"; g.fillText(lt, x1 - tw - 4, y0 + 12);
+  } else if (tgt) {
     const yy = Y(tgt.value); g.strokeStyle = "#141a2e"; g.setLineDash([6, 4]); g.lineWidth = 1.5; g.beginPath(); g.moveTo(x0, yy); g.lineTo(x1, yy); g.stroke(); g.setLineDash([]);
-    g.font = font(700, 12); const lt = `Your bar: ${fmtTarget(tgt)}`, tw = g.measureText(lt).width;
+    const scoped = run.judge !== judged && judged !== "pooled" && MET[key].fields.some(f => /_worst$/.test(f) && v.all.some(d => d.metrics[f] != null));
+    g.font = font(700, 12); const lt = `Your bar: ${fmtTarget(tgt)}${scoped ? `, judged on the worst ${caseOf(run).who}` : ""}`, tw = g.measureText(lt).width;
     const bx = barLabelX(pts, v.ev.chosen ? { x: X(v.ev.chosen.gates), y: Y(metricOf(run, v.ev.chosen, key).v) } : null, { x0, x1, y0, yy, tw, W, cw: g.measureText(`Chosen: ${v.ev.chosen ? fmt(v.ev.chosen.gates) : ""} gates`).width });
     g.textAlign = "left"; g.fillStyle = "rgb(255 255 255 / .88)"; g.fillRect(bx.x - 4, yy + bx.dy - 12, tw + 8, 15); g.fillStyle = "#141a2e"; g.fillText(lt, bx.x, yy + bx.dy);
   }
@@ -2399,7 +2492,7 @@ function drawChart(run, v) {
     g.fillStyle = "rgb(255 255 255 / .92)"; g.fillRect(lx - 4, ly - 14, tw + 8, 19); g.fillStyle = col; g.textAlign = "left"; g.fillText(txt, lx, ly);
   };
   if (v.ev.chosen) { const p = ring(v.ev.chosen, 8.5, "#141a2e", 2.2); callout(p, `Chosen: ${fmt(v.ev.chosen.gates)} gates`, "#141a2e"); }
-  else if (v.ev.nearest[0] && (v.done || isMea(run))) { const d = v.ev.nearest[0], val = metricOf(run, d, key).v; if (val != null) callout({ x: X(d.gates), y: Y(val) }, run.case === "af" ? `Measured circuit: ${fmt(d.gates)} gates` : `Nearest: ${fmt(d.gates)} gates`, "#9f2a20"); }
+  else if (v.ev.nearest[0] && (v.done || isMea(run))) { const d = v.ev.nearest[0], val = metricOf(run, d, key).v; if (val != null) callout({ x: X(d.gates), y: Y(val) }, run.case === "af" ? `Measured circuit: ${fmt(d.gates)} gates` : v.ev.best ? `Best so far: ${fmt(d.gates)} gates` : `Nearest: ${fmt(d.gates)} gates`, "#9f2a20"); }
   const sd = run.ui.sel && selDesign(run, v); if (sd && sd.id === run.ui.sel && (!v.ev.chosen || sd.id !== v.ev.chosen.id)) ring(sd, 7, "#2b55d0", 2.2);
   const hd = CH.hover && v.vis.find(d => d.id === CH.hover); if (hd) ring(hd, 6, "#141a2e", 1.2);
   panelsChart(run, v, g, { Y, X, key, labels, x1, narrow });
@@ -2794,7 +2887,16 @@ function wfBarsHTML(run, d, key, T, openId) {
 function wfDetailHTML(run, d, p) {
   const c = caseOf(run), cont = p.hours != null, hrs = h => +h.toFixed(h < 10 ? 1 : 0);
   return `<div class="wf-open"><div class="ptlh"><b>${esc(wfName(run, p))}</b><span>${p.total ? `${p.caught} of ${p.total} ${esc(c.events)} caught (${fmtVal("sensitivity", p.caught / p.total)})` : `no ${esc(c.events)} in this recording`}</span>${cont ? `<span>${p.false_alarms} false alarms in ${hrs(p.hours)} hours (${faNum(p.false_alarms / p.hours)} ${faWord()})</span>` : ""}${p.graded ? `<span>${p.agreed} of ${p.graded} graded hours agree with the experts</span>` : ""}${p.neg_total && !cont ? `<span>${p.neg_correct} of ${p.neg_total} negatives correct</span>` : ""}</div>
-      ${cont ? patientTimeline(run, d, p) : ""}</div>`;
+      ${!cont ? "" : isSim(run) ? `<p class="wf-tk"><span class="mk sim">simulated</span>Times drawn by the simulation model to match the tallies.</p>${patientTimeline(run, d, p)}` : wfCountsHTML(run, p)}</div>`;
+}
+// a measured baby: only what the results file holds per baby (events caught of total, false alarms, hours),
+// as counts; the file has no event times, so nothing is placed on a time axis
+function wfCountsHTML(run, p) {
+  const c = caseOf(run), pl = (n, one, many) => `${fmt(n)} ${n === 1 ? one : many}`;
+  const sq = p.total ? Array.from({ length: p.total }, (_, i) => `<i class="${i < p.caught ? "c" : "m"}"></i>`).join("") : "";
+  return `<div class="wf-cnt"><p class="wf-tk"><span class="mk mea">measured</span>Counts from the results file. It holds no event times, so there is no timeline.</p>
+    ${p.total ? `<div class="wf-sq" role="img" aria-label="${p.caught} of ${p.total} ${esc(c.events)} caught">${sq}</div><p class="wf-sql"><span><i class="c"></i>${pl(p.caught, `${esc(c.event)} caught`, `${esc(c.events)} caught`)}</span><span><i class="m"></i>${fmt(p.total - p.caught)} missed</span><span>One square per ${esc(c.event)}, not in time order</span></p>` : `<p class="wf-sql">No ${esc(c.events)} in this recording.</p>`}
+    <p class="wf-sql"><span>${pl(p.false_alarms, "false alarm", "false alarms")} in ${+p.hours.toFixed(1)} hours of recording</span></p></div>`;
 }
 function renderPatients(run, force) {
   const v = viewAt(run), d = selDesign(run, v), c = caseOf(run), key = run.primary;
@@ -2811,7 +2913,7 @@ function renderPatients(run, force) {
   const pp = d.per_patient || [];
   if (!pp.length) { $("#body").innerHTML = `<div class="vis wf">${head("Where it fails", `Design ${esc(d.id)} has no per-${esc(c.who)} tallies.`)}</div>`; return; }
   const T = wfTally(run, d, key);
-  const isCh = v.ev.chosen && v.ev.chosen.id === d.id, role = isCh ? (v.done || isMea(run) ? "the chosen chip" : "the best so far") : !v.ev.chosen && v.ev.nearest[0] && v.ev.nearest[0].id === d.id ? "the nearest design; none clears every target" : "picked on the Overview";
+  const isCh = v.ev.chosen && v.ev.chosen.id === d.id, role = isCh ? (v.done || isMea(run) ? "the chosen chip" : "the best so far") : !v.ev.chosen && v.ev.nearest[0] && v.ev.nearest[0].id === d.id ? (v.ev.best ? "the best design so far by the pooled result; none clears every target" : "the nearest design; none clears every target") : d.role === "baseline" ? "the baseline, not a design of ours" : "picked on the Overview";
   const openId = run.ui.wfOpen && run.ui.wfFor === d.id && pp.some(p => String(p.id) === run.ui.wfOpen) ? run.ui.wfOpen : String((T.worst || T.rows[0]).p.id);
   const open = pp.find(p => String(p.id) === openId);
   const h1 = T.worst ? `Worst ${esc(c.who)}: ${esc(wfName(run, T.worst.p))}, ${esc(wfPhrase(run, key, T.worst.v))}` : `No ${esc(c.who)} has enough ${esc(c.events)} to judge`;
@@ -2824,7 +2926,7 @@ function renderPatients(run, force) {
       <p class="wf-note">Design ${esc(d.id)}, ${fmt(d.gates)} gates, ${esc(budgetLabel(run, d.channels).toLowerCase())}: ${esc(role)}. ${pooled != null ? `All ${esc(c.whoP)} pooled: ${esc(fmtVal(key, pooled))}. ` : ""}${esc(rule)}</p>
       ${wfBarsHTML(run, d, key, T, openId)}
       ${open ? wfDetailHTML(run, d, open) : ""}
-    </div><p class="vf">${isSim(run) ? `Simulated ${esc(c.whoP)}: the tallies come from the simulation model (see Sources); the times on the timeline are drawn to match the tallies.` : `Measured tallies on held-out ${esc(c.whoP)}; the times on the timeline are not in the results file, so they are drawn to match the tallies.`}</p></div>`;
+    </div><p class="vf">${isSim(run) ? `Simulated ${esc(c.whoP)}: the tallies come from the simulation model (see Sources); the times on the timeline are drawn to match the tallies.` : `Measured tallies on held-out ${esc(c.whoP)}, from the results file. It holds counts per ${esc(c.who)}, not event times, so no timeline is drawn.`}</p></div>`;
   const pick = id => { run.ui.wfOpen = id; run.ui.wfFor = d.id; renderPatients(run, true); const b = [...document.querySelectorAll(".wf-row")].find(x => x.dataset.wf === id); if (b) b.focus(); };
   $(".wf-grid").onclick = e => { const b = e.target.closest("[data-wf]"); if (b) pick(b.dataset.wf); };
   $(".wf-grid").onkeydown = e => {
