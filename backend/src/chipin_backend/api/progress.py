@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import stat
 import sys
 from pathlib import Path
@@ -43,7 +44,7 @@ usage:
   ./progress status "<one present-tense line>"
   ./progress artifact <path in this folder> [{kinds}]
 """
-import json, sys
+import json, math, sys
 from datetime import datetime, timezone
 
 OUT = {out!r}
@@ -82,6 +83,8 @@ elif cmd == "metric":
         value = float(rest[1])
     except ValueError:
         fail("metric value must be a number")
+    if not math.isfinite(value):
+        fail("metric value must be a finite number")
     line.update(key=rest[0], value=int(value) if value.is_integer() else value)
     if len(rest) == 3:
         line["unit"] = rest[2]
@@ -186,8 +189,8 @@ class ProgressTailer:
             )
         elif kind == "metric":
             value = item["value"]
-            if isinstance(value, bool) or not isinstance(value, int | float):
-                raise ValueError("metric value is not a number")
+            if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+                raise ValueError("metric value is not a finite number")
             self.log.append("metric", key=str(item["key"]), value=value, unit=item.get("unit"))
         elif kind == "status":
             self.log.append("status", text=clip(str(item["text"]), 200))

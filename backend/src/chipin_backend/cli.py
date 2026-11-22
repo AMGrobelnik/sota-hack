@@ -5,6 +5,7 @@ Examples::
     chipin-backend config
     chipin-backend run --backend stub --prompt "hello"
     chipin-backend run --config config/example.yaml --prompt-file examples/seizure_eeg_prompt.md
+    chipin-backend run --preset pro --prompt-file examples/seizure_eeg_prompt.md
     chipin-backend ask --model cheap "Name one low-power EEG seizure feature"
     chipin-backend serve --agent stub
 
@@ -27,6 +28,8 @@ from loguru import logger
 from chipin_backend.agents.base import BACKENDS
 from chipin_backend.agents.types import AgentSpec, utc_now
 from chipin_backend.api.cli import add_serve_parser, run_serve
+from chipin_backend.api.config import Preset, load_api_config
+from chipin_backend.api.manager import ApiAgent, RequestError, RunManager
 from chipin_backend.config import BackendConfig, ComputeTier, RunMode, load_config
 from chipin_backend.llm import MissingKeyError, OpenRouterClient, expand_preset
 from chipin_backend.llm.providers import ProviderError, resolve_provider
@@ -71,6 +74,13 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--timeout", type=int, default=None, help="whole-run wall clock in seconds")
     run.add_argument(
         "--no-summary", action="store_true", help="skip the OpenRouter run summary written into run.json"
+    )
+    run.add_argument(
+        "--preset",
+        choices=get_args(Preset),
+        default=None,
+        help="run it as the dashboard does, on this Mac: standing instructions, ./progress, "
+        "contract events.jsonl; the prompts are joined into one brief",
     )
     ask = sub.add_parser("ask", parents=[common], help="one OpenRouter chat call; prints the answer")
     ask.add_argument("question")
@@ -118,6 +128,8 @@ def _main(argv: list[str] | None) -> int:
         logger.error("give at least one --prompt or --prompt-file")
         return 2
     backend = args.backend
+    if args.preset is not None:
+        return asyncio.run(_dashboard_run(config, args, prompts))
     if args.provider is not None:
         if backend not in (None, "openrouter"):
             logger.error("--provider needs the openrouter backend, not {}", backend)
@@ -141,6 +153,47 @@ def _main(argv: list[str] | None) -> int:
         return 2
     print(json.dumps({"run_dir": str(run.path), **result.to_dict()}, indent=2))
     return 1 if result.failed else 0
+
+
+#: ``run --backend`` -> the dashboard's agent name.
+DASHBOARD_AGENTS: dict[str, ApiAgent] = {"claude_cli": "claude", "openrouter": "openrouter", "stub": "stub"}
+
+
+async def _dashboard_run(config: BackendConfig, args: argparse.Namespace, prompts: list[str]) -> int:
+    """``run --preset``: one run exactly as ``POST /api/runs`` starts it, without the HTTP server.
+
+    The run folder gets the dashboard's files (``events.jsonl`` with contract
+    events, ``progress.jsonl``, ``workspace/progress``, ``api.json``); the
+    agent gets the standing instructions, with the chip-lab paragraph when
+    the lab is reachable. Prints the run's view as JSON; exit 1 unless it
+    succeeded, 2 for a bad request.
+    """
+    if args.mode is not None or args.tier is not None:
+        logger.error("--preset runs on this Mac (the dashboard's local runner); drop --mode and --tier")
+        return 2
+    agent = DASHBOARD_AGENTS.get(args.backend or config.agents.default_backend)
+    if agent is None:
+        logger.error("--preset takes the backends {}", ", ".join(sorted(DASHBOARD_AGENTS)))
+        return 2
+    api = load_api_config()
+    if args.timeout is not None:
+        api = api.model_copy(update={"run_timeout_s": args.timeout})
+    body: dict[str, Any] = {"prompt": "\n\n".join(prompts), "preset": args.preset}
+    body.update({k: v for k, v in (("provider", args.provider), ("model", args.model)) if v is not None})
+    manager = RunManager(config, api, agent=agent, summary=not args.no_summary)
+    try:
+        item = manager.start(body)
+    except RequestError as exc:
+        logger.error("{}", exc)
+        return 2
+    try:
+        if item.task is not None:
+            await item.task
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        await manager.shutdown()
+        raise
+    print(json.dumps({"run_dir": str(item.run.path), **item.detail_view()}, indent=2, ensure_ascii=False))
+    return 0 if item.record.get("status") == "succeeded" else 1
 
 
 async def _ask(

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
@@ -34,6 +35,7 @@ from chipin_backend.api.progress import PROGRESS_FILE, ProgressTailer, write_hel
 from chipin_backend.api.scripted import NAME as SCRIPTED
 from chipin_backend.api.scripted import STEP_ENV, register
 from chipin_backend.api.translate import Translator, clip
+from chipin_backend.chiplab import chiplab_available, chiplab_instructions
 from chipin_backend.compute.base import Runner
 from chipin_backend.config import BackendConfig, RunMode
 from chipin_backend.llm.keys import MissingKeyError
@@ -143,6 +145,7 @@ class RunManager:
         *,
         agent: ApiAgent = "claude",
         runner: ApiRunner = "local",
+        summary: bool = True,
     ) -> None:
         register()
         self.config = config
@@ -150,7 +153,8 @@ class RunManager:
         self.agent = agent
         self.runner = runner
         self.runs: dict[str, ApiRun] = {}
-        self.instructions = INSTRUCTIONS_PATH.read_text(encoding="utf-8")
+        self.summary = summary
+        self.instructions = standing_instructions()
 
     @property
     def runs_dir(self) -> Path:
@@ -285,7 +289,12 @@ class RunManager:
                 raise asyncio.CancelledError
             item.inner = asyncio.create_task(
                 run_agent(
-                    spec, self.config, run_mode=RUNNER_MODES[self.runner], run=item.run, on_runner=keep_runner
+                    spec,
+                    self.config,
+                    run_mode=RUNNER_MODES[self.runner],
+                    run=item.run,
+                    on_runner=keep_runner,
+                    summary=self.summary,
                 )
             )
             _, result = await item.inner
@@ -365,6 +374,14 @@ class RunManager:
             await asyncio.gather(*(i.task for i in live if i.task), return_exceptions=True)
         for item in self.runs.values():
             item.log.wake()
+
+
+def standing_instructions(source: Mapping[str, str] | None = None) -> str:
+    """The agent's standing instructions, plus the chip-lab paragraph when an agent can reach the lab."""
+    text = INSTRUCTIONS_PATH.read_text(encoding="utf-8")
+    if chiplab_available(source):
+        text = f"{text.rstrip()}\n\n{chiplab_instructions()}"
+    return text
 
 
 def _bullets(result: AgentResult) -> str | None:
@@ -447,4 +464,5 @@ __all__ = [
     "ApiRunner",
     "RequestError",
     "RunManager",
+    "standing_instructions",
 ]

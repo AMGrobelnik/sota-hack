@@ -227,10 +227,72 @@ dashboards put their assumptions there as `answers.assumptions`.
 
 What is real today: the Claude agent runs on this Mac, works through the
 brief, writes files and a report, reports stages, messages, tools and cost,
-and takes messages and stop requests while it runs. What is not: there are
-no fine-tuning, gate-compiler or verifier tools yet, so an agent marks those
-stages skipped; attached files reach the agent as names and header lines
-only; runs on rented machines are not offered by this server.
+and takes messages and stop requests while it runs. With the chip lab
+installed (see "Chip lab") it compiles and verifies real chips. What is not:
+there is no fine-tuning tool yet, so an agent marks that stage skipped
+unless it trains a small model itself; attached files reach the agent as
+names and header lines only; runs on rented machines are not offered by
+this server.
+
+`run --preset <lite|pro|max|ultra>` makes the same run from the command
+line, without the server: the same instructions, `./progress` helper and
+`events.jsonl`, on this Mac. Several `--prompt`/`--prompt-file` values are
+joined into one brief.
+
+```bash
+chipin-backend run --preset pro --env-file <keys> \
+    --prompt-file examples/seizure_eeg_prompt.md --prompt-file <more brief>
+```
+
+## Chip lab
+
+The chip lab (`chiplab/` on the `ant/chip-lab` branch, guide
+`chiplab/docs/CHIPIN_INTEGRATION.md`) turns a trained model into a
+verified, measured chip. The backend only lets the agent reach it; the lab
+reports its own status lines, metrics and chip files through `./progress`.
+
+Point the backend at a lab install (in the environment, `backend/.env` or
+`--env-file`; paths, not secrets):
+
+| Name                 | What it is                              |
+| -------------------- | --------------------------------------- |
+| `CHIPIN_CHIPLAB_BIN` | folder holding the `chiplab` command    |
+| `CHIPLAB_CONFIG`     | the lab's config file, passed as is     |
+| `CHIPLAB_USER_DIR`   | the lab's tool folder, passed as is     |
+
+- The lab's default install (`scripts/install.sh`) needs none of them:
+  it writes `~/.config/chiplab/config.json` and `~/.local/bin/chiplab`, and
+  the lab is on whenever `chiplab` is on the agent's `PATH`.
+- An install elsewhere: set `CHIPIN_CHIPLAB_BIN` to the launcher's folder
+  (or the lab's `.venv/bin`), and `CHIPLAB_CONFIG` / `CHIPLAB_USER_DIR` to
+  where its config and tools are. The folder goes first on the agent's
+  `PATH`; the two lab variables pass through the allowlist unchanged.
+- With none of this the lab is off: the agent's environment and
+  instructions are as before. A `CHIPIN_CHIPLAB_BIN` with no executable
+  `chiplab` in it logs one warning and leaves the lab off.
+- Check it: `chiplab doctor` run inside the agent's environment must say
+  ok. The lab's `chiplab doctor --agent-env` checks only the default
+  install.
+
+What the agent can do with it: when the lab is on, the standing
+instructions get the lab's paragraph (`api/chiplab.md`, section 6 of the
+guide). The agent calls `chiplab <tool> --json '{...}'` from its working
+folder: compile (`ingest-model` or `compile-ir`, `synthesize`,
+`count-luts`, `map-to-process`), verify (`simulate`, `prove-equivalence`,
+`rtl-simulate`, `verification-level`) and the chip part of report
+(`chip-report`, `layout`, `timing-power`, `tt-package`, `bitstream`,
+`estimate-cost`). It marks the compile and verify stages itself, or passes
+`"progress_stages": true`.
+
+What reaches the dashboard: the lab runs `./progress` as a program, so
+its lines go through the same checks as the agent's and become ordinary
+`status`, `metric` and `artifact` events in `events.jsonl` and on the
+event stream. Metrics use the lab's fixed keys (`gates`, `luts_ice40`,
+`area_um2`, `vectors_checked`, `mismatches`, `verification_level`,
+`timing_slack_ns`, `power_uw_at_rate`, `cost_eur` and the rest; table in
+section 2 of the guide), each with its unit. Chip files land under
+`workspace/chips/<design_id>/`. The helper and the tailer refuse a metric
+that is not a finite number; the lab treats a refused line as non-fatal.
 
 ## Layout
 
@@ -245,6 +307,7 @@ backend/
     runs.py                  run folders: run.json, events.jsonl, workspace/
     orchestrate.py           run_agent(spec, config): one run end to end
     cli.py                   chipin-backend run / ask / serve / config
+    chiplab.py               the optional chip lab: agent PATH and settings
     api/                     the local API server for the dashboards
     llm/                     OpenRouter client, key, retry, presets, summaries
     agents/                  AgentBackend interface and the backends
@@ -304,6 +367,9 @@ Names only; values go in the gitignored `backend/.env`.
 | `CLAUDE_CONFIG_DIR`  | optional: another CLI login folder  |
 | `CHIPIN_CONFIG`    | optional: another config file       |
 | `HF_TOKEN`           | optional: passed to agents          |
+| `CHIPIN_CHIPLAB_BIN` | optional: the chip lab, see above   |
+| `CHIPLAB_CONFIG`     | optional: the lab's config file     |
+| `CHIPLAB_USER_DIR`   | optional: the lab's tool folder     |
 
 The backend sets two more itself: `CHIPIN_LLM_CALLS` (where `ask` logs a
 call) and `CHIPIN_WORKER_TOKEN` (a pod's worker token).
