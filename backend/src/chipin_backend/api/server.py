@@ -38,6 +38,7 @@ from aiohttp import web
 from loguru import logger
 
 from chipin_backend.api.config import ApiConfig
+from chipin_backend.api.events import public_text
 from chipin_backend.api.manager import ApiAgent, ApiRunner, RequestError, RunManager
 from chipin_backend.api.transcribe import CONTEXT_HEADER, add_transcribe_route, transcribe_ready
 from chipin_backend.config import BackendConfig
@@ -70,7 +71,7 @@ def _json(data: Any, status: int = 200) -> web.Response:
 
 
 def _error(message: str, status: int) -> web.Response:
-    return _json({"error": message}, status=status)
+    return _json({"error": public_text(message)}, status=status)
 
 
 @web.middleware

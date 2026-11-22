@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import threading
 from pathlib import Path
 from typing import Any
@@ -19,13 +20,31 @@ from loguru import logger
 from chipin_backend.agents.types import utc_now
 
 API_EVENTS_FILE = "events.jsonl"
+#: Per event type, the text fields that may carry an error's wording (see :func:`public_text`).
+_ERROR_TEXT_FIELDS = {"error": ("message",), "run.finished": ("summary",), "status": ("text",)}
+#: An absolute local path of two or more parts, not part of a URL or a relative path.
+_ABSOLUTE_PATH = re.compile(r"(?<![\w.:/~-])/(?:[\w.@+-]+/)+[\w.@+-]*")
 #: The stages of a ChipIn run, in order (contract version 1).
 STAGES = ("spec", "reference", "propose", "finetune", "compile", "verify", "report")
 FINISHED = "run.finished"
 
 
+def public_text(text: str, root: Path | None = None) -> str:
+    """``text`` with no local absolute path: one inside ``root`` relative to it, any
+    other cut to its last part. Error text reaches the stream and the API."""
+    out = str(text)
+    if root is not None:
+        for folder in sorted({str(root.resolve()), str(root)}, key=len, reverse=True):
+            out = out.replace(f"{folder}/", "").replace(folder, ".")
+    return _ABSOLUTE_PATH.sub(lambda m: m.group().rstrip("/").rsplit("/", 1)[-1] or ".", out)
+
+
 class EventLog:
-    """Append-only, replayable list of contract events for one run."""
+    """Append-only, replayable list of contract events for one run.
+
+    Error wording (``error`` messages, ``run.finished`` summaries, status
+    lines) is written with paths relative to the run folder (:func:`public_text`).
+    """
 
     def __init__(self, path: Path, run_id: str, loop: asyncio.AbstractEventLoop) -> None:
         self.path = path
@@ -61,6 +80,9 @@ class EventLog:
             if self._events and self._events[-1]["type"] == FINISHED and not self._reopened:
                 logger.debug("run {}: {} after run.finished dropped", self.run_id, type_)
                 return None
+            for key in _ERROR_TEXT_FIELDS.get(type_, ()):
+                if isinstance(fields.get(key), str):
+                    fields[key] = public_text(fields[key], self.path.parent)
             event = {
                 "seq": (self._events[-1]["seq"] + 1) if self._events else 1,
                 "ts": utc_now(),
@@ -118,4 +140,4 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return events
 
 
-__all__ = ["API_EVENTS_FILE", "FINISHED", "STAGES", "EventLog"]
+__all__ = ["API_EVENTS_FILE", "FINISHED", "STAGES", "EventLog", "public_text"]

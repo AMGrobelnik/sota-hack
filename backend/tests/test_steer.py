@@ -14,12 +14,18 @@ from aiohttp import ClientResponse
 from aiohttp.test_utils import TestClient, TestServer
 
 from chipin_backend.agents import AgentEvent, AgentSpec, backend_for
+from chipin_backend.agents import claude_cli as claude_cli_module
 from chipin_backend.api.config import ApiConfig
-from chipin_backend.api.events import EventLog
+from chipin_backend.api.events import EventLog, public_text
 from chipin_backend.api.manager import API_RECORD_FILE, ApiRun, RequestError, RunManager
 from chipin_backend.api.server import TOKEN_HEADER, create_app
-from chipin_backend.api.steer import DELIVERED_TEXT, MAX_MESSAGE_CHARS, Steering
-from chipin_backend.api.translate import Translator
+from chipin_backend.api.steer import (
+    CONTINUING_TEXT,
+    DELIVERED_TEXT,
+    MAX_MESSAGE_CHARS,
+    Steering,
+)
+from chipin_backend.api.translate import READING_BRIEF, Translator
 from chipin_backend.config import BackendConfig
 from chipin_backend.runs import JsonlEventSink, RunDir
 
@@ -132,6 +138,8 @@ async def test_a_message_after_the_end_continues_the_same_run(
 
     assert rest[0]["type"] == "message" and rest[0]["role"] == "user"
     assert rest[0]["message_id"] == "m1" and rest[0]["seq"] == first[-1]["seq"] + 1
+    statuses = [e["text"] for e in rest if e["type"] == "status"]
+    assert statuses[0] == CONTINUING_TEXT and READING_BRIEF not in statuses
     got = _seq(rest, lambda e: e["type"] == "status" and e.get("message_id") == "m1")
     reply = _seq(rest, lambda e: e.get("role") == "agent" and "Follow-up answer" in e.get("text", ""))
     assert got < reply
@@ -285,6 +293,133 @@ async def test_claude_takes_messages_mid_turn_without_a_restart(
     typed = [t for t in typed if isinstance(t, str)]
     assert len(typed) == 2 and "and the next step?" in typed[1]
     assert "<system-prompt>" in typed[0] and "<system-prompt>" not in typed[1], "rules typed once"
+
+
+def _trouble(tmp_path: Path, **trouble: Any) -> None:
+    """Start trouble for the fake CLI's next spawns (see fake_claude_cli.py)."""
+    (tmp_path / "claude-config" / "fake-trouble.json").write_text(json.dumps(trouble))
+
+
+def _claude_agents(config: BackendConfig, fake_cli: Path, tmp_path: Path) -> Any:
+    cli = config.agents.claude_cli.model_copy(
+        update={"cli_path": str(fake_cli), "config_dir": tmp_path / "claude-config"}
+    )
+    return config.agents.model_copy(update={"claude_cli": cli})
+
+
+async def _first_then_follow_up(
+    config: BackendConfig, fake_cli: Path, tmp_path: Path
+) -> tuple[Any, AgentSpec, _Sink]:
+    """A first claude run in ``work``, and the spec of a follow-up to it."""
+    agents = _claude_agents(config, fake_cli, tmp_path)
+    spec = AgentSpec(name="fake", prompts=["work"], workdir=tmp_path / "work", timeout_s=60)
+    first = await backend_for("claude_cli", agents).run(spec, _Sink())
+    assert not first.failed, first.error
+    follow = AgentSpec(
+        name="fake",
+        prompts=["and then?"],
+        workdir=tmp_path / "work",
+        timeout_s=60,
+        resume_session=first.session_id,
+    )
+    return agents, follow, _Sink()
+
+
+async def test_claude_follow_up_answers_the_trust_prompt(
+    config: BackendConfig, tmp_path: Path, fake_cli: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    agents, follow, sink = await _first_then_follow_up(config, fake_cli, tmp_path)
+    _trouble(tmp_path, trust_dialog=True)
+    again = await backend_for("claude_cli", agents).run(follow, sink)
+    assert not again.failed, again.error
+    assert again.session_id == follow.resume_session
+    assert any(e.kind == "text" and "done" in e.data.get("text", "") for e in sink.events)
+    assert "trust this folder" in (tmp_path / "work" / ".chipin" / "claude-pty.log").read_text()
+
+
+async def test_claude_start_retries_a_transient_failure(
+    config: BackendConfig, tmp_path: Path, fake_cli: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    agents, follow, sink = await _first_then_follow_up(config, fake_cli, tmp_path)
+    monkeypatch.setattr(claude_cli_module, "START_RETRY_BACKOFF_S", 0.01)
+    _trouble(tmp_path, fail_starts=3)  # the first run took start 1
+    again = await backend_for("claude_cli", agents).run(follow, sink)
+    assert not again.failed and again.started, again.error
+    retries = [e for e in sink.events if e.kind == "status" and "trying again" in e.data["message"]]
+    assert len(retries) == 2
+
+
+async def test_claude_start_gives_up_after_its_tries(
+    config: BackendConfig, tmp_path: Path, fake_cli: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    agents, follow, sink = await _first_then_follow_up(config, fake_cli, tmp_path)
+    monkeypatch.setattr(claude_cli_module, "START_RETRY_BACKOFF_S", 0.01)
+    _trouble(tmp_path, fail_starts=99)
+    again = await backend_for("claude_cli", agents).run(follow, sink)
+    assert again.failed and not again.started
+    assert f"tried {claude_cli_module.START_ATTEMPTS} times" in (again.error or "")
+    assert str(tmp_path) not in (again.error or ""), "no local absolute path"
+    assert ".chipin/claude-pty.log" in (again.error or "")
+
+
+async def test_a_follow_up_that_cannot_start_leaves_the_run_as_it_was(
+    config: BackendConfig, tmp_path: Path, fake_cli: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(claude_cli_module, "START_RETRY_BACKOFF_S", 0.01)
+    claude = _config(config).model_copy(update={"agents": _claude_agents(config, fake_cli, tmp_path)})
+    api = ApiConfig(keepalive_s=0.2, progress_poll_s=0.02, run_timeout_s=60)
+    async with TestClient(TestServer(create_app(claude, api, token=TOKEN, agent="claude"))) as client:
+        run_id = await _start(client)
+        first = await _read(await _stream(client, run_id))
+        assert first[-1]["status"] == "succeeded", first[-1]
+        folder = config.resolved_runs_dir() / run_id
+
+        _trouble(tmp_path, fail_starts=99)
+        assert (await _say(client, run_id, "first question"))["delivery"] == "follow_up"
+        failed = await _read(await _stream(client, run_id, first[-1]["seq"] + 1))
+        statuses = [e["text"] for e in failed if e["type"] == "status"]
+        assert statuses[0] == CONTINUING_TEXT and READING_BRIEF not in statuses
+        assert failed[-1]["type"] == "run.finished" and failed[-1]["status"] == "succeeded"
+        assert failed[-1]["follow_up_failed"] is True
+        errors = [e["message"] for e in failed if e["type"] == "error"]
+        assert "could not continue the conversation" in errors[-1]
+        detail = await (await client.get(f"/api/runs/{run_id}", headers=AUTH)).json()
+        assert detail["status"] == "succeeded" and detail["summary"] == first[-1]["summary"]
+        everything = (folder / "events.jsonl").read_text() + json.dumps(detail)
+        everything += (folder / API_RECORD_FILE).read_text()
+        assert str(tmp_path) not in everything and "/Users/" not in everything, "no local path"
+        assert not any(e["type"] == "status" and e.get("message_id") == "m1" for e in failed)
+
+        _trouble(tmp_path, fail_starts=0)
+        assert (await _say(client, run_id, "second question"))["delivery"] == "follow_up"
+        rest = await _read(await _stream(client, run_id, failed[-1]["seq"] + 1))
+        assert rest[-1]["type"] == "run.finished" and rest[-1]["status"] == "succeeded"
+        assert "follow_up_failed" not in rest[-1]
+        delivered = [e["message_id"] for e in rest if e.get("text") == DELIVERED_TEXT]
+        assert delivered == ["m1", "m2"], "the unanswered message went with the next one"
+        transcript = next((tmp_path / "claude-config" / "projects").rglob("*.jsonl"))
+        assert "first question" in transcript.read_text() and "second question" in transcript.read_text()
+        result = json.loads((folder / "run.json").read_text())
+        assert result["status"] == "succeeded"
+        assert [f["status"] for f in result["result"]["follow_ups"]] == ["failed", "succeeded"]
+
+
+async def test_error_text_names_no_local_path(tmp_path: Path) -> None:
+    run = tmp_path / "runs" / "r1"
+    run.mkdir(parents=True)
+    log = EventLog(run / "events.jsonl", "r1", asyncio.get_running_loop())
+    log.append("error", message=f"start failed (PTY log: {run}/workspace/.chipin/claude-pty.log)")
+    log.append("status", text="could not read /opt/elsewhere/secret/config.json")
+    log.append("run.finished", status="failed", summary=f"see {run.resolve()}/run.json")
+    texts = [e.get("message") or e.get("text") or e.get("summary") for e in log.since(1)]
+    assert texts == [
+        "start failed (PTY log: workspace/.chipin/claude-pty.log)",
+        "could not read config.json",
+        "see run.json",
+    ]
+    assert public_text("fetched https://example.org/a/b and ./progress status x") == (
+        "fetched https://example.org/a/b and ./progress status x"
+    )
 
 
 # ---- the openrouter harness, on a scripted model ----

@@ -132,6 +132,8 @@ class AgentResult:
     cost_usd: float = 0.0
     duration_s: float = 0.0
     files: list[str] = field(default_factory=list)  # files written, relative to workdir
+    #: ``False`` when the agent never started (its CLI could not be brought up): nothing ran.
+    started: bool = True
     #: Written after the run (``chipin_backend.llm.summarise``): ``{"run": ...,
     #: "output_label": ...}``, each a ``Summary.to_dict()`` with its own cost.
     summary: dict[str, Any] | None = None

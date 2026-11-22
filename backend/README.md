@@ -244,7 +244,16 @@ and the end of the run; it goes as a follow-up then) or `follow_up`.
   the agent starts answering. The `cost` event and the run's cost are the
   totals so far (`turn_usd` is the follow-up's own); `run.json` lists each
   follow-up under `result.follow_ups`. A stream that closed at the first
-  `run.finished` must be opened again with `from=<next seq>`.
+  `run.finished` must be opened again with `from=<next seq>`. A follow-up's
+  first status line is "ChipIn is continuing the conversation".
+- A follow-up whose agent cannot be started (after the backend's own
+  retries) ends with an `error` event and a `run.finished` with
+  `follow_up_failed: true` and the run's earlier status and summary: the
+  run is not failed. The next message tries again and takes the unanswered
+  ones with it.
+- Error text in the stream and the API names no local absolute path: a
+  path inside the run folder is shown relative to it, any other by its
+  last part.
 - Errors: 404 unknown run, 400 empty text, 413 too long, 409 a failed run,
   429 too many runs in progress (for a follow-up), 401 no token.
 - The standing instructions say a user message takes priority over the
@@ -547,6 +556,10 @@ tier never falls back to a CPU machine.
   API key; `ANTHROPIC_API_KEY` is removed from the agent's environment. For
   the length of a run it marks the run's folder trusted in the CLI's
   `.claude.json` (an atomic rewrite) and removes that entry afterwards.
+  The grant is renewed at every start, and the start answers the folder
+  trust prompt if it shows anyway (another CLI on the same login can
+  rewrite that file in between). A start that fails is tried again, three
+  tries in all.
 - `openrouter` is an OpenHands agent loop on a paid OpenRouter model. It
   needs the `openhands` extra and `tmux`. Its conversation state stays in
   memory, so the key is never written into the workspace.

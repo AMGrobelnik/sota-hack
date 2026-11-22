@@ -15,6 +15,10 @@
   resume_session``), the run goes back to ``running`` and ends with a new
   ``run.finished``; the ``cost`` event and the run's cost are the totals so
   far. The delivery status comes when the agent starts answering.
+* A follow-up whose agent cannot be started (after the backend's own retries)
+  ends with an ``error`` event and a ``run.finished`` that puts the run back
+  as it was (``succeeded`` or ``stopped``): the run is not failed, and the
+  next message tries again, carrying the unanswered ones with it.
 * A failed run takes no messages (409); text is limited to
   :data:`MAX_MESSAGE_CHARS` characters (413).
 """
@@ -45,6 +49,13 @@ if TYPE_CHECKING:
 MAX_MESSAGE_CHARS = 4000
 #: The status line that marks a message as delivered.
 DELIVERED_TEXT = "Your message reached the agent"
+#: A follow-up's first status line.
+CONTINUING_TEXT = "ChipIn is continuing the conversation"
+#: The error that ends a follow-up whose agent could not be started.
+NOT_STARTED_TEXT = (
+    "ChipIn could not continue the conversation: the agent did not start ({reason}). "
+    "The run is as it was; send a message to try again."
+)
 #: A real agent's view of a message during the run. Its first line names the
 #: message, so the claude_cli backend can find it in the CLI's transcript; without
 #: the last sentence a message arriving between turns would end the run.
@@ -85,6 +96,8 @@ class Steering:
     #: Cost totals before the agent run in progress (``usd``, ``tokens_in``, ``tokens_out``).
     cost_base: dict[str, Any] | None = None
     follow_ups: int = 0
+    #: (message id, text) of a follow-up whose agent never started; sent with the next one.
+    unanswered: list[tuple[str, str]] = field(default_factory=list)
     log: EventLog | None = None
 
     def sink(self, translator: Translator, log: EventLog) -> SteerSink:
@@ -239,6 +252,7 @@ def watch(manager: RunManager, item: ApiRun) -> None:
 def start_follow_up(manager: RunManager, item: ApiRun, messages: list[tuple[str, str]]) -> None:
     """Continue a finished run's session with ``messages`` (already recorded), in its folder."""
     st = steering_of(item)
+    messages, st.unanswered = [*st.unanswered, *messages], []
     st.follow_ups += 1
     st.answering = [message_id for message_id, _ in messages]
     st.cost_base = dict(item.record.get("cost") or {}) or None
@@ -251,14 +265,17 @@ def start_follow_up(manager: RunManager, item: ApiRun, messages: list[tuple[str,
         prompts=[prompt],
         resume_session=_session_id(item),
     )
+    before = {k: item.record.get(k) for k in ("status", "finished_at", "summary", "cost")}
     item.log.reopen()
     item.stopping = False
     item.stop_reason = "stopped by the user"
     item.record.update(status="running", follow_ups=st.follow_ups)
     item.record.pop("finished_at", None)
     item.save()
-    item.log.append("status", text="ChipIn is answering your message")
-    item.task = asyncio.create_task(_drive_follow_up(manager, item, spec), name=f"follow-up-{item.id}")
+    item.log.append("status", text=CONTINUING_TEXT)
+    item.task = asyncio.create_task(
+        _drive_follow_up(manager, item, spec, messages=messages, before=before), name=f"follow-up-{item.id}"
+    )
     watch(manager, item)
     logger.info("run {}: follow-up {} started", item.id, st.follow_ups)
 
@@ -291,19 +308,32 @@ def _spec_from_record(manager: RunManager, item: ApiRun) -> AgentSpec:
     )
 
 
-async def _drive_follow_up(manager: RunManager, item: ApiRun, spec: AgentSpec) -> None:
-    """One follow-up turn of the agent; always ends the event log with ``run.finished``."""
+async def _drive_follow_up(
+    manager: RunManager,
+    item: ApiRun,
+    spec: AgentSpec,
+    *,
+    messages: list[tuple[str, str]],
+    before: dict[str, Any],
+) -> None:
+    """One follow-up turn of the agent; always ends the event log with ``run.finished``.
+
+    When the agent never started, the run goes back to ``before`` (its status,
+    times, summary and cost) and ``messages`` wait for the next follow-up.
+    """
     from chipin_backend.api.manager import RUNNER_MODES, ApiRunDir
 
     st = steering_of(item)
-    translator = Translator(item.log, JsonlEventSink(item.run.events_path), item.run.workspace)
+    translator = Translator(
+        item.log, JsonlEventSink(item.run.events_path), item.run.workspace, start_text=None
+    )
     run = ApiRunDir(item.run.path, sink=st.sink(translator, item.log))
     tailer = ProgressTailer(item.run.path / PROGRESS_FILE, item.log, item.run.path, item.run.workspace)
     tailer.skip_to_end()
     report = item.run.workspace / "report.md"
     report_before = report.stat().st_mtime if report.is_file() else None
     follow = asyncio.create_task(tailer.follow(manager.api.progress_poll_s))
-    status, summary, result = "failed", None, None
+    status, summary, result, not_started = "failed", None, None, False
     runner = runner_for(manager.config, RUNNER_MODES[manager.runner])
     item.runner = runner
     try:
@@ -313,7 +343,11 @@ async def _drive_follow_up(manager: RunManager, item: ApiRun, spec: AgentSpec) -
         result = await item.inner
         status = "failed" if result.failed else "succeeded"
         summary = clip(result.error or translator.last_text or result.final_text, 600) or None
-        if result.failed and not translator.error_emitted:
+        not_started = result.failed and not result.started
+        if not_started:
+            reason = clip(result.error or "no reason given", 300)
+            item.log.append("error", message=NOT_STARTED_TEXT.format(reason=reason))
+        elif result.failed and not translator.error_emitted:
             item.log.append("error", message=result.error or "the agent failed")
     except asyncio.CancelledError:
         if not item.stopping:
@@ -332,21 +366,30 @@ async def _drive_follow_up(manager: RunManager, item: ApiRun, spec: AgentSpec) -
             manager._artifact(tailer, "report.md", "report")
         emit_evidence(item.run.path, item.log.append)
         cost = translator.cost or item.record.get("cost")
+        outcome = status
+        if not_started:
+            st.answering, st.unanswered = [], [*messages, *st.unanswered]
+            status, summary, cost = before["status"], before["summary"], before["cost"]
         item.log.append(
             "run.finished",
             status=status,
             summary=summary,
             bullets=item.record.get("bullets"),
             follow_up=st.follow_ups,
+            follow_up_failed=True if not_started else None,
         )
-        item.record.update(status=status, finished_at=utc_now(), summary=summary, cost=cost)
+        finished_at = before["finished_at"] if not_started else utc_now()
+        item.record.update(status=status, finished_at=finished_at, summary=summary, cost=cost)
         item.save()
-        _record_follow_up(item, result, status, st)
+        _record_follow_up(item, result, outcome, st, run_status=status)
         logger.info("run {}: follow-up {} {}", item.id, st.follow_ups, status)
 
 
-def _record_follow_up(item: ApiRun, result: AgentResult | None, status: str, st: Steering) -> None:
-    """Add the follow-up to ``run.json``: its outcome under ``result.follow_ups``, its cost to the total."""
+def _record_follow_up(
+    item: ApiRun, result: AgentResult | None, status: str, st: Steering, *, run_status: str
+) -> None:
+    """Add the follow-up to ``run.json``: its outcome (``status``) under ``result.follow_ups``,
+    its cost to the total, ``run_status`` as the run's."""
     try:
         record = item.run.read_record()
         merged = dict(record.result or {})
@@ -360,7 +403,7 @@ def _record_follow_up(item: ApiRun, result: AgentResult | None, status: str, st:
         item.run.update_record(
             result=merged,
             agent_cost_usd=(record.agent_cost_usd or 0.0) + added,
-            status=status,
+            status=run_status,
             finished_at=utc_now(),
         )
     except (OSError, ValueError, TypeError) as exc:
@@ -377,9 +420,11 @@ def shutdown() -> None:
 
 
 __all__ = [
+    "CONTINUING_TEXT",
     "DELIVERED_TEXT",
     "FOLLOW_UP_PROMPT",
     "MAX_MESSAGE_CHARS",
+    "NOT_STARTED_TEXT",
     "USER_MESSAGE_PROMPT",
     "SteerError",
     "SteerSink",

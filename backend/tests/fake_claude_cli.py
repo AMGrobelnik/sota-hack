@@ -13,6 +13,13 @@ meanwhile (a ``queue-operation`` ``enqueue``) and hands it to the model when
 the tool finishes (``remove`` with ``absorbed_mid_turn`` and a
 ``queued_command`` attachment); the reply then says ``heard: <message>``.
 
+Start trouble, for the driver's start handling, from
+``$CLAUDE_CONFIG_DIR/fake-trouble.json`` (the agent env passes no test
+variables): ``{"fail_starts": N}`` makes the first N spawns (counted in
+``$CLAUDE_CONFIG_DIR/fake-starts``) exit at once; ``{"trust_dialog": true}``
+shows the folder trust prompt first, focus on "No, exit", as the real CLI does
+when the folder is not trusted.
+
 Run as ``python fake_claude_cli.py <claude args>``; ``--version`` prints one.
 """
 
@@ -31,6 +38,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 PASTE_START, PASTE_END = "\x1b[200~", "\x1b[201~"
+FOCUS = "\u276f"  # the CLI's focus arrow
 
 
 def slug(cwd: str) -> str:
@@ -55,10 +63,20 @@ def main() -> None:
         sys.stdout.write(text.replace("\n", "\r\n"))
         sys.stdout.flush()
 
+    trouble_file = config / "fake-trouble.json"
+    trouble = json.loads(trouble_file.read_text()) if trouble_file.is_file() else {}
+    starts = config / "fake-starts"
+    count = int(starts.read_text()) + 1 if starts.is_file() else 1
+    starts.write_text(str(count))
+    if count <= int(trouble.get("fail_starts", 0)):
+        sys.exit(1)
+
     fd = sys.stdin.fileno()
     saved = termios.tcgetattr(fd)
     tty.setraw(fd)
     try:
+        if trouble.get("trust_dialog") and not trust_dialog(fd, draw):
+            return
         draw("fake claude\n⏵⏵ bypass permissions on\n")
         state = {"buf": ""}
         turn = 0
@@ -98,6 +116,27 @@ def main() -> None:
                     return
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, saved)
+
+
+def trust_dialog(fd: int, draw: Callable[[str], None]) -> bool:
+    """The folder trust prompt; ``True`` once "Yes, I trust this folder" is confirmed."""
+    options = ["No, exit", "Yes, I trust this folder"]
+    focus = 0
+
+    def frame() -> None:
+        lines = "".join(f"  {FOCUS if i == focus else ' '} {o}\n" for i, o in enumerate(options))
+        draw(f"\nAccessing workspace:\n\n  {os.getcwd()}\n\n{lines}\n  Enter to confirm · Esc to cancel\n")
+
+    frame()
+    while True:
+        keys = os.read(fd, 1024).decode("utf-8", "replace")
+        if not keys:
+            return False
+        if "\x1b[B" in keys:
+            focus = min(focus + 1, len(options) - 1)
+            frame()
+        elif "\r" in keys:
+            return focus == 1
 
 
 def run_turn(

@@ -40,6 +40,7 @@ from chipin_backend.agents._claude.cost import (
 from chipin_backend.agents._claude.repl import (
     ReplSession,
     RunDeadlineError,
+    StartFailedError,
     TurnResult,
     transcript_path,
 )
@@ -62,6 +63,10 @@ RETRYABLE_API_STATUSES = frozenset({401, 429, 500, 502, 503, 529})
 MAX_API_RETRIES = 5
 #: Back-off between API-error retries, by attempt.
 API_RETRY_BACKOFF_S = (5.0, 15.0, 30.0, 60.0, 120.0)
+#: Tries at bringing the CLI up before the run fails (a start can fail on a passing glitch).
+START_ATTEMPTS = 3
+#: Wait before the next start try, times the number of tries so far.
+START_RETRY_BACKOFF_S = 2.0
 
 #: Sent after a stall restart that resumed the session with the prompt already in it.
 STALL_NUDGE = (
@@ -228,9 +233,10 @@ class ClaudeCliBackend(AgentBackend):
                 prompts[-1] += struct_out_instruction(spec.output_schema, output_file)
 
         driver = _TurnDriver(session, spec, emit, self._mailbox)
-        final_text, error, structured = "", None, None
+        final_text, error, structured, started_cli = "", None, None, False
         try:
-            session.start(resume=bool(spec.resume_session))
+            _start_with_retries(session, resume=bool(spec.resume_session), emit=emit)
+            started_cli = True
             for prompt in prompts:
                 final_text = driver.send(prompt) or final_text
             for attempt in range(1, spec.output_retries + 2):
@@ -286,11 +292,32 @@ class ClaudeCliBackend(AgentBackend):
             cost_usd=usd,
             duration_s=duration,
             files=written_files(workdir),
+            started=started_cli,
         )
 
 
 class _AgentFailedError(Exception):
     """The agent cannot go on (stall restarts or API retries used up)."""
+
+
+def _start_with_retries(session: ReplSession, *, resume: bool, emit: Any) -> None:
+    """Bring the CLI up, trying again after a failed start up to :data:`START_ATTEMPTS` times.
+
+    Each try answers the same startup dialogs (:class:`~chipin_backend.agents._claude.screen.
+    DialogPilot`); the last failure is raised as :class:`_AgentFailedError`.
+    """
+    for attempt in range(1, START_ATTEMPTS + 1):
+        try:
+            session.start(resume=resume)
+            return
+        except StartFailedError as err:
+            if attempt == START_ATTEMPTS:
+                raise _AgentFailedError(f"{err} (tried {START_ATTEMPTS} times)") from err
+            wait_s = START_RETRY_BACKOFF_S * attempt
+            logger.warning("claude_cli: start {} of {} failed: {}", attempt, START_ATTEMPTS, err)
+            retry = f"The agent did not start; trying again ({attempt + 1}/{START_ATTEMPTS})"
+            emit("status", {"message": retry})
+            time.sleep(wait_s)
 
 
 def _session_totals(transcript: Path) -> CostReport | None:

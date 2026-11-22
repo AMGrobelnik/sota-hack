@@ -249,8 +249,11 @@ class ReplSession:
             self._first_turn = True
         else:
             self._fast_forward()
+        # Granted again at every spawn: another CLI on the same login may have
+        # rewritten the config since. The first grant is the one withdrawn at close.
+        grant = pretrust(self.cwd, self._configured_dir)
         if self._trust is None:
-            self._trust = pretrust(self.cwd, self._configured_dir)
+            self._trust = grant
         self._log_path.parent.mkdir(parents=True, exist_ok=True)
         argv = self._argv_for(self.session_id, resume)
         self._child = pexpect.spawn(
@@ -302,7 +305,8 @@ class ReplSession:
 
     def _fail_start(self, reason: str) -> NoReturn:
         self.kill()
-        raise StartFailedError(f"claude CLI start failed: {reason} (PTY log: {self._log_path})")
+        log = self._log_path.relative_to(self.cwd)
+        raise StartFailedError(f"claude CLI start failed: {reason} (PTY log: {log} in the agent's folder)")
 
     def _write(self, data: str, *, deadline: float) -> None:
         """Write to the PTY without ever blocking past ``deadline``.

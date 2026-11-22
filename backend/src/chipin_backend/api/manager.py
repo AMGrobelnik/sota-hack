@@ -31,7 +31,7 @@ from loguru import logger
 
 from chipin_backend.agents.types import AgentResult, AgentSpec, EventSink, utc_now
 from chipin_backend.api.config import ApiConfig, Preset
-from chipin_backend.api.events import API_EVENTS_FILE, EventLog
+from chipin_backend.api.events import API_EVENTS_FILE, EventLog, public_text
 from chipin_backend.api.progress import PROGRESS_FILE, ProgressTailer, write_helper
 from chipin_backend.api.scripted import NAME as SCRIPTED
 from chipin_backend.api.scripted import STEP_ENV, register
@@ -127,7 +127,9 @@ class ApiRun:
         return view
 
     def save(self) -> None:
-        """Write ``api.json`` atomically."""
+        """Write ``api.json`` atomically; its summary names paths relative to the run folder."""
+        if isinstance(self.record.get("summary"), str):
+            self.record["summary"] = public_text(self.record["summary"], self.run.path)
         path = self.run.path / API_RECORD_FILE
         tmp = path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(self.record, indent=2, ensure_ascii=False), encoding="utf-8")

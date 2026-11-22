@@ -22,6 +22,8 @@ from chipin_backend.api.events import EventLog
 from chipin_backend.runs import JsonlEventSink
 
 AUTHOR = "ChipIn"
+#: The status line when a run's agent starts.
+READING_BRIEF = "ChipIn is reading your brief"
 SUMMARY_MAX = 120
 DETAIL_MAX = 300
 
@@ -89,10 +91,19 @@ class Translator:
     Thread-safe; never raises into the agent (a failure is logged).
     """
 
-    def __init__(self, log: EventLog, raw: JsonlEventSink, workdir: Path | None = None) -> None:
+    def __init__(
+        self,
+        log: EventLog,
+        raw: JsonlEventSink,
+        workdir: Path | None = None,
+        *,
+        start_text: str | None = READING_BRIEF,
+    ) -> None:
         self.log = log
         self.raw = raw
         self.workdir = workdir
+        #: The status line for the agent's start; ``None`` for none (a follow-up says its own).
+        self.start_text = start_text
         self._lock = threading.Lock()
         self._calls: dict[str, tuple[str, str]] = {}  # call_id -> (tool name, summary)
         self._hidden: set[str] = set()
@@ -134,8 +145,8 @@ class Translator:
         elif kind == "error":
             self.error_emitted = True
             self.log.append("error", message=str(data.get("message", "the agent failed")))
-        elif kind == "agent_start":
-            self.log.append("status", text="ChipIn is reading your brief")
+        elif kind == "agent_start" and self.start_text:
+            self.log.append("status", text=self.start_text)
 
     def _tool_call(self, data: dict[str, Any]) -> None:
         tool = str(data.get("tool", ""))
@@ -168,4 +179,11 @@ class Translator:
         )
 
 
-__all__ = ["AUTHOR", "Translator", "clip", "is_progress_call", "tool_summary"]
+__all__ = [
+    "AUTHOR",
+    "READING_BRIEF",
+    "Translator",
+    "clip",
+    "is_progress_call",
+    "tool_summary",
+]
