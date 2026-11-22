@@ -1,0 +1,338 @@
+{
+ "ir": "chipir/1",
+ "name": "afseq_r1_and2",
+ "inputs": [
+  {
+   "name": "x",
+   "lanes": 1,
+   "bits": 8,
+   "signed": false
+  },
+  {
+   "name": "h",
+   "lanes": 3,
+   "bits": 8,
+   "signed": false
+  },
+  {
+   "name": "c",
+   "lanes": 2,
+   "bits": 7,
+   "signed": false
+  },
+  {
+   "name": "p",
+   "lanes": 1,
+   "bits": 7,
+   "signed": false
+  }
+ ],
+ "nodes": [
+  {
+   "id": "h1",
+   "op": "gather",
+   "src": "h",
+   "idx": [
+    0
+   ]
+  },
+  {
+   "id": "s1_5",
+   "op": "shift",
+   "src": "h1",
+   "k": 5
+  },
+  {
+   "id": "e1",
+   "op": "sub",
+   "a": "x",
+   "b": "h1"
+  },
+  {
+   "id": "ae1",
+   "op": "abs",
+   "src": "e1"
+  },
+  {
+   "id": "b_rel1_5",
+   "op": "cmp",
+   "src": "ae1",
+   "rel": "gt",
+   "other": "s1_5"
+  },
+  {
+   "id": "h3",
+   "op": "gather",
+   "src": "h",
+   "idx": [
+    2
+   ]
+  },
+  {
+   "id": "s3_4",
+   "op": "shift",
+   "src": "h3",
+   "k": 4
+  },
+  {
+   "id": "e3",
+   "op": "sub",
+   "a": "x",
+   "b": "h3"
+  },
+  {
+   "id": "ae3",
+   "op": "abs",
+   "src": "e3"
+  },
+  {
+   "id": "b_rel3_4",
+   "op": "cmp",
+   "src": "ae3",
+   "rel": "gt",
+   "other": "s3_4"
+  },
+  {
+   "id": "B",
+   "op": "concat",
+   "srcs": [
+    "b_rel1_5",
+    "b_rel3_4"
+   ]
+  },
+  {
+   "id": "pF",
+   "op": "gather",
+   "src": "p",
+   "idx": [
+    0,
+    0
+   ]
+  },
+  {
+   "id": "V",
+   "op": "cmp",
+   "src": "pF",
+   "rel": "ge",
+   "t": [
+    1,
+    3
+   ]
+  },
+  {
+   "id": "BV",
+   "op": "concat",
+   "srcs": [
+    "B",
+    "V"
+   ]
+  },
+  {
+   "id": "G",
+   "op": "lut",
+   "src": "BV",
+   "inputs": [
+    [
+     0,
+     2
+    ],
+    [
+     1,
+     3
+    ]
+   ],
+   "tables": [
+    [
+     0,
+     0,
+     0,
+     1
+    ],
+    [
+     0,
+     0,
+     0,
+     1
+    ]
+   ]
+  },
+  {
+   "id": "cnt",
+   "op": "add",
+   "a": "c",
+   "b": "G"
+  },
+  {
+   "id": "done",
+   "op": "cmp",
+   "src": "p",
+   "rel": "eq",
+   "t": 127
+  },
+  {
+   "id": "kdone",
+   "op": "matvec",
+   "src": "done",
+   "W": [
+    [
+     128
+    ]
+   ]
+  },
+  {
+   "id": "cr",
+   "op": "sub",
+   "a": "cnt",
+   "b": "kdone"
+  },
+  {
+   "id": "c_next",
+   "op": "clip",
+   "src": "cr",
+   "lo": 0,
+   "hi": 127
+  },
+  {
+   "id": "pd",
+   "op": "concat",
+   "srcs": [
+    "p",
+    "done"
+   ]
+  },
+  {
+   "id": "p1",
+   "op": "matvec",
+   "src": "pd",
+   "W": [
+    [
+     1,
+     -128
+    ]
+   ],
+   "b": [
+    1
+   ]
+  },
+  {
+   "id": "p_next",
+   "op": "clip",
+   "src": "p1",
+   "lo": 0,
+   "hi": 127
+  },
+  {
+   "id": "hs",
+   "op": "gather",
+   "src": "h",
+   "idx": [
+    0,
+    1
+   ]
+  },
+  {
+   "id": "h_next",
+   "op": "concat",
+   "srcs": [
+    "x",
+    "hs"
+   ]
+  },
+  {
+   "id": "c01",
+   "op": "gather",
+   "src": "cnt",
+   "idx": [
+    0,
+    1
+   ]
+  },
+  {
+   "id": "ge2",
+   "op": "cmp",
+   "src": "c01",
+   "rel": "ge",
+   "t": [
+    94,
+    72
+   ]
+  },
+  {
+   "id": "r",
+   "op": "lut",
+   "src": "ge2",
+   "inputs": [
+    [
+     0,
+     1
+    ]
+   ],
+   "tables": [
+    [
+     0,
+     0,
+     0,
+     1
+    ]
+   ]
+  },
+  {
+   "id": "rd",
+   "op": "concat",
+   "srcs": [
+    "r",
+    "done"
+   ]
+  },
+  {
+   "id": "af",
+   "op": "lut",
+   "src": "rd",
+   "inputs": [
+    [
+     0,
+     1
+    ]
+   ],
+   "tables": [
+    [
+     0,
+     0,
+     0,
+     1
+    ]
+   ]
+  }
+ ],
+ "outputs": [
+  {
+   "name": "af",
+   "src": "af"
+  },
+  {
+   "name": "done",
+   "src": "done"
+  },
+  {
+   "name": "h_next",
+   "src": "h_next"
+  },
+  {
+   "name": "c_next",
+   "src": "c_next"
+  },
+  {
+   "name": "p_next",
+   "src": "p_next"
+  }
+ ],
+ "meta": {
+  "family": "and2",
+  "window": 128,
+  "features": [
+   "rel1_5",
+   "rel3_4"
+  ],
+  "kind": "clocked next-state core"
+ }
+}
