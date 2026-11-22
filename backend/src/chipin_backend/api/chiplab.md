@@ -8,8 +8,11 @@ Exit codes: 0 ok, 1 error (read `error`), 2 a check ran and the design failed it
 - **verify** (the chip against your model; against patient recordings too when you have them): `simulate`
   (pass your own test vectors and expected outputs), `prove-equivalence`, `rtl-simulate`, and
   `verification-level`.
-- **report**: `chip-report`, `layout` / `timing-power` (pass `decision_rate_hz` = how often the chip decides,
-  for the battery-relevant power), `tt-package`, `bitstream`, `estimate-cost`.
+- **report**: `layout` / `timing-power` (pass `decision_rate_hz` = how often the chip decides, for the
+  battery-relevant power), `tt-package`, `bitstream`, `estimate-cost`. Before you mark report done, call
+  `chiplab chip-report --json '{"design_id": "<the chip you chose>", "decision_rate_hz": <decisions per second>}'`
+  on the one chip you chose: the chip figures the user sees (area, power, energy, cost, verification) come from
+  that call.
 
 Run these from your working folder. The lab reports its own metrics, status lines and chip files through
 `./progress`, so do not repeat those numbers. Do mark the stages yourself:

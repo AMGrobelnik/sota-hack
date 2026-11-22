@@ -4,12 +4,15 @@ The helper appends one JSON line per call to the run's ``progress.jsonl``::
 
     ./progress stage propose started [round]
     ./progress stage finetune skipped "no recordings attached"
-    ./progress metric gates 2330 [unit]
+    ./progress metric gates 2330 [unit] [--chip <design_id>]
+    ./progress chosen <design_id>
     ./progress status "ChipIn is wiring the weights into gates"
     ./progress artifact report.md [file|report|chip]
 
 :class:`ProgressTailer` reads new lines from that file and writes ``stage``,
-``metric``, ``status`` and ``artifact`` events. A malformed line is skipped
+``metric``, ``chosen``, ``status`` and ``artifact`` events. A metric's
+optional ``chip`` names the design it measures; ``chosen`` names the run's
+chosen chip, and a later one replaces an earlier one. A malformed line is skipped
 with a warning; the helper itself rejects bad arguments with exit status 2,
 so the agent learns at once.
 """
@@ -40,7 +43,8 @@ _HELPER = '''\
 usage:
   ./progress stage <{stages}> <started|done> [round]
   ./progress stage <{stages}> skipped "<short reason>"
-  ./progress metric <key> <number> [unit]
+  ./progress metric <key> <number> [unit] [--chip <design_id>]
+  ./progress chosen <design_id>
   ./progress status "<one present-tense line>"
   ./progress artifact <path in this folder> [{kinds}]
 """
@@ -77,7 +81,14 @@ if cmd == "stage":
             fail("round must be a whole number")
         line["round"] = int(rest[2])
 elif cmd == "metric":
-    if len(rest) not in (2, 3):
+    chip = None
+    if "--chip" in rest[2:]:
+        at = rest.index("--chip", 2)
+        if at + 1 >= len(rest) or not rest[at + 1].strip() or rest[at + 1].startswith("--"):
+            fail("--chip needs a design id")
+        chip = rest[at + 1]
+        rest = rest[:at] + rest[at + 2:]
+    if len(rest) not in (2, 3) or any(arg.startswith("--") for arg in rest):
         fail("metric needs a key and a number")
     try:
         value = float(rest[1])
@@ -88,6 +99,12 @@ elif cmd == "metric":
     line.update(key=rest[0], value=int(value) if value.is_integer() else value)
     if len(rest) == 3:
         line["unit"] = rest[2]
+    if chip is not None:
+        line["chip"] = chip
+elif cmd == "chosen":
+    if len(rest) != 1 or not rest[0].strip() or rest[0].startswith("--"):
+        fail("chosen needs one design id")
+    line["chip"] = rest[0]
 elif cmd == "status":
     if not rest or not " ".join(rest).strip():
         fail("status needs a line of text")
@@ -191,7 +208,16 @@ class ProgressTailer:
             value = item["value"]
             if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
                 raise ValueError("metric value is not a finite number")
-            self.log.append("metric", key=str(item["key"]), value=value, unit=item.get("unit"))
+            chip = item.get("chip")
+            self.log.append(
+                "metric",
+                key=str(item["key"]),
+                value=value,
+                unit=item.get("unit"),
+                chip=_chip(chip) if chip is not None else None,
+            )
+        elif kind == "chosen":
+            self.log.append("chosen", chip=_chip(item["chip"]))
         elif kind == "status":
             self.log.append("status", text=clip(str(item["text"]), 200))
         elif kind == "artifact":
@@ -212,6 +238,13 @@ class ProgressTailer:
             return
         self.artifacts.add(str(rel))
         self.log.append("artifact", name=target.name, kind=kind, path=str(rel))
+
+
+def _chip(value: object) -> str:
+    """A design id from a progress line: a non-empty string."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("chip must be a non-empty design id")
+    return clip(value.strip(), 200)
 
 
 __all__ = ["ARTIFACT_KINDS", "HELPER_NAME", "PROGRESS_FILE", "ProgressTailer", "write_helper"]
