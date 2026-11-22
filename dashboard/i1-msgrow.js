@@ -47,6 +47,11 @@
     return out;
   }
   var isModel = function (s) { return !!s && s.source === "model"; };
+  var flat = function (t) { return String(t == null ? "" : t).replace(/\s+/g, " ").trim(); };
+  // a summary worth drawing: it has words (an empty line never replaces the message's own)
+  var usable = function (s) { return !!s && typeof s.text === "string" && !!flat(s.text); };
+  // summaries stop for good at a limit other than the upper lines' own: no step line comes after it
+  var stepsStopped = function (S) { return !!S.limit && !/^(parts|closing)$/.test(String(S.limit.reason || "")); };
   // a summary written inside the message event itself (a tool's "summary" is its command, not a summary)
   function inline(e) {
     if (!e || e.type !== "message") return null;
@@ -58,7 +63,7 @@
   function rows(S, H) {
     var best = {};
     Object.keys(S.sums).forEach(function (id) {
-      var s = S.sums[id].s; if (s.level !== "item") return;
+      var s = S.sums[id].s; if (s.level !== "item" || !usable(s)) return;
       covers(s).forEach(function (q) {
         var rk = S.eToRaw[q]; if (!rk) return;
         var o = best[rk];
@@ -106,6 +111,8 @@
     var tool = kind === "tool" || kind === "lab", text, cls = "", tag = "", lead = "", mark = "", pend = false;
     if (s && s.text) {
       text = bare(H.sumText(S, n), w, s);
+      // a model line that only repeats the message's own words is not a summary: drawn as written
+      if (isModel(s) && kind === "msg") { var own = S.ev[r.first] || {}, ft = flat(text); if (ft === flat(H.itemFirst(S, r)) || ft === flat(own.text)) s = Object.assign({}, s, { source: "verbatim" }); }
       if (isModel(s)) mark = '<span class="cm-mr-ai" title="Summary written by a model">' + ico("spark") + '<span class="cm-vh">Model summary</span></span>';
       else if (tool) { cls = " cm-mr-rule"; if (r.name === "Bash") text = stripCd(text); }
       else if (kind !== "msg" && kind !== "error") { /* your own message, a file, a chosen chip: the line is the event itself */ }
@@ -114,7 +121,7 @@
     } else {
       text = H.itemFirst(S, r);
       if (tool) { cls = " cm-mr-rule"; text = String(r.call || text); if (r.name === "Bash") text = stripCd(text); }
-      else if (kind === "msg" && !S.finished) pend = true;
+      else if (kind === "msg" && !S.finished && !stepsStopped(S)) pend = true;
       else if (kind === "msg") tag = '<span class="cm-mr-tag" title="No summary was written for this message; this is its own first line">first line</span>';
     }
     if (tool) {
