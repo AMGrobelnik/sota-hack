@@ -51,13 +51,17 @@
     return true;
   }
   function place() {
-    var spots = [["bottom", "left"], ["top", "left"], ["bottom", "right"], ["top", "right"]];
+    /* round 2 (x): first the empty middle of the top bar, which stays clear of the page, of its right-side progress indicator and of the corner widgets at every stop; then the corners. Round 1 (w): the corners. */
+    var spots = set === "x" ? [["top", "center"], ["bottom", "left"], ["top", "left"], ["bottom", "right"], ["top", "right"]]
+      : [["bottom", "right"], ["bottom", "left"], ["top", "right"], ["top", "left"]];
     for (var i = 0; i < spots.length; i++) {
       nav.style.top = nav.style.bottom = nav.style.left = nav.style.right = "auto";
-      nav.style[spots[i][0]] = nav.style[spots[i][1]] = "10px";
+      nav.style.transform = spots[i][1] === "center" ? "translateX(-50%)" : "";
+      nav.style[spots[i][0]] = "10px";
+      if (spots[i][1] === "center") nav.style.left = "50%"; else nav.style[spots[i][1]] = "10px";
       if (clear()) return;
     }
-    nav.style.top = nav.style.right = "auto"; nav.style.bottom = nav.style.left = "10px";
+    nav.style.transform = ""; nav.style.top = nav.style.left = "auto"; nav.style.bottom = nav.style.right = "10px";
   }
   place();
   window.addEventListener("load", place);
