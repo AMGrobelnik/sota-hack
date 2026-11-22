@@ -30,7 +30,7 @@ from chipin_backend.agents.env import build_agent_env
 from chipin_backend.api.config import ApiConfig
 from chipin_backend.api.events import EventLog
 from chipin_backend.api.manager import ApiAgent, RunManager, standing_instructions
-from chipin_backend.api.progress import ProgressTailer, write_helper
+from chipin_backend.api.progress import LAB_DESIGN_METRICS, ProgressTailer, write_helper
 from chipin_backend.api.server import TOKEN_HEADER, create_app
 from chipin_backend.chiplab import (
     CHIPLAB_BIN_ENV,
@@ -95,6 +95,8 @@ LAB_VALUES: dict[str, int | float] = {
     "candidates": 12,
     "best_gates": 1904,
 }
+#: The lab's metrics about a batch of designs, not one.
+BATCH_METRICS = {"candidates", "best_gates"}
 DESIGN = "765fa47586bd"
 FAKE_CLAUDE = Path(__file__).with_name("fake_claude_cli.py")
 #: What the fake lab prints for ``chiplab agent-doc`` (the real lab prints its AGENT.md).
@@ -183,8 +185,12 @@ def _lab_env(tmp_path: Path) -> dict[str, str]:
 
 def _expected_lab_events() -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = [{"type": "status", "text": f"ChipIn is synthesising chip {DESIGN}"}]
+    # the lab sends no --chip; the tailer tags each metric about one design with the design
+    # its status line names, and leaves the batch counts untagged
     events += [
-        {"type": "metric", "key": k, "value": v, "unit": LAB_METRIC_UNITS[k]} for k, v in LAB_VALUES.items()
+        {"type": "metric", "key": k, "value": v, "unit": LAB_METRIC_UNITS[k]}
+        | ({} if k in BATCH_METRICS else {"chip": DESIGN})
+        for k, v in LAB_VALUES.items()
     ]
     events += [
         {"type": "artifact", "name": Path(rel).name, "kind": kind, "path": f"workspace/{rel}"}
@@ -576,6 +582,75 @@ async def test_tailer_refuses_a_bad_chip(tmp_path: Path) -> None:
     assert log.since(1) == []
 
 
+def test_lab_design_metrics_are_the_lab_keys_less_the_batch_counts() -> None:
+    assert {k: u for k, u in LAB_METRIC_UNITS.items() if k not in BATCH_METRICS} == LAB_DESIGN_METRICS
+
+
+async def test_lab_metrics_take_the_design_its_status_line_names(tmp_path: Path) -> None:
+    """The lab sends no --chip: each metric about one design takes the design of its status line."""
+    lines = [
+        {"type": "status", "text": "ChipIn is synthesising chip aaa111"},
+        {"type": "metric", "key": "gates", "value": 40, "unit": "gates"},
+        {"type": "metric", "key": "depth", "value": 10, "unit": "gates"},
+        {"type": "status", "text": "ChipIn is counting LUTs for chip bbb222"},
+        {"type": "metric", "key": "luts_xc7", "value": 17, "unit": "LUT6"},
+        {"type": "metric", "key": "accuracy", "value": 0.98},  # the agent's own, untagged: left so
+        {"type": "metric", "key": "gates", "value": 15, "unit": "gates", "chip": "ccc333"},  # its tag wins
+        {"type": "metric", "key": "verification_level", "value": 2, "unit": "level"},  # no status of its own
+        {"type": "status", "text": "ChipIn is checking the chip against patient recordings"},  # the agent's
+        {"type": "metric", "key": "area_um2", "value": 60.5, "unit": "um2"},
+        {"type": "metric", "key": "gates", "value": 7},  # a lab key without the lab's unit: the agent's
+        {"type": "status", "text": "ChipIn is ranking candidate chips"},  # a batch: about no one design
+        {"type": "metric", "key": "candidates", "value": 3, "unit": "designs"},
+        {"type": "metric", "key": "best_gates", "value": 15, "unit": "gates"},
+        {"type": "metric", "key": "gates", "value": 99, "unit": "gates"},
+        {"type": "status", "text": "ChipIn is synthesising chip eee555"},
+        {"type": "status", "text": "ChipIn is synthesising chip"},  # no id: clears too
+        {"type": "metric", "key": "depth", "value": 3, "unit": "gates"},
+        {"type": "status", "text": "ChipIn found a problem while proving the clocked chip ddd444"},
+        {"type": "metric", "key": "verification_level", "value": 0, "unit": "level"},
+    ]
+    progress_file = tmp_path / "progress.jsonl"
+    progress_file.write_text("".join(json.dumps(line) + "\n" for line in lines))
+    log = EventLog(tmp_path / "events.jsonl", "r1", asyncio.get_running_loop())
+    ProgressTailer(progress_file, log, tmp_path, tmp_path).drain()
+    tags = [(e["key"], e.get("chip")) for e in log.since(1) if e["type"] == "metric"]
+    assert tags == [
+        ("gates", "aaa111"),
+        ("depth", "aaa111"),
+        ("luts_xc7", "bbb222"),
+        ("accuracy", None),
+        ("gates", "ccc333"),
+        ("verification_level", "bbb222"),
+        ("area_um2", "bbb222"),
+        ("gates", None),
+        ("candidates", None),
+        ("best_gates", None),
+        ("gates", None),
+        ("depth", None),
+        ("verification_level", "ddd444"),
+    ]
+
+
+async def test_lab_metrics_from_a_subagent_folder_carry_the_design(tmp_path: Path) -> None:
+    """A subagent runs the lab from the orchestrator's folder; its lines reach its own file, tagged."""
+    run_path = tmp_path / "run"
+    workspace = run_path / "workspace"
+    folder = workspace / "agents" / "a3"
+    folder.mkdir(parents=True)
+    meta = run_path / "subagents" / "a3"
+    meta.mkdir(parents=True)
+    write_helper(workspace, run_path / "progress.jsonl", orchestrator=True)
+    write_helper(folder, meta / "progress.jsonl", subagent=True)
+    env = {**build_agent_env(base=_lab_env(tmp_path)), "CHIPIN_SUBAGENT_ID": "a3"}
+    _run_lab(workspace, env, {"design_id": DESIGN})
+    assert not (run_path / "progress.jsonl").exists()
+    log = EventLog(run_path / "events.jsonl", "r1", asyncio.get_running_loop())
+    ProgressTailer(meta / "progress.jsonl", log, run_path, folder, marks=False).drain()
+    tags = {e["key"]: e.get("chip") for e in log.since(1) if e["type"] == "metric"}
+    assert tags == {k: None if k in BATCH_METRICS else DESIGN for k in LAB_VALUES}
+
+
 async def test_an_old_events_file_still_loads(tmp_path: Path) -> None:
     """A run stored before chip tags existed loads and replays unchanged."""
     old = [
@@ -637,7 +712,8 @@ async def test_lab_events_reach_the_api_stream(
         or (e["type"] == "status" and DESIGN in e["text"])
     ]
     assert from_lab == _expected_lab_events()
-    tagged = [e for e in _strip(events) if e.get("chip")]
+    # the stub's own "ChipIn is ..." lines run alongside the lab's and do not move its tags
+    tagged = [e for e in _strip(events) if e.get("chip") and e not in from_lab]
     assert tagged == [
         {"type": "metric", "key": "trial_gates", "value": 48.7, "unit": "gates", "chip": DESIGN},
         {"type": "chosen", "chip": DESIGN},
