@@ -148,7 +148,12 @@ async def get_evidence(request: web.Request) -> web.Response:
     item = request.app[MANAGER].get(request.match_info["run_id"])
     if item.record.get("status") == "running":
         raise RequestError("the run is still in progress", status=409)
-    return _json(await asyncio.to_thread(build_evidence, item.run.path, write=False))
+    try:
+        evidence = await asyncio.to_thread(build_evidence, item.run.path, write=False)
+    except Exception as exc:  # a broken run folder must give a clean answer, not an unhandled 500
+        logger.exception("run {}: evidence not computed", item.id)
+        return _error(f"the evidence could not be computed ({type(exc).__name__})", 500)
+    return _json(evidence)
 
 
 async def post_message(request: web.Request) -> web.Response:

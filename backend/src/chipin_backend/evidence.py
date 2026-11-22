@@ -1,15 +1,19 @@
 """Run evidence: three measurements computed only from a finished run's own files.
 
-A. Number tracing: every number the final report states, traced to a
-   machine-produced source in the same run folder (a ``metric`` event, or a
-   numeric field of a file the chip lab wrote). An untraced number is not
-   called wrong: it only has no machine source.
+A. Number tracing: every number the final report states, in one of three
+   classes that are never added together: traced (value and meaning agree
+   with a machine-produced source in the run folder: a ``metric`` event, a
+   model file's stored parameter count, or a numeric field of a file the chip
+   lab wrote), value found but meaning not confirmed (for a human to check),
+   or untraced; plus excluded (dates, versions, list numbers, ...). An
+   untraced number is not called wrong: it only has no machine source.
 B. Weight bytes per decision: the bytes of trained weights a software
-   implementation of the selected chip's model reads for one decision, and
-   the memory cells (and flip-flops) in the chip's compiled netlist.
+   implementation of the selected chip's model reads for one decision (one
+   width rule for every design), and the memory cells (and flip-flops) in the
+   chip's compiled netlist.
 C. Stage timings: wall time per stage from the ``stage`` events, each
-   stage's share, the largest share and the speed-up bound it implies, items
-   per second where the events count items, and per-tool-call wall times.
+   stage's share, both speed-up bounds of the largest share, counts of what
+   each stage processed, and per-tool-call wall times.
 
 Pure functions over a run folder: no network, no model calls. The entry
 point :func:`build_evidence` returns a JSON-ready dict and writes
@@ -115,9 +119,86 @@ _STOP = frozenset(
     re.findall(
         r"\w+",
         "a an and are as at be by for from has in is it its of on or per than that the this to was were "
-        "with which while each all one two three about into over under after before",
+        "with which while each all one two three about into over under after before we our my me us",
     )
 )
+#: Words too generic to tie a claim to a source on their own (rule: never enough for a match).
+GENERIC_WORDS = frozenset(
+    {"line", "size", "count", "number", "value", "total", "time", "second", "num", "max", "min", "id"}
+)
+#: Kinds of counted things: the claim words (stemmed) that name each kind.
+_CLAIM_NOUNS: dict[str, frozenset[str]] = {
+    "gate": frozenset({"gate", "cell", "ge"}),
+    "vector": frozenset({"vector"}),
+    "parameter": frozenset({"parameter", "param", "weight"}),
+    "level": frozenset({"level"}),
+    "patient": frozenset({"patient", "subject", "recording"}),
+    "byte": frozenset({"byte", "kb", "mb"}),
+    "bit": frozenset({"bit"}),
+    "tile": frozenset({"tile"}),
+    "lut": frozenset({"lut", "lut4", "lut6"}),
+    "transistor": frozenset({"transistor"}),
+    "lane": frozenset({"lane"}),
+    "design": frozenset({"design"}),
+    "line": frozenset({"line"}),
+    "decision": frozenset({"decision"}),
+    "seconds": frozenset({"second", "sec"}),
+    "eur": frozenset({"eur", "euro"}),
+}
+#: The source key words (stemmed) that agree with each kind: the synonym table.
+_SOURCE_NOUNS: dict[str, frozenset[str]] = {
+    **_CLAIM_NOUNS,
+    "vector": frozenset({"vector", "identical"}),
+    "parameter": frozenset({"parameter", "param"}),
+    "level": frozenset({"level", "depth"}),
+    "seconds": frozenset({"second", "wall", "elapsed", "duration"}),
+    "unit:s": frozenset({"slack", "period", "delay", "latency", "path"}),
+    "unit:W": frozenset({"power", "leakage"}),
+    "unit:m2": frozenset({"area"}),
+    "unit:J": frozenset({"energy"}),
+    "unit:Hz": frozenset({"frequency", "fmax", "clock"}),
+    "unit:V": frozenset({"voltage", "vdd"}),
+}
+_NOUN_OF_WORD = {word: kind for kind, words in _CLAIM_NOUNS.items() for word in words}
+#: Source key words that make it a percentage (value as written) or a 0-to-1 ratio.
+_PERCENT_WORDS = frozenset({"percent", "pct"})
+_RATIO_WORDS = frozenset({"rate", "sensitivity", "specificity", "accuracy", "share", "fraction", "ratio"})
+#: Source key words of structural fields that describe files or tools, not results.
+_STRUCTURAL_WORDS = frozenset(
+    {
+        "line",
+        "byte",
+        "size",
+        "second",
+        "wall",
+        "cpu",
+        "elapsed",
+        "duration",
+        "seed",
+        "exit",
+        "returncode",
+        "rc",
+        "ts",
+        "timestamp",
+        "index",
+        "idx",
+        "seq",
+        "offset",
+    }
+)
+_LOOP_SIZE_KEYS = frozenset({"vectors", "n_vectors", "num_vectors", "vector_count"})
+
+#: The three classes of a reported number (never added together), plus excluded.
+TRACED = "traced"
+VALUE_ONLY = "value_found_meaning_not_confirmed"
+UNTRACED = "untraced"
+EXCLUDED = "excluded"
+CLASS_NAMES = {
+    TRACED: "traced (value and meaning agree)",
+    VALUE_ONLY: "value found, meaning not confirmed",
+    UNTRACED: "untraced",
+    EXCLUDED: "excluded",
+}
 _PREFIX = {"p": 1e-12, "n": 1e-9, "u": 1e-6, "µ": 1e-6, "m": 1e-3, "": 1.0, "k": 1e3, "M": 1e6, "G": 1e9}
 _BASES = ("Hz", "W", "J", "s", "m2", "m²", "m", "V")
 _COUNT_UNITS = (
@@ -125,6 +206,7 @@ _COUNT_UNITS = (
     "transistors?|patients?|levels?|EUR"
 )
 _UNIT = re.compile(rf"^(?:%|x|\u00d7|[kMGK]|(?:[pnuµmkMG]?(?:Hz|W|J|s|m2|m²|m|V))|{_COUNT_UNITS})$")
+_RANGE_UNIT = re.compile(r"^\s*[-–]\s*\d[\d.,]*\s*([^\s.,;:)*|]+)")  # noqa: RUF001
 _NUMBER = re.compile(r"(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?(?:[eE]([-+]?\d+))?")
 _BOUNDARY = set(" \t()[]{};|*\"'`=:<>≈~!?,–—→")  # noqa: RUF001 (dashes and arrows separate numbers)
 _MONTH = (
@@ -145,16 +227,32 @@ _SPANS: tuple[tuple[str, re.Pattern[str]], ...] = (
 )
 
 
+def _stem(word: str) -> str:
+    """``word`` lower-cased with an English plural ending removed (``passes`` -> ``pass``)."""
+    low = word.lower()
+    if len(low) > 4 and low.endswith("ies"):
+        return low[:-3] + "y"
+    if len(low) > 4 and low.endswith(("sses", "shes", "ches", "xes")):
+        return low[:-2]
+    if len(low) > 3 and low.endswith("s") and not low.endswith(("ss", "us", "is")):
+        return low[:-1]
+    return low
+
+
 def _terms(text: str) -> set[str]:
-    """Lower-case content words of ``text``, a trailing plural ``s`` dropped."""
-    words = re.findall(r"[A-Za-z][A-Za-z]+", text.replace("_", " "))
-    out = set()
-    for word in words:
-        low = word.lower()
-        if low in _STOP:
-            continue
-        out.add(low[:-1] if len(low) > 3 and low.endswith("s") and not low.endswith("ss") else low)
-    return out
+    """Stemmed lower-case content words of ``text`` (``_`` and ``-`` split words)."""
+    words = re.findall(r"[A-Za-z][A-Za-z0-9]+", text.replace("_", " "))
+    return {_stem(word) for word in words if word.lower() not in _STOP}
+
+
+def _noun_kind(word: str | None) -> str | None:
+    """The kind of counted thing or physical quantity ``word`` names, if it is in the table."""
+    if not word:
+        return None
+    scaled = _unit_scale(word)
+    if scaled is not None:
+        return f"unit:{scaled[0]}"
+    return _NOUN_OF_WORD.get(_stem(word.strip("*_")))
 
 
 def _unit_scale(unit: str | None) -> tuple[str, float] | None:
@@ -204,11 +302,19 @@ class Claim:
     percent: bool
     terms: set[str] = field(default_factory=set)
     excluded: str | None = None
+    #: The kind the unit or noun right next to the number names (``gate``, ``unit:s``, ...).
+    noun: str | None = None
+    noun_word: str | None = None
 
 
 @dataclass
 class Source:
-    """One machine-produced number in the run folder."""
+    """One machine-produced number in the run folder.
+
+    ``terms`` are the words of the key's last meaningful segment; ``kinds`` the counted things
+    or physical quantities the key or unit names; ``confirmed`` is False for a figure a file
+    declares that the run's own data does not reproduce.
+    """
 
     label: str
     key: str
@@ -216,6 +322,11 @@ class Source:
     unit: str | None
     terms: set[str]
     from_event: bool
+    kinds: set[str] = field(default_factory=set)
+    percent: bool = False
+    ratio: bool = False
+    structural: bool = False
+    confirmed: bool = True
 
 
 def _word_around(line: str, start: int, end: int) -> tuple[int, int]:
@@ -312,23 +423,38 @@ def _claim(
         resolution *= 10.0 ** int(exp)
     unit = tail if tail and _UNIT.match(tail) else None
     written = line[start:end] + (raw_tail if unit or compound else "")
+    after = line[right:].split()
+    nxt = after[0].strip(".,;:)*|") if after else ""
     if unit is None:
-        after = line[right:].split()
-        nxt = after[0].strip(".,;:)*|") if after else ""
         unit = nxt if nxt and _UNIT.match(nxt) and nxt not in ("x", "K", "M", "G", "k", "B") else None
         written += f" {unit}" if unit else ""
+    if unit is None and (ranged := _RANGE_UNIT.match(line[end:])) and _unit_scale(ranged.group(1)):
+        unit = ranged.group(1)  # "0.03-0.05 µW": the first bound carries the second's unit
     if unit in ("k", "K", "M", "G"):
         scale = {"k": 1e3, "K": 1e3, "M": 1e6, "G": 1e9}[unit]
         value, resolution, unit = value * scale, resolution * scale, None
     if lead.endswith(("-", "−")) and not lead.rstrip("-−"):  # noqa: RUF001
         value = -value
     snippet = _snippet(line, start, end)
-    before, after_words = line[:left].split()[-CONTEXT_WORDS:], line[right:].split()[:CONTEXT_WORDS]
+    before = [w for w in line[:left].split() if re.search(r"[A-Za-z]{2}", w)][-CONTEXT_WORDS:]
+    after_words = [w for w in after if re.search(r"[A-Za-z]{2}", w)][:CONTEXT_WORDS]
     terms = _terms(" ".join([*before, tail if compound else "", *after_words]))
     if header is not None:
         column = line[:start].count("|") - 1
         if 0 <= column < len(header):
             terms |= _terms(header[column])
+    noun_word = None
+    if unit == "%":
+        noun_word = "%"
+    elif unit is not None:
+        noun_word = unit
+    elif compound:
+        noun_word = tail
+    else:
+        previous = line[:left].split()[-1:] if line[:left].strip() else []
+        candidates = [nxt, previous[0].strip("(*_,:") if previous else ""]
+        noun_word = next((w for w in candidates if _noun_kind(w)), None)
+    noun = "percent" if noun_word == "%" else _noun_kind(noun_word)
     return Claim(
         line=index + 1,
         snippet=snippet,
@@ -339,6 +465,8 @@ def _claim(
         percent=unit == "%",
         terms=terms,
         excluded=excluded,
+        noun=noun,
+        noun_word=noun_word if noun else None,
     )
 
 
@@ -402,68 +530,195 @@ def lab_files(run: Path) -> list[Path]:
     return out
 
 
+def _leaf(key: str) -> str:
+    """The key's last meaningful segment: the last one with a non-generic word (indices dropped)."""
+    segments = [s for s in re.sub(r"\[[^\]]*\]", "", key).split(".") if s]
+    for segment in reversed(segments):
+        if _terms(segment) - GENERIC_WORDS:
+            return segment
+    return segments[-1] if segments else key
+
+
+def _source(
+    label: str, key: str, value: float, unit: str | None, *, from_event: bool, check_structure: bool = True
+) -> Source:
+    """A source with its key words, the kinds they name, and its percent and structural flags."""
+    leaf = _leaf(key)
+    terms = _terms(leaf)
+    scaled = _unit_scale(unit)
+    kinds = {kind for kind, words in _SOURCE_NOUNS.items() if terms & words}
+    if scaled is not None:  # a physical unit outranks words such as "clock" in clock_period_ns
+        kinds = {k for k in kinds if not k.startswith("unit:")} | {f"unit:{scaled[0]}"}
+    elif not kinds and (unit_kind := _noun_kind(unit)):
+        kinds = {unit_kind}
+    percent = unit == "%" or bool(terms & _PERCENT_WORDS)
+    ratio = not percent and scaled is None and bool(terms & _RATIO_WORDS) and 0 <= value <= 1
+    if percent or ratio:
+        kinds.add("percent")
+    structural = check_structure and (
+        bool(terms & _STRUCTURAL_WORDS) or leaf.lower() in _LOOP_SIZE_KEYS or bool(re.search(r"_s$", leaf))
+    )
+    return Source(label, key, value, unit, terms, from_event, kinds, percent, ratio, structural)
+
+
+def model_files(run: Path) -> list[Path]:
+    """JSON files in the run's workspace that store weight arrays (model files), outside lab answers."""
+    space = _workspace(run)
+    out = []
+    for path in sorted(space.rglob("*.json"), key=lambda p: (p.relative_to(space).parts[0] == "chips", p)):
+        parts = path.relative_to(space).parts
+        if any(part.startswith(".") for part in parts) or path.name == "net.json":
+            continue
+        data = _load_json(path)
+        if isinstance(data, dict) and "status" not in data and any(_tensors(data)):
+            out.append(path)
+    return out
+
+
+def _model_sources(run: Path) -> list[Source]:
+    """Parameter counts of each model file: the stored weight values, and a differing declared count.
+
+    The stored count is machine-countable (the length of every weight and bias array). A declared
+    ``meta.params`` that equals it is named in the same source; one that differs (weight sharing,
+    unrolled weights) is a separate, unconfirmed source.
+    """
+    sources = []
+    for path in model_files(run):
+        data = _load_json(path)
+        tensors = list(_tensors(data))
+        stored = sum(len(values) for _, values in tensors)
+        meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+        declared = meta.get("params") if isinstance(meta.get("params"), int) else None
+        name = f" (model {data['name']})" if isinstance(data.get("name"), str) else ""
+        rel = _rel(run, path)
+        agrees = "; meta.params declares the same" if declared == stored else ""
+        label = f"{rel}{name}: {stored} stored weight values in {len(tensors)} arrays{agrees}"
+        source = _source(label, "stored_parameters", stored, None, from_event=False, check_structure=False)
+        sources.append(source)
+        if declared is not None and declared != stored:
+            label = (
+                f"{rel}{name}: meta.params declares {declared}, but the arrays store {stored} values "
+                "(the declared count is not reproduced from the data)"
+            )
+            source = _source(label, "declared_parameters", declared, None, from_event=False)
+            source.confirmed = False
+            sources.append(source)
+    return sources
+
+
 def collect_sources(run: Path, events: list[dict[str, Any]]) -> list[Source]:
-    """Every machine-produced number: metric events, then numeric fields and text numbers of lab files."""
+    """Every machine-produced number: metric events, model parameter counts, then lab file numbers."""
     sources = []
     for event in events:
         value = event.get("value")
         if event.get("type") != "metric" or isinstance(value, bool) or not isinstance(value, int | float):
             continue
         key, unit = str(event.get("key")), event.get("unit") or _key_unit(str(event.get("key")))
-        sources.append(
-            Source(
-                label=f"metric {key} = {value} (events.jsonl seq {event.get('seq')})",
-                key=key,
-                value=float(value),
-                unit=unit,
-                terms=_terms(key) | _terms(str(event.get("unit") or "")),
-                from_event=True,
-            )
-        )
+        label = f"metric {key} = {value} (events.jsonl seq {event.get('seq')})"
+        sources.append(_source(label, key, float(value), unit, from_event=True, check_structure=False))
+    sources += _model_sources(run)
     for path in lab_files(run):
         rel = _rel(run, path)
         if path.suffix == ".json":
             for key, value in _walk_numbers(_load_json(path)):
-                last = key.rsplit(".", 1)[-1]
-                sources.append(
-                    Source(f"{rel}: {key} = {value:g}", key, value, _key_unit(last), _terms(key), False)
-                )
+                unit = _key_unit(key.rsplit(".", 1)[-1])
+                sources.append(_source(f"{rel}: {key} = {value:g}", key, value, unit, from_event=False))
             continue
         for claim in extract_claims(path.read_text(encoding="utf-8", errors="replace")):
             if claim.excluded is None:
                 label = f"{rel} line {claim.line}: {claim.snippet}"
-                sources.append(Source(label, claim.snippet, claim.value, claim.unit, claim.terms, False))
+                source = Source(label, claim.snippet, claim.value, claim.unit, claim.terms, False)
+                source.kinds = {claim.noun} if claim.noun else set()
+                source.percent = claim.percent
+                sources.append(source)
     return sources
 
 
 def _matches(claim: Claim, source: Source) -> bool:
-    """Whether ``source`` rounds to ``claim`` at the digits shown (sign not compared)."""
+    """Whether ``source`` rounds to ``claim`` at the digits shown (sign not compared).
+
+    A percent claim matches only a percentage (as written) or a 0-to-1 ratio (times 100).
+    """
     wanted = abs(claim.value)
-    candidates = [abs(source.value)]
     if claim.percent:
-        candidates.append(abs(source.value) * 100)
-    have, want = _unit_scale(source.unit), _unit_scale(claim.unit)
-    if have and want and have[0] == want[0]:
-        candidates.append(abs(source.value) * have[1] / want[1])
+        if source.percent:
+            candidates = [abs(source.value)]
+        elif source.ratio:
+            candidates = [abs(source.value) * 100]
+        else:
+            return False
+    else:
+        candidates = [abs(source.value)]
+        have, want = _unit_scale(source.unit), _unit_scale(claim.unit)
+        if have and want and have[0] == want[0]:
+            candidates.append(abs(source.value) * have[1] / want[1])
     tolerance = claim.resolution * (1 + 1e-9) + 1e-12
     return any(abs(c - wanted) <= tolerance for c in candidates)
+
+
+def _shared_words(claim: Claim, source: Source) -> set[str]:
+    """Whole non-generic words shared by the claim's context and the source key's last segment."""
+    return (claim.terms & source.terms) - GENERIC_WORDS
 
 
 def _is_small_int(claim: Claim) -> bool:
     return claim.resolution >= 0.5 and claim.value.is_integer() and abs(claim.value) <= SMALL_INT_MAX
 
 
+def classify_claim(claim: Claim, sources: list[Source]) -> tuple[str, list[Source], str | None]:
+    """``(class, sources in rank order, reason)`` for one report number.
+
+    Traced needs the value and the meaning to agree: the noun or unit next to the number agrees
+    with the source's kind, or (with no such noun) the number's words share a whole non-generic
+    word with the source key. A value-only match is never traced. A structural field (line count,
+    byte size, tool duration, seed, ...) is a source only when the claim's words name it.
+    """
+    hits = [s for s in sources if _matches(claim, s)]
+    named = [s for s in hits if not s.structural or claim.noun in s.kinds or _shared_words(claim, s)]
+
+    def rank(pool: list[Source]) -> list[Source]:
+        return sorted(
+            pool,
+            key=lambda s: (
+                -len(_shared_words(claim, s)),
+                not s.from_event,
+                abs(abs(s.value) - abs(claim.value)),
+            ),
+        )
+
+    if claim.noun is not None and claim.noun != "percent":
+        agree = [s for s in named if claim.noun in s.kinds]
+        if confirmed := [s for s in agree if s.confirmed]:
+            return TRACED, rank(confirmed), None
+        if agree:
+            return VALUE_ONLY, rank(agree), "the only agreeing source is a declared figure"
+        reason = f"no source with this value is a {claim.noun_word}"
+        if hits:
+            reason += f"; the value appears only as a different quantity ({rank(hits)[0].label})"
+        return UNTRACED, [], reason
+    keyed = [s for s in named if _shared_words(claim, s)]
+    if confirmed := [s for s in keyed if s.confirmed]:
+        return TRACED, rank(confirmed), None
+    if keyed:
+        return VALUE_ONLY, rank(keyed), "the only source sharing a word is a declared figure"
+    if named and _is_small_int(claim):
+        return UNTRACED, [], "small integer, and no source with this value shares a word"
+    if named:
+        return VALUE_ONLY, rank(named), "the value matches but no word ties the number to the source"
+    return UNTRACED, [], None
+
+
 def trace_numbers(run: Path, events: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-    """Measurement A over the run's final report."""
+    """Measurement A over the run's final report: every number in one of three classes, or excluded."""
     events = read_events(run) if events is None else events
     report = find_report(run, events)
     result: dict[str, Any] = {
         "report": _rel(run, report) if report else None,
-        "traced": 0,
-        "traced_without_key_match": 0,
-        "untraced": 0,
-        "untraced_small_integer": 0,
-        "excluded": 0,
+        "classes": dict(CLASS_NAMES),
+        TRACED: 0,
+        VALUE_ONLY: 0,
+        UNTRACED: 0,
+        EXCLUDED: 0,
         "numbers": [],
     }
     if report is None:
@@ -472,39 +727,24 @@ def trace_numbers(run: Path, events: list[dict[str, Any]] | None = None) -> dict
     sources = collect_sources(run, events)
     result["sources"] = {
         "metric_events": sum(s.from_event for s in sources),
-        "lab_file_numbers": sum(not s.from_event for s in sources),
+        "model_parameter_counts": sum(s.key.endswith("_parameters") for s in sources),
+        "lab_file_numbers": sum(not s.from_event and not s.key.endswith("_parameters") for s in sources),
     }
     for claim in extract_claims(report.read_text(encoding="utf-8"), find_prompt(run, events)):
         entry: dict[str, Any] = {"line": claim.line, "snippet": claim.snippet, "text": claim.text}
         entry["value"] = claim.value
         if claim.excluded:
-            entry["status"] = f"excluded ({claim.excluded})"
-            result["excluded"] += 1
+            kind, ranked, reason = EXCLUDED, [], claim.excluded
         else:
-            hits = [s for s in sources if _matches(claim, s)]
-            ranked = sorted(
-                hits,
-                key=lambda s: (
-                    -len(claim.terms & s.terms),
-                    not s.from_event,
-                    abs(abs(s.value) - abs(claim.value)),
-                ),
-            )
-            best = ranked[0] if ranked else None
-            if best and _is_small_int(claim) and not claim.terms & best.terms:
-                best = None
-                entry["status"] = "untraced (small integer, no matching key)"
-                result["untraced_small_integer"] += 1
-            elif best is None:
-                entry["status"] = "untraced"
-                result["untraced"] += 1
-            if best is not None:
-                entry["status"] = "traced"
-                entry["source"] = best.label
-                entry["other_matches"] = len(hits) - 1
-                entry["key_match"] = bool(claim.terms & best.terms)
-                result["traced"] += 1
-                result["traced_without_key_match"] += not entry["key_match"]
+            kind, ranked, reason = classify_claim(claim, sources)
+        entry["class"] = kind
+        entry["status"] = CLASS_NAMES[kind]
+        if reason:
+            entry["reason"] = reason
+        if ranked:
+            entry["source"] = ranked[0].label
+            entry["other_matches"] = len(ranked) - 1
+        result[kind] += 1
         result["numbers"].append(entry)
     return result
 
@@ -512,7 +752,6 @@ def trace_numbers(run: Path, events: list[dict[str, Any]] | None = None) -> dict
 # ---------------------------------------------------------------- B. weight bytes
 
 _WEIGHT_KEY = re.compile(r"^(?:W|b|w|weights?|bias(?:es)?|kernel)\d*$")
-_WIDTH_KEYS = ("weight_bits", "w_bits", "wbits")
 _FLOP = re.compile(r"dff|dlatch|^\$_?sr|__df|__dl|__edf|__sdf", re.I)
 _MEMORY = re.compile(r"^\$mem|sram|\bram|rom\b|_ram|_rom|macro", re.I)
 
@@ -553,13 +792,16 @@ def select_chip(run: Path, events: list[dict[str, Any]]) -> tuple[Path | None, s
     counts = {c: len(re.findall(rf"(?<![\w-]){re.escape(c.name)}(?![\w-])", text)) for c in pool}
     best = max(pool, key=lambda c: counts[c])
     if counts[best] and list(counts.values()).count(counts[best]) == 1:
-        basis = "the laid-out chips" if laid_out else "all chips"
-        return best, f"the chip the report names most often ({counts[best]} times) among {basis}"
+        basis = "laid-out chips" if laid_out else "chip folders"
+        return best, f"the report names this chip most often ({counts[best]} times) among the {basis}"
     weighted = [c for c in pool if (m := _model_file(c)) is not None and any(_tensors(_load_json(m)))]
+    if weighted and laid_out:
+        return weighted[0], "the run named no chip; first laid-out design with weights"
     if weighted:
-        what = "laid-out chip" if laid_out else "chip folder (by name)"
-        return weighted[0], f"the report names no single chip; the first {what} whose model carries weights"
-    return pool[0], "the report names no single chip and no model carries weights; the first chip"
+        return weighted[
+            0
+        ], "the run named no chip and laid none out; first chip folder (by name) with weights"
+    return pool[0], "the run named no chip and no model carries weights; first chip folder"
 
 
 def _min_signed_bits(values: list[int]) -> int:
@@ -593,31 +835,24 @@ def _tensors(data: Any, path: str = "") -> Iterator[tuple[str, list[float]]]:
             yield from _tensors(item, f"{path}[{label}]")
 
 
-def _declared_width(data: Any) -> int | None:
-    meta = data.get("meta") if isinstance(data, dict) else None
-    for holder in (data, meta):
-        if isinstance(holder, dict):
-            for key in _WIDTH_KEYS:
-                if isinstance(holder.get(key), int):
-                    return int(holder[key])
-    return None
+def _width(values: list[float]) -> tuple[int, int, str]:
+    """``(stored bits, packed minimal bits, kind)`` of one array, by one rule for every design.
 
-
-def _width(values: list[float], declared: int | None) -> tuple[int, int, str]:
-    """``(stored bits, minimal bits, kind)`` of one tensor."""
+    Stored: the smallest machine integer type (int8/16/32/64) holding every value, or float32 for
+    decimal values. Packed: the fewest bits per value (1 for binary, 2 for ternary, else the
+    smallest signed width).
+    """
     if any(not v.is_integer() for v in values):
-        bits = declared or 32
-        return bits, bits, "declared width" if declared else "decimal values, float32 assumed"
+        return 32, 32, "decimal values, float32"
     ints = sorted({int(v) for v in values})
     if set(ints) <= {-1, 1} or set(ints) <= {0, 1}:
-        return declared or 1, 1, "binary (1 bit)"
-    if set(ints) <= {-1, 0, 1}:
-        return declared or 2, 2, "ternary (2 bits)"
-    minimal = _min_signed_bits(ints)
-    if declared:
-        return declared, minimal, "declared width"
+        minimal, kind = 1, "binary"
+    elif set(ints) <= {-1, 0, 1}:
+        minimal, kind = 2, "ternary"
+    else:
+        minimal, kind = _min_signed_bits(ints), "integers"
     stored = next(b for b in (8, 16, 32, 64) if b >= minimal)
-    return stored, minimal, f"integers, int{stored} (smallest machine type holding every value)"
+    return stored, minimal, f"{kind}, int{stored} (smallest machine type), {minimal} bits packed"
 
 
 def _model_file(chip: Path) -> Path | None:
@@ -717,10 +952,9 @@ def chip_weight_figures(run: Path, chip: Path) -> dict[str, Any]:
     model = _model_file(chip)
     if model is not None:
         data = _load_json(model)
-        declared = _declared_width(data)
         tensors = []
         for name, values in _tensors(data):
-            stored, minimal, kind = _width(values, declared)
+            stored, minimal, kind = _width(values)
             tensors.append(
                 {"field": name, "count": len(values), "bits": stored, "min_bits": minimal, "kind": kind}
             )
@@ -743,15 +977,17 @@ def chip_weight_figures(run: Path, chip: Path) -> dict[str, Any]:
         fields = ", ".join(t["field"] for t in tensors)
         sentence = (
             f"A software implementation reads {out['software']['bytes_per_decision']} bytes of trained "
-            f"weights per decision: {count} parameters ({widths or 'none'}) in the arrays {fields or 'none'} "
-            f"of {_rel(run, model)}; packed at the smallest width each array needs it would be "
+            f"weights per decision: {count} stored values ({widths or 'none'}; each array in the "
+            f"smallest machine integer type holding it) in the arrays {fields or 'none'} of "
+            f"{_rel(run, model)}; packed at the fewest bits each array needs it would be "
             f"{out['software']['bytes_at_minimal_widths']} bytes."
         )
         declared_params = out["software"]["declared_params"]
         if isinstance(declared_params, int) and declared_params != count:
             sentence += (
-                f" The file declares {declared_params} parameters: its arrays store {count} entries "
-                "(shared or unrolled weights), so software that shares them reads fewer bytes."
+                f" The file declares {declared_params} parameters but its arrays store {count} values "
+                "(weight sharing or unrolled weights): the bytes above count the stored values, and "
+                "software that shares the weights would read fewer."
             )
         out["software"]["sentence"] = sentence
     else:
@@ -820,13 +1056,17 @@ def stage_timings(events: list[dict[str, Any]]) -> dict[str, Any]:
     stages = []
     for name, spans in intervals.items():
         seconds = sum((s["end"] - s["start"]).total_seconds() for s in spans)
+        share = seconds / total if total else None
         stages.append(
             {
                 "stage": name,
                 "seconds": round(seconds, 3),
-                "share": round(seconds / total, 4) if total else None,
+                "share": round(share, 4) if share is not None else None,
                 "state": spans[-1]["state"],
-                "items": _stage_items(stamped, spans, seconds),
+                "items": _stage_items(stamped, spans),
+                "bound_if_this_stage_free": round(1 / (1 - share), 2)
+                if share is not None and share < 1
+                else None,
             }
         )
     stages.sort(key=lambda s: min(sp["start"] for sp in intervals[s["stage"]]))
@@ -842,13 +1082,19 @@ def stage_timings(events: list[dict[str, Any]]) -> dict[str, Any]:
     timed = [s for s in stages if s["share"]]
     if timed:
         top = max(timed, key=lambda s: s["share"])
+        share = top["share"]
+        others_free = 1 / share
+        this_free = 1 / (1 - share) if share < 1 else None
+        this_text = f"at most {this_free:.2f}x faster" if this_free else "no bound (it is the whole run)"
         result["largest"] = {
             "stage": top["stage"],
-            "share": top["share"],
-            "bound": round(1 / top["share"], 2),
+            "share": share,
+            "bound_if_others_free": round(others_free, 2),
+            "bound_if_this_free": round(this_free, 2) if this_free else None,
             "sentence": (
-                f"{top['stage']} took {top['share']:.0%} of the run's wall time, so even if every other "
-                f"stage took no time the whole run could speed up by at most {1 / top['share']:.2f}x."
+                f"{top['stage']} took {share:.0%} of the run's wall time. If every other stage cost "
+                f"nothing, the run would be at most {others_free:.2f}x faster; if this stage cost "
+                f"nothing, {this_text}."
             ),
         }
     return result
@@ -866,9 +1112,13 @@ def _union_seconds(spans: list[tuple[datetime, datetime]]) -> float:
 
 
 def _stage_items(
-    stamped: list[tuple[dict[str, Any], datetime]], spans: list[dict[str, Any]], seconds: float
+    stamped: list[tuple[dict[str, Any], datetime]], spans: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """Counts of what the events show the stage processed, with items per second."""
+    """Counts of what the events show the stage processed.
+
+    No per-second rate: a stage's wall time includes the agent's own thinking, so dividing a
+    count by it is not tool throughput.
+    """
     inside = [e for e, t in stamped if any(s["start"] <= t <= s["end"] for s in spans)]
     chips = {
         Path(str(e.get("path"))).parts[2]
@@ -889,10 +1139,7 @@ def _stage_items(
             items.append((label, metrics[key]))
     if vectors:
         items.append(("vectors checked", vectors))
-    return [
-        {"item": label, "count": count, "per_second": round(count / seconds, 3) if seconds > 0 else None}
-        for label, count in items
-    ]
+    return [{"item": label, "count": count} for label, count in items]
 
 
 def _tool_calls(stamped: list[tuple[dict[str, Any], datetime]]) -> dict[str, Any]:
@@ -968,7 +1215,7 @@ def evidence_summary(evidence: dict[str, Any]) -> dict[str, Any]:
     software = weights.get("software") or {}
     chip = weights.get("chip_netlist") or {}
     return {
-        "numbers": {k: numbers.get(k) for k in ("traced", "untraced", "untraced_small_integer", "excluded")},
+        "numbers": {k: numbers.get(k) for k in (TRACED, VALUE_ONLY, UNTRACED, EXCLUDED)},
         "weights": {
             "chip": weights.get("chip"),
             "software_bytes_per_decision": software.get("bytes_per_decision"),
@@ -979,7 +1226,8 @@ def evidence_summary(evidence: dict[str, Any]) -> dict[str, Any]:
             "total_seconds": stages.get("total_seconds"),
             "largest": (stages.get("largest") or {}).get("stage"),
             "largest_share": (stages.get("largest") or {}).get("share"),
-            "bound": (stages.get("largest") or {}).get("bound"),
+            "bound_if_others_free": (stages.get("largest") or {}).get("bound_if_others_free"),
+            "bound_if_this_free": (stages.get("largest") or {}).get("bound_if_this_free"),
         },
     }
 
@@ -991,6 +1239,14 @@ def emit_evidence(run: Path, append: Callable[..., Any]) -> None:
         append("evidence", **evidence_summary(evidence))
     except Exception:  # evidence must never fail a run
         logger.exception("run {}: evidence not computed", Path(run).name)
+
+
+def number_summary(numbers: dict[str, Any]) -> str:
+    """The one-line count of each class of report number (never summed)."""
+    line = "; ".join(
+        f"{CLASS_NAMES[k]}: {numbers.get(k, 0)}" for k in (TRACED, VALUE_ONLY, UNTRACED, EXCLUDED)
+    )
+    return line[0].upper() + line[1:] + "."
 
 
 def render_markdown(evidence: dict[str, Any]) -> str:
@@ -1007,33 +1263,41 @@ def render_markdown(evidence: dict[str, Any]) -> str:
         out += [numbers.get("note", "no report"), ""]
     else:
         out += [
-            f"Report: `{numbers['report']}`. Traced {numbers['traced']}, untraced {numbers['untraced']}, "
-            f"untraced small integers {numbers['untraced_small_integer']}, excluded {numbers['excluded']}.",
-            f"{numbers['traced_without_key_match']} traced numbers share no word with their source's key "
-            "(the value matches; the match may be a coincidence).",
-            "An untraced number is not wrong: it has no machine source in this run folder.",
+            f"Report: `{numbers['report']}`. {number_summary(numbers)}",
+            "The classes are separate counts and are never added together. A number under "
+            f'"{CLASS_NAMES[VALUE_ONLY]}" has a matching value but nothing ties its meaning to the '
+            "source: a human should check it. An untraced number is not wrong: it has no machine "
+            "source in this run folder.",
             "",
         ]
-        for entry in numbers["numbers"]:
-            where = f": {entry['source']}" if entry.get("source") else ""
-            extra = f" (+{entry['other_matches']} more)" if entry.get("other_matches") else ""
-            loose = " [no shared key word]" if entry.get("key_match") is False else ""
-            out.append(f"- line {entry['line']}: `{entry['text']}` {entry['status']}{where}{extra}{loose}")
-            out.append(f"  - {entry['snippet']}")
-        out.append("")
+        for kind in (TRACED, VALUE_ONLY, UNTRACED, EXCLUDED):
+            entries = [e for e in numbers["numbers"] if e["class"] == kind]
+            out += [f"### {CLASS_NAMES[kind][0].upper()}{CLASS_NAMES[kind][1:]}: {len(entries)}", ""]
+            for entry in entries:
+                where = f": {entry['source']}" if entry.get("source") else ""
+                extra = f" (+{entry['other_matches']} more)" if entry.get("other_matches") else ""
+                why = f" ({entry['reason']})" if entry.get("reason") else ""
+                out.append(f"- line {entry['line']}: `{entry['text']}`{where}{extra}{why}")
+                out.append(f"  - {entry['snippet']}")
+            out.append("")
     out += ["## B. Weight bytes per decision", ""]
     if weights.get("chip") is None:
         out += [weights.get("note", "no chip"), ""]
     else:
         software, chip = weights.get("software") or {}, weights.get("chip_netlist") or {}
-        out += [f"Chip `{weights['chip']}`, selected as {weights['chip_selected_by']}.", ""]
+        out += [
+            f"These figures are for chip `{weights['chip']}`. Why this chip: {weights['chip_selected_by']}.",
+            "",
+        ]
         out += [f"- Software: {software.get('sentence') or software.get('note')}"]
         out += [f"- Chip: {chip.get('sentence')}"]
         out += [f"- Lab cross-check: {note}" for note in chip.get("lab_cross_checks") or []]
         for other in weights.get("other_laid_out_chips") or []:
+            declared = other["declared_params"]
+            declared_text = f", {declared} declared" if declared is not None else ", none declared"
             out.append(
                 f"- Other laid-out chip `{other['chip']}`: software {other['software_bytes_per_decision']} "
-                f"bytes ({other['parameters']} stored parameters, {other['declared_params']} declared); "
+                f"bytes ({other['parameters']} stored values{declared_text}); "
                 f"chip {other['memory_cells']} memory cells, {other['flip_flops']} flip-flops, "
                 f"{other['cells']} cells"
             )
@@ -1051,8 +1315,7 @@ def render_markdown(evidence: dict[str, Any]) -> str:
             share = f"{stage['share']:.1%}" if stage["share"] is not None else "n/a"
             out.append(f"- {stage['stage']}: {stage['seconds']:.1f} s, {share}, {stage['state']}")
             for item in stage["items"]:
-                rate = f", {item['per_second']}/s" if item["per_second"] is not None else ""
-                out.append(f"  - {item['item']}: {item['count']:g}{rate}")
+                out.append(f"  - {item['item']}: {item['count']:g}")
         if stages.get("largest"):
             out += ["", stages["largest"]["sentence"]]
         tools = stages["tool_calls"]
@@ -1069,9 +1332,11 @@ def render_markdown(evidence: dict[str, Any]) -> str:
 
 
 __all__ = [
+    "CLASS_NAMES",
     "EVIDENCE_JSON",
     "EVIDENCE_MD",
     "build_evidence",
+    "classify_claim",
     "emit_evidence",
     "evidence_summary",
     "extract_claims",
