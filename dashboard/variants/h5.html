@@ -740,6 +740,7 @@ svg.mchip .fl{stroke-dasharray:4 8;animation:flow .9s linear infinite}
 .cand .mk svg.ic{width:13px;height:13px;stroke-width:2.6}
 .cand.fit .mk{background:var(--okbg);color:var(--okt)}
 .cand.out .mk{background:var(--fill);color:var(--ink3)}
+.cand.dep .mk{background:var(--fill);color:var(--ink2);font-weight:700;font-size:13px}
 .cand .cn{font-size:13px;line-height:1.4;color:var(--ink2)}
 .cand .cn b{display:block;color:var(--ink);font-weight:600}
 .cand .cv{font-size:12px;font-weight:600;color:var(--ink3);padding-top:2px}
@@ -1080,6 +1081,12 @@ const PAPERS = {
   epfl: { short: "Two-stage detector", title: "Two-stage iEEG seizure detector on an FPGA", fact: "The detection stage powers on only after a monitoring stage flags something; activation ratio 0.272.", use: "The idea of a tiny always-on stage that wakes the rest, to save power.", url: "https://infoscience.epfl.ch/record/293538" },
   cochrane: { short: "Cochrane review", title: "Cochrane review of amplitude-integrated EEG in newborns", fact: "16 studies, 562 newborns: simplified EEG may not be accurate enough for diagnosing neonatal seizures.", use: "A caution that simplified bedside monitors in newborns need strict checking, so every newborn is judged on their own.", url: "https://www.cochrane.org/evidence/CD013546_how-accurate-simplified-and-easily-available-electroencephalography-called-amplitude-integrated-eeg" },
 };
+// which age groups a text names (none named = unknown); every reason and assumption below cites only these or an answer given
+const POP_RE = [["newborn", /newborn|neonat|preterm|\bbab(?:y|ies)\b/], ["infant", /infant|toddler/], ["child", /child|paediatric|pediatric|\bkids?\b/], ["elderly", /elderly|older adult|older people|senior|geriatric/], ["adult", /\badults?\b/]];
+const POP_NAME = { newborn: "newborns", infant: "infants", child: "children", elderly: "older adults", adult: "adults" };
+const popsOf = t => { const s = String(t || "").toLowerCase(); return POP_RE.filter(([k, re]) => re.test(k === "adult" ? s.replace(/older adults?/g, "") : s)).map(([k]) => k); };
+const popList = a => a.map(k => POP_NAME[k]).join(" and ");
+const capFirst = s => s.charAt(0).toUpperCase() + s.slice(1);
 /* Assumptions: what ChipIn takes as given, each of one kind (about the people, the recordings, the device, the clinical bar).
    Which set applies depends on where the data comes from; the clinical bar is the same for every set. */
 const KINDS = {
@@ -1113,25 +1120,39 @@ const ASM_SIM = {
 };
 function asmOwn(U, c) {
   const who = c.answers && c.answers.who, ch = c.chans;
+  const pw = who ? who.toLowerCase() : U.people === "newborns" && !popsOf(c.text).some(k => k === "newborn" || k === "infant") ? "people" : U.people;
   return [
     { id: "D1", kind: "rec", text: c.answers && /not yet/i.test(c.answers.marks || "") ? `Your team will mark every ${U.event} before the final check` : `Every ${U.event} in your files is marked by a clinician`, val: `Marked by a clinician`, why: `The chip learns from these marks and is judged against them; a missing mark looks like a miss.` },
     { id: "D2", kind: "rec", text: `Each file comes from one person, and no person is on both sides of the split`, val: `One person per file`, why: `Otherwise the check would see ${U.people} the models trained on, and look better than it is.` },
     { id: "D3", kind: "device", text: ch && ch.length ? `The ${ch.length} channels you picked (${ch.slice(0, 4).join(", ")}${ch.length > 4 ? ", and more" : ""}) are the ones the finished device will have` : `The channels in your files include the ones the finished device will have`, val: `The picked channels`, why: `A chip can only use what the device measures; other channels are left out of training.` },
-    { id: "D4", kind: "people", text: who ? `The ${who.toLowerCase()} recorded are like the ${who.toLowerCase()} who will wear the device` : `The ${U.people} recorded are like the ${U.people} who will wear the device`, val: `Like the wearers`, why: who ? `From your answer about who was recorded; a chip designed on one group can fail on another.` : `You did not say who was recorded; a chip designed on one group can fail on another.` },
+    { id: "D4", kind: "people", text: `The ${pw} recorded are like the ${pw} who will wear the device`, val: `Like the wearers`, why: who ? `From your answer about who was recorded; a chip designed on one group can fail on another.` : `You did not say who was recorded; a chip designed on one group can fail on another.` },
   ];
 }
 function asmPub(U, c) {
   const who = c.answers && c.answers.who;
+  const pw = who ? who.toLowerCase() : U.people === "newborns" && !popsOf(c.text).some(k => k === "newborn" || k === "infant") ? "people" : U.people;
   return [
-    { id: "P1", kind: "people", text: `The ${U.people} in the public sets are like ${who ? "the " + who.toLowerCase() : "the " + U.people} who will wear the device`, val: `Like the wearers`, why: `The public recordings were made in hospital; your wearers may be elsewhere.` },
+    { id: "P1", kind: "people", text: `The ${pw} in the public sets are like the ${pw} who will wear the device`, val: `Like the wearers`, why: `The public recordings were made in hospital; your wearers may be elsewhere.` },
     { id: "P2", kind: "device", text: `The temple channels of the public cap stand in for the patch's electrodes`, val: `Temple channels stand in for the patch`, why: `The public sets use a full cap; the patch has only some of those positions, so only those are used.` },
     { id: "P3", kind: "rec", text: `Seizures marked in the public sets are marked the way your clinicians would`, val: `Marked the same way`, why: `The chip is judged against those marks.` },
   ];
 }
 function asmSim(uc, c) {
   const who = c.answers && c.answers.who, A = ASM_SIM[uc].map(a => Object.assign({}, a));
-  if (uc === "eeg" && who && who !== "Adults") { A[0].text = `${who === "A mix" ? "Adults and children" : who} with focal epilepsy, at home, moving about`; A[0].why = "From your answer about who wears it; movement adds noise the simulator has to include."; }
-  if (uc === "nirs" && who && /early/i.test(who)) { A[0].text = "Newborns born early, in intensive care, lying still most of the time"; A[0].why = "From your answer; a thinner scalp and skull change how far the light reaches."; }
+  const pops = popsOf(c.text), named = popList(pops);
+  if (uc === "eeg") {
+    const grp = who ? (who === "A mix" ? "Adults and children" : who) : pops.length ? capFirst(named) : "Assumed adults";
+    A[0].text = `${grp} with focal epilepsy, at home, moving about`; A[0].val = A[0].text;
+    A[0].why = who ? "From your answer about who wears it; movement adds noise the simulator has to include." : pops.length ? `Your description names ${named}; home use is assumed, and movement adds noise the simulator has to include.` : "Your description does not name an age group; change it if yours is not adults. Movement adds noise the simulator has to include.";
+  } else {
+    const nbOnly = pops.filter(k => k === "newborn" || k === "infant");
+    if (who && /early/i.test(who)) { A[0].text = "Newborns born early, in intensive care, lying still most of the time"; A[0].why = "From your answer; a thinner scalp and skull change how far the light reaches."; }
+    else if (who) A[0].why = "From your answer; how much they move sets how noisy the light signal is.";
+    else {
+      A[0].text = nbOnly.length ? `${capFirst(popList(nbOnly))}, assumed in intensive care, lying still most of the time` : "Assumed newborns in intensive care, lying still most of the time"; A[0].val = A[0].text;
+      A[0].why = nbOnly.length ? `Your description names ${popList(nbOnly)}; the ward is assumed. How much they move sets how noisy the light signal is.` : pops.length ? `Your description names ${named}, but this demo's brain-oxygen patch covers newborns only. Change it if that is wrong.` : "Your description does not name an age group; newborns are assumed. How much they move sets how noisy the light signal is.";
+    }
+  }
   return A;
 }
 function asmBase(uc, mode, c = {}) { const U = UC[uc]; return (mode === "own" ? asmOwn(U, c) : mode === "public" ? asmPub(U, c) : asmSim(uc, c)).concat(BAR[uc].map(a => Object.assign({}, a))); }
@@ -1224,7 +1245,7 @@ runs.forEach(r => { if (r.acc > total(r)) r.acc = total(r); if (r.redirect) { r.
 function heldN(r) { return r.uc === "eeg" && r.data.mode === "public" ? 14 : 12; }
 /* Each assumption with how it stands: confirmed, changed by you, assumed (not checked), or added by you */
 function asmList(r) {
-  const base = asmBase(r.uc, r.data.mode, { answers: r.answers, chans: r.data.chans }).map(a => { const s = r.data.asm[a.id]; const st = !s ? "un" : s.ok ? "ok" : "chg"; return Object.assign({}, a, { st, ok: st !== "chg", cur: st === "chg" ? s.val : a.text }); });
+  const base = asmBase(r.uc, r.data.mode, { text: r.title, answers: r.answers, chans: r.data.chans }).map(a => { const s = r.data.asm[a.id]; const st = !s ? "un" : s.ok ? "ok" : "chg"; return Object.assign({}, a, { st, ok: st !== "chg", cur: st === "chg" ? s.val : a.text }); });
   return base.concat((r.data.mine || []).map((m, i) => ({ id: "Y" + (i + 1), kind: m.kind || "rec", text: m.text, cur: m.text, why: "Added by you.", st: "you", ok: true })));
 }
 const fmtBytes = n => n >= 1e9 ? (n / 1e9).toFixed(1) + " GB" : n >= 1048576 ? (n / 1048576).toFixed(1) + " MiB" : n >= 1024 ? Math.round(n / 1024) + " KiB" : n + " bytes";
@@ -1705,15 +1726,17 @@ function questionsFor(I) {
 }
 const QSHORT = { who: "Who", chans: "Sensors", detect: "Detect", marks: "Marks", alarm: "Alarm reaches", battery: "Battery", fa: "False alarms" };
 function modeOf(I) { return I.data || (I.files.length ? "own" : I.uc === "nirs" || I.uc === "other" ? "sim" : "public"); }
-function ctxOf(I) { const e = I.files.find(f => f.edf); return { answers: ansText(I.answers), chans: e && I.chans ? [...I.chans].map(i => e.edf.labels[i]) : null }; }
+function ctxOf(I) { const e = I.files.find(f => f.edf); return { text: I.text, answers: ansText(I.answers), chans: e && I.chans ? [...I.chans].map(i => e.edf.labels[i]) : null }; }
 function ansText(A) { const o = {}; Object.entries(A || {}).forEach(([k, v]) => { o[k] = Array.isArray(v) ? v.join(", ") : v; }); return o; }
 /* The visible dataset search: archives, records looked at, candidates with a tick or a cross and one reason each */
 function searchPlan(I) {
   const D = DATASETS;
   const arch = [["PhysioNet", 0, 2.0, 12], ["Zenodo", 0.4, 2.4, 5], ["Temple University EEG corpus", 0.8, 2.8, 2], ["VitalDB", 1.2, 3.1, 1]];
   const no = (t, d, why) => ({ t, ok: false, d, why }), yes = (t, d, why) => ({ t, ok: true, d, why });
+  const pops = popsOf(I.text), named = popList(pops);
+  const hel = !pops.length || pops.includes("newborn") ? { t: 3.9, ok: null, d: D.helsinki, why: "Newborns only: fits if your device is for newborns." } : no(3.9, D.helsinki, `Newborns only; your description names ${named}.`);
   let rows;
-  if (I.uc === "eeg") rows = [no(3.4, D.sleepedf, "Sleep recordings, no seizure marks."), no(3.9, D.helsinki, "Newborns, not the adults your device is for."), no(4.4, D.tusz, "Needs a signed access form, which ChipIn cannot sign for you."), no(4.9, D.vitaldb, "Surgery with a BIS monitor, not seizures."), yes(5.4, D.chbmit, "Scalp EEG with every seizure marked, open with no account."), yes(5.9, D.siena, "A separate open set, so the final check uses people the models never saw.")];
+  if (I.uc === "eeg") rows = [no(3.4, D.sleepedf, "Sleep recordings, no seizure marks."), hel, no(4.4, D.tusz, "Needs a signed access form, which ChipIn cannot sign for you."), no(4.9, D.vitaldb, "Surgery with a BIS monitor, not seizures."), yes(5.4, D.chbmit, "Scalp EEG with every seizure marked, open with no account."), yes(5.9, D.siena, "A separate open set, so the final check uses people the models never saw.")];
   else if (I.uc === "nirs") rows = [no(3.4, D.helsinki, "Newborns, but EEG, not brain oxygen."), no(3.9, D.vitaldb, "Adult surgery, EEG from a BIS monitor."), no(4.4, D.chbmit, "Scalp EEG for seizures, not brain oxygen."), no(4.9, D.sleepedf, "Sleep EEG, not brain oxygen.")];
   else rows = [no(3.4, D.chbmit, "Scalp EEG, not what your device measures."), no(3.9, D.siena, "Scalp EEG, not what your device measures."), no(4.4, D.vitaldb, "Surgical cases; no recordings from your kind of device."), no(4.9, D.sleepedf, "Sleep recordings, not what your device measures.")];
   return { arch, rows, end: rows[rows.length - 1].t + 0.7, looked: arch.reduce((a, x) => a + x[3], 0) };
@@ -1721,7 +1744,7 @@ function searchPlan(I) {
 function searchHTML(I) {
   const P = searchPlan(I), el = (now() - I.search) / 1000, done = el >= P.end;
   const arch = P.arch.map(([n, a, b, cnt]) => { const f = clamp((el - a) / (b - a), 0, 1); return `<div class="arow2"><span class="an">${esc(n)}</span><span class="abar"><i data-a0="${a}" data-a1="${b}" style="width:${f * 100}%"></i></span><span class="ac" data-cnt="${cnt}" data-a1="${b}">${f >= 1 ? cnt + (cnt === 1 ? " record" : " records") : ""}</span></div>`; }).join("");
-  const rows = P.rows.map(x => `<li class="cand${el >= x.t ? " show" : ""} ${x.ok ? "fit" : "out"}" data-t="${x.t}"><span class="mk">${x.ok ? ic("check") : ic("x")}</span><span class="cn"><b>${esc(x.d.name)}</b><span>${esc(x.why)}</span></span><span class="cv">${x.ok ? "Fits" : "Dropped"}</span></li>`).join("");
+  const rows = P.rows.map(x => `<li class="cand${el >= x.t ? " show" : ""} ${x.ok === null ? "dep" : x.ok ? "fit" : "out"}" data-t="${x.t}"><span class="mk" aria-label="${x.ok === null ? "Depends on your answer" : x.ok ? "Fits" : "Dropped"}">${x.ok === null ? "?" : x.ok ? ic("check") : ic("x")}</span><span class="cn"><b>${esc(x.d.name)}</b><span>${esc(x.why)}</span></span><span class="cv">${x.ok === null ? "Depends" : x.ok ? "Fits" : "Dropped"}</span></li>`).join("");
   return `<div class="slog2" id="slog"><div class="sh2"><span class="g" id="sglyph">${done ? doneGlyph : spinner()}</span><span id="shead">${done ? "Search finished" : "Searching open archives"}</span><span class="looked" id="slooked">${done ? P.looked : 0} records looked at</span></div>
     <div class="archs">${arch}</div><ol class="cands">${rows}</ol></div>`;
 }
