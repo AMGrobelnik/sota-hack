@@ -7,7 +7,7 @@ Operating threshold: fixed on the round's validation patients only. Headline rul
 any test result was seen): specificity >= 0.999 on validation normals. The ladder 0.99, 0.995,
 0.998 is also recorded so the whole trade-off is visible.
 
-Usage: python -I run_coin.py <beats.npz> <baseline cv lists dir> <out dir> <workers> <folds|all>
+Usage: python -I run_coin.py <beats.npz> <baseline cv lists dir> <out dir> <workers> <folds|all> [refs|norefs]
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ N_FOLDS = 50
 TRAIN_NORMAL_CAP = 20000
 TEST_SPEC = 0.998
 VAL_SPECS = (0.999, 0.998, 0.995, 0.99)  # first = headline rule
+REF_FOLDS = (0, 5, 10, 18, 25, 40)  # float references are fitted on these folds only (CPU time)
 
 BASE = np.arange(D.N_BASE)  # exactly the baseline chip's 372 input bits
 MORPH = np.arange(D.N_BITS)  # baseline bits + 7-level thermometer of the same samples
@@ -80,7 +81,7 @@ def oracle_sens(score: np.ndarray, y: np.ndarray) -> float:
 
 
 def run_fold(args: tuple) -> dict:
-    beats_path, fold = args
+    beats_path, fold, with_refs = args
     B = load_beats(Path(beats_path))
     bits = B.bits
     Xfull = np.concatenate([bits, D.rr_bits(B.rr)], axis=1)
@@ -132,7 +133,7 @@ def run_fold(args: tuple) -> dict:
         "R2_hgb_baseline_bits": bits[:, : D.N_BASE].astype(np.float32),
         "R3_hgb_samples_rr": np.concatenate([xs, ratio_feats(B.rr)], axis=1),
     }
-    for name, X in refs.items():
+    for name, X in refs.items() if with_refs else []:
         clf = HistGradientBoostingClassifier(max_iter=100, early_stopping=False, random_state=0)
         clf.fit(X[tr_idx], y[tr_idx], sample_weight=D.balanced_weights(y[tr_idx]))
         sv, st = clf.decision_function(X[va_m]), clf.decision_function(X[te_m])
@@ -145,7 +146,7 @@ def run_fold(args: tuple) -> dict:
     return {"res": res, "irs": irs}
 
 
-def main(beats: Path, lists: Path, out: Path, workers: int, which: str) -> None:
+def main(beats: Path, lists: Path, out: Path, workers: int, which: str, refs: str) -> None:
     out.mkdir(parents=True, exist_ok=True)
     (out / "irs").mkdir(exist_ok=True)
     folds = read_folds(lists)
@@ -153,7 +154,7 @@ def main(beats: Path, lists: Path, out: Path, workers: int, which: str) -> None:
     sel = folds if which == "all" else [folds[int(i)] for i in which.split(",")]
     sel = [f for f in sel if not (out / f"fold{f['fold']:02d}.json").exists()]
     with ProcessPoolExecutor(workers) as ex:
-        for r in ex.map(run_fold, [(str(beats), f) for f in sel]):
+        for r in ex.map(run_fold, [(str(beats), f, refs == "refs" or f["fold"] in REF_FOLDS) for f in sel]):
             f = r["res"]["fold"]
             (out / "irs" / f"fold{f:02d}.json").write_text(json.dumps(r["irs"]))
             (out / f"fold{f:02d}.json").write_text(json.dumps(r["res"]))
@@ -162,4 +163,4 @@ def main(beats: Path, lists: Path, out: Path, workers: int, which: str) -> None:
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]), int(sys.argv[4]), sys.argv[5])
+    main(Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]), int(sys.argv[4]), sys.argv[5], sys.argv[6] if len(sys.argv) > 6 else "refs")

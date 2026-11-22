@@ -193,22 +193,44 @@ def fit_tree(tr: Data, name: str, depth: int, cols: np.ndarray) -> dict:
     return leaves_to_ir(name, pl, rank, 0, {"family": f"tree_d{depth}"})
 
 
-def fit_gbdt(tr: Data, name: str, n_trees: int, cols: np.ndarray, q: int = 7) -> dict:
+def _pick_q(float_score: np.ndarray, int_score_for_q, y: np.ndarray, w: np.ndarray) -> int:
+    """Smallest signed weight range q (7, 15, 31, 63) whose integer score keeps the float model's
+    weighted training AUC within 0.002 (training beats only)."""
+    ref = roc_auc_score(y, float_score, sample_weight=w)
+    for q in Q_LADDER:
+        if roc_auc_score(y, int_score_for_q(q), sample_weight=w) >= ref - 0.002:
+            return q
+    return Q_LADDER[-1]
+
+
+Q_LADDER = (7, 15, 31, 63)
+
+
+def fit_gbdt(tr: Data, name: str, n_trees: int, cols: np.ndarray) -> dict:
     clf = GradientBoostingClassifier(n_estimators=n_trees, max_depth=2, learning_rate=0.3, random_state=0)
-    clf.fit(tr.X[:, cols], tr.y, sample_weight=tr.w)
-    paths_all, vals = [], []
-    for est in clf.estimators_[:, 0]:
+    Xc = tr.X[:, cols]
+    clf.fit(Xc, tr.y, sample_weight=tr.w)
+    paths_all, vals, leaf_of = [], [], []
+    for e, est in enumerate(clf.estimators_[:, 0]):
         for lf, path in _leaf_paths(est).items():
             if path:
                 paths_all.append([(int(cols[f]), b) for f, b in path])
                 vals.append(float(est.tree_.value[lf, 0, 0]))
+                leaf_of.append((e, lf))
     v = np.asarray(vals)
-    ints = np.round(v * (q / np.abs(v).max())).astype(int)
+    leaves = clf.apply(Xc)[:, :, 0].astype(int)  # [n, trees] leaf ids
+    onehot = np.stack([leaves[:, e] == lf for e, lf in leaf_of], axis=1).astype(np.int64)
+
+    def ints_for(q: int) -> np.ndarray:
+        return np.round(v * (q / np.abs(v).max())).astype(int)
+
+    q = _pick_q(clf.decision_function(Xc), lambda q: onehot @ ints_for(q), tr.y, tr.w)
+    ints = ints_for(q)
     keep = [i for i in range(len(ints)) if ints[i] != 0]
-    return leaves_to_ir(name, [paths_all[i] for i in keep], [int(ints[i]) for i in keep], 0, {"family": f"gbdt_d2_k{n_trees}", "leaf_bits": 4})
+    return leaves_to_ir(name, [paths_all[i] for i in keep], [int(ints[i]) for i in keep], 0, {"family": f"gbdt_d2_k{n_trees}", "leaf_q": q})
 
 
-def fit_linear(tr: Data, name: str, target_nnz: int, cols: np.ndarray, q: int = 7) -> dict:
+def fit_linear(tr: Data, name: str, target_nnz: int, cols: np.ndarray) -> dict:
     best = None
     X = tr.X[:, cols].astype(np.float32)
     for C in (0.001, 0.003, 0.01, 0.03, 0.1):
@@ -221,9 +243,16 @@ def fit_linear(tr: Data, name: str, target_nnz: int, cols: np.ndarray, q: int = 
             break
     w = best[1].coef_[0]
     order = np.argsort(-np.abs(w))[:target_nnz]
-    wi = np.round(w * (q / np.abs(w).max())).astype(int)
+    wk = np.zeros_like(w)
+    wk[order] = w[order]
+
+    def ints_for(q: int) -> np.ndarray:
+        return np.round(wk * (q / np.abs(wk).max())).astype(int)
+
+    q = _pick_q(X @ wk, lambda q: tr.X[:, cols] @ ints_for(q), tr.y, tr.w)
+    wi = ints_for(q)
     idx = [int(i) for i in order if wi[i] != 0]
-    return linear_to_ir(name, [int(cols[i]) for i in idx], [int(wi[i]) for i in idx], 0, {"family": f"linear_nnz{target_nnz}", "weight_bits": 4})
+    return linear_to_ir(name, [int(cols[i]) for i in idx], [int(wi[i]) for i in idx], 0, {"family": f"linear_nnz{target_nnz}", "weight_q": q})
 
 
 # ----------------------------------------------------------------------------- fast evaluation

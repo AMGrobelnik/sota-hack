@@ -11,7 +11,7 @@ The baseline's own PTA_1 filter file is not in its repository; this file impleme
 original PTA low-pass and high-pass and removes their 21-sample group delay (documented
 difference).
 
-Usage: python -I prep.py <mitdb dir> <out npz>
+Usage: python -I prep.py <mitdb dir> <out npz> [pta_comp|pta_raw|butter_ff]
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from pathlib import Path
 
 import numpy as np
 import wfdb
-from scipy.signal import lfilter
+from scipy.signal import butter, filtfilt, lfilter
 
 RECORDS = [
     100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 111, 112, 113, 114, 115, 116, 117, 118,
@@ -42,18 +42,33 @@ PTA_DELAY = 21  # 5 (low-pass) + 16 (high-pass) samples
 N_AVG = 8  # causal running mean of the last 8 RR intervals
 
 
-def pta_bandpass(x: np.ndarray) -> np.ndarray:
-    """Original Pan-Tompkins integer low-pass then high-pass, delay removed."""
+def pta_bandpass(x: np.ndarray, compensate: bool = True) -> np.ndarray:
+    """Original Pan-Tompkins integer low-pass then high-pass, delay removed unless told not to."""
     b_lp = np.zeros(13)
     b_lp[[0, 6, 12]] = [1, -2, 1]
     y = lfilter(b_lp, [1, -2, 1], x)
     b_hp = np.zeros(33)
     b_hp[0], b_hp[16], b_hp[17], b_hp[32] = -1 / 32, 1, -1, 1 / 32
     y = lfilter(b_hp, [1, -1], y)
+    if not compensate:
+        return y
     out = np.empty_like(y)
     out[:-PTA_DELAY] = y[PTA_DELAY:]
     out[-PTA_DELAY:] = y[-1]
     return out
+
+
+def butter_ff(x: np.ndarray) -> np.ndarray:
+    """Zero-phase 2nd-order Butterworth band-pass at the paper's 9 to 21.6 Hz."""
+    b, a = butter(2, [9 / 180, 21.6 / 180], btype="band")
+    return filtfilt(b, a, x)
+
+
+FILTERS = {
+    "pta_comp": lambda x: pta_bandpass(x, True),
+    "pta_raw": lambda x: pta_bandpass(x, False),
+    "butter_ff": butter_ff,
+}
 
 
 def rr_features(pos: np.ndarray, beat_pos: np.ndarray) -> np.ndarray:
@@ -72,13 +87,13 @@ def rr_features(pos: np.ndarray, beat_pos: np.ndarray) -> np.ndarray:
     return np.stack([pre, post, avg], axis=1)
 
 
-def main(db: Path, out: Path) -> None:
+def main(db: Path, out: Path, variant: str = "pta_comp") -> None:
     xs, ys, recs, poss, rrs, syms = [], [], [], [], [], []
     skipped = 0
     for r in RECORDS:
         sig, _ = wfdb.rdsamp(str(db / str(r)), channels=[0])
         ann = wfdb.rdann(str(db / str(r)), "atr")
-        f = pta_bandpass(np.squeeze(sig).astype(np.float64))
+        f = FILTERS[variant](np.squeeze(sig).astype(np.float64))
         sym = ann.symbol
         smp = np.asarray(ann.sample)
         beat_pos = np.asarray([s for s, c in zip(smp, sym) if c in BEATS])
@@ -118,4 +133,4 @@ def main(db: Path, out: Path) -> None:
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]), Path(sys.argv[2]))
+    main(Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3] if len(sys.argv) > 3 else "pta_comp")
