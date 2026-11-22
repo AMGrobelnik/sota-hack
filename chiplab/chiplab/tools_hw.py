@@ -132,11 +132,17 @@ def compile_stream(design_id: str, tt: bool = True) -> dict:
     ir = json.loads((d / "ir.json").read_text()); info = json.loads((d / "port.json").read_text())
     core_text = (d / "design.v").read_text() if info.get("optimizer") else None   # keep the optimised core
     text, sinfo = emit_stream(ir, info, tt=tt, core_text=core_text)
+    try:   # the wrapper's own flip-flops and sky130 area, kept apart from the core's figures
+        from chiplab.ir.estimate import stream_wrapper
+        sinfo.update(stream_wrapper(ir, tt=tt))
+    except (KeyError, ValueError, TypeError):
+        pass
     fn = "stream_tt.v" if tt else "stream.v"
     (d / fn).write_text(text)
     (d / (fn[:-2] + ".json")).write_text(json.dumps(sinfo, default=str))
     return {"design_id": design_id, "top": sinfo.get("top"), "verilog": str(d / fn), "files": [str(d / fn)],
-            **{k: sinfo.get(k) for k in ("transfers_per_frame", "counter_bits", "truncated", "uo_map")}}
+            **{k: sinfo.get(k) for k in ("transfers_per_frame", "counter_bits", "truncated", "uo_map")},
+            **{k: sinfo[k] for k in ("wrapper_ffs", "wrapper_area_um2") if k in sinfo}}
 
 
 @tool("Verification level 3: cocotb + Icarus simulation of the streaming wrapper (frames streamed in, outputs "
