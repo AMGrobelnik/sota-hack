@@ -59,6 +59,7 @@
  *   ChipInPanels.openMeasured(facts) -> { close() }
  *       Drawer "Measured so far" listing only the facts handed in:
  *       facts = [ { title, text, scope, source_name?, source_url? } ].
+ *       After the facts it appends "Against a published AF chip", written from data/af-baseline.json.
  *   ChipInPanels.defaultFacts() -> facts that need no data file.
  *   ChipInPanels.footerCredit() -> the footer credit sentence.
  *
@@ -184,6 +185,7 @@
     ".cpn-reset:hover{background:var(--cpn-soft)}",
     ".cpn-fact{padding:12px 0;border-bottom:1px solid var(--cpn-line)}",
     ".cpn-fact:last-child{border:0}",
+    ".cpn-afrow{margin-top:10px}.cpn-afrow .t{font-size:13px}.cpn-af{overflow-wrap:anywhere}",
     ".cpn-fact .t{font-size:14px;font-weight:600;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}",
     ".cpn-fact .x{font-size:13px;color:var(--cpn-ink);margin:4px 0 0;line-height:1.5}",
     ".cpn-fact .s{font-size:12px;color:var(--cpn-ink3);margin:4px 0 0;line-height:1.5}",
@@ -792,6 +794,25 @@
       },
     ];
   }
+  /* Against a published AF chip: every figure and word comes from data/af-baseline.json, next to this file. */
+  var baselineUrl = (function () {
+    var cs = typeof document !== "undefined" ? document.currentScript : null;
+    return cs && cs.src ? new URL("data/af-baseline.json", cs.src).href : null;
+  })();
+  var baselineData; // undefined = not fetched, null = unavailable
+  function baselineHtml(b) {
+    if (!b || !Array.isArray(b.rows)) return "";
+    var mk = function (m) { return m === "published" ? '<span class="mk no">published</span>' : MK_MEA; };
+    return '<div class="cpn-fact cpn-af"><div class="t">' + esc(b.heading) + "</div>" +
+      '<p class="s">' + esc(b.sub) + "</p>" +
+      b.rows.map(function (r) {
+        return '<div class="cpn-afrow"><div class="t">' + esc(r.title) +
+          (r.verdict ? ' <span class="mk no">' + esc(r.verdict) + "</span>" : "") + "</div>" +
+          (r.lines || []).map(function (l) { return '<p class="x">' + mk(l.mark) + " " + esc(l.text) + "</p>"; }).join("") +
+          (r.caveat ? '<p class="x">' + esc(r.caveat) + "</p>" : "") + "</div>";
+      }).join("") +
+      (b.footer ? '<p class="s">' + esc(b.footer) + "</p>" : "") + "</div>";
+  }
   function openMeasured(facts) {
     facts = Array.isArray(facts) ? facts : [];
     var body = facts.length
@@ -804,6 +825,16 @@
       }).join("")
       : '<p class="cpn-empty">No measured facts were handed to this drawer.</p>';
     var dr = drawer("Measured so far", '<p class="cpn-note" style="margin:0 0 6px">Only figures that were measured, each with what it covers.</p>' + body);
+    if (baselineUrl) {
+      var addBaseline = function () {
+        if (baselineData && dr.body.isConnected) dr.body.insertAdjacentHTML("beforeend", baselineHtml(baselineData));
+      };
+      if (baselineData !== undefined) addBaseline();
+      else {
+        fetch(baselineUrl, { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+          .then(function (j) { baselineData = j; addBaseline(); });
+      }
+    }
     return { close: dr.close };
   }
 
