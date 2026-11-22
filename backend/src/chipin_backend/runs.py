@@ -75,11 +75,13 @@ class RunRecord:
     subagent_cost_usd: float | None = None
     #: The level summaries' share of ``llm_cost_usd`` (live API runs; left out otherwise).
     summaries_usd: float | None = None
+    #: The intake's follow-up questions call's share of ``llm_cost_usd`` (live API runs; left out otherwise).
+    questions_usd: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Plain JSON-ready dict; the fan-out fields only when set."""
         data = asdict(self)
-        for name in ("subagents", "subagent_cost_usd", "summaries_usd"):
+        for name in ("subagents", "subagent_cost_usd", "summaries_usd", "questions_usd"):
             if data[name] is None:
                 del data[name]
         return data

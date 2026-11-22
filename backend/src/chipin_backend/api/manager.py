@@ -43,6 +43,14 @@ from chipin_backend.api.fanout import (
     subagent_instructions,
 )
 from chipin_backend.api.progress import PROGRESS_FILE, ProgressTailer, write_helper
+from chipin_backend.api.questions import (
+    FollowUp,
+    QuestionLedger,
+    QuestionsError,
+    follow_up_block,
+    parse_follow_up,
+    with_follow_up,
+)
 from chipin_backend.api.scripted import NAME as SCRIPTED
 from chipin_backend.api.scripted import STEP_ENV, register
 from chipin_backend.api.spec import RunSpec, SpecError, parse_spec, spec_instructions, write_spec
@@ -127,6 +135,7 @@ class ApiRun:
     #: The run's subagents when fan-out is on.
     fanout: Fanout | None = None
     levels: RunSummaries | None = None  # levels of summaries (api/summaries.py)
+    questions_usd: float = 0.0  # the follow-up questions call this run used (api/questions.py)
 
     @property
     def id(self) -> str:
@@ -141,7 +150,7 @@ class ApiRun:
     def detail_view(self) -> dict[str, Any]:
         """The run object of ``GET /api/runs/{id}``."""
         view = self.summary_view()
-        for key in ("summary", "bullets", "cost", "fanout", "merges"):
+        for key in ("summary", "bullets", "cost", "fanout", "merges", "follow_up"):
             if self.record.get(key) is not None:
                 view[key] = self.record[key]
         if self.fanout is not None:
@@ -185,6 +194,7 @@ class RunManager:
         self.instructions = standing_instructions()
         self.subagent_instructions = subagent_standing_instructions()
         self.levels = load_level_settings()
+        self.question_ledger = QuestionLedger(self.runs_dir)
         self.closing = False
 
     @property
@@ -237,6 +247,9 @@ class RunManager:
         """Validate a ``POST /api/runs`` body, make the run folder and start the agent."""
         prompt, preset, machine, answers, files = _validate(body, self.api)
         run_spec = _run_spec(body, self.api)
+        follow_up = _follow_up(body, self.api)
+        if run_spec is not None and follow_up is not None:
+            run_spec = with_follow_up(run_spec, follow_up)
         provider, model = self._provider_choice(body)
         effort = self.api.presets[preset] if preset else None
         try:
@@ -259,7 +272,7 @@ class RunManager:
         steering = Steering()
         run = replace(run, sink=steering.sink(translator, log))
         write_helper(run.workspace, run.path / PROGRESS_FILE)
-        (run.workspace / "brief.md").write_text(_brief(prompt, answers, files), encoding="utf-8")
+        (run.workspace / "brief.md").write_text(_brief(prompt, answers, files, follow_up), encoding="utf-8")
         if run_spec is not None:
             write_spec(run.workspace, run_spec)
         record: dict[str, Any] = {
@@ -277,12 +290,18 @@ class RunManager:
             record["model"] = model
         elif model is not None:
             record["model"] = model
-        item = ApiRun(run, record, log)
+        if follow_up is not None:
+            record["follow_up"] = follow_up.to_json()
+        item = ApiRun(run, record, log, questions_usd=self.question_ledger.take(follow_up and follow_up.id))
+        if item.questions_usd > 0:
+            record["questions_usd"] = round(item.questions_usd, 6)
         stub_env = {STEP_ENV: str(self.api.stub_step_s)}
         instructions = _with_spec(self.instructions, run_spec)
         first = _first_prompt(prompt)
         if run_spec is not None:
             first = f"{run_spec.block}\n\n{first}"
+        elif follow_up is not None:
+            first = f"{follow_up_block(follow_up)}\n\n{first}"
         if plan is not None:
             item.fanout = self._fanout(item, plan, stub_env, run_spec)
             record["fanout"] = plan.view()
@@ -444,6 +463,10 @@ class RunManager:
                     cost = {**(cost or {"usd": 0.0, "tokens_in": 0, "tokens_out": 0})}
                     cost["summaries_usd"] = round(item.levels.writer.spent, 6)
                     changed = True
+            if item.questions_usd > 0 and self._add_llm_spend(item, item.questions_usd, "questions_usd"):
+                cost = {**(cost or {"usd": 0.0, "tokens_in": 0, "tokens_out": 0})}
+                cost["questions_usd"] = round(item.questions_usd, 6)
+                changed = True
             if changed and cost is not None:
                 item.log.append("cost", **cost)
             emit_evidence(item.run.path, item.log.append)
@@ -481,6 +504,20 @@ class RunManager:
                 item.run.update_record(llm_cost_usd=round(before + spent, 6), summaries_usd=round(spent, 6))
             except (OSError, ValueError, TypeError) as exc:
                 logger.error("run {}: summary spend not recorded: {}", item.id, exc)
+        return True
+
+    @staticmethod
+    def _add_llm_spend(item: ApiRun, spent: float, field_name: str) -> bool:
+        """Add other OpenRouter spend of the run (the follow-up questions) to ``run.json``'s
+        ``llm_cost_usd``, under its own ``field_name`` too, as the summaries' spend is."""
+        if spent <= 0:
+            return False
+        if item.run.record_path.is_file():
+            try:
+                before = item.run.read_record().llm_cost_usd or 0.0
+                item.run.update_record(llm_cost_usd=round(before + spent, 6), **{field_name: round(spent, 6)})
+            except (OSError, ValueError, TypeError) as exc:
+                logger.error("run {}: {} not recorded: {}", item.id, field_name, exc)
         return True
 
     @staticmethod
@@ -556,6 +593,14 @@ def _run_spec(body: dict[str, Any], api: ApiConfig) -> RunSpec | None:
         raise RequestError(str(exc)) from None
 
 
+def _follow_up(body: dict[str, Any], api: ApiConfig) -> FollowUp | None:
+    """The request's ``follow_up`` answers (``None`` when absent); a bad one is a 400."""
+    try:
+        return parse_follow_up(body.get("follow_up"), api.questions)
+    except QuestionsError as exc:
+        raise RequestError(str(exc)) from None
+
+
 def _with_spec(instructions: str, run_spec: RunSpec | None) -> str:
     """The standing instructions, plus the spec and design-record paragraph for a run with a spec."""
     return f"{instructions.rstrip()}\n\n{spec_instructions()}" if run_spec else instructions
@@ -601,9 +646,13 @@ def _validate(
     return prompt.strip(), preset, machine or "local", answers, files
 
 
-def _brief(prompt: str, answers: dict[str, Any], files: list[dict[str, Any]]) -> str:
+def _brief(
+    prompt: str, answers: dict[str, Any], files: list[dict[str, Any]], follow_up: FollowUp | None = None
+) -> str:
     """``brief.md``: what the user gave, and plainly what did not arrive."""
     parts = ["# Brief\n", prompt.strip(), ""]
+    if follow_up is not None:
+        parts += [follow_up_block(follow_up), ""]
     if answers:
         parts += ["## Answers to follow-up questions\n"]
         parts += [f"- {k}: {json.dumps(v, ensure_ascii=False)}" for k, v in answers.items()]

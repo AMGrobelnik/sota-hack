@@ -26,6 +26,7 @@ Routes::
     POST /api/transcribe?lang=en     -> {"text", "model", "audio_seconds", "latency_ms"}
     POST /api/helper/messages      -> Chippy, the helper agent (see api/helper.py)
     POST /api/helper/suggestions   -> example prompts for the current view
+    POST /api/questions            -> {"id", "questions": [...], "reason"} (see api/questions.py)
 
 A preflight from a public page to this loopback server (Chrome's Private
 Network Access) is answered with ``Access-Control-Allow-Private-Network``.
@@ -57,6 +58,7 @@ from chipin_backend.api.events import public_text
 from chipin_backend.api.helper import add_helper_routes, helper_ready
 from chipin_backend.api.history import MAX_PAGE, history_page, run_facts, with_summaries
 from chipin_backend.api.manager import ApiAgent, ApiRunner, RequestError, RunManager
+from chipin_backend.api.questions import add_questions_route
 from chipin_backend.api.session_token import new_token
 from chipin_backend.api.summaries import SUMMARIES_FILE, read_jsonl
 from chipin_backend.api.transcribe import CONTEXT_HEADER, add_transcribe_route, transcribe_ready
@@ -438,6 +440,7 @@ def create_app(
     app.router.add_get("/api/runs/{run_id}/history", get_history)
     add_transcribe_route(app, api.transcribe)
     add_helper_routes(app, api.helper, app[MANAGER].runs_dir)
+    add_questions_route(app, api.questions, app[MANAGER])
     if frontend is not None:
         app[FRONTEND] = frontend.resolve()
         app.router.add_get("/", index)

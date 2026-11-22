@@ -5,13 +5,14 @@ different things: a subagent's event (with ``agent``) carries that subagent's
 own spend so far; the orchestrator's carries its own spend; the closing event
 of a fan-out run carries the total with ``subagents_usd``; a follow-up's
 carries the total so far; ``summaries_usd`` is the level summaries' spend,
-never inside ``usd``. Summing ``usd`` over the events therefore counts most of
+never inside ``usd``, and ``questions_usd`` the intake's follow-up questions
+call's, likewise. Summing ``usd`` over the events therefore counts most of
 the run several times. :class:`CostLedger` reads them in order and gives every
 event two fields that need no interpretation:
 
 - ``run_total_usd``: what the whole run has cost so far (orchestrator,
-  every subagent and the level summaries). The newest event's value is the
-  run's cost; never add these up.
+  every subagent, the level summaries and the follow-up questions). The
+  newest event's value is the run's cost; never add these up.
 - ``agent_usd``: the spend so far of the agent the event is about (the
   subagent named by ``agent``, else the orchestrator).
 
@@ -41,6 +42,7 @@ class CostLedger:
     subagents_reported: float = 0.0
     orchestrator: float = 0.0
     summaries: float = 0.0
+    questions: float = 0.0
     finished: bool = False
 
     @property
@@ -50,7 +52,7 @@ class CostLedger:
 
     @property
     def total(self) -> float:
-        return self.orchestrator + self.subagents + self.summaries
+        return self.orchestrator + self.subagents + self.summaries + self.questions
 
     def fields(self, event: Mapping[str, Any]) -> dict[str, float]:
         """Take one event; for a ``cost`` event, its ``run_total_usd`` and ``agent_usd``."""
@@ -76,6 +78,8 @@ class CostLedger:
                 self.orchestrator = usd
             if "summaries_usd" in event:
                 self.summaries = _usd(event.get("summaries_usd"))
+            if "questions_usd" in event:
+                self.questions = _usd(event.get("questions_usd"))
             own = self.orchestrator
         return {"run_total_usd": round(self.total, 6), "agent_usd": round(own, 6)}
 
