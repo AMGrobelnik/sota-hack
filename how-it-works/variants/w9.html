@@ -1,0 +1,981 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ChipIn: how it works</title>
+<meta name="description" content="How ChipIn designs the chip inside a medical sensing device, read from one run's event log.">
+<meta name="theme-color" content="#0f1a2a">
+<link rel="icon" type="image/svg+xml" href="../../assets/brand/favicon.svg">
+<script>
+/* =====================================================================
+   ALL VISIBLE COPY LIVES IN THIS ONE OBJECT. Edit wording here only.
+   The markup below is built from it; no visible text sits anywhere else.
+   ===================================================================== */
+window.COPY = {
+  doc: {
+    name: "ChipIn",
+    section: "How it works",
+    home: "Home",
+    dashboard: "Open the dashboard",
+    start: "Start",
+    stepOf: "of",
+    stagesLabel: "Pipeline stages",
+    footer: "Built at the SoTA Scientific Parallelism Hackathon, London, November 2026."
+  },
+
+  intro: {
+    short: "Start",
+    title: "How ChipIn works, read from one run's log",
+    lines: [
+      "You describe a medical sensing device. Agents propose small models, train many at once, compile them into logic gates with the weights wired in, verify the gates bit for bit against the model, and return the smallest chip that clears your clinical bar.",
+      "This page follows one run. The spec comes first. Then seven screens of its event log, one per stage, with notes beside the lines. The agent stack and the checks come after."
+    ],
+    legendTitle: "How to read a log line",
+    legendSample: ["0058", "+07:52", "cmp-1", "tool chiplab synthesize", "done  94090842ebae-alk"],
+    legendCols: ["sequence number", "time since the run started", "which agent: orch is the orchestrator, cmp-1 a compile subagent", "the event", "detail"],
+    kindsTitle: "Event kinds",
+    kinds: [
+      ["stage", "a stage starts or ends"],
+      ["subagent", "a subagent starts on one idea"],
+      ["tool", "a call to a chip-lab tool"],
+      ["metric", "a number from a tool's answer"],
+      ["status", "the orchestrator's decision"],
+      ["chosen", "the chip the run returns"]
+    ],
+    hint: "Scroll, or press Page Down."
+  },
+
+  spec: {
+    short: "Idea to spec",
+    title: "From a rough idea to a spec",
+    lede: "You give a rough idea. The product asks about eight questions, each with a default. It ends in an editable spec.",
+    ideaLabel: "Your rough idea",
+    idea: "A small patch for newborns in intensive care that warns the nurse when a seizure starts. It should last a week on a coin cell.",
+    qHead: ["Question", "Default"],
+    questions: [
+      ["Who is the device for, and what must it detect?", "Taken from your idea: newborns; seizures."],
+      ["Where is it used, and who responds to an alert?", "Neonatal unit; a nurse. This sets the false-alarm unit: per hour."],
+      ["Which performance targets?", "Set by task type. Event monitoring: sensitivity and false alarms per hour or day. Screening: sensitivity and specificity. Grading: agreement with experts."],
+      ["How many electrodes or sensors, and where?", "Let the platform search 1 to 4 electrodes."],
+      ["What battery life?", "A week, from your idea."],
+      ["Disposable or reusable?", "Disposable."],
+      ["Which data?", "An open dataset with a card. Or your own recordings, or simulated data labelled as such."],
+      ["Fixed assumptions", "Patients split so no patient is in both training and test. Every design judged on the worst unseen patient."]
+    ],
+    specLabel: "Editable spec (example)",
+    specRows: [
+      ["device", "seizure patch, newborns"],
+      ["setting", "neonatal unit, nurse responds"],
+      ["task", "event monitoring"],
+      ["target", "sensitivity >= 0.80"],
+      ["", "false alarms <= 0.5 per hour"],
+      ["sensors", "search 1 to 4 electrodes"],
+      ["battery", "7 days"],
+      ["use", "disposable"],
+      ["data", "open neonatal EEG"],
+      ["split", "by patient (fixed)"],
+      ["judged on", "worst unseen patient (fixed)"]
+    ],
+    cardLabel: "Dataset card (example)",
+    card: [
+      ["Population", "Newborns in intensive care"],
+      ["Channels", "Scalp EEG, full electrode set"],
+      ["Labels", "Seizures, marked by experts"],
+      ["Licence", "CC BY 4.0"]
+    ],
+    cardWarn: "Does not fit the device as recorded: the patch has at most 4 electrodes. Designs use a subset of channels."
+  },
+
+  models: {
+    short: "Models and size",
+    title: "You choose the models and the size of the run",
+    lede: "Two settings before the run starts.",
+    aTitle: "Which language models drive the agents",
+    aOptions: [
+      ["Automatic", "Claude. The default.", true],
+      ["Choose yourself", "Pick a backend and a model, including smaller, cheaper ones such as Inkling 2 through OpenRouter.", false]
+    ],
+    aRows: [
+      ["Backend", ["Claude", "OpenRouter"]],
+      ["Model", ["Inkling 2 Small", "Inkling 2 Mini"]]
+    ],
+    aNote: "The orchestrator and the subagents can use different models.",
+    bTitle: "How large the run is",
+    bRows: [
+      ["Subagents on each stage", ["1", "2", "4", "8"], 2],
+      ["Candidate designs tried", ["64", "256", "512", "1024"], 2]
+    ],
+    bNote: "More subagents explore more ideas in parallel. More candidates cover more of the design space.",
+    headerLabel: "The run's first log line (example settings)",
+    header: ["0000", "+00:00", "orch", "run started", "models auto (Claude)  subagents 4 per stage  candidates 512"]
+  },
+
+  pipeline: {
+    short: "Pipeline",
+    title: "The pipeline at a glance",
+    lede: "Seven stages in a row. One orchestrator agent above them. A fan of subagents under each stage.",
+    orchTitle: "Orchestrator agent",
+    orchText: "Runs the stages in order, briefs the subagents, picks what passes on.",
+    subLabel: "subagents",
+    logBand: "Event log: every stage, subagent, tool call and number, as it happens. The dashboard reads it.",
+    aria: "Diagram: an orchestrator above seven stages in a row, spec, reference, propose, finetune, compile, verify and report; a fan of subagents under each stage; all of them write to one event log."
+  },
+
+  // Labels for the five notes beside every stage's log. Same order on all seven screens.
+  noteLabels: ["What the stage does", "What subagents try in parallel", "Skills they call", "What comes back", "How the orchestrator picks"],
+  logTitle: "Run log",
+  logIllustrative: "Illustrative excerpt. Ids and numbers are examples, not measurements.",
+  stageWord: "Stage",
+
+  stages: [
+    {
+      key: "spec", name: "spec", fan: 4, fanText: ["readings of the brief,", "datasets"],
+      title: "Spec: pin down the device",
+      notes: [
+        "Pins down the device, the signal, the targets and the constraints from your answers.",
+        "Alternative readings of the brief and of the constraints. Candidate open datasets, checked for fit.",
+        null,
+        "The spec, and the data split by patient.",
+        "Keeps the reading that matches your answers and a dataset that fits the device."
+      ],
+      skills: ["define-task", "load-data"],
+      log: [
+        [["+00:00", "orch", "stage spec started", "round 1"], ["+00:01", "orch", "message", "brief: seizure patch, 8 answers"]],
+        [["+00:02", "spec-1", "subagent started", "reading: 2 electrodes, alarms per hour"], ["+00:02", "spec-2", "subagent started", "reading: 4 electrodes, alarms per hour"], ["+00:02", "spec-3", "subagent started", "dataset fit: open neonatal EEG"], ["+00:02", "spec-4", "subagent started", "dataset fit: simulated EEG"]],
+        [["+00:05", "spec-3", "tool chiplab load-data", "done  view 3f9a1c"], ["+00:06", "spec-4", "tool chiplab load-data", "done  view 81d2e0  simulated"], ["+00:09", "spec-1", "tool chiplab define-task", "done  split locked"]],
+        [["+00:09", "spec-1", "metric subjects 24", ""], ["+00:09", "spec-1", "metric subjects_test 10", ""], ["+00:10", "spec-1", "artifact spec.yaml", ""]],
+        [["+00:11", "orch", "status", "kept spec-1 with dataset from spec-3"], ["+00:11", "orch", "stage spec done", ""]]
+      ]
+    },
+    {
+      key: "reference", name: "reference", fan: 3, fanText: ["model families", ""],
+      title: "Reference: the accuracy to beat",
+      notes: [
+        "A full-precision model on the same data. It is never put on a chip. It separates “the data does not allow more” from “shrinking cost this much”.",
+        "Different reference model families.",
+        null,
+        "The reference scores per patient, including the worst patient.",
+        "Keeps the best worst-patient score as the bar the small designs are compared with."
+      ],
+      skills: ["load-data", "train-batch", "evaluate-clinical"],
+      log: [
+        [["+00:12", "orch", "stage reference started", ""]],
+        [["+00:12", "ref-1", "subagent started", "family: 1D convolutional net, float"], ["+00:12", "ref-2", "subagent started", "family: gradient-boosted trees"], ["+00:12", "ref-3", "subagent started", "family: spectral features, logistic"]],
+        [["+00:13", "ref-1", "tool chiplab load-data", "done  view 3f9a1c"], ["+01:40", "ref-1", "tool chiplab train-batch", "done  1 model"], ["+01:52", "ref-1", "tool chiplab evaluate-clinical", "done  split val"]],
+        [["+01:52", "ref-1", "metric sensitivity_worst 0.78", ""], ["+01:52", "ref-1", "metric false_alarms 0.31 per_hour", ""], ["+02:05", "ref-2", "metric sensitivity_worst 0.71", ""]],
+        [["+02:30", "orch", "status", "reference = ref-1 (best worst patient)"], ["+02:30", "orch", "stage reference done", ""]]
+      ]
+    },
+    {
+      key: "propose", name: "propose", fan: 4, fanText: ["design families", ""],
+      title: "Propose: candidate small designs",
+      notes: [
+        "Proposes candidate small-model designs, each with an estimated size.",
+        "Each explores a different family: feature sets, channel or sensor budgets, network shapes, bit widths.",
+        null,
+        "A pool of candidate designs with estimated sizes. Estimates are labelled as estimates.",
+        "Merges the pools, drops duplicates and passes the pool to training."
+      ],
+      skills: ["propose-designs", "estimate-batch"],
+      log: [
+        [["+02:31", "orch", "stage propose started", "round 1"]],
+        [["+02:31", "prop-1", "subagent started", "family: band-power features, 1 to 2 channels"], ["+02:31", "prop-2", "subagent started", "family: integer MLP, 2-bit weights"], ["+02:31", "prop-3", "subagent started", "family: 4 channels, 1-bit weights"], ["+02:31", "prop-4", "subagent started", "family: small 1D conv, 3-bit"]],
+        [["+02:40", "prop-2", "tool chiplab propose-designs", "done  proposal p-2b7e  128 designs"], ["+02:52", "prop-2", "tool chiplab estimate-batch", "done  128 scored  estimate"]],
+        [["+03:10", "orch", "metric candidates 512", ""], ["+03:10", "prop-2", "metric gates_est 640 chip c71f0a3e9b18-tus", "estimate"]],
+        [["+03:20", "orch", "status", "pool 512 designs, 4 families"], ["+03:20", "orch", "stage propose done", ""]]
+      ]
+    },
+    {
+      key: "finetune", name: "finetune", fan: 2, fanText: ["one batch per", "family"],
+      title: "Finetune: many candidates in one batch",
+      notes: [
+        "Trains the candidates many at once, as one batch on a GPU.",
+        "One subagent per design family or channel budget. Each runs one batch.",
+        null,
+        "Trained integer models, with scores on unseen patients.",
+        "Keeps the designs that clear your bar on the worst unseen patient, smallest first."
+      ],
+      skills: ["train-batch", "evaluate-clinical", "leaderboard"],
+      log: [
+        [["+03:21", "orch", "stage finetune started", ""]],
+        [["+03:21", "ft-1", "subagent started", "batch: 2 channels, 256 designs"], ["+03:21", "ft-2", "subagent started", "batch: 4 channels, 256 designs"]],
+        [["+03:22", "ft-1", "tool chiplab train-batch", "done  256 trained  gpu"], ["+05:40", "ft-1", "tool chiplab evaluate-clinical", "done  split val"], ["+07:30", "ft-2", "tool chiplab leaderboard", "done  top 6"]],
+        [["+05:40", "ft-1", "metric sensitivity_worst 0.74 chip 94090842ebae-alk", ""], ["+05:40", "ft-1", "metric false_alarms 0.42 per_hour chip 94090842ebae-alk", ""]],
+        [["+07:50", "orch", "status", "shortlist 6 designs clear the bar"], ["+07:50", "orch", "stage finetune done", ""]]
+      ]
+    },
+    {
+      key: "compile", name: "compile", fan: 3, fanText: ["one per design", ""],
+      title: "Compile: weights wired into gates",
+      notes: [
+        "Each design becomes logic gates with the weights wired in as constants, so the chip has no weight memory to read.",
+        "One subagent per design, trying compile and optimiser options.",
+        null,
+        "Gate count, logic depth and a netlist per design.",
+        "Ranks the designs by gate count and passes them to verification."
+      ],
+      skills: ["ingest-model", "compile-ir", "synthesize", "count-luts", "map-to-process", "ingest-batch", "synthesize-batch"],
+      log: [
+        [["+07:51", "orch", "stage compile started", ""]],
+        [["+07:51", "cmp-1", "subagent started", "design 94090842ebae-alk"], ["+07:51", "cmp-2", "subagent started", "design 5be01c9a77d2-kor"], ["+07:51", "cmp-3", "subagent started", "design 2e6d4b90f1a7-mev, depth-first"]],
+        [["+07:52", "cmp-1", "tool chiplab ingest-model", "done  94090842ebae-alk"], ["+07:58", "cmp-1", "tool chiplab synthesize", "done  94090842ebae-alk"], ["+08:04", "cmp-1", "tool chiplab map-to-process", "done  sky130"]],
+        [["+07:58", "cmp-1", "metric gates 1279 chip 94090842ebae-alk", ""], ["+07:58", "cmp-1", "metric depth 31 levels chip 94090842ebae-alk", ""], ["+07:59", "cmp-1", "artifact gates.v", "94090842ebae-alk"]],
+        [["+10:30", "orch", "status", "ranked 6 designs by gates"], ["+10:30", "orch", "stage compile done", ""]]
+      ]
+    },
+    {
+      key: "verify", name: "verify", fan: 3, fanText: ["one per design", ""],
+      title: "Verify: the gates are the model",
+      notes: [
+        "Runs the gates on test vectors and compares them bit for bit with the model, then proves formally that they always agree.",
+        "One subagent per design.",
+        null,
+        "Mismatches: zero, or the design is dropped. A verification level per design.",
+        "Passes on only designs with zero mismatches and a proof."
+      ],
+      skills: ["simulate", "rtl-simulate", "prove-equivalence", "prove-sequential", "verification-level", "simulate-batch"],
+      log: [
+        [["+10:31", "orch", "stage verify started", ""]],
+        [["+10:31", "ver-1", "subagent started", "design 94090842ebae-alk"], ["+10:31", "ver-2", "subagent started", "design 5be01c9a77d2-kor"]],
+        [["+10:32", "ver-1", "tool chiplab simulate", "done  random vectors"], ["+10:40", "ver-1", "tool chiplab prove-equivalence", "done  equal"], ["+10:41", "ver-1", "tool chiplab verification-level", "done  level 2"]],
+        [["+10:32", "ver-1", "metric mismatches 0 chip 94090842ebae-alk", ""], ["+10:41", "ver-1", "metric verification_level 2 chip 94090842ebae-alk", ""], ["+10:44", "ver-2", "metric mismatches 3 chip 5be01c9a77d2-kor", ""]],
+        [["+12:40", "orch", "status", "dropped 5be01c9a77d2-kor: 3 mismatches"], ["+12:40", "orch", "stage verify done", ""]]
+      ]
+    },
+    {
+      key: "report", name: "report", fan: 3, fanText: ["finalists,", "cost"],
+      title: "Report: the chip and its files",
+      notes: [
+        "Lays out the chosen chip in an open 130 nm process. Estimates timing, power and area. Assembles the chip's figures and files.",
+        "Layout and timing per finalist. Cost and comparison.",
+        null,
+        "The smallest chip that clears the bar, its figures with estimates marked as estimates, and its files.",
+        "Returns the smallest chip that clears the bar."
+      ],
+      skills: ["layout", "timing-power", "estimate-cost", "compare-hw-baseline", "gate-activity", "chip-report", "bitstream", "tt-package"],
+      log: [
+        [["+12:41", "orch", "stage report started", ""]],
+        [["+12:41", "rep-1", "subagent started", "layout and timing: 94090842ebae-alk"], ["+12:41", "rep-2", "subagent started", "layout and timing: 2e6d4b90f1a7-mev"], ["+12:41", "rep-3", "subagent started", "cost and comparison"]],
+        [["+12:42", "rep-1", "tool chiplab layout", "done  sky130"], ["+15:30", "rep-1", "tool chiplab timing-power", "done  cached"], ["+15:58", "rep-1", "tool chiplab chip-report", "done"]],
+        [["+15:58", "rep-1", "metric area_um2 14210 chip 94090842ebae-alk", "estimate"], ["+15:58", "rep-1", "metric power_uw_at_rate 2.9 chip 94090842ebae-alk", "estimate"], ["+15:59", "rep-1", "artifact report.md", "94090842ebae-alk"]],
+        [["+16:10", "orch", "chosen 94090842ebae-alk", ""], ["+16:10", "orch", "stage report done", ""]]
+      ]
+    }
+  ],
+
+  agent: {
+    short: "What an agent is",
+    title: "What an agent is",
+    lede: "The orchestrator and every subagent are the same four layers.",
+    head: ["Layer", "Orchestrator", "Each subagent"],
+    rows: [
+      ["Language model", "Served by Claude. Can run on a large model.", "The same, or smaller, cheaper models such as Inkling 2 Mini and Small, through OpenRouter."],
+      ["Agentic harness", "Claude Code or OpenHands.", "Claude Code or OpenHands."],
+      ["Prompts", "Standing instructions for the seven stages, and the rules: never invent a measurement; every number comes from a tool.", "The same rules, plus the brief for its stage."],
+      ["Skills", "The chip lab, and a progress reporter that sends every stage, number and file to the dashboard as it happens.", "The same."]
+    ],
+    rule: "Agents do not write chip code from scratch; they call tools, and every number on the dashboard comes from a tool's answer, not from the model's text.",
+    traceLabel: "Where a number comes from",
+    trace: [
+      ["tool call", "tool chiplab synthesize  design 94090842ebae-alk"],
+      ["tool answer", "{ \"status\": \"ok\", \"gates\": 1279, \"depth\": 31 }"],
+      ["log line", "metric gates 1279 chip 94090842ebae-alk"]
+    ]
+  },
+
+  skills: {
+    short: "The skills",
+    title: "The skills: the chip lab",
+    lede: "Command-line tools in one program. 43 tools, as listed in the lab's own reference.",
+    head: ["Tool", "What it does", "Stage"],
+    any: "any stage",
+    columns: [
+      [
+        ["Model to gates", [
+          ["ingest-model", "Bring a trained model in; compile it to a design", "compile"],
+          ["compile-ir", "Compile a chipir/1 document: validate, Verilog, lint", "compile"],
+          ["compile-verilog", "Trained candidate to Verilog, weights wired in", "compile"],
+          ["compile-stream", "Wrap a design for streaming hardware", "verify, report"],
+          ["compose-chip", "One chip from several model heads, with fusion", "compile"],
+          ["submit-verilog", "Screen, lint and check written Verilog bit for bit", "compile"],
+          ["synthesize", "Gate count, logic depth, transistors, netlist", "compile"],
+          ["count-luts", "Lookup-table count for an FPGA family", "compile"],
+          ["map-to-process", "Standard cells of a real process: area, tiles", "compile"]
+        ]],
+        ["Checking the chip is the model", [
+          ["simulate", "Level 1: netlist against the integer model", "verify"],
+          ["rtl-simulate", "Level 3: streaming wrapper simulation and lint", "verify"],
+          ["prove-equivalence", "Level 2: netlist equals the model for every input", "verify"],
+          ["prove-sequential", "Level 2 for clocked designs: the wrapper", "verify"],
+          ["verification-level", "Level, its evidence and what to run next", "verify"]
+        ]],
+        ["Physical chip", [
+          ["layout", "Place and route: area, slack, power, GDS", "report"],
+          ["timing-power", "Timing and power at the decision rate", "report"],
+          ["bitstream", "iCE40 FPGA bitstream: LUTs, pins, max clock", "report"],
+          ["tt-package", "Tiny Tapeout project with a test from the model", "report"],
+          ["tt-readiness", "Tiny Tapeout readiness; never submits or pays", "report"],
+          ["tt-export", "Tiny Tapeout repo, ready for a human to submit", "report"]
+        ]]
+      ],
+      [
+        ["Cost and comparison", [
+          ["estimate-cost", "Manufacturing routes, cost and the basis of each", "report"],
+          ["compare-hw-baseline", "Published hardware on the same task and protocol", "report"],
+          ["gate-activity", "How often each net switches; data for power", "report"],
+          ["chip-report", "One-page report: numbers with basis, checks, cost", "report"]
+        ]],
+        ["Batches and jobs", [
+          ["synthesize-batch", "Synthesize many designs at once", "compile"],
+          ["ingest-batch", "Ingest many models at once, in parallel", "compile"],
+          ["simulate-batch", "Bit-exact check many designs at once", "verify"],
+          ["estimate-batch", "Fast gate estimates to rank many designs", "propose"],
+          ["submit-job", "Run any tool asynchronously; results cached", "any"],
+          ["submit-batch", "Many jobs of one tool at once", "any"],
+          ["job-status", "State of a job, with timings", "any"],
+          ["job-result", "Result of a finished job", "any"],
+          ["cancel-job", "Cancel a queued job", "any"],
+          ["list-jobs", "Recent jobs and the load on each lane", "any"],
+          ["cache-stats", "Cache entries, hits, misses, bytes", "any"]
+        ]],
+        ["Data and training", [
+          ["define-task", "Define the task; lock the split by subject", "spec"],
+          ["load-data", "Recordings to windows, with labels and split", "spec, reference"],
+          ["propose-designs", "Propose a batch of candidate designs", "propose"],
+          ["train-batch", "Train every candidate at once on the GPU", "reference, finetune"],
+          ["evaluate-clinical", "Score decisions per window, recording, subject", "reference, finetune"],
+          ["leaderboard", "Designs ranked: gates, depth, bit-exact, metrics", "finetune"],
+          ["events", "Events for the dashboard: stages, checks", "any"],
+          ["plugins", "Datasets, front-ends, families, simulators", "spec"]
+        ]]
+      ]
+    ]
+  },
+
+  checks: {
+    short: "What is checked",
+    title: "What is checked, and how numbers are marked",
+    lede: "Every design carries a verification level. Every number carries its kind.",
+    head: ["Check", "Tool", "What it shows", "Level"],
+    rows: [
+      ["Bit-exact simulation", "simulate, simulate-batch", "The gates run on test or random vectors. Every output is compared bit for bit with the model. Any mismatch drops the design.", "1"],
+      ["Formal equivalence", "prove-equivalence, prove-sequential", "A proof that the gates equal the model for every possible input.", "2"],
+      ["Streaming simulation and lint", "rtl-simulate", "The streaming wrapper, simulated frame by frame.", "3"],
+      ["Gate-level test after layout", "tt-package", "The Tiny Tapeout test on the laid-out chip.", "4"],
+      ["Real hardware", "none", "Never set automatically.", "5"]
+    ],
+    levelNote: "verification-level reports each design's level and the evidence behind it.",
+    marksTitle: "How numbers are marked",
+    marks: [
+      ["Measured", "2,330 gates", "", "Shown plain. A tool measured it."],
+      ["Estimate", "2.9 µW", "estimate: layout tools, open 130 nm process (sky130)", "Power, area and cost are estimates from layout tools in one open process. The assumption is shown with the number."],
+      ["Simulated", "Simulated data", "", "Demo data from a simulator is labelled as simulated."]
+    ],
+    marksNote: "The estimate on this card is an example of the marking."
+  },
+
+  measured: {
+    short: "Measured so far",
+    title: "Measured so far",
+    lede: "Only these figures are stated as measured. Each has its scope.",
+    head: ["Figure", "What was measured", "Scope"],
+    rows: [
+      [["2,330 gates", "3,880 of 3,880"], "An atrial-fibrillation feasibility circuit of 2,330 gates. Its outputs matched the model on 3,880 of 3,880 test windows.", "Early feasibility test. Not clinical accuracy."],
+      [["256 at a time"], "Candidate models trained 256 at a time, fine-tuned together in one GPU batch, not one after another.", "No speed-up figure: a fair one-at-a-time baseline has not been measured yet."],
+      [["17 min 50 s"], "One full agent run through the real chip-lab tools: three classifier designs and a front-end compiled, each bit-exact on 100,000 random vectors and formally proved.", "The run used placeholder weights, so it has no detection figures."],
+      [["about $0.10", "against $1.42"], "The same task driven by Inkling 2 Small and Mini through OpenRouter reached compiled, bit-exact, proved designs at about $0.10 per run, against $1.42 for the Claude run.", "One run each. The designs differ, so sizes and times are not compared."]
+    ]
+  },
+
+  limits: {
+    short: "Limits",
+    title: "Limits",
+    items: [
+      "A feasibility tool, not clinical evidence.",
+      "The device maker keeps clinical validation and regulatory responsibility.",
+      "Power, area and cost are estimates from one open process.",
+      "Demo runs on the dashboard are simulated unless marked measured."
+    ]
+  }
+};
+(function () {
+  var h = document.documentElement;
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) h.classList.add('motion');
+})();
+</script>
+<style>
+:root {
+  --night: #0f1a2a;
+  --deep: #16263c;
+  --well: #0a1423;
+  --paper: #eef1f2;
+  --ink: #132033;
+  --signal: #5be49b;
+  --amber: #ffb86b;
+  --dusk: #c9a3c4;
+  --mute: #9aabc0;
+  --text: #e8eef5;
+  --soft: #c4d1df;
+  --rule: rgba(214, 228, 242, .15);
+  --rule2: rgba(214, 228, 242, .28);
+  --f: "Avenir Next", "Avenir", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --m: "SF Mono", ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+  --bar: 58px;
+}
+* { box-sizing: border-box; }
+html { background: var(--night); -webkit-text-size-adjust: 100%; }
+html.motion { scroll-behavior: smooth; }
+body { margin: 0; color: var(--text); font: 400 17px/1.5 var(--f); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; border-radius: 4px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+h1, h2, h3 { margin: 0; font-weight: 650; letter-spacing: -.03em; line-height: 1.05; color: #fff; text-wrap: balance; }
+p { margin: 0; }
+.mono { font-family: var(--m); }
+
+/* top bar: where you are */
+.top { position: fixed; z-index: 30; top: 0; left: 0; right: 0; height: var(--bar); display: flex; align-items: center; gap: 22px; padding: 0 clamp(16px, 3vw, 40px); background: rgba(15, 26, 42, .97); border-bottom: 1px solid var(--rule); }
+.brand { font-weight: 650; font-size: 18px; letter-spacing: -.01em; text-decoration: none; color: #fff; white-space: nowrap; }
+.brand span { font-weight: 500; color: var(--mute); margin-left: 8px; }
+.pos { font-size: 14px; color: var(--mute); white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 12ch; }
+.pos b { color: #fff; font-weight: 600; }
+.strip { position: relative; display: grid; grid-template-columns: repeat(7, 1fr); flex: 1; max-width: 640px; margin: 0 auto; border: 1px solid var(--rule); border-radius: 7px; font: 500 12.5px/1 var(--m); color: var(--mute); }
+.strip span { position: relative; z-index: 1; padding: 8px 0; text-align: center; transition: color .25s; }
+.strip span + span { border-left: 1px solid var(--rule); }
+.strip span.on { color: #062418; font-weight: 600; }
+.strip .hl { position: absolute; z-index: 0; top: 0; bottom: 0; left: 0; width: calc(100% / 7); background: var(--signal); border-radius: 6px; opacity: 0; }
+.motion .strip .hl { transition: transform .45s cubic-bezier(.3, .7, .2, 1), opacity .25s; }
+.strip.live .hl { opacity: 1; }
+.links { display: flex; align-items: center; gap: 18px; white-space: nowrap; }
+.links a { font-size: 15px; font-weight: 600; text-decoration: none; color: #dbe5ef; }
+.links a:hover { text-decoration: underline; text-underline-offset: 4px; }
+.links .btn { background: var(--signal); color: #062418; padding: 8px 14px; border-radius: 9px; }
+.links .btn:hover { background: #86f2b9; text-decoration: none; }
+
+/* steps */
+.step { position: relative; min-height: 100vh; min-height: 100svh; padding: calc(var(--bar) + 30px) clamp(18px, 4.4vw, 64px) 30px; display: flex; flex-direction: column; justify-content: center; border-bottom: 1px solid var(--rule); }
+.in { width: 100%; max-width: 1300px; margin: 0 auto; }
+.hd { display: grid; grid-template-columns: auto 1fr; column-gap: 18px; align-items: baseline; margin-bottom: 24px; }
+.num { font: 600 15px/1 var(--m); color: var(--signal); min-width: 3ch; }
+.hd h2 { font-size: clamp(28px, 2.7vw, 40px); }
+.hd .lede { grid-column: 2; margin-top: 10px; font-size: clamp(16px, 1.25vw, 19px); color: var(--soft); max-width: 72ch; }
+.label { font-size: 13.5px; font-weight: 600; color: var(--mute); margin-bottom: 10px; }
+.panel { background: var(--deep); border: 1px solid var(--rule); border-radius: 12px; }
+.well { background: var(--well); border: 1px solid var(--rule); border-radius: 10px; }
+
+/* log lines, shared */
+.ln { display: grid; grid-template-columns: 4.4ch 7ch 7.2ch minmax(0, 1fr); column-gap: 1.6ch; font: 400 13.5px/1.62 var(--m); color: var(--soft); white-space: pre-wrap; }
+.ln .sq { color: #5d6f86; }
+.ln .ts { color: var(--mute); }
+.ln .who { color: var(--mute); }
+.ln .ev { color: #fff; }
+.ln .rest { color: var(--mute); }
+.ln .ev + .rest::before { content: "  "; }
+.k-stage .ev { color: var(--signal); }
+.k-subagent .ev { color: var(--dusk); }
+.k-tool .ev { color: #fff; }
+.k-metric .ev { color: var(--amber); }
+.k-status .ev, .k-message .ev, .k-artifact .ev { color: #a9c2dc; }
+.k-run .ev { color: var(--signal); }
+.k-chosen { background: rgba(91, 228, 155, .12); }
+.k-chosen .ev { color: var(--signal); font-weight: 700; }
+.est { color: var(--amber); border-bottom: 1px dashed rgba(255, 184, 107, .7); }
+
+/* intro */
+.intro .in { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 56px; align-items: center; }
+.intro h1 { font-size: clamp(38px, 4.4vw, 64px); letter-spacing: -.04em; margin-bottom: 26px; }
+.intro p { font-size: clamp(17px, 1.35vw, 20px); color: var(--soft); max-width: 46ch; }
+.intro p + p { margin-top: 14px; }
+.intro .hint { margin-top: 26px; font-size: 14.5px; color: var(--mute); }
+.legend { padding: 22px 24px; }
+.legend .sample { padding: 12px 14px; }
+.fields { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 18px; margin: 14px 2px 20px; font-size: 14.5px; }
+.fields dt { font-size: 13px; color: #fff; }
+.fields dd { margin: 0; color: var(--soft); }
+.kinds { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 22px; }
+.kinds li { display: flex; gap: 12px; align-items: baseline; font-size: 15px; color: var(--soft); }
+.kinds code { font: 600 13.5px var(--m); min-width: 8.5ch; }
+
+/* 1 spec */
+.specg { display: grid; grid-template-columns: minmax(0, .62fr) minmax(0, 1.5fr) minmax(0, .92fr); gap: 22px; align-items: start; }
+.idea { padding: 18px 18px 20px; }
+.idea p { font-size: 17px; line-height: 1.45; color: #fff; }
+table { border-collapse: collapse; width: 100%; }
+th { text-align: left; font-size: 13.5px; font-weight: 600; color: var(--mute); padding: 0 12px 8px 0; border-bottom: 1px solid var(--rule2); }
+td { vertical-align: top; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--rule); font-size: 15px; line-height: 1.38; color: var(--soft); }
+td:first-child { color: #fff; }
+.qt td { font-size: 14.5px; padding-top: 7px; padding-bottom: 7px; }
+.qt td:first-child { width: 42%; }
+.qt tr.fixed td { color: var(--signal); }
+.qt tr.fixed td:first-child { color: var(--signal); }
+.speccard { padding: 14px 16px; }
+.kv { display: grid; grid-template-columns: 9.5ch minmax(0, 1fr); column-gap: 1.5ch; font: 400 13.5px/1.62 var(--m); }
+.kv .k { color: var(--mute); }
+.kv .v { color: #fff; }
+.kv .v.fx { color: var(--signal); }
+.dcard { margin-top: 14px; padding: 14px 16px; }
+.dcard dl { margin: 0; display: grid; grid-template-columns: 9ch minmax(0, 1fr); gap: 3px 12px; font-size: 14px; }
+.dcard dt { color: var(--mute); }
+.dcard dd { margin: 0; color: #fff; }
+.warn { margin-top: 10px; padding: 8px 10px; border-left: 3px solid var(--amber); background: rgba(255, 184, 107, .08); font-size: 13.5px; line-height: 1.4; color: #ffe2c2; }
+
+/* 2 models */
+.modg { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.modg .panel { padding: 22px 24px; }
+.modg h3 { font-size: 21px; letter-spacing: -.015em; margin-bottom: 16px; }
+.opt { display: grid; grid-template-columns: 22px 1fr; gap: 2px 12px; padding: 12px 0; border-top: 1px solid var(--rule); }
+.opt .dot { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--mute); margin-top: 4px; }
+.opt.sel .dot { border-color: var(--signal); box-shadow: inset 0 0 0 4px var(--deep); background: var(--signal); }
+.opt b { color: #fff; font-weight: 600; }
+.opt p { grid-column: 2; color: var(--soft); font-size: 15px; }
+.seg { display: grid; grid-template-columns: 12ch 1fr; gap: 10px 14px; align-items: center; margin: 6px 0 0 34px; }
+.seg .sl { font-size: 14px; color: var(--mute); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 500 13px/1 var(--m); padding: 6px 9px; border: 1px solid var(--rule2); border-radius: 6px; color: var(--soft); }
+.chip.sel { border-color: var(--signal); color: #fff; background: rgba(91, 228, 155, .12); }
+.size { display: grid; gap: 18px; margin-top: 4px; }
+.size .sl { font-size: 15px; color: #fff; margin-bottom: 8px; }
+.size .chip { font-size: 15px; padding: 9px 14px; }
+.note2 { margin-top: 16px; font-size: 14.5px; color: var(--mute); max-width: 52ch; }
+.runhdr { margin-top: 22px; }
+.runhdr .well { padding: 12px 14px; }
+
+/* 3 pipeline */
+.pipe svg { display: block; width: 100%; height: auto; max-height: calc(100svh - 260px); }
+.pipe text { font-family: var(--f); }
+.pipe .mtx { font-family: var(--m); }
+.plist { display: none; }
+
+/* 4-10 stage zoom: the annotated log */
+.zoom .hd { margin-bottom: 18px; }
+.alog { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); grid-auto-flow: row dense; }
+.alog .lh, .grp { grid-column: 1; }
+.alog .nh, .ann { grid-column: 2; }
+.alog .lh { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; padding: 10px 16px; background: var(--well); border: 1px solid var(--rule); border-bottom: 0; border-radius: 10px 0 0 0; font-size: 13px; color: var(--mute); }
+.alog .lh b { font-family: var(--m); font-weight: 600; color: #fff; }
+.alog .lh i { font-style: normal; color: var(--amber); }
+.alog .nh { padding: 10px 0 10px 26px; font-size: 13px; color: var(--mute); border-bottom: 0; }
+.grp { padding: 9px 16px; background: var(--well); border-left: 1px solid var(--rule); border-right: 1px solid var(--rule); border-top: 1px dashed var(--rule); }
+.grp.last { border-bottom: 1px solid var(--rule); border-radius: 0 0 0 10px; padding-bottom: 12px; }
+.ann { position: relative; padding: 9px 0 9px 26px; border-top: 1px dashed var(--rule); }
+.ann::before { content: ""; position: absolute; left: -1px; top: 20px; width: 18px; height: 1px; background: var(--rule2); }
+.ann::after { content: ""; position: absolute; left: 15px; top: 17px; width: 7px; height: 7px; border-radius: 50%; background: var(--night); border: 1.5px solid var(--mute); }
+.ann .nl { font-size: 13px; color: var(--mute); margin-bottom: 2px; padding-left: 12px; }
+.ann .nt { font-size: 15.5px; line-height: 1.42; color: #fff; padding-left: 12px; max-width: 46ch; }
+.ann .chips { padding-left: 12px; margin-top: 4px; }
+.ann .chip { font-size: 12.5px; padding: 4px 7px; color: #fff; }
+.ann.a0::after { border-color: var(--signal); }
+.ann.a1::after { border-color: var(--dusk); }
+.ann.a2::after { border-color: #fff; }
+.ann.a3::after { border-color: var(--amber); }
+.ann.a4::after { border-color: var(--signal); background: var(--signal); }
+
+/* 11 agent */
+.agentg { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 32px; align-items: start; }
+.layers td:first-child { width: 22%; font-weight: 600; }
+.layers td { font-size: 15.5px; }
+.layers td .ab { display: inline-block; width: 2ch; color: var(--mute); font-family: var(--m); font-weight: 400; }
+.rule { margin-top: 20px; padding: 14px 18px; border-left: 3px solid var(--signal); background: rgba(91, 228, 155, .07); font-size: 17.5px; line-height: 1.45; color: #fff; }
+.trace { padding: 18px 18px 20px; }
+.trace ol { list-style: none; margin: 0; padding: 0; }
+.trace li { position: relative; padding: 0 0 18px 22px; }
+.trace li::before { content: ""; position: absolute; left: 4px; top: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--signal); }
+.trace li:not(:last-child)::after { content: ""; position: absolute; left: 7.5px; top: 18px; bottom: 2px; width: 1px; background: var(--rule2); }
+.trace .tl { font-size: 13px; color: var(--mute); }
+.trace code { display: block; margin-top: 3px; font: 400 13.5px/1.5 var(--m); color: #fff; overflow-wrap: anywhere; }
+.trace li:last-child code { color: var(--amber); }
+
+/* 12 skills */
+.skg { display: grid; grid-template-columns: 1fr 1fr; gap: 0 40px; }
+.sk caption { text-align: left; font-size: 15px; font-weight: 650; color: #fff; padding: 12px 0 4px; border-bottom: 1px solid var(--rule2); }
+.sk th { font-size: 12px; padding-bottom: 4px; }
+.sk.nh2 thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.sk td { font-size: 13.5px; padding: 2.5px 10px 2.5px 0; line-height: 1.3; }
+.skills .hd { margin-bottom: 14px; }
+.sk td:first-child { font-family: var(--m); font-size: 13px; width: 20ch; white-space: nowrap; color: #fff; }
+.sk td:last-child { width: 15ch; padding-right: 0; color: var(--mute); font-size: 13px; }
+.sk tr.st td:last-child { color: var(--signal); }
+.skg > div > table:first-child caption { padding-top: 0; }
+
+/* 13 checks */
+.chg { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 32px; align-items: start; }
+.ct td:nth-child(2) { font-family: var(--m); font-size: 13px; color: var(--soft); width: 21ch; }
+.ct td:last-child, .ct th:last-child { text-align: center; width: 5ch; padding-right: 0; font-family: var(--m); color: var(--signal); }
+.ct th:last-child { color: var(--mute); font-family: var(--f); }
+.ct td:first-child { width: 22%; }
+.lvln { margin-top: 12px; font-size: 14.5px; color: var(--mute); }
+.lvln code { font-family: var(--m); color: #fff; font-size: 13.5px; }
+.marks { padding: 18px 20px; }
+.mk { padding: 12px 0; border-top: 1px solid var(--rule); }
+.mk:first-of-type { border-top: 0; padding-top: 2px; }
+.mk .ml { font-size: 13px; color: var(--mute); }
+.mk .mv { font-size: 24px; font-weight: 650; letter-spacing: -.02em; color: #fff; margin: 2px 0 4px; font-variant-numeric: tabular-nums; }
+.mk .mv small { font-size: 13px; font-weight: 500; letter-spacing: 0; color: var(--amber); margin-left: 8px; }
+.mk.k1 .mv { color: var(--amber); }
+.mk .tag { display: inline-block; font-size: 13px; font-weight: 650; color: var(--dusk); border: 1px solid rgba(201, 163, 196, .6); border-radius: 999px; padding: 2px 10px; margin: 4px 0 6px; }
+.mk p { font-size: 14.5px; color: var(--soft); }
+.marks .fine { margin-top: 10px; font-size: 12.5px; color: var(--mute); }
+
+/* 14 measured */
+.mt td { padding-top: 16px; padding-bottom: 16px; font-size: 16px; }
+.mt td:first-child { width: 22%; }
+.mt td:last-child { width: 30%; color: var(--mute); font-size: 15px; }
+.mt .fig { display: block; font-size: clamp(24px, 2.2vw, 32px); font-weight: 650; letter-spacing: -.03em; line-height: 1.1; color: #fff; font-variant-numeric: tabular-nums; }
+.mt .fig2 { display: block; margin-top: 4px; font-size: 16px; font-weight: 600; color: var(--soft); }
+
+/* 15 limits */
+.lim { list-style: none; margin: 0; padding: 0; max-width: 820px; }
+.lim li { display: block; padding: 18px 0; border-top: 1px solid var(--rule); font-size: clamp(19px, 1.6vw, 24px); line-height: 1.35; color: #fff; }
+.foot { margin-top: 56px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px 32px; align-items: center; padding-top: 22px; border-top: 1px solid var(--rule); font-size: 14.5px; color: var(--mute); }
+.foot .links a { font-size: 15px; }
+
+/* presenting size: one step per screen, snapping */
+@media (min-width: 1000px) and (min-height: 700px) {
+  html { scroll-snap-type: y mandatory; }
+  .step { scroll-snap-align: start; height: 100vh; height: 100svh; }
+}
+@media (max-height: 860px) and (min-width: 1000px) {
+  .ln { font-size: 12.8px; line-height: 1.55; }
+  .ann .nt { font-size: 14.5px; }
+  .hd { margin-bottom: 16px; }
+}
+
+/* narrow screens */
+@media (max-width: 999px) {
+  .strip { display: none; }
+  .top { justify-content: space-between; }
+  .intro .in, .specg, .modg, .agentg, .skg, .chg { grid-template-columns: minmax(0, 1fr); }
+  .specg, .modg, .agentg, .chg { gap: 18px; }
+  .alog { grid-template-columns: minmax(0, 1fr); grid-auto-flow: row; }
+  .alog .lh, .grp, .alog .nh, .ann { grid-column: 1; }
+  .fields { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .fields dd { margin-bottom: 8px; }
+  .alog .nh { display: none; }
+  .alog .lh { border-radius: 10px 10px 0 0; flex-direction: column; gap: 2px; }
+  .ann { order: 0; padding: 12px 0 6px; border-top: 0; }
+  .ann::before, .ann::after { display: none; }
+  .ann .nl, .ann .nt, .ann .chips { padding-left: 0; }
+  .grp { border-top: 1px dashed var(--rule); }
+  .grp.last { border-radius: 0 0 10px 10px; }
+}
+@media (max-width: 640px) {
+  .brand span, .pos { display: none; }
+  .links { gap: 12px; }
+  .links a { font-size: 14px; }
+  .links .btn { padding: 7px 10px; }
+  .step { min-height: 0; padding-top: calc(var(--bar) + 28px); padding-bottom: 44px; }
+  .hd { grid-template-columns: minmax(0, 1fr); }
+  .hd .num { margin-bottom: 8px; }
+  .hd .lede { grid-column: 1; }
+  .ln { grid-template-columns: 6ch 6.5ch minmax(0, 1fr); font-size: 12.5px; }
+  .ln .sq { display: none; }
+  .kinds { grid-template-columns: 1fr; }
+  .seg { grid-template-columns: 1fr; margin-left: 0; }
+  .qt td:first-child { width: 46%; }
+  .ct td:nth-child(2), .ct th:nth-child(2) { display: none; }
+  .sk td:first-child { white-space: normal; width: 14ch; font-size: 12.5px; }
+  .pipe svg { display: none; }
+  .plist { display: block; }
+  .plist .orch { padding: 14px 16px; border: 1.4px solid var(--signal); background: #133a2b; border-radius: 10px; }
+  .plist .orch b { display: block; color: #fff; font-size: 17px; }
+  .plist .orch span { color: var(--soft); font-size: 15px; }
+  .plist ol { list-style: none; margin: 0; padding: 0 0 0 18px; border-left: 1.4px solid rgba(91, 228, 155, .55); margin-left: 18px; }
+  .plist li { position: relative; padding: 14px 0 0 0; }
+  .plist li .sn { display: inline-block; font: 600 16px var(--m); color: #fff; background: var(--deep); border: 1px solid var(--rule2); border-radius: 7px; padding: 6px 10px; }
+  .plist li .sn i { font-style: normal; color: var(--signal); margin-right: 8px; font-size: 13px; }
+  .plist li p { margin-top: 4px; font-size: 14.5px; color: var(--dusk); }
+  .plist .band { margin-top: 16px; padding: 12px 14px; border: 1px solid rgba(255, 184, 107, .55); border-radius: 9px; background: var(--well); font: 13px/1.5 var(--m); color: #ffd7aa; }
+  .sk td:last-child { width: 9ch; font-size: 12.5px; }
+  .sk td { font-size: 13px; }
+  .mt, .mt tbody, .mt tr, .mt td { display: block; width: auto !important; }
+  .mt thead { display: none; }
+  .mt td { border: 0; padding: 4px 0; }
+  .mt tr { border-bottom: 1px solid var(--rule); padding: 12px 0; }
+  .layers td:first-child { width: 28%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .strip .hl, .strip span { transition: none !important; }
+}
+</style>
+</head>
+<body>
+<header class="top" id="top"></header>
+<main id="app"></main>
+
+<script>
+(function () {
+  'use strict';
+  var C = window.COPY;
+  var esc = function (s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
+  var pad = function (n) { return ('000' + n).slice(-4); };
+  var seq = 0;
+
+  // ---------- log line ----------
+  function kindOf(ev) {
+    var w = ev.split(' ')[0];
+    if (w === 'run') return 'run';
+    return ['stage', 'subagent', 'tool', 'metric', 'status', 'message', 'artifact', 'chosen'].indexOf(w) >= 0 ? w : 'status';
+  }
+  function line(sq, t, who, ev, rest) {
+    var k = kindOf(ev);
+    var r = rest || '';
+    var restHtml = r === 'estimate' ? '<span class="est">estimate</span>' : esc(r).replace(/ estimate$/, ' <span class="est">estimate</span>');
+    return '<div class="ln k-' + k + '"><span class="sq">' + esc(sq) + '</span><span class="ts">' + esc(t) + '</span><span class="who">' + esc(who) +
+      '</span><span><span class="ev">' + esc(ev) + '</span>' + (r ? '<span class="rest">' + restHtml + '</span>' : '') + '</span></div>';
+  }
+  function chips(list, sel) {
+    return '<div class="chips">' + list.map(function (x, i) { return '<span class="chip' + (i === sel ? ' sel' : '') + '">' + esc(x) + '</span>'; }).join('') + '</div>';
+  }
+  function head(n, title, lede, tag) {
+    return '<div class="hd"><span class="num">' + esc(n) + '</span><' + (tag || 'h2') + ' id="h-' + esc(n) + '">' + esc(title) + '</' + (tag || 'h2') + '>' +
+      (lede ? '<p class="lede">' + esc(lede) + '</p>' : '') + '</div>';
+  }
+  var steps = [];
+  function section(id, short, cls, inner, stageIdx) {
+    steps.push({ id: id, short: short, stage: stageIdx == null ? -1 : stageIdx });
+    return '<section class="step ' + cls + '" id="' + id + '" aria-labelledby="h-' + id + '"><div class="in">' + inner + '</div></section>';
+  }
+
+  // ---------- top bar ----------
+  var D = C.doc;
+  document.getElementById('top').innerHTML =
+    '<a class="brand" href="../../">' + esc(D.name) + '<span>' + esc(D.section) + '</span></a>' +
+    '<p class="pos" id="pos" aria-live="polite"></p>' +
+    '<div class="strip" id="strip" aria-label="' + esc(D.stagesLabel) + '" role="list"><i class="hl" id="hl" aria-hidden="true"></i>' +
+    C.stages.map(function (s) { return '<span role="listitem">' + esc(s.name) + '</span>'; }).join('') + '</div>' +
+    '<nav class="links" aria-label="Site"><a href="../../">' + esc(D.home) + '</a><a class="btn" href="../../dashboard/">' + esc(D.dashboard) + '</a></nav>';
+
+  var out = [];
+
+  // ---------- intro ----------
+  var I = C.intro;
+  var smp = I.legendSample;
+  out.push(section('s0', I.short, 'intro',
+    '<div><h1 id="h-s0">' + esc(I.title) + '</h1>' + I.lines.map(function (p) { return '<p>' + esc(p) + '</p>'; }).join('') +
+    '<p class="hint">' + esc(I.hint) + '</p></div>' +
+    '<div class="panel legend"><p class="label">' + esc(I.legendTitle) + '</p><div class="well sample">' + line(smp[0], smp[1], smp[2], smp[3], smp[4]) + '</div>' +
+    '<dl class="fields">' + I.legendCols.map(function (c, j) { return '<dt class="mono">' + esc(smp[j]) + '</dt><dd>' + esc(c) + '</dd>'; }).join('') + '</dl>' +
+    '<p class="label">' + esc(I.kindsTitle) + '</p><ul class="kinds">' +
+    I.kinds.map(function (k) { return '<li class="k-' + k[0] + '"><code class="ln" style="display:inline"><span class="ev">' + esc(k[0]) + '</span></code><span>' + esc(k[1]) + '</span></li>'; }).join('') +
+    '</ul></div>'));
+
+  // ---------- 1 spec ----------
+  var S = C.spec;
+  out.push(section('s1', S.short, 'spec',
+    head('1', S.title, S.lede).replace('id="h-1"', 'id="h-s1"') +
+    '<div class="specg">' +
+      '<div class="panel idea"><p class="label">' + esc(S.ideaLabel) + '</p><p>' + esc(S.idea) + '</p></div>' +
+      '<table class="qt"><thead><tr><th scope="col">' + esc(S.qHead[0]) + '</th><th scope="col">' + esc(S.qHead[1]) + '</th></tr></thead><tbody>' +
+      S.questions.map(function (q, i) { return '<tr' + (i === S.questions.length - 1 ? ' class="fixed"' : '') + '><td>' + esc(q[0]) + '</td><td>' + esc(q[1]) + '</td></tr>'; }).join('') +
+      '</tbody></table>' +
+      '<div><div class="well speccard"><p class="label">' + esc(S.specLabel) + '</p><div class="kv">' +
+      S.specRows.map(function (r) { var fx = /fixed/.test(r[1]); return '<span class="k">' + esc(r[0]) + '</span><span class="v' + (fx ? ' fx' : '') + '">' + esc(r[1]) + '</span>'; }).join('') +
+      '</div></div>' +
+      '<div class="panel dcard"><p class="label">' + esc(S.cardLabel) + '</p><dl>' +
+      S.card.map(function (r) { return '<dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd>'; }).join('') + '</dl>' +
+      '<p class="warn">' + esc(S.cardWarn) + '</p></div></div>' +
+    '</div>'));
+
+  // ---------- 2 models ----------
+  var M = C.models;
+  out.push(section('s2', M.short, 'models',
+    head('2', M.title, M.lede).replace('id="h-2"', 'id="h-s2"') +
+    '<div class="modg">' +
+      '<div class="panel"><h3>' + esc(M.aTitle) + '</h3>' +
+      M.aOptions.map(function (o, i) {
+        return '<div class="opt' + (o[2] ? ' sel' : '') + '"><span class="dot" aria-hidden="true"></span><b>' + esc(o[0]) + '</b><p>' + esc(o[1]) + '</p></div>' +
+          (i === 1 ? '<div class="seg">' + M.aRows.map(function (r) { return '<span class="sl">' + esc(r[0]) + '</span>' + chips(r[1], -1); }).join('') + '</div>' : '');
+      }).join('') +
+      '<p class="note2">' + esc(M.aNote) + '</p></div>' +
+      '<div class="panel"><h3>' + esc(M.bTitle) + '</h3><div class="size">' +
+      M.bRows.map(function (r) { return '<div><p class="sl">' + esc(r[0]) + '</p>' + chips(r[1], r[2]) + '</div>'; }).join('') +
+      '</div><p class="note2">' + esc(M.bNote) + '</p></div>' +
+    '</div>' +
+    '<div class="runhdr"><p class="label">' + esc(M.headerLabel) + '</p><div class="well">' + line(M.header[0], M.header[1], M.header[2], M.header[3], M.header[4]) + '</div></div>'));
+
+  // ---------- 3 pipeline ----------
+  var P = C.pipeline;
+  function pipeSVG() {
+    var W = 1280, x0 = 40, bw = 150, gap = 25, sy = 150, sh = 62, fy = 276;
+    var s = '<svg viewBox="0 0 ' + W + ' 500" role="img" aria-label="' + esc(P.aria) + '">' +
+      '<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#9aabc0"/></marker></defs>' +
+      '<rect x="40" y="14" width="1200" height="70" rx="10" fill="#133a2b" stroke="#5be49b" stroke-width="1.4"/>' +
+      '<text x="64" y="44" fill="#fff" font-size="20" font-weight="650">' + esc(P.orchTitle) + '</text>' +
+      '<text x="64" y="70" fill="#c4d1df" font-size="16">' + esc(P.orchText) + '</text>';
+    C.stages.forEach(function (st, i) {
+      var x = x0 + i * (bw + gap), cx = x + bw / 2;
+      s += '<line x1="' + cx + '" y1="84" x2="' + cx + '" y2="' + sy + '" stroke="rgba(91,228,155,.55)" stroke-width="1.3"/>';
+      s += '<rect x="' + x + '" y="' + sy + '" width="' + bw + '" height="' + sh + '" rx="8" fill="#16263c" stroke="rgba(214,228,242,.4)" stroke-width="1.2"/>';
+      s += '<text x="' + (x + 12) + '" y="' + (sy + 22) + '" fill="#5be49b" font-size="13" class="mtx">' + (i + 1) + '</text>';
+      s += '<text x="' + cx + '" y="' + (sy + 42) + '" fill="#fff" font-size="18" font-weight="650" text-anchor="middle" class="mtx">' + esc(st.name) + '</text>';
+      if (i < C.stages.length - 1) s += '<line x1="' + (x + bw + 2) + '" y1="' + (sy + sh / 2) + '" x2="' + (x + bw + gap - 2) + '" y2="' + (sy + sh / 2) + '" stroke="#9aabc0" stroke-width="1.4" marker-end="url(#ar)"/>';
+      var n = st.fan, sw = 24, span = bw - 20, step = n > 1 ? (span - sw) / (n - 1) : 0;
+      for (var j = 0; j < n; j++) {
+        var sx = n > 1 ? x + 10 + j * step : cx - sw / 2;
+        s += '<line x1="' + cx + '" y1="' + (sy + sh) + '" x2="' + (sx + sw / 2) + '" y2="' + fy + '" stroke="rgba(201,163,196,.6)" stroke-width="1.1"/>';
+        s += '<rect x="' + sx + '" y="' + fy + '" width="' + sw + '" height="20" rx="4" fill="#0f1a2a" stroke="#c9a3c4" stroke-width="1.2"/>';
+      }
+      s += '<text x="' + cx + '" y="' + (fy + 44) + '" fill="#c9a3c4" font-size="14" text-anchor="middle">' + n + ' ' + esc(P.subLabel) + '</text>';
+      s += '<text x="' + cx + '" y="' + (fy + 64) + '" fill="#c4d1df" font-size="14" text-anchor="middle">' + esc(st.fanText[0]) + '</text>';
+      if (st.fanText[1]) s += '<text x="' + cx + '" y="' + (fy + 82) + '" fill="#c4d1df" font-size="14" text-anchor="middle">' + esc(st.fanText[1]) + '</text>';
+      s += '<line x1="' + cx + '" y1="' + (fy + 92) + '" x2="' + cx + '" y2="420" stroke="rgba(255,184,107,.55)" stroke-width="1.1" stroke-dasharray="4 4"/>';
+    });
+    s += '<rect x="40" y="420" width="1200" height="54" rx="9" fill="#0a1423" stroke="rgba(255,184,107,.55)" stroke-width="1.2"/>';
+    s += '<text x="640" y="453" fill="#ffd7aa" font-size="16" text-anchor="middle" class="mtx">' + esc(P.logBand) + '</text>';
+    return s + '</svg>';
+  }
+  function pipeList() {
+    return '<div class="plist"><div class="orch"><b>' + esc(P.orchTitle) + '</b><span>' + esc(P.orchText) + '</span></div><ol>' +
+      C.stages.map(function (st, i) {
+        return '<li><span class="sn"><i>' + (i + 1) + '</i>' + esc(st.name) + '</span><p>' + st.fan + ' ' + esc(P.subLabel) + ': ' + esc((st.fanText[0] + ' ' + st.fanText[1]).trim()) + '</p></li>';
+      }).join('') + '</ol><p class="band">' + esc(P.logBand) + '</p></div>';
+  }
+  out.push(section('s3', P.short, 'pipe', head('3', P.title, P.lede).replace('id="h-3"', 'id="h-s3"') + pipeSVG() + pipeList()));
+
+  // ---------- 4 to 10: stage zooms ----------
+  C.stages.forEach(function (st, si) {
+    var n = String(4 + si), id = 's' + n;
+    var html = head(n, st.title, C.stageWord + ' ' + (si + 1) + ' ' + C.doc.stepOf + ' 7: ' + st.name + '.').replace('id="h-' + n + '"', 'id="h-' + id + '"');
+    html += '<div class="alog"><div class="lh"><b>' + esc(C.logTitle) + '</b><i>' + esc(C.logIllustrative) + '</i></div><div class="nh" aria-hidden="true"></div>';
+    st.log.forEach(function (g, gi) {
+      var last = gi === st.log.length - 1;
+      var note = gi === 2
+        ? '<p class="nl">' + esc(C.noteLabels[2]) + '</p>' + chips(st.skills, -1)
+        : '<p class="nl">' + esc(C.noteLabels[gi]) + '</p><p class="nt">' + esc(st.notes[gi]) + '</p>';
+      html += '<div class="ann a' + gi + '">' + note + '</div><div class="grp' + (last ? ' last' : '') + '">' + g.map(function (l) {
+        seq += 1;
+        return line(pad(seq), l[0], l[1], l[2], l[3]);
+      }).join('') + '</div>';
+    });
+    html += '</div>';
+    out.push(section(id, st.name, 'zoom', html, si));
+  });
+
+  // ---------- 11 agent ----------
+  var A = C.agent;
+  out.push(section('s11', A.short, 'agent',
+    head('11', A.title, A.lede).replace('id="h-11"', 'id="h-s11"') +
+    '<div class="agentg"><div><table class="layers"><thead><tr>' + A.head.map(function (h) { return '<th scope="col">' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+    A.rows.map(function (r, i) { return '<tr><td><span class="ab">' + 'abcd'[i] + '</span>' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td><td>' + esc(r[2]) + '</td></tr>'; }).join('') +
+    '</tbody></table><p class="rule">' + esc(A.rule) + '</p></div>' +
+    '<div class="panel trace"><p class="label">' + esc(A.traceLabel) + '</p><ol>' +
+    A.trace.map(function (t) { return '<li><span class="tl">' + esc(t[0]) + '</span><code>' + esc(t[1]) + '</code></li>'; }).join('') +
+    '</ol></div></div>'));
+
+  // ---------- 12 skills ----------
+  var K = C.skills, total = 0;
+  var cols = K.columns.map(function (col) {
+    return '<div>' + col.map(function (g, gi) {
+      total += g[1].length;
+      return '<table class="sk' + (gi ? ' nh2' : '') + '"><caption>' + esc(g[0]) + ' (' + g[1].length + ')</caption><thead><tr>' + K.head.map(function (h) { return '<th scope="col">' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+        g[1].map(function (t) { var any = t[2] === 'any'; return '<tr' + (any ? '' : ' class="st"') + '><td>' + esc(t[0]) + '</td><td>' + esc(t[1]) + '</td><td>' + esc(any ? K.any : t[2]) + '</td></tr>'; }).join('') +
+        '</tbody></table>';
+    }).join('') + '</div>';
+  }).join('');
+  out.push(section('s12', K.short, 'skills', head('12', K.title, K.lede).replace('id="h-12"', 'id="h-s12"') + '<div class="skg" data-total="' + total + '">' + cols + '</div>'));
+
+  // ---------- 13 checks ----------
+  var X = C.checks;
+  out.push(section('s13', X.short, 'checks',
+    head('13', X.title, X.lede).replace('id="h-13"', 'id="h-s13"') +
+    '<div class="chg"><div><table class="ct"><thead><tr>' + X.head.map(function (h) { return '<th scope="col">' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+    X.rows.map(function (r) { return '<tr><td>' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td><td>' + esc(r[2]) + '</td><td>' + esc(r[3]) + '</td></tr>'; }).join('') +
+    '</tbody></table><p class="lvln">' + esc(X.levelNote).replace(/^verification-level/, '<code>verification-level</code>') + '</p></div>' +
+    '<div class="panel marks"><p class="label">' + esc(X.marksTitle) + '</p>' +
+    X.marks.map(function (m, i) {
+      var v = i === 2 ? '<span class="tag">' + esc(m[1]) + '</span>' : '<p class="mv">' + esc(m[1]) + (m[2] ? '<small>' + esc(m[2]) + '</small>' : '') + '</p>';
+      return '<div class="mk k' + i + '"><p class="ml">' + esc(m[0]) + '</p>' + v + '<p>' + esc(m[3]) + '</p></div>';
+    }).join('') + '<p class="fine">' + esc(X.marksNote) + '</p></div></div>'));
+
+  // ---------- 14 measured ----------
+  var R = C.measured;
+  out.push(section('s14', R.short, 'measured',
+    head('14', R.title, R.lede).replace('id="h-14"', 'id="h-s14"') +
+    '<table class="mt"><thead><tr>' + R.head.map(function (h) { return '<th scope="col">' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+    R.rows.map(function (r) { return '<tr><td><span class="fig">' + esc(r[0][0]) + '</span>' + (r[0][1] ? '<span class="fig2">' + esc(r[0][1]) + '</span>' : '') + '</td><td>' + esc(r[1]) + '</td><td>' + esc(r[2]) + '</td></tr>'; }).join('') +
+    '</tbody></table>'));
+
+  // ---------- 15 limits ----------
+  var L = C.limits;
+  out.push(section('s15', L.short, 'limits',
+    head('15', L.title, '').replace('id="h-15"', 'id="h-s15"') +
+    '<ul class="lim">' + L.items.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' +
+    '<footer class="foot"><p>' + esc(D.footer) + '</p><nav class="links" aria-label="Footer"><a href="../../">' + esc(D.home) + '</a><a class="btn" href="../../dashboard/">' + esc(D.dashboard) + '</a></nav></footer>'));
+
+  document.getElementById('app').innerHTML = out.join('');
+
+  // ---------- where you are ----------
+  var secs = steps.map(function (s) { return document.getElementById(s.id); });
+  var pos = document.getElementById('pos'), strip = document.getElementById('strip'), hl = document.getElementById('hl');
+  var cells = strip.querySelectorAll('span');
+  var cur = -1;
+  function current() {
+    var y = window.innerHeight * 0.45, idx = 0;
+    for (var i = 0; i < secs.length; i++) if (secs[i].getBoundingClientRect().top <= y) idx = i;
+    return idx;
+  }
+  function show(i) {
+    if (i === cur) return;
+    cur = i;
+    var s = steps[i];
+    pos.innerHTML = i === 0 ? '<b>' + esc(D.start) + '</b>' : '<b>' + i + '</b> ' + esc(D.stepOf) + ' ' + (steps.length - 1) + '&ensp;' + esc(s.short);
+    var on = s.stage >= 0;
+    strip.classList.toggle('live', on);
+    if (on) hl.style.transform = 'translateX(' + (s.stage * 100) + '%)';
+    for (var c = 0; c < cells.length; c++) cells[c].classList.toggle('on', c === s.stage);
+  }
+  var ticking = false;
+  window.addEventListener('scroll', function () {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () { ticking = false; show(current()); });
+  }, { passive: true });
+  window.addEventListener('resize', function () { cur = -1; show(current()); });
+  show(current());
+
+  // ---------- keys: one step per press at the presenting size ----------
+  var big = matchMedia('(min-width: 1000px) and (min-height: 700px)');
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)');
+  var tgt = 0, lastGo = 0;
+  function here() { return Date.now() - lastGo < 900 ? tgt : current(); }
+  function go(i) {
+    i = Math.max(0, Math.min(secs.length - 1, i));
+    tgt = i; lastGo = Date.now();
+    secs[i].scrollIntoView({ behavior: reduce.matches ? 'auto' : 'smooth', block: 'start' });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (!big.matches || e.altKey || e.ctrlKey || e.metaKey) return;
+    var t = e.target, tag = t && t.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+    var i = here(), k = e.key;
+    var next = k === 'PageDown' || k === 'ArrowDown' || k === 'ArrowRight' || (k === ' ' && !e.shiftKey && tag !== 'A' && tag !== 'BUTTON');
+    var prev = k === 'PageUp' || k === 'ArrowUp' || k === 'ArrowLeft' || (k === ' ' && e.shiftKey && tag !== 'A' && tag !== 'BUTTON');
+    if (next) { e.preventDefault(); go(i + 1); }
+    else if (prev) { e.preventDefault(); go(i - 1); }
+    else if (k === 'Home') { e.preventDefault(); go(0); }
+    else if (k === 'End') { e.preventDefault(); go(secs.length - 1); }
+  });
+
+  // ---------- wheel and trackpad: one step per gesture at the presenting size ----------
+  // A gesture's trailing inertia events are swallowed until the wheel has been quiet briefly.
+  var acc = 0, lockUntil = 0, lastWheel = 0;
+  window.addEventListener('wheel', function (e) {
+    if (!big.matches || e.ctrlKey || Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
+    e.preventDefault();
+    var now = Date.now(), quiet = now - lastWheel > 180;
+    lastWheel = now;
+    if (now < lockUntil && !quiet) { lockUntil = Math.max(lockUntil, now + 120); return; }
+    if (quiet) acc = 0;
+    acc += e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+    if (Math.abs(acc) < 24) return;
+    var i = here();
+    go(acc > 0 ? i + 1 : i - 1);
+    acc = 0;
+    lockUntil = now + 650;
+  }, { passive: false });
+})();
+</script>
+</body>
+</html>
