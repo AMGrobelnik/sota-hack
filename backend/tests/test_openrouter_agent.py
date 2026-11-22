@@ -209,6 +209,114 @@ async def test_a_cancelled_run_still_reports_its_cost(
     assert events[-1].kind == "cost" and events[-1].data["usd"] == 0.0
 
 
+def test_a_long_single_line_command_runs_whole(tmp_path: Path) -> None:
+    """A one-line command far past the tty's ~1 KiB input queue reaches bash whole and runs.
+
+    The stock subprocess terminal writes it in one go, the tty drops the tail
+    (closing quote and Enter) and the command hangs until the tool times out:
+    a long ``./subagent start`` brief stalled a run that way.
+    """
+    pytest.importorskip("openhands.sdk")
+    from openhands.tools.terminal.definition import TerminalAction
+
+    from chipin_backend.agents.paced_terminal import PacedTerminalExecutor
+
+    executor = PacedTerminalExecutor(str(tmp_path))
+    try:
+        arg = "x" * 6000
+        obs = executor(TerminalAction(command=f'printf "%s" "{arg}" | wc -c', timeout=20))
+    finally:
+        executor.close()
+    assert obs.exit_code == 0, obs.text[-300:]
+    assert "6000" in obs.text
+
+
+def test_the_agent_gets_the_paced_terminal(config: BackendConfig, tmp_path: Path) -> None:
+    """The backend's agent asks the registry for the paced terminal, not the stock one."""
+    pytest.importorskip("openhands.sdk")
+    from chipin_backend.agents.openrouter_agent import OpenRouterAgentBackend
+    from chipin_backend.agents.paced_terminal import PACED_TERMINAL
+    from chipin_backend.llm.providers import resolve_provider
+
+    backend = OpenRouterAgentBackend(config.agents)
+    provider = resolve_provider(backend.providers, None)
+    spec = AgentSpec(name="a", prompts=["x"], workdir=tmp_path)
+    agent = backend._build_agent(spec, "openrouter/openai/gpt-5-nano", FAKE_KEY, provider)
+    assert [t.name for t in agent.tools] == [PACED_TERMINAL, "file_editor", "task_tracker"]
+
+
+async def test_cost_is_reported_while_the_agent_works(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each model step with new spend emits the run's spend so far, less a continued run's earlier part."""
+    from chipin_backend.agents import openrouter_agent
+
+    monkeypatch.setattr(openrouter_agent, "LIVE_COST_INTERVAL_S", 0.0)
+
+    @dataclass
+    class Usage:
+        prompt_tokens: int
+        completion_tokens: int
+
+    @dataclass
+    class Metrics:
+        accumulated_cost: float
+        accumulated_token_usage: Usage
+
+    class Stats:
+        def __init__(self) -> None:
+            self.metrics = Metrics(1.0, Usage(100, 10))
+
+        def get_combined_metrics(self) -> Metrics:
+            return self.metrics
+
+    class Conversation:
+        conversation_stats = Stats()
+
+    emitted: list[tuple[str, dict[str, Any]]] = []
+    live = openrouter_agent._LiveCost()
+    live.conversation, live.before = Conversation(), (1.0, 100, 10)
+    step = ActionEvent(tool_call_id="c", tool_name="terminal", action=TerminalAction("ls"))
+
+    def emit(kind: str, data: dict[str, Any]) -> None:
+        emitted.append((kind, data))
+
+    stats = Conversation.conversation_stats
+    live.after_step(step, emit)  # nothing spent yet in this run
+    stats.metrics = Metrics(1.25, Usage(300, 30))
+    live.after_step(ObservationEvent(tool_call_id="c", observation=Observation("ok")), emit)  # not a step
+    live.after_step(step, emit)
+    stats.metrics = Metrics(1.5, Usage(500, 50))
+    live.after_step(MessageEvent(source="agent", llm_message=Message(content=[])), emit)
+    assert emitted == [
+        ("cost", {"usd": 0.25, "input_tokens": 200, "output_tokens": 20}),
+        ("cost", {"usd": 0.5, "input_tokens": 400, "output_tokens": 40}),
+    ]
+
+
+async def test_a_cancelled_wait_pauses_the_conversation() -> None:
+    """Cancelling the wait (a stop) pauses the SDK run, whose thread would otherwise go on."""
+    import threading
+
+    from chipin_backend.agents.openrouter_agent import _Activity, _run_until_idle
+
+    class Conversation:
+        def __init__(self) -> None:
+            self.paused = threading.Event()
+
+        def run(self) -> None:
+            self.paused.wait(30)
+
+        def pause(self) -> None:
+            self.paused.set()
+
+    conversation = Conversation()
+    task = asyncio.create_task(_run_until_idle(conversation, _Activity(), None))
+    await asyncio.sleep(0.2)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert await asyncio.to_thread(conversation.paused.wait, 5)
+
+
 @pytest.mark.live
 async def test_live_openrouter_agent_run(config: BackendConfig, tmp_path: Path) -> None:
     """A real OpenHands run on the configured cheap model (needs the extra and the key)."""
