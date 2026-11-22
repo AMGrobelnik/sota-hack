@@ -16,6 +16,10 @@ them in parallel. Protocol (documented for the scientist and the testbench):
 
 The generic (non-TT) variant has plain ports (clk, rst_n, strobe, din[14:0], dout[all output bits], valid),
 for FPGA boards and for tools that want every output bit.
+
+Optional blocks (emit/postproc.py): postproc (smoothing, k-of-N, duration timer and alarm hold on the decision
+sequence) and channel_serial (one frame per channel, running max or sum over C frames, one model copy). Without
+them the output is unchanged, bit for bit.
 """
 from __future__ import annotations
 
@@ -44,8 +48,10 @@ def _clog2(n: int) -> int:
     return max(1, math.ceil(math.log2(n))) if n > 1 else 1
 
 
-def emit_stream(core_ir: dict, core_info: dict | None = None, tt: bool = True, core_text: str | None = None) -> tuple[str, dict]:
-    """Return (verilog with the core and the wrapper, info). info lists the protocol and the output bit map."""
+def emit_stream(core_ir: dict, core_info: dict | None = None, tt: bool = True, core_text: str | None = None,
+                postproc: dict | None = None, channel_serial: dict | None = None) -> tuple[str, dict]:
+    """Return (verilog with the core and the wrapper, info). info lists the protocol and the output bit map.
+    postproc / channel_serial: optional blocks (emit/postproc.py); None keeps the default wrapper."""
     if core_text is not None:  # an alternative implementation of the same core (e.g. the alkaid-optimised RTL)
         info = core_info or emit(core_ir)[1]
     else:
@@ -56,7 +62,12 @@ def emit_stream(core_ir: dict, core_info: dict | None = None, tt: bool = True, c
     T = len(tr)
     CW = _clog2(T)
     ob = sum(o["lanes"] * o["bits"] for o in info["outputs"])
-    obt = min(ob, 7) if tt else ob
+    ext = None
+    if postproc or channel_serial:
+        from chiplab.emit.postproc import Extension
+        ext = Extension(info, postproc, channel_serial)
+    xb = ext.out_bits if ext else ob          # bits the wrapper outputs (the core's, unless a block is added)
+    obt = min(xb, 7) if tt else xb
     idx = {}
     for t, (p, i, c, w) in enumerate(tr):
         idx[(p, i, c)] = (t, w)
@@ -68,7 +79,7 @@ def emit_stream(core_ir: dict, core_info: dict | None = None, tt: bool = True, c
               "  wire [14:0] din = {uio_in, ui_in[6:0]};", "  wire strobe_pin = ui_in[7];", "  wire en = ena;"]
     else:
         L += [f"module {top} (", "  input  wire        clk,", "  input  wire        rst_n,", "  input  wire        strobe,",
-              "  input  wire [14:0] din,", f"  output wire [{ob - 1}:0] dout,", "  output wire        valid_o", ");",
+              "  input  wire [14:0] din,", f"  output wire [{xb - 1}:0] dout,", "  output wire        valid_o", ");",
               "  wire strobe_pin = strobe;", "  wire en = 1'b1;"]
     L += [f"  reg [{WORD * T - 1}:0] sreg;", f"  reg [{CW - 1}:0] cnt;", "  reg s1, s2, s3, done, valid;",
           f"  reg [{obt - 1}:0] oreg;", "  wire stb = s2 & ~s3;"]
@@ -90,11 +101,13 @@ def emit_stream(core_ir: dict, core_info: dict | None = None, tt: bool = True, c
     L.append(f"  {info['top']} core ({', '.join(conns)});")
     cat = [f"cout_{o['name']}" for o in reversed(info["outputs"])]
     L.append(f"  wire [{ob - 1}:0] cout = {{{', '.join(cat)}}};" if len(cat) > 1 else f"  wire [{ob - 1}:0] cout = {cat[0]};")
+    if ext:
+        L += ext.decls()
     shift = f"{{din, sreg[{WORD * T - 1}:{WORD}]}}" if T > 1 else "din"
     L += ["  always @(posedge clk) begin",
           "    if (!rst_n) begin",
           f"      sreg <= {WORD * T}'d0; cnt <= {CW}'d0; s1 <= 1'b0; s2 <= 1'b0; s3 <= 1'b0;",
-          f"      done <= 1'b0; valid <= 1'b0; oreg <= {obt}'d0;",
+          f"      done <= 1'b0; valid <= 1'b0; oreg <= {obt}'d0;" + (f" {ext.reset()}" if ext and ext.reset() else ""),
           "    end else if (en) begin",
           "      s1 <= strobe_pin; s2 <= s1; s3 <= s2;",
           "      done <= 1'b0;",
@@ -102,16 +115,16 @@ def emit_stream(core_ir: dict, core_info: dict | None = None, tt: bool = True, c
           f"        sreg <= {shift};",
           f"        if (cnt == {CW}'d{T - 1}) begin cnt <= {CW}'d0; done <= 1'b1; end else cnt <= cnt + {CW}'d1;",
           f"        if (cnt == {CW}'d0) valid <= 1'b0;",
-          "      end",
-          f"      if (done) begin oreg <= cout[{obt - 1}:0]; valid <= 1'b1; end",
-          "    end",
+          "      end"]
+    L += ext.on_done(obt) if ext else [f"      if (done) begin oreg <= cout[{obt - 1}:0]; valid <= 1'b1; end"]
+    L += ["    end",
           "  end"]
     unused = [f"sreg[{b}]" for b in range(WORD * T) if b not in used]
     if tt:
         pad = f"{7 - obt}'d0, " if obt < 7 else ""
         L += [f"  assign uo_out = {{valid, {pad}oreg}};", "  assign uio_out = 8'd0;", "  assign uio_oe = 8'd0;"]
-        if ob > obt:
-            unused.append(f"cout[{ob - 1}:{obt}]")
+        if xb > obt:
+            unused.append(f"cout[{ob - 1}:{obt}]" if not ext else f"xout[{xb - 1}:{obt}]")
     else:
         L += ["  assign dout = oreg;", "  assign valid_o = valid;"]
     if unused:
@@ -123,12 +136,19 @@ def emit_stream(core_ir: dict, core_info: dict | None = None, tt: bool = True, c
         for i in range(o["lanes"]):
             for b in range(o["bits"]):
                 bitmap.append({"output": o["name"], "lane": i, "bit": b})
+    if ext:
+        bitmap = ext.bitmap(bitmap)
     sinfo = {"top": top, "core_top": info["top"], "tt": tt, "word_bits": WORD, "transfers_per_frame": T,
-             "counter_bits": CW, "output_bits": ob, "visible_output_bits": obt, "truncated": ob > obt,
+             "counter_bits": CW, "output_bits": xb, "visible_output_bits": obt, "truncated": xb > obt,
              "uo_map": bitmap[:obt] if tt else bitmap, "core": info,
              "protocol": "15-bit word = {uio_in, ui_in[6:0]} per rising edge of ui_in[7]; hold data 3 cycles; "
                          "valid = uo_out[7] (level), outputs on uo_out[6:0]" if tt else
                          "15-bit din per rising edge of strobe; hold 3 cycles; valid_o level; dout = all output bits"}
+    if ext:
+        sinfo.update(ext.summary())
+        if ext.cs:
+            sinfo["protocol"] += (f"; channel-serial: each frame is one channel, valid rises after every "
+                                  f"{ext.cs['channels']} frames (channel 0 first)")
     return text, sinfo
 
 

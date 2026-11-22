@@ -10,6 +10,17 @@ from chiplab.config import oss_bin
 from chiplab.hw.yosys import SIMPLE_GATES, run
 
 
+def _kill_group(p: subprocess.Popen) -> None:
+    """Kill a process started with start_new_session=True together with every child it spawned."""
+    import os
+    import signal
+    try:
+        os.killpg(p.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+    p.communicate()
+
+
 def synth_seq_netlist(rtl_files: list[Path], top: str, workdir: Path, timeout: int = 900, blackbox: list[str] | None = None) -> Path:
     reads = "\n".join(f"read_verilog {Path(f).resolve()}" for f in rtl_files)
     bb = "".join(f"blackbox {m}\n" for m in (blackbox or []))
@@ -52,13 +63,16 @@ depth {depth}
 engine smtbmc yices
 """)
     out = wd / "eqy_out"
+    # own process group, killed whole on timeout: eqy's sby/yosys/solver children must not outlive the cap
+    p = subprocess.Popen([oss_bin("eqy"), "-f", "chip.eqy", "-d", str(out), "-j", "4"], cwd=wd,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
     try:
-        p = subprocess.run([oss_bin("eqy"), "-f", "chip.eqy", "-d", str(out), "-j", "4"], cwd=wd,
-                           capture_output=True, text=True, timeout=timeout)
+        stdout, stderr = p.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
+        _kill_group(p)
         return {"proved": None, "method": "eqy", "error": f"timed out after {timeout}s", "seconds": round(time.time() - t0, 1),
                 "blackboxed": blackbox or []}
-    log = p.stdout + p.stderr
+    log = stdout + stderr
     (wd / "eqy.log").write_text(log)
     proved = p.returncode == 0 and "Successfully proved designs equivalent" in log
     failed = "Failed to prove equivalence" in log or "FAIL" in log
