@@ -129,7 +129,7 @@ Everything for a design is in `runs/designs/<design_id>/` (or `$CHIPLAB_HOME/des
 | area, slack, power, GDS, PNG (`layout_<pdk>/`) | layout (LibreLane); power is vectorless unless an activity trace is given |
 | gate activity (`gate_activity.json`), `ports.vcd` | activity from your vectors |
 | verification evidence (`simulate_*.json`, `formal.json`, `rtlsim.json`) | measured |
-| `report.md`, `cost.json` | report; prices as checked on 21 Nov 2026 |
+| `report.md`, `cost.json` | report; prices as checked on 22 Nov 2026 |
 | `estimate-batch` gate counts | estimate (least-squares fit to the lab's own syntheses) |
 
 ## 6. Manufacturing: what you can really buy today
@@ -138,8 +138,14 @@ Everything for a design is in `runs/designs/<design_id>/` (or `$CHIPLAB_HOME/des
 |---|---|---|---|
 | iCE40UP5K FPGA | bitstream (`bitstream`) | $36 UPduino board, days | A real board needs its pin map (pass a `.pcf`); reprogrammable, not a product |
 | Tiny Tapeout, sky130 | complete project folder (`tt-package`) | €70 per tile (about 1,000 gates) + €300 devkit (€100 for individuals); TTSKY26 closes 30 Nov 2026, chips about June 2027 | 8 in / 8 out / 8 bidirectional pins (hence streaming); designs are published openly. Cloud build: commit the folder, run the `tt-gds` GitHub workflow |
-| Tiny Tapeout, GF180 / IHP | same flow | same pricing; GF180 closes 7 Dec 2026 | validated on sky130; GF180/IHP checked up to config and PDK resolution |
-| wafer.space GF180, ChipFoundry, EUROPRACTICE, Pragmatic FlexIC | area, timing and power estimates only | wafer.space $3,000 per ~1,000 dies; Pragmatic €900/mm² (minimum 3×3 mm) | Need full-chip steps the lab does **not** do yet: pad ring, harness, full DRC/LVS signoff, commercial design kits |
+| Tiny Tapeout, GF180 (TTGF26c) | same flow; 346.64 × 160.72 µm tiles, up to 4×8 | closes 7 Dec 2026; about €70 per tile (unverified for GF180); chips about June 2027 (unverified) | design must be public, Apache-compatible; validated on sky130, GF180 checked up to config and PDK resolution |
+| Tiny Tapeout, IHP SG13G2 | same flow; 202.08 × 154.98 µm tiles, up to 8×4 | no IHP shuttle open on 22 Nov 2026 | checked up to config and PDK resolution |
+| wafer.space GF180 (Run 3) | area, timing and power estimates; slot fit check | 1,000 dies per slot: quarter $3,000 (1.73 mm² core), half $5,000 (4.46 or 5.02 mm² core), full $8,000 (12.92 mm² core); chip-on-board +$1,500; buy by 9 Dec, GDS by 16 Dec 2026, ships Q2 2027 | dies untested (unverified); design may stay closed |
+| ChipFoundry chipIgnite (sky130) | estimates only | $14,950 for 100 QFN parts, up to 15 mm² user area; next commitment and delivery dates unverified | needs their harness |
+| EUROPRACTICE GF180 / IHP | estimates only | GF180 €913/mm² (minimum 6 mm²); IHP SG13G2 €7,300/mm², SG13CMOS €4,500/mm² | standard prices; academic discounts exist |
+| Pragmatic FlexIC | estimates only | €900/mm² (minimum 3×3 mm), unverified | commercial design kit |
+
+Every route except the FPGA needs full-chip steps the lab does **not** do yet: pad ring, harness, full DRC/LVS signoff. `estimate-cost` marks each figure as read on the vendor's page (22 Nov 2026) or unverified.
 
 No route is medically certified; the device maker remains responsible for clinical validation and approval.
 

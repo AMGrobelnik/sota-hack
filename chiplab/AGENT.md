@@ -625,7 +625,7 @@ chiplab rtl-simulate --json '{"design_id": "765fa47586bd", "n": 300}'
 
 ### `estimate-cost`
 
-Manufacturing routes for a design (iCE40 FPGA, Tiny Tapeout sky130/GF180, wafer.space GF180, Pragmatic FlexIC): fits or not, cost, deadline, and the basis of each number.
+Manufacturing routes for a design (iCE40 FPGA, Tiny Tapeout sky130/GF180/IHP, wafer.space GF180 slots, ChipFoundry chipIgnite, EUROPRACTICE GF180/IHP, Pragmatic FlexIC): fits or not, cost, deadline, the basis of each number, and per figure whether it was read on the vendor's page or is unverified.
 
 - Python: `lab.estimate_cost(design_id: str) -> dict`
 - Lane: inline; cached: False
