@@ -162,14 +162,15 @@ def add_luts(raw: dict, luts: dict) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--raw", type=Path, action="append", required=True)
-    ap.add_argument("--luts", type=Path)
+    ap.add_argument("--luts", type=Path, action="append", default=[])
     ap.add_argument("--reaped", type=Path, nargs="*", default=[])
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--md", type=Path)
     a = ap.parse_args()
     raw = scrub(merge([json.loads(p.read_text()) for p in a.raw]))
-    if a.luts and a.luts.exists():
-        add_luts(raw, json.loads(a.luts.read_text()))
+    for p in a.luts:
+        if p.exists():
+            add_luts(raw, json.loads(p.read_text()))
     raw["orphans_reaped"] = [json.loads(ln) for p in a.reaped if p.exists()
                              for ln in p.read_text().splitlines() if ln.startswith("{")]
     rows = [summary(r) for r in raw["designs"]]

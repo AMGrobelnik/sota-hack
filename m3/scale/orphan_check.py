@@ -30,7 +30,9 @@ def _cwd(pid: int | str) -> str:
 
 
 def abc_orphans(workdir: Path) -> list[dict]:
-    """yosys-abc processes working in `workdir` with no yosys left among their ancestors (abc pid + sh wrapper)."""
+    """yosys-abc processes working in `workdir` whose parent is gone: the parent is pid 1, or only `sh` wrappers sit
+    between it and pid 1 (Yosys starts ABC as `sh -c yosys-abc ...`). Returns abc pid + wrapper pids, nothing else:
+    a yosys-abc started directly by a live Python process (the formal check's cec / iprove) is not an orphan."""
     out = subprocess.run(["ps", "-Ao", "pid=,ppid=,etime=,command="], capture_output=True, text=True, timeout=30).stdout
     procs = {}
     for ln in out.splitlines():
@@ -42,7 +44,7 @@ def abc_orphans(workdir: Path) -> list[dict]:
         if Path(cmd.split()[0]).name != "yosys-abc":
             continue
         chain, cur = [pid], ppid
-        while cur in procs and cur != 1 and Path(procs[cur][2].split()[0]).name != "yosys":
+        while cur in procs and cur != 1 and Path(procs[cur][2].split()[0]).name == "sh":
             chain.append(cur)
             cur = procs[cur][0]
         if cur == 1 and str(workdir) in _cwd(pid):
