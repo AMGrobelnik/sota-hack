@@ -382,15 +382,17 @@ class OpenRouterAgentBackend(AgentBackend):
         terminal_params = {"env": build_agent_env(spec.env), "terminal_type": "subprocess"}
         tools = [Tool(name=classes[n].name, params=terminal_params if n == "terminal" else {}) for n in names]
         kwargs: dict[str, Any] = {"llm": llm, "tools": tools}
+        # One context for both: the instructions are appended to OpenHands' own
+        # system message (which keeps its tool rules) and the skills are listed in it.
+        context: dict[str, Any] = {}
         if spec.system_prompt:
-            # Appended to OpenHands' own system message, which keeps its tool rules.
-            kwargs["agent_context"] = AgentContext(system_message_suffix=spec.system_prompt)
+            context["system_message_suffix"] = spec.system_prompt
+        if spec.workdir is not None and (skills := workspace_skills(spec.workdir)):
+            context["skills"] = skills
+        if context:
+            kwargs["agent_context"] = AgentContext(**context)
         if servers := mcp_servers_for(spec.mcp_servers):
             kwargs["mcp_config"] = servers
-        if spec.workdir is not None and (skills := workspace_skills(spec.workdir)):
-            from openhands.sdk import AgentContext
-
-            kwargs["agent_context"] = AgentContext(skills=skills)
         return Agent(**kwargs)
 
     async def _turn(

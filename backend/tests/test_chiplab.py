@@ -366,6 +366,9 @@ async def test_openrouter_agent_gets_the_instructions_and_the_lab_page_as_its_sy
     from chipin_backend.agents.openrouter_agent import OpenRouterAgentBackend
 
     spec = await _dashboard_spec("openrouter", config, tmp_path, monkeypatch)
+    assert spec.workdir is not None
+    # The lab is on, so the run's folder holds the chip-lab skill as well.
+    assert install_skill(spec.workdir, "openrouter") is not None
     sent: list[list[Any]] = []
 
     class RecordingLLM(TestLLM):
@@ -392,6 +395,7 @@ async def test_openrouter_agent_gets_the_instructions_and_the_lab_page_as_its_sy
     text = "".join(getattr(c, "text", "") for c in system[0].content)
     _assert_carries_the_instructions(text)
     assert "OpenHands" in text  # the SDK's own system message is kept, not replaced
+    assert "<available_skills>" in text and "<name>chiplab</name>" in text  # and the skill with it
 
 
 class _Sink:
