@@ -739,6 +739,7 @@ select.gfin{padding:0 10px}
 <script src="../i1-search.js"></script><!-- SEARCH HOOK: the five search steps between Run and the run view, replayed on examples (window.ChipInSearch) --><!-- QUESTIONS HOOK: follow-up questions from a connected backend, one extra step before the spec card (window.ChipInQuestions) -->
 <script src="../i1-summary.js"></script><!-- SUMMARY HOOK: the result page's summary card, trade-off sentence and the chart's default view (window.ChipInSummary) -->
 <script src="../i1-whysize.js"></script><!-- WHY SIZE HOOK: the Why this size panel under the chart: cost along the curve, battery, what changes, to check (window.ChipInWhySize) -->
+<script src="../i1-report.js"></script><!-- REPORT HOOK: Assumptions and limits link, one-page design report, compare two designs (window.ChipInReport) -->
 <script type="module">
 "use strict";
 /* =====================================================================
@@ -2066,7 +2067,7 @@ function renderRun() {
       <nav class="tabs" aria-label="Run views">${VIEWS.map(([k, n]) => `<a class="tab${route.view === k ? " on" : ""}" href="#/run/${run.id}/${k}">${n}</a>`).join("")}</nav>
       <span id="stp"></span>
       ${!plays(run) || window.ChipInPlayback /* PLAYBACK HOOK: the bar goes under the header */ ? '<span class="grow" style="flex:1"></span>' : `<div class="pbar"><button class="pbtn" id="pbtn" aria-label="Pause"></button><span class="clk" id="clk"></span><div class="track" id="trk"><i></i><b></b></div><span class="left2" id="left2"></span></div>`}
-      <div class="tright"><span class="mk ${isSim(run) ? "sim" : "mea"} topbadge">${esc(badgeText(run))}</span><button class="cpill rset" id="rset" title="Run settings"><span class="pv">${isMea(run) ? "Measured run" : esc(`Run size: ${run.preset} · Model: ${modelName(run.agent)}`)}</span></button><button class="ib" id="rmenu" aria-label="Run menu">${I("hdots", "s16")}</button></div>
+      <div class="tright">${window.ChipInReport?.linkHTML() || "" /* REPORT HOOK: Assumptions and limits, always in the top bar */}<span class="mk ${isSim(run) ? "sim" : "mea"} topbadge">${esc(badgeText(run))}</span><button class="cpill rset" id="rset" title="Run settings"><span class="pv">${isMea(run) ? "Measured run" : esc(`Run size: ${run.preset} · Model: ${modelName(run.agent)}`)}</span></button><button class="ib" id="rmenu" aria-label="Run menu">${I("hdots", "s16")}</button></div>
     </div><div class="body" id="body"></div>`;
   cur = { id: run.id, view: route.view, sig: "" };
   if ($("#pbtn")) $("#pbtn").onclick = () => {
@@ -2075,13 +2076,15 @@ function renderRun() {
     saveRuns(); tick();
   };
   $("#rset").onclick = () => runSettings(run);
-  $("#rmenu").onclick = e => openPop(e.currentTarget, `<button class="pi" data-v="sources">${I("db", "s14")}<span>Where this comes from</span></button><button class="pi" data-v="settings">${I("sliders", "s14")}<span>Run settings</span></button><button class="pi" data-v="measured">${I("check", "s14")}<span>Measured so far</span></button>${!plays(run) ? "" : `<div class="psep"></div><button class="pi" data-v="restart">${I("restart", "s14")}<span>Play this run again<span class="h">From the start of the demo clock</span></span></button>`}`, ev => {
+  $("#rmenu").onclick = e => openPop(e.currentTarget, `<button class="pi" data-v="sources">${I("db", "s14")}<span>Where this comes from</span></button><button class="pi" data-v="settings">${I("sliders", "s14")}<span>Run settings</span></button><button class="pi" data-v="measured">${I("check", "s14")}<span>Measured so far</span></button>${window.ChipInReport ? `<button class="pi" data-v="report">${I("db", "s14")}<span>Design report<span class="h">One page to print or save as PDF</span></span></button>` : "" /* REPORT HOOK */}${!plays(run) ? "" : `<div class="psep"></div><button class="pi" data-v="restart">${I("restart", "s14")}<span>Play this run again<span class="h">From the start of the demo clock</span></span></button>`}`, ev => {
     const b = ev.target.closest("[data-v]"); if (!b) return; closePop();
     if (b.dataset.v === "sources") openSources(run);
     if (b.dataset.v === "settings") runSettings(run);
     if (b.dataset.v === "measured") openMeasuredFacts();
+    if (b.dataset.v === "report") window.ChipInReport.report(); /* REPORT HOOK */
     if (b.dataset.v === "restart") { run.clock = { base: 0, anchor: Date.now(), playing: true }; run.ui.sel = null; saveRuns(); render(); }
   }, { width: 250, up: false });
+  window.ChipInReport?.bind(() => { const v = viewAt(run); return { run, v, P: rpP(), ctx: panelCtx(run, v), openModal, closeModal, toast }; }); /* REPORT HOOK */
   updTop(run, true);
   renderView(run, true);
   if (plays(run)) window.ChipInPlayback?.mountExample(run, { elapsed, timeline, tick, saveRuns }); /* PLAYBACK HOOK: the shared bar drives run.clock */
@@ -2239,7 +2242,7 @@ function inspHTML(run, v) {
   else if (!v.ev.chosen && run.targets.length && v.done) note = `<p class="inote">No design passes every target, so this is the nearest. ${isSim(run) ? "Loosen a target, or try a bigger preset." : "Loosen a target to see which designs clear it."}</p>`;
   return `<h2>${d.role === "baseline" ? "Baseline" : "Design"} ${esc(d.id)} ${mark}${isCh ? '<span class="pf ok">Chosen</span>' : ""}</h2><p class="is">${esc(budgetLabel(run, d.channels))}${d.round ? `, round ${d.round}` : ""}</p>
     ${rows.map(([a, b]) => `<div class="irow"><span>${a}</span><b>${b}</b></div>`).join("")}${note}
-    <div class="ilinks"><a class="qbtn" href="#/run/${run.id}/chip">${I("chip", "s13")}The chip</a></div>`;
+    <div class="ilinks"><a class="qbtn" href="#/run/${run.id}/chip">${I("chip", "s13")}The chip</a>${window.ChipInReport?.cmpBtn(run, v, d, rpP()) || "" /* REPORT HOOK: compare */}</div>`;
 }
 function afBaseLine(run) {
   const st = run.targets.map(t => meets(t, t.metric === "sensitivity" ? AF_BASE.sensitivity_pooled : t.metric === "specificity" ? AF_BASE.specificity : null));
@@ -2323,6 +2326,7 @@ function updOverview(run) {
 const SUM = () => window.ChipInSummary && window.ChipInModels ? window.ChipInSummary : null;
 let SUMP = null;
 const sumP = () => SUMP || (SUMP = { metricOf, targetState, frontier, MET, fmt, fmtVal, fmtTarget, esc, caseOf, budgetLabel, isSim, isMea, mFile, panelKind, AF_DESIGN, MEASURED, afFinal, afScopeWord, about, sizeTip });
+const rpP = () => Object.assign({}, sumP(), { scopeText, noFileRefs, selDesign, afSize, badgeText, afFile }); /* REPORT HOOK: helpers for ../i1-report.js */
 // target editing on the overview: value, comparison, which one the chart plots, remove
 function editTarget(run, anchor, i) {
   const t = run.targets[i]; if (!t) return;
@@ -2647,7 +2651,7 @@ function inspAF(run, v) {
   if (isCh && afFinal(v)) for (const k of keys) { const t = run.targets.find(x => x.metric === k), x = metricOf(run, AF_DESIGN, k).v; rows.push([`${MET[k].name}, ${tw}, test`, `${fmtVal(k, x)}${t ? pfHTML(meets(t, x)) : ""}`]); }
   const title = isCh && v.ph >= 4 ? "The design that was built" : isCh && v.ph >= 3 ? "Best under the size cap" : d.best && v.ph >= 2 ? "Best overall, too large" : "Candidate";
   return `<h2>${title} <span class="mk mea">measured</span></h2><p class="is">${esc(d.id)}</p>${rows.map(([a, b]) => `<div class="irow"><span>${a}</span><b>${b}</b></div>`).join("")}
-    <div class="ilinks"><a class="qbtn" href="#/run/${run.id}/chip">${I("chip", "s13")}The chip</a></div>`;
+    <div class="ilinks"><a class="qbtn" href="#/run/${run.id}/chip">${I("chip", "s13")}The chip</a>${window.ChipInReport?.cmpBtn(run, v, d, rpP()) || "" /* REPORT HOOK: compare */}</div>`;
 }
 // the funnel from the file's counts, each stage lit by its step, and the measured search rate beside it
 function funnelAF(run, v) {
