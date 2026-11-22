@@ -467,6 +467,15 @@ def main() -> None:
             res["icarus"][db] = icarus_db(db, recs, model, n, dev, sw, top, [str(sw / "full.v")], cw, cb, len(feats), "rtl")
             print(tag, "icarus", db, res["icarus"][db], flush=True)
             resf.write_text(json.dumps(res, indent=1, default=str))
+    if "gatesim" in a.steps:  # the synthesised generic gate netlist of the whole clocked design (yosys, after abc)
+        cw = next(p["lanes"] * p["bits"] for p in ports["inputs"] if p["name"] == "c")
+        cb = next(p["bits"] for p in ports["inputs"] if p["name"] == "c")
+        res.setdefault("icarus_gate_netlist", {})
+        for db, recs in data.items():
+            res["icarus_gate_netlist"][db] = icarus_db(db, recs, model, n, dev, sw, top, [str(sw / "gen" / "gates.v")],
+                                                       cw, cb, len(feats), "gate")
+            print(tag, "gatesim", db, res["icarus_gate_netlist"][db], flush=True)
+            resf.write_text(json.dumps(res, indent=1, default=str))
     if a.layout:
         code3 = (
             "import json; from pathlib import Path\n"
