@@ -130,6 +130,11 @@
     },
     {
       id: "ads1299",
+      channels: 8,
+      role: "eeg-budget",
+      eeg_named: true,
+      noise_uvpp: 1,
+      noise_note: "1 uVpp (70 Hz bandwidth), ADS1299 datasheet feature list",
       name: "EEG front end ADS1299 (8 channels)",
       power_uw: 39000,
       per: "whole part (8 channels)",
@@ -140,6 +145,11 @@
     },
     {
       id: "ads1299-6",
+      channels: 6,
+      role: "eeg-budget",
+      eeg_named: true,
+      noise_uvpp: 1,
+      noise_note: "1 uVpp (70 Hz bandwidth), ADS1299 datasheet feature list",
       name: "EEG front end ADS1299-6 (6 channels)",
       power_uw: 30000,
       per: "whole part (6 channels)",
@@ -150,12 +160,219 @@
     },
     {
       id: "ads1299-4",
+      channels: 4,
+      role: "eeg-budget",
+      eeg_named: true,
+      noise_uvpp: 1,
+      noise_note: "1 uVpp (70 Hz bandwidth), ADS1299 datasheet feature list",
       name: "EEG front end ADS1299-4 (4 channels)",
       power_uw: 22000,
       per: "whole part (4 channels)",
       source_name: "ADS1299 datasheet (Texas Instruments)",
       source_url: "https://www.ti.com/document-viewer/ADS1299/datasheet/specifications",
       quote: "ADS1299-4 normal mode 22 / 24 mW typ/max",
+      kind: "datasheet",
+    },
+    // --- Low-channel biopotential front ends (Texas Instruments datasheets,
+    // read as text from the maker's PDF). role "eeg-budget": the datasheet
+    // names EEG and gives power with conditions, so the EEG budget may use it.
+    // role "ecg-grade-scale": the datasheet names ECG only; shown for scale,
+    // never used in an EEG budget. role "headline-only": names EEG but the
+    // power is a feature-list figure without stated conditions; not used.
+    {
+      id: "ads1194",
+      name: "Biopotential front end ADS1194 (4 channels, 16-bit)",
+      power_uw: 3000,
+      per: "whole part (4 channels), analog supply 3 V",
+      channels: 4,
+      role: "eeg-budget",
+      eeg_named: true,
+      channel_quiescent_uw: 350,
+      noise_uvpp: 12.2,
+      noise_note: "12.2 uVpp (gain 6, 10 s of data; feature list: 12 uVpp, 150 Hz bandwidth, G = 6)",
+      source_name: "ADS1194/ADS1196/ADS1198 datasheet SBAS471C (Texas Instruments)",
+      source_url: "https://www.ti.com/lit/ds/symlink/ads1198.pdf",
+      quote:
+        "Quiescent power dissipation, ADS1194 Normal mode 3 / 3.3 mW typ/max (analog supply 3 V, " +
+        "RLD, WCT and pace amplifiers turned off; DVDD 1.8 V, 500 SPS, gain 6). " +
+        "Quiescent channel power PGA + ADC 350 uW. Channel register: 'PD: 1 = Channel power-down'",
+      eeg_quote:
+        "make them well-suited for scalable electrocardiogram (ECG), electroencephalography (EEG), " +
+        "and electromyography (EMG) applications",
+      kind: "datasheet",
+    },
+    {
+      id: "ads1196",
+      name: "Biopotential front end ADS1196 (6 channels, 16-bit)",
+      power_uw: 3600,
+      per: "whole part (6 channels), analog supply 3 V",
+      channels: 6,
+      role: "eeg-budget",
+      eeg_named: true,
+      channel_quiescent_uw: 350,
+      noise_uvpp: 12.2,
+      noise_note: "12.2 uVpp (gain 6, 10 s of data), family figure",
+      source_name: "ADS1194/ADS1196/ADS1198 datasheet SBAS471C (Texas Instruments)",
+      source_url: "https://www.ti.com/lit/ds/symlink/ads1198.pdf",
+      quote:
+        "Quiescent power dissipation, ADS1196 Normal mode 3.6 / 4 mW typ/max (analog supply 3 V, " +
+        "RLD, WCT and pace amplifiers turned off; DVDD 1.8 V, 500 SPS, gain 6). " +
+        "Quiescent channel power PGA + ADC 350 uW",
+      eeg_quote:
+        "make them well-suited for scalable electrocardiogram (ECG), electroencephalography (EEG), " +
+        "and electromyography (EMG) applications",
+      kind: "datasheet",
+    },
+    {
+      id: "ads1198",
+      name: "Biopotential front end ADS1198 (8 channels, 16-bit)",
+      power_uw: 4300,
+      per: "whole part (8 channels), analog supply 3 V",
+      channels: 8,
+      role: "eeg-budget",
+      eeg_named: true,
+      channel_quiescent_uw: 350,
+      noise_uvpp: 12.2,
+      noise_note: "12.2 uVpp (gain 6, 10 s of data), family figure",
+      source_name: "ADS1194/ADS1196/ADS1198 datasheet SBAS471C (Texas Instruments)",
+      source_url: "https://www.ti.com/lit/ds/symlink/ads1198.pdf",
+      quote:
+        "Quiescent power dissipation, ADS1198 Normal mode 4.3 / 4.8 mW typ/max (analog supply 3 V, " +
+        "RLD, WCT and pace amplifiers turned off; DVDD 1.8 V, 500 SPS, gain 6). " +
+        "Quiescent channel power PGA + ADC 350 uW. Feature list: Low Power 0.55 mW/channel",
+      eeg_quote:
+        "make them well-suited for scalable electrocardiogram (ECG), electroencephalography (EEG), " +
+        "and electromyography (EMG) applications",
+      kind: "datasheet",
+    },
+    {
+      id: "ads1294",
+      name: "Biopotential front end ADS1294 (4 channels, 24-bit), high-resolution mode",
+      power_uw: 5400,
+      per: "whole part (4 channels), analog supply 3 V",
+      channels: 4,
+      role: "eeg-budget",
+      eeg_named: true,
+      noise_uvpp: 5,
+      noise_note: "5 uVpp (gain 6, 10 s of data; feature list: 4 uVpp, 150 Hz bandwidth, G = 6)",
+      source_name: "ADS1294/6/8 datasheet SBAS459K (Texas Instruments)",
+      source_url: "https://www.ti.com/lit/ds/symlink/ads1294.pdf",
+      quote:
+        "Power dissipation, ADS1294, ADS1294R, HR mode 5.4 / 6 mW typ/max (AVDD - AVSS = 3 V; RLD, WCT " +
+        "and pace amplifiers turned off; DVDD 1.8 V, 500 SPS, HR mode, gain 6). Feature list: Low Power 0.75 mW/channel",
+      eeg_quote:
+        "Applications: Medical Instrumentation (ECG, EMG, and EEG); incorporate all of the features that " +
+        "are commonly required in medical electrocardiogram (ECG) and electroencephalogram (EEG) applications",
+      kind: "datasheet",
+    },
+    {
+      id: "ads1298",
+      name: "Biopotential front end ADS1298 (8 channels, 24-bit), high-resolution mode",
+      power_uw: 8800,
+      per: "whole part (8 channels), analog supply 3 V",
+      channels: 8,
+      role: "eeg-budget",
+      eeg_named: true,
+      noise_uvpp: 5,
+      noise_note: "5 uVpp (gain 6, 10 s of data), family figure",
+      source_name: "ADS1294/6/8 datasheet SBAS459K (Texas Instruments)",
+      source_url: "https://www.ti.com/lit/ds/symlink/ads1294.pdf",
+      quote:
+        "Power dissipation, ADS1298, ADS1298R, HR mode 8.8 / 9.5 mW typ/max (AVDD - AVSS = 3 V; RLD, WCT " +
+        "and pace amplifiers turned off; DVDD 1.8 V, 500 SPS, HR mode, gain 6)",
+      eeg_quote:
+        "Applications: Medical Instrumentation (ECG, EMG, and EEG); incorporate all of the features that " +
+        "are commonly required in medical electrocardiogram (ECG) and electroencephalogram (EEG) applications",
+      kind: "datasheet",
+    },
+    {
+      id: "afe1594",
+      name: "Biopotential front end AFE1594 (4 channels, 24-bit), headline figure only",
+      power_uw: 1680,
+      per: "whole part (4 channels), 4 x 0.42 mW; conditions not stated",
+      channels: 4,
+      role: "headline-only",
+      eeg_named: true,
+      noise_uvpp: 4,
+      noise_note: "4 uVpp (150 Hz bandwidth)",
+      source_name: "AFE159x datasheet SBASB28A (Texas Instruments), abridged production version",
+      source_url: "https://www.ti.com/lit/ds/symlink/afe1594.pdf",
+      quote:
+        "Four high resolution channels at low power of 0.42mW/channel (feature list; the version read has " +
+        "no electrical table, so supply and mode are not stated; 4 x 0.42 mW = 1.68 mW is our product). " +
+        "Input-referred noise: 4 uVpp in 150Hz BW",
+      eeg_quote:
+        "Medical instrumentation (ECG, EMG, and EEG); electrocardiogram (ECG) and electroencephalogram (EEG) applications",
+      kind: "datasheet",
+    },
+    {
+      id: "ads1191",
+      name: "ECG front end ADS1191 (1 channel, 16-bit), ECG-grade, shown for scale",
+      power_uw: 450,
+      per: "whole part (1 channel), analog supply 3 V",
+      channels: 1,
+      role: "ecg-grade-scale",
+      eeg_named: false,
+      noise_uvpp: 24,
+      noise_note: "24 uVpp (150 Hz bandwidth, G = 6)",
+      source_name: "ADS1191/ADS1192 datasheet SBAS566A (Texas Instruments)",
+      source_url: "https://www.ti.com/lit/ds/symlink/ads1191.pdf",
+      quote:
+        "Quiescent power dissipation, ADS1191 Normal mode 450 / 495 uW typ/max (analog supply 3 V, RLD turned off; " +
+        "DVDD 1.8 V, 500 SPS, gain 6). Applications: Medical Instrumentation (ECG); the sheet does not name EEG as an application",
+      kind: "datasheet",
+    },
+    {
+      id: "ads1192",
+      name: "ECG front end ADS1192 (2 channels, 16-bit), ECG-grade, shown for scale",
+      power_uw: 670,
+      per: "whole part (2 channels), analog supply 3 V",
+      channels: 2,
+      role: "ecg-grade-scale",
+      eeg_named: false,
+      noise_uvpp: 24,
+      noise_note: "24 uVpp (150 Hz bandwidth, G = 6)",
+      source_name: "ADS1191/ADS1192 datasheet SBAS566A (Texas Instruments)",
+      source_url: "https://www.ti.com/lit/ds/symlink/ads1191.pdf",
+      quote:
+        "Quiescent power dissipation, ADS1192 Normal mode 670 / 740 uW typ/max (analog supply 3 V, RLD turned off; " +
+        "DVDD 1.8 V, 500 SPS, gain 6). Applications: Medical Instrumentation (ECG); the sheet does not name EEG as an application",
+      kind: "datasheet",
+    },
+    {
+      id: "ads1291",
+      name: "ECG front end ADS1291 (1 channel, 24-bit), ECG-grade, shown for scale",
+      power_uw: 450,
+      per: "whole part (1 channel), analog supply 3 V",
+      channels: 1,
+      role: "ecg-grade-scale",
+      eeg_named: false,
+      noise_uvpp: 8,
+      noise_note: "8 uVpp (150 Hz bandwidth, G = 6)",
+      source_name: "ADS1291/ADS1292/ADS1292R datasheet SBAS502C (Texas Instruments)",
+      source_url: "https://www.ti.com/lit/ds/symlink/ads1291.pdf",
+      quote:
+        "Quiescent power dissipation, ADS1291 Normal mode 450 / 495 uW typ/max (analog supply 3 V, RLD turned off; " +
+        "DVDD 1.8 V, 500 SPS, gain 6). Description: portable, low-power medical electrocardiogram (ECG), sports, and " +
+        "fitness applications; the sheet does not name EEG as an application",
+      kind: "datasheet",
+    },
+    {
+      id: "ads1292",
+      name: "ECG front end ADS1292 (2 channels, 24-bit), ECG-grade, shown for scale",
+      power_uw: 670,
+      per: "whole part (2 channels), analog supply 3 V",
+      channels: 2,
+      role: "ecg-grade-scale",
+      eeg_named: false,
+      noise_uvpp: 8,
+      noise_note: "8 uVpp (150 Hz bandwidth, G = 6)",
+      source_name: "ADS1291/ADS1292/ADS1292R datasheet SBAS502C (Texas Instruments)",
+      source_url: "https://www.ti.com/lit/ds/symlink/ads1291.pdf",
+      quote:
+        "Quiescent power dissipation, ADS1292 and ADS1292R Normal mode 670 / 740 uW typ/max (analog supply 3 V, RLD turned off; " +
+        "DVDD 1.8 V, 500 SPS, gain 6). Description: portable, low-power medical electrocardiogram (ECG), sports, and " +
+        "fitness applications; the sheet does not name EEG as an application",
       kind: "datasheet",
     },
     {
@@ -168,6 +385,19 @@
       quote:
         "Connection at 1000 ms averages 9.47 uA (via search; Engineering B silicon; " +
         "supply voltage not stated, 3 V assumed: 9.47 uA x 3 V = 28.4 uW)",
+      kind: "assumed",
+    },
+    {
+      id: "ble-cc2340r5",
+      name: "Bluetooth LE radio CC2340R5, connected at 1 s, 1M PHY, 0 dBm",
+      power_uw: 21,
+      per: "whole part",
+      source_name: "Bluetooth LE Software Product Brief CC2340, SWRA793A (Texas Instruments)",
+      source_url: "https://www.ti.com/lit/an/swra793a/swra793a.pdf",
+      quote:
+        "Table 6-1 Connection - PHYs: 1M, 0 dbm, connection interval 1 sec, current consumption 7 uA. " +
+        "The brief does not state the supply voltage; 3.0 V is the CC2340R5 datasheet's test supply " +
+        "(VDDS = 3.0V, DCDC enabled), assumed here: 7 uA x 3.0 V = 21 uW",
       kind: "assumed",
     },
     {
@@ -292,18 +522,105 @@
     };
   }
 
-  /** Smallest ADS1299 family part set covering n channels (device totals only). */
-  function eegFrontEnd(n) {
-    n = Math.max(1, Math.round(n));
-    var lines = [];
-    var full = Math.floor(n / 8);
-    var rest = n - full * 8;
-    if (full > 0) lines.push(lineFromPart(part("ads1299"), full, full + " x " + part("ads1299").name));
-    if (rest > 0) {
-      var p = rest <= 4 ? part("ads1299-4") : rest <= 6 ? part("ads1299-6") : part("ads1299");
-      lines.push(lineFromPart(p, 1));
+  /*
+   * EEG front-end rule. Candidates are the parts with role "eeg-budget": the
+   * maker's datasheet names EEG and gives power with conditions. Parts whose
+   * datasheet names ECG only (role "ecg-grade-scale") and headline-only
+   * figures are never used. For n channels the model takes the cheapest
+   * combination of candidate parts that covers n channels, by total power,
+   * and per part it enables only the channels needed.
+   *   policy "lowest-power" (default): all candidates.
+   *   policy "low-noise": only the candidates with the lowest quoted
+   *     input-referred noise figure (the ADS1299 family). The noise figures
+   *     are quoted at different bandwidths and gains, so they are not
+   *     directly comparable; each part carries its own noise_note.
+   * The datasheets give device totals. Where a part also gives a quiescent
+   * power per channel (channel_quiescent_uw) and a per-channel power-down
+   * bit, a part with unused channels is costed as total minus that figure per
+   * unused channel: this is our estimate, not a datasheet figure.
+   */
+  var FRONT_END_POLICIES = {
+    "lowest-power":
+      "Cheapest combination, by datasheet power, of parts whose datasheet names EEG and states the power conditions.",
+    "low-noise":
+      "Only the EEG-named parts with the lowest quoted input-referred noise (the ADS1299 family), cheapest combination by power.",
+  };
+
+  function eegCandidates(policy) {
+    var c = PARTS.filter(function (p) {
+      return p.role === "eeg-budget" && p.eeg_named === true;
+    });
+    if (policy === "low-noise") {
+      var best = Infinity;
+      c.forEach(function (p) {
+        best = Math.min(best, p.noise_uvpp);
+      });
+      c = c.filter(function (p) {
+        return p.noise_uvpp === best;
+      });
     }
-    return lines;
+    c.sort(function (a, b) {
+      return a.channels - b.channels || a.power_uw - b.power_uw;
+    });
+    return c;
+  }
+
+  function enabledPower(p, m) {
+    if (m < p.channels && p.channel_quiescent_uw) {
+      return { power_uw: p.power_uw - (p.channels - m) * p.channel_quiescent_uw, estimate: true };
+    }
+    return { power_uw: p.power_uw, estimate: false };
+  }
+
+  /** Cheapest cover of n EEG channels: [{ part, enabled, power_uw, estimate }]. */
+  function eegPlan(n, policy) {
+    n = Math.max(1, Math.round(n));
+    var cands = eegCandidates(policy || "lowest-power");
+    var best = [{ p: 0, picks: [] }];
+    for (var c = 1; c <= n; c++) {
+      var cur = null;
+      for (var i = 0; i < cands.length; i++) {
+        var m = Math.min(c, cands[i].channels);
+        var ep = enabledPower(cands[i], m);
+        var prev = best[c - m];
+        var cost = prev.p + ep.power_uw;
+        if (cur === null || cost < cur.p - 1e-9) {
+          cur = {
+            p: cost,
+            picks: prev.picks.concat([{ part: cands[i], enabled: m, power_uw: ep.power_uw, estimate: ep.estimate }]),
+          };
+        }
+      }
+      best.push(cur);
+    }
+    return best[n].picks;
+  }
+
+  function eegFrontEnd(n, policy) {
+    var groups = [];
+    eegPlan(n, policy).forEach(function (pk) {
+      for (var i = 0; i < groups.length; i++) {
+        if (groups[i].part === pk.part && groups[i].enabled === pk.enabled) {
+          groups[i].count++;
+          return;
+        }
+      }
+      groups.push({ part: pk.part, enabled: pk.enabled, power_uw: pk.power_uw, estimate: pk.estimate, count: 1 });
+    });
+    return groups.map(function (g) {
+      var name = g.part.name;
+      if (g.enabled < g.part.channels) {
+        name = name + ", " + g.enabled + " of " + g.part.channels + " channels enabled, the rest powered down";
+      }
+      if (g.count > 1) name = g.count + " x " + name;
+      return {
+        name: name,
+        power_uw: g.power_uw * g.count,
+        kind: g.estimate ? "estimate" : g.part.kind,
+        source_name: g.part.source_name,
+        source_url: g.part.source_url,
+      };
+    });
   }
 
   var DEVICE_KINDS = {
@@ -315,14 +632,14 @@
   /*
    * Total device power, chip as one line.
    *   ecg-patch: one MAX30003 per lead.
-   *   eeg-monitor: the smallest set of ADS1299 family parts covering the
-   *     channels (the datasheet gives device totals only, so 1 to 4 channels
-   *     use the ADS1299-4).
+   *   eeg-monitor: the cheapest set of EEG-named datasheet parts covering the
+   *     channels (see the EEG front-end rule above; option frontEnd is
+   *     "lowest-power" (default) or "low-noise").
    *   incubator-radar-thermal: sensors 1 = radar only (assumed 1% duty),
    *     sensors 2 = radar plus thermal infrared array.
    * Regulator losses, self-discharge and the MCU are not included.
    */
-  function deviceBudget(o) {
+  function deviceBudget(o) { // options also: frontEnd, radioPart (a PARTS id)
     o = o || {};
     var kind = o.kind || "ecg-patch";
     var lines = [];
@@ -330,7 +647,7 @@
       var leads = Math.max(1, Math.round(o.channels || 1));
       lines.push(lineFromPart(part("max30003"), leads, leads > 1 ? leads + " x " + part("max30003").name : null));
     } else if (kind === "eeg-monitor") {
-      lines = lines.concat(eegFrontEnd(o.channels || 8));
+      lines = lines.concat(eegFrontEnd(o.channels || 8, o.frontEnd));
     } else if (kind === "incubator-radar-thermal") {
       var sensors = Math.max(1, Math.round(o.sensors || o.channels || 2));
       lines.push(lineFromPart(part("radar-bgt60tr13c-duty"), 1));
@@ -338,7 +655,7 @@
     } else {
       throw new Error("unknown device kind " + kind);
     }
-    if (o.radio !== false) lines.push(lineFromPart(part("ble-nrf52832"), 1));
+    if (o.radio !== false) lines.push(lineFromPart(part(o.radioPart || "ble-nrf52832"), 1));
     var chip = part("chip");
     lines.push({
       name: chip.name,
@@ -414,6 +731,23 @@
       kind: "assumed",
     },
     {
+      id: "icp621333",
+      name: "ICP621333HPMT rechargeable lithium polymer pouch cell (Renata)",
+      type: "rechargeable",
+      capacity_mah: 270,
+      capacity_min_mah: 260,
+      voltage_v: 3.8,
+      continuous_ma: 270,
+      size: "35 mm x 13 mm x 6.8 mm, about 5.6 g, with safety circuit",
+      source_name: "Renata ICP621333HPMT datasheet Rev V01 11/2020 (copy hosted by Conrad)",
+      source_url:
+        "https://asset.conrad.com/media10/add/160267/c1/-/gl/003015330DS00/tehnicni-podatki-3015330-renata-icp621333hpmt-specialni-akumulatorji-prismaticno-kabel-lipo-37-v-270-mah.pdf",
+      quote:
+        "Nominal Voltage 3.8 V; Typical Capacity 270 mAh; Minimum Capacity 260 mAh (0.2C cut off 3.0 V at 20C); " +
+        "Max discharge Current 1.0 C - 270 mA (for continues discharge); Cycle Life > 80% of minimum capacity after 500 cycles",
+      kind: "datasheet",
+    },
+    {
       id: "lir2032",
       name: "LIR2032 rechargeable coin cell",
       type: "rechargeable",
@@ -445,7 +779,7 @@
   var ILLUSTRATIVE_MIN_LIFE_HOURS = 24;
 
   var REFERENCE_PRIMARY = "cr2032";
-  var REFERENCE_RECHARGEABLE = "lir2032";
+  var REFERENCE_RECHARGEABLE = "icp621333";
 
   function cellLifeHours(c, totalUw) {
     var mwh = c.capacity_mah * c.voltage_v;
@@ -458,7 +792,9 @@
 
   /*
    * Two explicit checks, applied first to the reference coin cell (CR2032)
-   * and then to the reference rechargeable (LIR2032):
+   * and then to the reference rechargeable (the Renata ICP621333HPMT pouch
+   * cell, a few hundred mAh; the LIR2032 coin cell stays in CELLS, assumed,
+   * unused here):
    *   1. average current (total power / cell voltage) within the cell's
    *      continuous-current rating (skipped where no rating is sourced);
    *   2. life (energy / total power) at least ILLUSTRATIVE_MIN_LIFE_HOURS.
@@ -499,7 +835,10 @@
         current_ma: rI,
         reason:
           why + "; a " + r.name + " lasts about " + (rLife / 24).toFixed(1) +
-          " days per charge (no continuous-current rating sourced for it).",
+          " days per charge" +
+          (r.continuous_ma === null
+            ? " (no continuous-current rating sourced for it)."
+            : ", at " + rI.toFixed(2) + " mA, within its " + r.continuous_ma + " mA continuous rating."),
       };
     }
     return {
@@ -527,6 +866,8 @@
         radio: opts.radio !== false,
         gates: opts.gates === undefined ? 2500 : opts.gates,
         decisionsPerSecond: opts.decisionsPerSecond,
+        frontEnd: opts.frontEnd,
+        radioPart: opts.radioPart,
       });
       var c = batteryClass(b.total_uw);
       return {
@@ -541,6 +882,114 @@
         reason: c.reason,
       };
     });
+  }
+
+  function lifeText(days) {
+    return days >= 2 ? Math.round(days) + " days" : (days * 24).toFixed(1) + " hours";
+  }
+
+  function mw(uw) {
+    return (uw / 1000).toFixed(uw < 1000 ? 3 : 2) + " mW";
+  }
+
+  /*
+   * channelStory(kind, opts): what the number of channels (leads, sensors)
+   * does to the battery, computed from classBoundaries. Returns
+   * { text, estimate: true, tips: [{ budget, unit, from, to, text }], rows }.
+   * A tip is a budget at which the class changes from the previous budget.
+   * With no tip the sentence says the count changes hours per charge, not
+   * the class. For EEG it adds, from the same model, the lowest-noise front
+   * end and the ECG-grade single-channel part shown for scale.
+   */
+  function channelStory(kind, opts) {
+    opts = opts || {};
+    var k = DEVICE_KINDS[kind];
+    if (!k) throw new Error("unknown device kind " + kind);
+    var rows = classBoundaries(kind, opts);
+    var first = rows[0];
+    var last = rows[rows.length - 1];
+    var tips = [];
+    for (var i = 1; i < rows.length; i++) {
+      if (rows[i].class !== rows[i - 1].class) {
+        tips.push({
+          budget: rows[i].budget,
+          unit: k.unit,
+          from: rows[i - 1].class,
+          to: rows[i].class,
+          text:
+            "At " + rows[i].budget + " " + k.unit + " (" + mw(rows[i].total_uw) + ") the battery tips from " +
+            rows[i - 1].class + " to " + rows[i].class + ", against " + mw(rows[i - 1].total_uw) +
+            " at " + rows[i - 1].budget + ".",
+        });
+      }
+    }
+    var parts = [];
+    var who = k.name;
+    if (tips.length === 0) {
+      parts.push(
+        "For the " + who + ", going from " + first.budget + " to " + last.budget + " " + k.unit +
+          " changes hours per charge and not the class: " + mw(first.total_uw) + " to " + mw(last.total_uw) +
+          ", " + lifeText(first.life_days) + " to " + lifeText(last.life_days) + " per " +
+          (first.class === "primary coin cell" ? "cell" : "charge") + ", " + first.class + " throughout."
+      );
+    } else {
+      parts.push(
+        "For the " + who + ", " + tips.map(function (t) { return t.text.charAt(0).toLowerCase() + t.text.slice(1); }).join(" ") +
+          " From " + first.budget + " to " + last.budget + " " + k.unit + " battery life goes from " +
+          lifeText(first.life_days) + " to " + lifeText(last.life_days) + "."
+      );
+    }
+    if (kind === "eeg-monitor") {
+      var smallest = eegCandidates(opts.frontEnd)[0];
+      parts.push(
+        "No datasheet part that names EEG has fewer than " + smallest.channels + " channels (smallest: " +
+          smallest.name.split(" (")[0] + "), so fewer channels save only the unused channels switched off, " +
+          "an estimate from the datasheet's per-channel figure."
+      );
+      var lowNoiseRows = classBoundaries(kind, {
+        budgets: opts.budgets,
+        radio: opts.radio,
+        gates: opts.gates,
+        decisionsPerSecond: opts.decisionsPerSecond,
+        radioPart: opts.radioPart,
+        frontEnd: "low-noise",
+      });
+      var ln = lowNoiseRows[0];
+      var lnLast = lowNoiseRows[lowNoiseRows.length - 1];
+      var lnClasses = [];
+      lowNoiseRows.forEach(function (r) {
+        if (lnClasses.indexOf(r.class) < 0) lnClasses.push(r.class);
+      });
+      parts.push(
+        "With the lowest-noise front end read (ADS1299 family) it is " + mw(ln.total_uw) + " at " + ln.budget +
+          " to " + mw(lnLast.total_uw) + " at " + lnLast.budget + " " + k.unit + ": " + lnClasses.join(" or ") + ". Switching front end changes power by " +
+          (ln.total_uw / first.total_uw).toFixed(1) + " times at the smallest count, and the channel count by " + (last.total_uw / first.total_uw).toFixed(1) + " times from " +
+          first.budget + " to " + last.budget + "."
+      );
+      var scale = PARTS.filter(function (p) {
+        return p.role === "ecg-grade-scale" && p.channels === 1;
+      }).sort(function (a, b) {
+        return a.power_uw - b.power_uw;
+      })[0];
+      if (scale) {
+        var b = deviceBudget({
+          kind: kind,
+          channels: 1,
+          radio: opts.radio,
+          gates: opts.gates,
+          decisionsPerSecond: opts.decisionsPerSecond,
+          radioPart: opts.radioPart,
+        });
+        var base = b.total_uw - b.lines[0].power_uw;
+        var cls = batteryClass(base + scale.power_uw);
+        parts.push(
+          "For scale only: a 1-channel ECG-grade part (" + scale.name.split(" (")[0] + ", " + mw(scale.power_uw) +
+            ", noise " + scale.noise_uvpp + " uVpp) would give " + cls.class + " at 1 channel, but its datasheet " +
+            "names ECG and not EEG, so no EEG budget uses it."
+        );
+      }
+    }
+    return { text: parts.join(" "), estimate: true, tips: tips, rows: rows };
   }
 
   var GENERAL = "general engineering knowledge";
@@ -789,6 +1238,9 @@
     ILLUSTRATIVE_MIN_LIFE_HOURS: ILLUSTRATIVE_MIN_LIFE_HOURS,
     batteryClass: batteryClass,
     classBoundaries: classBoundaries,
+    channelStory: channelStory,
+    FRONT_END_POLICIES: FRONT_END_POLICIES,
+    eegPlan: eegPlan,
     CONSEQUENCES: CONSEQUENCES,
     COST_DEFAULTS: COST_DEFAULTS,
     costModel: costModel,
