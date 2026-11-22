@@ -35,7 +35,11 @@ from chiplab import config
 METRIC_KEYS = {"gates": "gates", "depth": "levels", "transistors": "transistors", "luts_ice40": "LUT4", "luts_xc7": "LUT6",
                "area_um2": "um2", "ge": "GE", "tt_tiles": "tiles", "cost_eur": "EUR", "vectors_checked": "vectors",
                "mismatches": "vectors", "verification_level": "level", "timing_slack_ns": "ns", "fmax_mhz": "MHz",
-               "energy_pj": "pJ", "leakage_uw": "uW", "power_uw_at_rate": "uW", "candidates": "designs"}
+               "energy_pj": "pJ", "leakage_uw": "uW", "power_uw_at_rate": "uW", "candidates": "designs",
+               # score_events, sent only with progress_metrics: true
+               "event_sensitivity": "fraction", "fa_per_hour": "FA/h", "worst_patient_sensitivity": "fraction",
+               "auc": "AUC"}
+EVENT_KEYS = ("event_sensitivity", "fa_per_hour", "worst_patient_sensitivity", "auc")
 
 #: The only keys sent while exploring; every other key is one chip's figure and goes out only in a report burst.
 RUN_KEYS = ("gates", "candidates", "vectors_checked", "mismatches")
@@ -133,6 +137,9 @@ def metrics_for(tool: str, res: dict) -> list[tuple[str, float]]:
     elif tool == "chip_report":
         for k, v in (res.get("figures") or {}).items():
             add(k, v)
+    elif tool == "score_events":
+        for k in EVENT_KEYS:
+            add(k, (res.get("headline") or {}).get(k))
     return out
 
 
@@ -329,6 +336,8 @@ def after(tool: str, args: dict, res: dict, h: Path | None, stages: bool, report
                 send.append(("candidates", n_chips))
             if report and did and res.get("status") == "ok":
                 st["reported"] = did
+        if tool == "score_events" and args.get("progress_metrics"):
+            send += found
         if new_file is not None:
             _call(h, "artifact", str(new_file.relative_to(ws)), "file")
         for k, v in send:

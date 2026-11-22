@@ -119,7 +119,7 @@ def run_batch(view: View, cands: list[dict], opts: dict, batch_dir: Path) -> dic
 def load_batch(batch_dir: Path) -> dict:
     b = Path(batch_dir)
     enc = json.loads((b / "encodings.json").read_text())
-    return {"dir": b, "state": torch.load(b / "state.pt", weights_only=False),
+    return {"dir": b, "state": torch.load(b / "state.pt", weights_only=True),
             "cands": json.loads((b / "cands.json").read_text()), "keys": enc["keys"], "fitted": enc["fitted"],
             "in_specs": enc["in_specs"], "rows": json.loads((b / "val_scores.json").read_text()),
             "batch": json.loads((b / "batch.json").read_text())}
