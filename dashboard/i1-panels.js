@@ -384,13 +384,18 @@
       : "";
     var lede = [story.lead, neck].filter(Boolean).join(" ");
     // shown short: the chip's share; the channel story (the rows below show its figures) is in the detail
-    if (neck) lede = "<span" + tipA(plain(lede) + " Estimated: " + M().describeEstimate("device_power")) + ">The chip is never the bottleneck: at most " + estT(sharePct(maxShare), M().describeEstimate("chip_power")) + " of device power.</span>";
+    if (neck) lede = "<span" + tipA(plain(lede) + " Estimated: " + M().describeEstimate("device_power")) + ">The chip is never the bottleneck: at most " + estT(sharePct(maxShare), M().describeEstimate("chip_power")) + " of device power in these budgets.</span>";
 
     var dev = ctx.reusable === true ? "a <b>reusable</b> device" : ctx.reusable === false ? "a <b>disposable</b> device" : "";
     var ask = ctx.batteryTargetHours > 0
       ? "You asked for at least <b>" + esc(hoursText(ctx.batteryTargetHours)) + "</b> per cell or charge" + (dev ? ", " + dev : "") + "."
       : "No wear-time target set" + (dev ? "; " + dev : "") + ".";
     if (ctx.reusable == null) ask += " Disposable or reusable is not set.";
+    // shown short when a target is set: the target and the device kind; the full sentence on hover
+    if (ctx.batteryTargetHours > 0) {
+      var kind = ctx.reusable === true ? "; <b>reusable</b>" : ctx.reusable === false ? "; <b>disposable</b>" : "; reusable or not unset";
+      ask = "<span" + tipA(plain(ask)) + ">Target: at least <b>" + esc(hoursText(ctx.batteryTargetHours)) + "</b> per cell or charge" + kind + ".</span>";
+    }
 
     var html = "";
     rows.forEach(function (r, i) {
@@ -436,7 +441,7 @@
       (story.more ? '<details class="cpn-more"><summary>More from the power model</summary><p>' + story.more + "</p></details>" : "") +
       '<p class="cpn-ask">' + ask + "</p>" +
       '<div class="cpn-rows" role="list" aria-label="Battery by ' + esc(unit) + '">' + html + "</div>" + same +
-      '<p class="cpn-foot"' + tipA("Device power is front end, Bluetooth radio and chip; the chip's power is an estimate from one layout run. A class needs at least an illustrative " + minH + " hours per cell or charge (not a clinical figure). Open a row for its parts and sources.") + ">Front end, radio and chip; chip power estimated.</p>" +
+      '<p class="cpn-foot"' + tipA("Device power is front end, Bluetooth radio and chip; the chip's power is an estimate from one layout run. A class needs at least an illustrative " + minH + " hours per cell or charge (not a clinical figure). Open a row for its parts and sources.") + ">Front end, radio and chip; chip power estimated. Class minimum: " + MK_ILL + "</p>" +
       "</div>";
   }
 

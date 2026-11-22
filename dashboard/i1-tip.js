@@ -98,11 +98,12 @@
     if (cur) cur.removeAttribute("aria-describedby");
     cur = null;
   }
-  // tipped text that is not already a control takes keyboard focus, unless it sits inside one
+  // a short note with detail that is not already a control takes keyboard focus, unless it sits inside one;
+  // the many inline estimate marks (.est) stay hover and tap only, so they do not flood the tab order
   var pending = false;
   function makeFocusable() {
     pending = false;
-    var list = document.querySelectorAll("[data-tip]:not([tabindex]), .est[title]:not([tabindex])");
+    var list = document.querySelectorAll("[data-tip]:not([tabindex]):not(.est)");
     for (var i = 0; i < list.length; i++) {
       var a = list[i];
       if (a.matches(FOCUSABLE) || (a.parentElement && a.parentElement.closest("a[href], button, summary, label"))) continue;

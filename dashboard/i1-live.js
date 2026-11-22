@@ -1120,9 +1120,9 @@
     var chip = connChip();
     if (!full && $("#lvCfgState", sec)) { $("#lvCfgState", sec).innerHTML = chip; var tb = $("#lvTest", sec); if (tb) tb.disabled = C.state === "checking"; return; }
     var saved = lsGet(K_CONN) || {}, base = C.base || saved.base || (loopback ? location.origin : "");
-    sec.innerHTML = '<h2 class="lv-ch">Backend</h2><p class="lead2">Runs started here go to a ChipIn backend on your computer. Without one, runs are examples on demo data. The address and token stay in this browser.</p>' +
+    sec.innerHTML = '<h2 class="lv-ch">Backend</h2><p class="lead2" data-tip="Runs started here go to a ChipIn backend on your computer. Without one, runs are examples on demo data. The address and token stay in this browser.">Your local ChipIn backend. Without one, runs are demo examples.</p>' +
       '<div class="cpanel"><div class="crow2"><div class="l"><b>Server address</b><span>' + (C.same ? "This page is served by the backend itself." : "The address the backend printed when it started.") + '</span></div><input class="fin2 lv-in" id="lvBase" value="' + esc(base) + '" placeholder="http://127.0.0.1:port" spellcheck="false" autocomplete="off" aria-label="Server address"></div>' +
-      '<div class="crow2"><div class="l"><b>Token</b><span>From the link the backend printed; paste the whole link or just the token.</span></div><input class="fin2 lv-in" id="lvTok" type="password" value="' + esc(C.token || saved.token || "") + '" placeholder="Token" spellcheck="false" autocomplete="off" aria-label="Token"></div>' +
+      '<div class="crow2"><div class="l"><b>Token</b><span data-tip="From the link the backend printed; paste the whole link or just the token.">Paste the backend\'s link or just its token.</span></div><input class="fin2 lv-in" id="lvTok" type="password" value="' + esc(C.token || saved.token || "") + '" placeholder="Token" spellcheck="false" autocomplete="off" aria-label="Token"></div>' +
       '<div class="crow2"><div class="l" id="lvCfgState">' + chip + '</div><button class="btn s" id="lvForget">Forget</button><button class="btn p" id="lvTest">Test</button></div></div>';
     $("#lvTest", sec).onclick = function () {
       var raw = $("#lvTok", sec).value.trim(), tok = L.tokenFromLink(raw) || raw || null, b = $("#lvBase", sec).value.trim();

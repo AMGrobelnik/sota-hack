@@ -1663,9 +1663,9 @@ const EXAMPLES = [{ k: "neonatal-eeg", n: "Neonatal EEG brain monitor", i: "wave
 const DSF = {
   helsinki: {
     short: "Helsinki neonatal EEG", name: "Helsinki neonatal EEG", sig: "eeg", group: "newborns", grades: false,
-    pop: "79 term babies from one hospital's neonatal unit", ch: "EEG; the measured results here use 1 channel (C3-C4), 2, 4 and 18 (the double banana montage)",
+    pop: "79 term babies from one hospital's neonatal unit", ch: "EEG; the measured results here use 1 channel (C3-C4), 2, 4 and 18 (the double banana montage)", chS: "EEG; measured at 1 (C3-C4), 2, 4 and 18 channels",
     labels: "Seizures, annotated independently by three experts", lic: "CC BY 4.0", lic_url: LIC_URL["CC BY 4.0"], url: "https://doi.org/10.5281/zenodo.4940267", link: "Zenodo 10.5281/zenodo.4940267",
-    note: "The measured results on this page use all 79 babies, 24 of them held out for testing."
+    note: "The measured results on this page use all 79 babies, 24 of them held out for testing.", noteS: "Measured results: all 79 babies, 24 held out."
   },
   cork: {
     short: "Cork neonatal EEG", name: "Cork neonatal EEG", sig: "eeg", group: "newborns", grades: true,
@@ -1875,7 +1875,7 @@ function tRowHTML(s, t, i, p) {
 function step4(s) {
   const b = flowBudgets(s), k = s.cons, j = Math.max(0, b.findIndex(x => x.ch === k.channels)), sim = !hasMeasured(s);
   const list = andList(b.map(x => x.label.toLowerCase()));
-  const spots = sim ? tp(`Compares ${list}. Synthetic data in this demo.`, `Compares ${list}. In this demo the search for spots runs on synthetic data and is marked so.`) : b.length > 1 ? tp(`Compares ${list}, from the measured data.`, `Compares every channel budget the measured data holds: ${list}.`) : `The measured data holds one budget: ${list}.`;
+  const spots = sim ? tp(`Compares ${list}. Synthetic data in this demo.`, `Compares ${list}. In this demo the search for spots runs on synthetic data and is marked so.`) : b.length > 1 ? tp(`Compares ${b.length} channel budgets, from the measured data.`, `Compares every channel budget the measured data holds: ${list}.`) : `The measured data holds one budget: ${list}.`;
   const stepper = `<div class="gst" role="group" aria-label="Electrodes or sensors"><button type="button" data-a="ch-" aria-label="Fewer"${j === 0 ? " disabled" : ""}>${I("minus", "s16")}</button><output aria-live="polite">${esc(b[j].label)}</output><button type="button" data-a="ch+" aria-label="More"${j === b.length - 1 ? " disabled" : ""}>${I("plus", "s16")}</button></div>`;
   const lone = !CASES[s.case] && !s.chans && loneSensor(s.parsed && s.parsed.sigs);
   const chWhy = ["Sets which curves the chart highlights.", "It sets which channel-budget curves the chart highlights."];
@@ -1906,8 +1906,8 @@ function modeNote(s) {
 function dsCardHTML(s, k) {
   const d = DSF[k], f = fitNotes(s, k);
   return `<article class="gds" aria-label="${esc(d.name)}"><h3>${linkOr(d.url, d.name)}</h3><dl>
-    <dt>Population</dt><dd>${esc(d.pop)}</dd><dt>Channels</dt><dd>${esc(d.ch)}</dd><dt>Labels</dt><dd>${esc(d.labels)}</dd><dt>Licence</dt><dd>${licHTML(d.lic, d.lic_url)}</dd>
-    <dt>Link</dt><dd><a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.link)}</a></dd></dl>${d.note ? `<p class="gdn">${esc(d.note)}</p>` : ""}
+    <dt>Population</dt><dd>${esc(d.pop)}</dd><dt>Channels</dt><dd>${d.chS ? tp(esc(d.chS), d.ch) : esc(d.ch)}</dd><dt>Labels</dt><dd>${esc(d.labels)}</dd><dt>Licence</dt><dd>${licHTML(d.lic, d.lic_url)}</dd>
+    <dt>Link</dt><dd><a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.link)}</a></dd></dl>${d.note ? `<p class="gdn">${d.noteS ? tp(esc(d.noteS), d.note) : esc(d.note)}</p>` : ""}
     ${f.warn.map(w => `<p class="gfit">${esc(w)}</p>`).join("")}${f.soft ? `<p class="gdn"${TA(f.soft)}>Not your device: results are an approximation.</p>` : ""}</article>`;
 }
 function cardHTML(s) {
@@ -2199,7 +2199,7 @@ function tilesBest(run, v) {
   const bWhat = fileNote(run, /Baseline, scored the same way: ([^:]+):/);
   // each note one short line; its full sentence on hover
   const notes = [];
-  if (B) notes.push(`<span${TA(`Baseline, not a design of ours: ${bWhat ? bWhat[1] : B.id}. ${B.counts.events_total ? `${fmt(B.counts.events_caught)} of ${fmt(B.counts.events_total)} ${c.events} caught pooled, ` : ""}${B.metrics.false_alarms_per_hour != null ? `${faNum(B.metrics.false_alarms_per_hour)} false alarms ${faWord()}, ` : ""}${fmt(B.gates)} gates.`)}><b>Baseline, not ours:</b> ${B.counts.events_total ? `${fmt(B.counts.events_caught)} of ${fmt(B.counts.events_total)} caught, ` : ""}${fmt(B.gates)} gates.</span>`);
+  if (B) notes.push(`<span${TA(`Baseline, not a design of ours: ${bWhat ? bWhat[1] : B.id}. ${B.counts.events_total ? `${fmt(B.counts.events_caught)} of ${fmt(B.counts.events_total)} ${c.events} caught pooled, ` : ""}${B.metrics.false_alarms_per_hour != null ? `${faNum(B.metrics.false_alarms_per_hour)} false alarms ${faWord()}, ` : ""}${fmt(B.gates)} gates.`)}><b>Baseline, not ours:</b> ${B.counts.events_total ? `${fmt(B.counts.events_caught)} of ${fmt(B.counts.events_total)} caught pooled, ` : ""}${B.metrics.false_alarms_per_hour != null ? `${faNum(B.metrics.false_alarms_per_hour)} false alarms ${faWord()}, ` : ""}${fmt(B.gates)} gates.</span>`);
   notes.push(tp(`Best of ${fmt(N)} on held-out ${esc(c.whoP)}, so it flatters.`, `Picked here by its result on the held-out ${c.whoP}, the best of ${fmt(N)} designs${seeds ? ` (each shape trained with ${seeds[1]} seeds)` : ""}, so the figure flatters it${spread ? `: training seeds alone move the pooled share by a median of ${Math.round(+spread[1] * 100)} points (at most ${Math.round(+spread[2] * 100)})` : ""}.`));
   if (front) notes.push(tp("Gates: classifier only.", "Gates cover the classifier only; the feature front end is not included."));
   return out.join("") + `<p class="tnote">${notes.join('<span class="tsep" aria-hidden="true">·</span>')}</p><span class="mk mea" style="position:absolute;right:12px;top:-9px">measured</span>`;
@@ -2688,7 +2688,7 @@ function funnelAF(run, v) {
     + cell(f.under_cap, "Under the size cap", ph >= 3, live && ph === 3)
     + cell(f.synthesised, "Synthesised to gates", ph >= 4, live && ph === 4)
     + cell(f.verified, "Verified bit for bit", ph >= 5, live && ph === 5, true)
-    + `<div class="fs sep" style="flex:1.7"><div class="fn">About ${about(AF_SPEED.batched)} a minute</div><div class="fl"${TA(`trained in batches of ${fmt(AF_SPEED.k)}, against about ${about(AF_SPEED.single)} one at a time`)}>batches of ${fmt(AF_SPEED.k)}; ${about(AF_SPEED.single)} singly</div></div>`;
+    + `<div class="fs sep" style="flex:1.7"><div class="fn">About ${about(AF_SPEED.batched)} a minute</div><div class="fl"${TA(`trained in batches of ${fmt(AF_SPEED.k)}, against about ${about(AF_SPEED.single)} one at a time`)}>batches of ${fmt(AF_SPEED.k)}; about ${about(AF_SPEED.single)} a minute singly</div></div>`;
   return { html, note: "" };
 }
 function legendAF(run) {
@@ -2697,8 +2697,8 @@ function legendAF(run) {
 }
 function logAF(run, v) {
   const P = MEASURED.af.path, st = v.tl.af.steps;
-  const items = P.slice(0, v.ph).map((p, i) => `<li class="${i === v.ph - 1 && !v.done ? "now" : ""}${!v.done && v.t - st[i] < 0.5 ? " new" : ""}"${p.source ? ` title="From ${esc(p.source)}"` : ""}><span class="n">${esc(p.step)}</span><div><span class="w">${clock(st[i])}</span>${tp(esc(stepShort(run, p, i) || stepText(run, p, i)), stepShort(run, p, i) ? stepText(run, p, i) : "")}</div></li>`).join("");
-  return `<h2>Decision path, replayed</h2><p class="als"${TA("The real search's recorded steps on the demo clock. No model runs now.")}>Recorded steps; no model runs now.</p>${items ? `<ol>${items}</ol>` : '<p class="wait">The first step appears once the brief is read.</p>'}`;
+  const items = P.slice(0, v.ph).map((p, i) => `<li class="${i === v.ph - 1 && !v.done ? "now" : ""}${!v.done && v.t - st[i] < 0.5 ? " new" : ""}"><span class="n">${esc(p.step)}</span><div><span class="w">${clock(st[i])}</span>${tp(esc(stepShort(run, p, i) || stepText(run, p, i)), [stepShort(run, p, i) ? stepText(run, p, i) : "", p.source ? `From ${p.source}.` : ""].filter(Boolean).join(" "))}</div></li>`).join("");
+  return `<h2>Decision path, replayed</h2><p class="als"${TA("The real search's recorded steps on the demo clock. No model runs now.")}>Recorded steps on a demo clock; no model runs now.</p>${items ? `<ol>${items}</ol>` : '<p class="wait">The first step appears once the brief is read.</p>'}`;
 }
 // the cloud's Y range: the bar, the reference and nearly every candidate; the few far below sit on the bottom edge
 function afYRange(run, key) {
@@ -2907,7 +2907,7 @@ function renderChat(run, force) {
   const first = force || !$("#feed"); cur.sig = sig;
   const html = evs.map(e => e.k === "you" ? `<div class="you"><p>${esc(e.txt)}</p></div>` : `<div class="msg" style="--rc:${CHAT_K[e.k][1]}"><span class="mav" style="background:${CHAT_K[e.k][1]}1a;color:${CHAT_K[e.k][1]}">${I(CHAT_K[e.k][0])}</span><div><div class="who">${APP.name}<span class="when">${!plays(run) ? "measured run" : clock(e.t)}</span></div><div class="mt">${esc(e.txt)}</div></div></div>`).join("");
   if (first) {
-    $("#body").innerHTML = `<div class="chat"><div class="feed" id="feed"><div class="fin"><p class="cnote2">${isSim(run) ? tp("Simulated: no model was called.", `This simulated run narrates its own steps. No model was called; ${modelName(run.agent)} is the model the run was labelled with.`) : afFile(run) ? tp("Recorded steps, replayed. No model was called.", "The real search's recorded steps, replayed on the demo clock. No model was called.") : "The measured run's results, as recorded."}</p><div id="msgs">${html}</div></div></div>
+    $("#body").innerHTML = `<div class="chat"><div class="feed" id="feed"><div class="fin"><p class="cnote2">${isSim(run) ? tp(`Simulated: no model called; labelled ${esc(modelName(run.agent))}.`, `This simulated run narrates its own steps. No model was called; ${modelName(run.agent)} is the model the run was labelled with.`) : afFile(run) ? tp("Recorded steps on a demo clock. No model was called.", "The real search's recorded steps, replayed on the demo clock. No model was called.") : "The measured run's results, as recorded."}</p><div id="msgs">${html}</div></div></div>
       ${window.ChipInLive?.i1?.exampleBox?.() ?? `<div class="comp"><div class="box"><textarea id="note" rows="1" aria-label="Add a note to this run" placeholder="Add a note to this run" data-voice></textarea><button class="send" id="sendN" aria-label="Add note">${I("up")}</button></div></div>`}</div>`; /* LIVE HOOK: the agent message box, disabled and explained on an example run (../i1-live.js) */
     const ta = $("#note"), sb = $("#sendN"); if (ta) { /* LIVE HOOK: no note box when the message box replaced it */
     ta.addEventListener("input", () => sb.classList.toggle("ready", !!ta.value.trim()));
@@ -3313,12 +3313,14 @@ function sabRender(run, v) {
   const grid = !open ? "" : `<div class="sab-g" id="sabG"><p class="sab-gh">${cs ? `Round ${r} of ${nR}, ${esc((SAB_STAGES.find(x => x[0] === cs.stage) || [, cs.stage])[1].toLowerCase())}: ${run.events ? ags.length : W} subagents in parallel, each on ${esc(SAB_KIND[cs.stage] || "its own strategy")}; the main agent keeps the best. ` : "No batch has started yet. "}Hollow: running. Filled: done. Red: failed. Ringed: kept. Simulated.</p>
     <div class="sab-gg">${ags.map(a => `<div class="sab-a"><i class="${kept.has(a.id) ? "kept" : a.state === "running" ? "" : a.state}" aria-hidden="true"></i><b title="${esc(a.strategy)}">${esc(a.strategy)}</b><span>${a.state === "running" ? "running" : esc(a.state + (a.text ? ", " + a.text : ""))}${kept.has(a.id) ? ", kept" : ""}</span></div>`).join("")}</div>
     ${st.stages.some(s => s.merged && (s.round === r || s.stage === "reference")) ? `<ul class="sab-m">${st.stages.filter(s => s.merged && (s.round === r || s.stage === "reference")).map(s => `<li>${sabMergeLine(st, s)}</li>`).join("")}</ul>` : ""}</div>`;
-  const h = `<div class="sab-row"><span class="mk sim">simulated</span><ol class="sab-st" aria-label="Stages">${marks}</ol>${chips ? `<span class="sab-ch" aria-label="${fin} of ${ags.length} subagents finished">${chips}</span>` : ""}<span class="sab-tx"${TA(plainOf(tx))}>${tx}</span><button type="button" class="sab-more" aria-expanded="${open}" aria-controls="sabG">${open ? "Hide batch" : "Batch details"}</button></div>${grid}`;
+  const h = `<div class="sab-row"><span class="mk sim">simulated</span><ol class="sab-st" aria-label="Stages">${marks}</ol>${chips ? `<span class="sab-ch" aria-label="${fin} of ${ags.length} subagents finished">${chips}</span>` : ""}<span class="sab-tx" data-tip-full="${esc(plainOf(tx))}">${tx}</span><button type="button" class="sab-more" aria-expanded="${open}" aria-controls="sabG">${open ? "Hide batch" : "Batch details"}</button></div>${grid}`;
   if (el._h !== h) {
     const f = el.contains(document.activeElement) && document.activeElement.classList.contains("sab-more");
     el._h = h; el.innerHTML = h; if (f) el.querySelector(".sab-more").focus({ preventScroll: true });
   }
   el.hidden = false;
+  const sx = el.querySelector(".sab-tx"); // the full line on hover only when the two-line clamp cut it off
+  if (sx) { if (sx.scrollHeight > sx.clientHeight + 1) sx.setAttribute("data-tip", sx.dataset.tipFull); else sx.removeAttribute("data-tip"); }
   if (!el._wired) { el._wired = true; el.addEventListener("click", e => { if (e.target.closest(".sab-more, .sab-ch")) { const rr = findRun(route.id); if (rr) { rr.ui.sabOpen = !rr.ui.sabOpen; sabRender(rr, viewAt(rr)); } } }); }
 }
 
