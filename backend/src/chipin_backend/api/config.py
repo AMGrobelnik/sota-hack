@@ -9,6 +9,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from chipin_backend.api.helper import HelperConfig
+from chipin_backend.api.questions import QuestionsConfig
 from chipin_backend.api.transcribe import TranscribeConfig
 from chipin_backend.config import Effort
 
@@ -103,6 +104,7 @@ class ApiConfig(BaseModel):
     #: Public dataset name (a spec's ``data.dataset``) -> a local folder holding it.
     datasets: dict[str, Path] = Field(default_factory=dict)
     helper: HelperConfig = Field(default_factory=HelperConfig)
+    questions: QuestionsConfig = Field(default_factory=QuestionsConfig)
 
 
 def load_api_config(path: Path = API_CONFIG_PATH) -> ApiConfig:
