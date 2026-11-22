@@ -114,8 +114,12 @@
   // voice.js asks the reader for the token; answer from here so no tab copy has to be kept
   try { Object.defineProperty(L, "token", { configurable: true, get: function () { return C.state === "on" ? C.token : null; } }); } catch (e) { /* older reader */ }
   L.onStatus(function (s) {
-    if (s === "disconnected" && C.state === "on") { C.state = "bad"; C.msg = "The backend stopped answering. Runs resume when it is back."; bump(); }
-    else if (s === "connected" && C.state === "bad" && C.token) { C.state = "on"; C.msg = ""; bump(); }
+    if (s === "disconnected" && C.state === "on") {
+      C.state = "bad"; C.msg = "The backend stopped answering. Runs resume when it is back."; bump();
+      // the stream dropped: if the health route is silent too, the run view says the connection was lost
+      fetch(C.base + "/api/health", { cache: "no-store" }).then(function (r) { if (!r.ok) throw 0; }).catch(function () { if (C.state === "bad" && !C.lost) { C.lost = true; C.lostAt = Date.now(); bump(); } });
+    }
+    else if (s === "connected") { if (C.lost) { C.lost = false; bump(); } if (C.state === "bad" && C.token) { C.state = "on"; C.msg = ""; bump(); } }
   });
   function init() {
     var saved = lsGet(K_CONN);
@@ -310,7 +314,7 @@
     var budgets = Object.keys(keys).map(function (k) { return keys[k]; }).sort(function (a, b) { return (a.budget.ch || 0) - (b.budget.ch || 0) || budgetName(a).localeCompare(budgetName(b)); }).map(budgetKey);
     var status = st.finished ? st.finished.status : st.status === "connecting" ? (r.status && r.status !== "running" ? r.status : "connecting") : "running";
     var t0 = tsMs(st.startedAt), t1 = st.finishedAt ? tsMs(st.finishedAt) : null;
-    return { id: id, r: r, st: st, x: x, spec: spec, T: T, designs: designs, chosenId: chosenId, chosen: chosen, budgets: budgets, status: status, running: status === "running", t0: t0, elapsed: t0 == null ? null : ((t1 || Date.now()) - t0) / 1000 };
+    return { id: id, r: r, st: st, x: x, spec: spec, T: T, designs: designs, chosenId: chosenId, chosen: chosen, budgets: budgets, status: status, running: status === "running", t0: t0, lost: C.lost && status === "running", elapsed: t0 == null ? null : ((t1 || (C.lost ? C.lostAt : Date.now())) - t0) / 1000 };
   }
   var budgetIdx = function (M, d) { return Math.max(0, M.budgets.indexOf(budgetKey(d))); };
 
@@ -444,7 +448,7 @@
     var rec = watchRun(r.id);
     var pref = viewPrefs[r.id] || {};
     V = { id: r.id, view: r.view, sel: V && V.id === r.id ? V.sel : pref.sel || null, y: pref.y || null, follow: true, logN: 0, chatN: 0, sig: {}, chartSig: "", hover: null, pts: [] };
-    main.innerHTML = topHTML(r) + '<div class="body" id="body"></div>';
+    main.innerHTML = topHTML(r) + '<div class="lv-lost" id="lvLost" role="alert" hidden>Connection to the backend was lost; the run may still be going on that computer. Retrying...</div><div class="body" id="body"></div>';
     wireTop(rec);
     var body = $("#body");
     if (r.view === "overview") { body.innerHTML = overviewHTML(); wireOverview(); }
@@ -545,7 +549,7 @@
         "The chosen chip, " + sizeTxt(c) + ", misses your " + andList(miss) + " target" + (miss.length === 1 ? "" : "s") + (hit.length ? " and clears " + andList(hit) : "") + ".";
     } else if (M.chosenId) h1 = "Chip " + esc(M.chosenId) + " is chosen; its design record has not arrived.";
     else if (M.designs.length) h1 = M.designs.length + " design" + (M.designs.length === 1 ? "" : "s") + " scored" + (M.running ? " so far; none chosen yet." : "; none chosen.");
-    else h1 = M.running || st === "connecting" ? "Running. No design scored yet." : "The run finished without a design record.";
+    else h1 = M.running || st === "connecting" ? (M.lost ? "Disconnected. No design scored yet." : "Running. No design scored yet.") : "The run finished without a design record.";
     var mark = dataMark(M.spec, M.designs), sp = M.spec || {};
     var chips = M.T.map(function (t) { var s = c ? meets(t, val(c, t.metric)) : null; return '<span class="tgt' + (t.metric === primaryOf(M) ? " pri" : "") + '">' + esc(metaOf(t.metric).n) + " " + esc(fmtT(t, M.spec)) + " " + (c ? pf(s) : "") + "</span>"; }).join("");
     return '<div class="tx"><p class="k0"><span>' + esc(M.r.title || "Live run") + "</span>" + mark + "</p><h1>" + h1 + "</h1>" +
@@ -893,13 +897,15 @@
     if (!V || V.waiting || !W[V.id]) return;
     var M = modelOf(V.id), x = M.x, ch = function (k, s) { if (force || V.sig[k] !== s) { V.sig[k] = s; return true; } return false; };
     // top bar
-    var stTxt = M.status === "running" ? '<span class="spill lv-run"><span class="spin"></span>Running</span>' : M.status === "succeeded" ? '<span class="spill done">Finished</span>' : M.status === "failed" ? '<span class="spill lv-fail">Failed</span>' : M.status === "stopped" ? '<span class="spill paused">Stopped</span>' : '<span class="spill paused">Connecting</span>';
+    var stTxt = M.lost ? '<span class="spill paused">Disconnected</span>' : M.status === "running" ? '<span class="spill lv-run"><span class="spin"></span>Running</span>' : M.status === "succeeded" ? '<span class="spill done">Finished</span>' : M.status === "failed" ? '<span class="spill lv-fail">Failed</span>' : M.status === "stopped" ? '<span class="spill paused">Stopped</span>' : '<span class="spill paused">Connecting</span>';
     if (ch("st", stTxt)) $("#lvSt").innerHTML = stTxt;
-    var clk = M.elapsed == null ? "–" : clock(M.elapsed); var ce = $("#lvClk"); if (ce.textContent !== clk) ce.textContent = clk; ce.classList.toggle("live", M.running);
+    var clk = M.elapsed == null ? "–" : clock(M.elapsed); var ce = $("#lvClk"); if (ce.textContent !== clk) ce.textContent = clk; ce.classList.toggle("live", M.running && !M.lost);
+    $("#lvLost").hidden = !M.lost;
     var cost = M.st.cost && num(M.st.cost.usd) != null ? "$" + M.st.cost.usd.toFixed(2) + " agent cost" : ""; if (ch("cost", cost)) { $("#lvCost").textContent = cost; $("#lvCost").title = M.st.cost ? fmt(M.st.cost.tokens_in || 0) + " tokens in, " + fmt(M.st.cost.tokens_out || 0) + " out" : ""; }
     var bt = M.running || M.status === "connecting" ? "Live run" : "Finished run"; if (ch("badge", bt)) { $("#lvBadge").textContent = bt; $("#lvBadge").className = "mk topbadge " + (bt === "Live run" ? "lv-live" : "no"); setDemo(bt); }
     var setT = (M.r.preset ? cap(M.r.preset) + " · " : "") + (M.r.agent && M.r.agent !== "auto" ? AGN[M.r.agent] || M.r.agent : "Auto"); if (ch("set", setT)) $("#lvSetT").textContent = setT;
     var stop = $("#lvStop"); stop.hidden = !M.running;
+    if (M.lost || V.wasLost) { var lb = [stop, $("#lvCxStop")].filter(Boolean); lb.forEach(function (b) { b.disabled = !!M.lost; if (!M.lost && b.lastChild.textContent === "Stopping") b.lastChild.textContent = b === stop ? "Stop" : "Stop the run"; }); V.wasLost = !!M.lost; }
     if (!M.running && stop.disabled) { stop.disabled = false; stop.lastChild.textContent = "Stop"; var cs = $("#lvCxStop"); if (cs) { cs.disabled = false; cs.lastChild.textContent = "Stop the run"; } }
     if (V.view === "overview") updOverview(M, ch, force);
     else if (V.view === "chat") updChat(M, ch);
@@ -907,11 +913,11 @@
     refreshSizes(M);
   }
   function updOverview(M, ch, force) {
-    var x = M.x, key = x.v + "|" + M.status + "|" + (V.sel || "") + "|" + (V.y || "") + "|" + (M.chosenId || "");
+    var x = M.x, key = x.v + "|" + M.status + "|" + !!M.lost + "|" + (V.sel || "") + "|" + (V.y || "") + "|" + (M.chosenId || "");
     if (ch("ban", banHTML(M))) $("#lvBan").innerHTML = V.sig.ban;
     if (ch("head", key)) $("#lvHead").innerHTML = headHTML(M);
-    var stl = M.running ? M.st.statusLine || "Waiting for the agent's first step" : M.status === "succeeded" ? "Finished" + (M.elapsed != null ? " in " + clock(M.elapsed) : "") + "." : "";
-    if (ch("status", stl)) { var s = $("#lvStatus"); s.className = "status" + (M.running ? "" : " done"); s.innerHTML = stl ? (M.running ? '<span class="spin"></span>' : "") + "<span>" + esc(stl) + "</span>" : ""; s.style.display = stl ? "" : "none"; }
+    var stl = M.lost ? "Waiting for the backend to answer again" : M.running ? M.st.statusLine || "Waiting for the agent's first step" : M.status === "succeeded" ? "Finished" + (M.elapsed != null ? " in " + clock(M.elapsed) : "") + "." : "";
+    if (ch("status", stl)) { var s = $("#lvStatus"); s.className = "status" + (M.running ? "" : " done"); s.innerHTML = stl ? (M.running && !M.lost ? '<span class="spin"></span>' : "") + "<span>" + esc(stl) + "</span>" : ""; s.style.display = stl ? "" : "none"; }
     if (ch("stages", JSON.stringify(M.st.stages) + M.status)) $("#lvStages").innerHTML = stagesHTML(M);
     if (ch("subs", key)) $("#lvSubs").innerHTML = subsHTML(M);
     if (ch("tiles", key)) $("#lvTiles").innerHTML = tilesHTML(M);
@@ -1115,7 +1121,7 @@
       ["Detects", (spec.detect || "not given") + (spec.task_types && spec.task_types.length ? " (" + spec.task_types.join(", ") + ")" : "")],
       ["Who and where", [spec.patient_group, spec.place].filter(Boolean).join(", ") + (spec.fa_unit ? "; false alarms per " + spec.fa_unit : "")],
       ["Targets", T.length ? T.map(function (t) { return metaOf(t.metric).n + " " + fmtT(t, spec) + (t.metric === spec.primary ? " (on the chart)" : ""); }).join("; ") : "none"],
-      ["Constraints", (k.find_best ? "find the best channel budget" : k.channels != null ? k.channels + " channels or sensors" : "channels not given") + (k.battery_hours != null ? "; battery at least " + k.battery_hours + " hours" : "") + (k.reusable === true ? "; reusable" : k.reusable === false ? "; disposable" : "")],
+      ["Constraints", (k.find_best ? "find the best channel budget" : k.channels != null ? k.channels + (k.channels === 1 ? " channel or sensor" : " channels or sensors") : "channels not given") + (k.battery_hours != null ? "; battery at least " + k.battery_hours + " hours" : "") + (k.reusable === true ? "; reusable" : k.reusable === false ? "; disposable" : "")],
       ["Data", dt.mode === "simulate" ? "Synthetic data, generated by the agent" : dt.mode === "public" ? "Public" + (dt.dataset ? ": " + dt.dataset : ", no dataset named") : dt.mode === "own" ? "Own recordings (not available in this build)" : "not given"]
     ];
   }
@@ -1175,15 +1181,16 @@
     };
     $("#lvForget", sec).onclick = function () { lsSet(K_CONN, null); C.state = "off"; C.token = null; C.msg = ""; C.base = C.same ? location.origin : null; if (C.same) C.state = "found"; paintConfigure(true); bump(); };
   }
+  function liveOpen() { return !!(V && V.id && owns()); }
   function connChip() {
-    var s = C.state, t = s === "on" ? "Connected to local backend" + (C.defaults && C.defaults.agent ? ", " + (AGN[C.defaults.agent] || C.defaults.agent) + " agent" : "") : s === "checking" ? "Checking the backend…" : s === "found" ? "Backend found on this page's address: add its token" : s === "bad" ? "Not connected: runs are examples" : "Not connected: runs are examples";
+    var s = C.state, t = s === "on" ? "Connected to local backend" + (C.defaults && C.defaults.agent ? ", " + (AGN[C.defaults.agent] || C.defaults.agent) + " agent" : "") : s === "checking" ? "Checking the backend…" : s === "found" ? "Backend found on this page's address: add its token" : s === "bad" ? (liveOpen() ? "Not connected to the backend" : "Not connected: runs are examples") : "Not connected: runs are examples";
     return '<span class="lv-cs" data-s="' + s + '"><i></i><b>' + esc(t) + "</b></span>" + (C.msg && s !== "on" ? '<span class="lv-cm2">' + esc(C.msg) + "</span>" : "");
   }
 
   /* ---------- sidebar: the chip and the backend's runs, under Recents ---------- */
   function recents() {
     var cur = parse(), s = C.state;
-    var txt = s === "on" ? "Connected to local backend" : s === "checking" ? "Checking the backend" : s === "found" ? "Backend found: add its token" : "Not connected: runs are examples";
+    var txt = s === "on" ? "Connected to local backend" : s === "checking" ? "Checking the backend" : s === "found" ? "Backend found: add its token" : liveOpen() && C.base ? "Not connected to the backend" : "Not connected: runs are examples";
     var rows = shownRuns().slice(0, 8).map(function (r) {
       var g = r.status === "running" ? '<span class="spin"></span>' : r.status === "succeeded" ? I("check", "s12 ok") : r.status === "failed" ? I("x", "s12 lv-bad") : r.status === "stopped" ? I("minus", "s12") : "";
       return '<a class="rrow lv-rrow' + (cur && cur.id === r.id ? " on" : "") + '" href="#/live/' + encodeURIComponent(r.id) + "/" + (cur ? cur.view : "overview") + '" title="' + esc(r.title + " (run " + r.id + ", " + r.status + ")") + '"><span class="g">' + g + '</span><span class="t">' + esc(r.title || r.id) + "</span></a>";
@@ -1213,6 +1220,8 @@
     ".mk.lv-live{color:#1e3a8a;background:#e8eefc}",
     ".spill.lv-run{display:inline-flex;align-items:center;gap:6px;background:#eef3fe;color:var(--blue7);box-shadow:inset 0 0 0 1px #d6e1fb}.spill.lv-fail{background:var(--badbg);color:#9f2a20;box-shadow:inset 0 0 0 1px #f3c9c3}",
     ".lv-cost{font-size:11.5px;color:var(--i600);white-space:nowrap;font-variant-numeric:tabular-nums}",
+    ".lv-lost{margin:8px 16px 0;background:var(--badbg);border:1px solid #f3c9c3;border-radius:12px;padding:9px 14px;font-size:13px;color:#7a2018;line-height:1.5}.lv-lost[hidden]{display:none}",
+    ".lv-stop:disabled{opacity:.5;cursor:not-allowed}",
     ".lv-stop{height:26px;padding:0 10px;margin-left:4px}.lv-stop[hidden]{display:none}",
     ".lv-mute{color:var(--i600)}.lv-pad{padding:0 16px 14px;margin:0;font-size:12.5px}",
     ".lv-stages{background:#fff;border:1px solid rgb(0 0 0/.07);border-radius:14px;padding:12px 6px 10px}",
