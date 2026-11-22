@@ -164,7 +164,8 @@
       if (b === "fa_per_hour") l = l.replace(/^False alarms/, "False alarms per hour");
       return /^[A-Z][a-z]/.test(l) ? l.charAt(0).toLowerCase() + l.slice(1) : l;
     }).replace(/\b(?:fa|false alarms?)[ _]per[ _]h(?:our|r)?\b/gi, function (m) { return /^F[a-z]/.test(m) ? "False alarms per hour" : "false alarms per hour"; })
-      .replace(/\b(H|h)eld_?out\b/g, "$1eld-out").replace(/\bHELDOUT\b/g, "HELD-OUT");
+      .replace(/\b(H|h)eld_?out\b/g, "$1eld-out").replace(/\bHELDOUT\b/g, "HELD-OUT")
+      .replace(/(?<![\w.:])\d+\.\d{5,}(?!\w|\.\d|:\d)/g, function (m) { return Number(m).toFixed(3); });
   }
 
   function dataMark(spec, designs) {

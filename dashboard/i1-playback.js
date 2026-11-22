@@ -121,6 +121,7 @@
     ".pb-run .d{font-size:12px;color:var(--i600);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}",
     ".pb-run .m{grid-column:1/-1;font-size:12px;color:var(--i600);display:flex;gap:6px 12px;flex-wrap:wrap;align-items:center}",
     ".pb-run .m b{font-weight:600;color:var(--i800);font-family:var(--mono);font-size:11px}",
+    "@media(max-width:640px){.pb-run{grid-template-columns:1fr}.pb-run .t{white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow-wrap:anywhere}.pb-run .d{text-align:left}}",
     ".pb-note{font-size:12.5px;color:var(--i600);padding:8px 12px 14px;line-height:1.5}",
     ".pb-src{font-size:11.5px;color:var(--i500);padding:10px 12px 4px}",
     /* recorded run view */
