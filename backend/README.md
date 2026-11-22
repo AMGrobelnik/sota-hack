@@ -686,10 +686,11 @@ The settings (`fanout` in `src/chipin_backend/api/api.yaml`):
 | --------------------------- | ------------------------ |
 | `enabled`                   | false                    |
 | `width`                     | null: the preset's       |
-| `widths`                    | 3 / 10 / 15 / 20         |
+| `widths`                    | 1 / 3 / 10 / 20          |
+| `totals`                    | 5 / 15 / 50 (no ultra)   |
 | `default_width`             | 3                        |
 | `max_parallel`              | null: the batch size     |
-| `max_total`                 | null: 5 x width + spare  |
+| `max_total`                 | null: totals, else 5 x W |
 | `spare_starts`              | null: width / 5, min 2   |
 | `usd_per_subagent`          | 0.05                     |
 | `max_usd`                   | null: 0.05 x max_total   |
@@ -699,14 +700,17 @@ The settings (`fanout` in `src/chipin_backend/api/api.yaml`):
 | `subagent.openrouter_model` | null: harness default    |
 | `subagent.effort`           | null: the preset's       |
 | `subagent.timeout_s`        | null: per preset         |
-| `subagent.timeouts`         | 600 / 1200 / 1500 / 1800 |
+| `subagent.timeouts`         | 600 for every preset     |
 
 The limits. The whole batch runs at once; a start beyond `max_parallel`
 is accepted and queued until a running subagent finishes. A start beyond
 `max_total`, or on the `openrouter` harness once the run's subagents have
 spent `max_usd` on API models, is refused: the helper prints why and exits
 1 (the orchestrator is told to carry on with what it has). A subagent past
-its time limit ends `timed out`. When the run ends or is stopped, every
+its time limit is stopped with its process tree and ends `timed out`;
+the orchestrator gets its last message and the numbers it reported.
+A `--config` overlay changes these settings under `api:`, for example
+`api.fanout.subagent.timeout_s`. When the run ends or is stopped, every
 subagent still queued or running is stopped first, its processes with it;
 their `subagent.finished` events come before `run.finished`. Spend is
 counted when a subagent ends, so subagents already running can carry the

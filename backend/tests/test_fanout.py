@@ -134,7 +134,7 @@ async def test_two_subagents_run_at_the_same_time(config: BackendConfig) -> None
     assert not (folder / "subagent").exists(), "a subagent gets no ./subagent helper"
 
 
-@pytest.mark.parametrize(("preset", "width"), [("lite", 1), ("pro", 3), ("max", 6), ("ultra", 20)])
+@pytest.mark.parametrize(("preset", "width"), [("lite", 1), ("pro", 3), ("max", 10), ("ultra", 20)])
 async def test_a_full_run_has_five_parallel_batches_each_merged(
     config: BackendConfig, preset: str, width: int
 ) -> None:
@@ -531,7 +531,7 @@ async def test_fanout_requests_are_checked(config: BackendConfig) -> None:
     [
         ("lite", 1, 5, 0.25, 600),
         ("pro", 3, 15, 0.75, 600),
-        ("max", 6, 30, 1.5, 600),
+        ("max", 10, 50, 2.5, 600),
         ("ultra", 20, 104, 5.2, 600),  # kept for old requests; the page offers three sizes
         (None, 3, 15, 0.75, 600),  # no preset: the middle (pro) run size
     ],
