@@ -20,6 +20,7 @@ from chipin_backend.api.questions import (
     canned_questions,
     parse_questions,
     past_runs_digest,
+    system_prompt,
 )
 from chipin_backend.api.server import MANAGER, TOKEN_HEADER, create_app
 from chipin_backend.config import BackendConfig
@@ -341,6 +342,22 @@ def test_questions_off_the_chip_design_are_dropped() -> None:
     )
     out = parse_questions(reply, QuestionsConfig())
     assert [q["id"] for q in out] == ["alert", "miss", "drop"]
+
+
+def test_option_keys_become_words_a_person_reads() -> None:
+    """The live run showed missed_event, false_alarm and both_equal as buttons and on the spec card."""
+    question = {
+        "id": "error_priority",
+        "question": "Which error is more critical to avoid?",
+        "why": "It sets the threshold.",
+        "kind": "choice",
+        "options": ["missed_event", "false_alarm", "both_equal", "Low-noise mode"],
+        "default": "missed_event",
+    }
+    out = parse_questions(json.dumps({"questions": [question]}), QuestionsConfig())
+    assert out[0]["options"] == ["Missed event", "False alarm", "Both equal", "Low-noise mode"]
+    assert out[0]["default"] == "Missed event"
+    assert "never code keys" in system_prompt(QuestionsConfig())
 
 
 def test_the_prompt_names_what_to_ask_and_what_to_skip() -> None:

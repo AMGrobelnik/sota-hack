@@ -252,6 +252,7 @@ async def test_post_run_picks_its_own_agent_and_model(
     model: str,
 ) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
+    monkeypatch.setattr(manager_mod, "agent_unavailable", lambda agent, config: "")
     seen: list[tuple[AgentSpec, dict[str, Any]]] = []
 
     async def fake_drive(self: Any, item: Any, spec: AgentSpec, translator: Any) -> None:

@@ -256,10 +256,20 @@ sentence ("Outcome:"). The lines may be about different designs or attempts: giv
 with the design its line gives it to, never merge two designs into one, and leave a number out
 when its line does not say which design it belongs to. Leave out housekeeping
 (progress reports, listing folders). If "ended"
-says it is still running, say what it is doing now; never call a finished part ongoing.
+says it is still running, say what it is doing now; never call a finished part ongoing. When
+"ended" says no chip has been chosen yet, no chip is final or chosen: a compiled chip is then a
+candidate still to be verified, never the final chip.
 {_STYLE_RULE} No lists.
 
 {_NUMBER_RULE}"""
+
+#: Words that call a chip final or chosen; an interim line before any ``chosen`` event may not use them.
+PREMATURE_FINAL = re.compile(
+    r"(?<!no )\bfinal (?:chip|design|circuit)\b"
+    r"|(?<!no )\b(?:chosen|selected|picked|winning) (?:chip|design)\b"
+    r"|(?<!no )\bchip (?:was |is |has been )?(?:chosen|selected|picked)\b",
+    re.IGNORECASE,
+)
 
 RETRY_NOTE = """
 
@@ -491,6 +501,8 @@ class Job:
     #: writing, says what the live run said.
     note: str = ""
     parts: list[Any] = field(default_factory=list)
+    #: A stage or run line queued before any chip was chosen: it may not call a chip final.
+    no_chip_yet: bool = False
 
 
 class Levels:
@@ -514,6 +526,7 @@ class Levels:
         self.brief = ""
         self.status = ""
         self.ended = False
+        self.chosen = ""
 
     # ---- feeding ----
 
@@ -532,6 +545,8 @@ class Levels:
         elif kind == "tool":
             self._tool(event, seq, agent)
         elif kind in ("metric", "artifact", "chosen", "error"):
+            if kind == "chosen" and event.get("chip"):
+                self.chosen = str(event["chip"])
             self._add(Item(f"i{seq}", [f"e{seq}"], agent, self._stage_of(agent), _own_line(event)), event)
         elif kind == "stage" and agent is None:
             self._stage_event(str(event.get("name") or event.get("stage") or ""), event)
@@ -652,7 +667,14 @@ class Levels:
         if stage.since_interim >= self.s.stage_interim_every:
             stage.since_interim = 0
             self.queue.append(
-                Job("stage", stage, final=False, note="still running", parts=self._parts(stage))
+                Job(
+                    "stage",
+                    stage,
+                    final=False,
+                    note="still running",
+                    parts=self._parts(stage),
+                    no_chip_yet=not self.chosen,
+                )
             )
 
     def _stage_event(self, name: str, event: Mapping[str, Any]) -> None:
@@ -723,7 +745,27 @@ class Levels:
         if stage.final or stage.state == "open" or not all(s.state for s in stage.subs):
             return
         self._final_stage(stage)
-        self.queue.append(Job("run", final=False, note="still running", parts=self._run_parts()))
+        self.queue.append(
+            Job(
+                "run",
+                final=False,
+                note=self.running_note(),
+                parts=self._run_parts(),
+                no_chip_yet=not self.chosen,
+            )
+        )
+
+    def running_note(self) -> str:
+        """How an unfinished run stands, for its interim line: the stages still to come, and
+        whether a chip was chosen. Until one is, no chip is final: a compiled chip is still
+        to be verified and reported (the live run said "Built the final chip" while verify ran)."""
+        left = [s for s in STAGES if s not in self.stages or self.stages[s].state == "open"]
+        note = "still running"
+        if left:
+            note += f"; still to come or in progress: {', '.join(left)}"
+        if self.chosen:
+            return note + "; a chip has been chosen"
+        return note + "; no chip has been chosen yet, so no chip is final"
 
     def _final_stage(self, stage: Stage) -> None:
         for batch in stage.batches.values():
@@ -737,7 +779,9 @@ class Levels:
         else:
             ended = stage.state
         stage.final = True
-        self.queue.append(Job("stage", stage, note=ended, parts=self._parts(stage)))
+        self.queue.append(
+            Job("stage", stage, note=ended, parts=self._parts(stage), no_chip_yet=not self.chosen)
+        )
 
     def _parts(self, stage: Stage) -> list[Group | Batch]:
         """What a stage summary queued now is built from: its closed groups and queued batches."""
@@ -779,13 +823,60 @@ class Levels:
         return max(0.0, self.queue[0].queued_at + self.s.item_batch_wait_s - now)
 
 
+#: Parts of a metric key as a reader says them (``val_fa_per_day`` is "validation false alarms per day").
+_KEY_WORDS = {
+    "val": "validation",
+    "sens": "sensitivity",
+    "spec": "specificity",
+    "fa": "false alarms",
+    "fp": "false positives",
+    "acc": "accuracy",
+    "auc": "AUC",
+    "auroc": "AUROC",
+    "f1": "F1",
+    "ppv": "PPV",
+    "npv": "NPV",
+    "fmax": "fmax",
+    "um2": "µm²",
+    "mhz": "MHz",
+    "pj": "pJ",
+    "uw": "µW",
+    "ns": "ns",
+    "luts": "LUTs",
+}
+
+
+def metric_label(key: str) -> str:
+    """A metric key in plain words: ``window_sens_test`` is "window sensitivity test"."""
+    words = [w for w in re.split(r"[_\s]+", str(key).strip()) if w]
+    return " ".join(_KEY_WORDS.get(w.lower(), w) for w in words) or str(key)
+
+
+def metric_value(value: Any) -> str:
+    """A measured number as a reader sees it: float noise gone, never more digits than it carries.
+
+    ``28.799999999999997`` is 28.8, ``0.9888475836431226`` is 0.989, ``4689.5`` stays 4689.5.
+    """
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return str(value)
+    if isinstance(value, int) or float(value).is_integer():
+        return str(int(value))
+    size = abs(value)
+    if size < 0.001:
+        return f"{value:.2g}"
+    places = 3 if size < 1 else 2 if size < 100 else 1
+    return f"{value:.{places}f}".rstrip("0").rstrip(".")
+
+
 def _own_line(event: Mapping[str, Any]) -> str:
     kind = event.get("type")
     if kind == "metric":
-        unit = f" {event['unit']}" if event.get("unit") else ""
+        label, value = metric_label(str(event.get("key"))), metric_value(event.get("value"))
+        said = str(event.get("unit") or "")
+        unit = f" {said}" if said and not label.endswith(said) else ""
         chip = f" for {event['chip']}" if event.get("chip") else ""
         source = f" by {event['source']}" if event.get("source") else ""
-        return clip(f"Measured {event.get('key')} = {event.get('value')}{unit}{chip}{source}", 120)
+        return clip(f"Measured {label} = {value}{unit}{chip}{source}", 120)
     if kind == "artifact":
         return clip(f"Saved {event.get('kind') or 'file'} {event.get('path') or event.get('name')}", 120)
     if kind == "chosen":
@@ -1053,7 +1144,13 @@ class Writer:
             data = {"part": f"the {stage.name} stage", "ended": ended}
             own = f"Skipped: {ended[9:]}" if skipped else lines[0]
             text, source, model = await self._one(
-                "stage", data, lines, own, self.s.upper_max_chars, closing=final
+                "stage",
+                data,
+                lines,
+                own,
+                self.s.upper_max_chars,
+                closing=final,
+                forbid=PREMATURE_FINAL if job.no_chip_yet else None,
             )
         covers = [p[1] for p in parts]
         text, source, covers, model = self._keep_model(
@@ -1087,7 +1184,13 @@ class Writer:
         )
         if lines:
             text, source, model = await self._one(
-                "run", data, lines, own, self.s.run_max_chars, closing=final
+                "run",
+                data,
+                lines,
+                own,
+                self.s.run_max_chars,
+                closing=final,
+                forbid=PREMATURE_FINAL if job.no_chip_yet else None,
             )
         else:
             text, source, model = clip(own, self.s.run_max_chars), "verbatim", ""
@@ -1117,13 +1220,15 @@ class Writer:
         max_chars: int,
         *,
         closing: bool = False,
+        forbid: re.Pattern[str] | None = None,
     ) -> tuple[str, Source, str]:
         """One summary from ``lines``: ``(text, source, model)``.
 
-        A reply with a number found in none of the lines (nor the part's own data), or over
-        ``max_chars``, is asked for once more. A number still unknown after that gives the lines'
-        own first clauses; a reply still too long is cut at a sentence or clause. No reply at
-        all gives ``own``.
+        A reply with a number found in none of the lines (nor the part's own data), over
+        ``max_chars``, or matching ``forbid`` (a chip called final before one was chosen), is
+        asked for once more. A number still unknown, or ``forbid`` still matched, after that
+        gives the lines' own first clauses; a reply still too long is cut at a sentence or
+        clause. No reply at all gives ``own``.
         """
         if not lines:
             return cut(own, max_chars), "fallback", ""
@@ -1136,15 +1241,23 @@ class Writer:
         if not text:
             return cut(own, max_chars), "fallback", ""
         model = reply.model if reply is not None else ""
+
+        def bad(line: str) -> bool:
+            return bool(unknown_numbers(line, sources)) or bool(forbid and forbid.search(line))
+
         problems = _problems(text, sources, max_chars)
+        if forbid is not None and forbid.search(text):
+            premature = "it calls a chip final or chosen, but no chip has been chosen yet"
+            problems = f"{problems}; {premature}" if problems else premature
         if problems:
             note = RETRY_NOTE.format(problems=problems, max_chars=_aim(max_chars))
             again = await self._call(level, system + note, payload, tokens, closing=closing)
             second = _tidy(again.text) if again is not None else ""
-            if second and not unknown_numbers(second, sources):
+            if second and not bad(second):
                 text, model = second, again.model if again is not None else model
-            elif unknown_numbers(text, sources):
-                return clause_fallback(lines, max_chars), "fallback", ""
+            elif bad(text):
+                kept = [ln for ln in lines if not (forbid and forbid.search(ln))] or lines
+                return clause_fallback(kept, max_chars), "fallback", ""
         return cut(text, max_chars), "model", model
 
     # ---- calls and limits ----

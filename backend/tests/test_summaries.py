@@ -671,3 +671,66 @@ async def test_the_guard_runs_on_every_upper_level_of_a_fanout_run() -> None:
     by_id = check_tree(await run_replay(script, summariser), script.events)
     upper = [s for s in by_id.values() if s["level"] in ("agent", "batch", "stage", "run")]
     assert upper and all(s["source"] == "fallback" and "77" not in s["text"] for s in upper)
+
+
+# ---- live-run faults: raw floats, raw keys, a chip called final too early ----
+
+
+def test_a_metric_step_line_has_readable_words_and_a_rounded_number() -> None:
+    s = Script()
+    s.add("metric", key="validation_fa_per_day", value=28.799999999999997, unit="per day", chip="thr-a")
+    s.add("metric", key="test_specificity", value=0.9888475836431226, chip="thr-a")
+    s.add("metric", key="window_sens_test", value=0.968)
+    s.add("metric", key="gates", value=490)
+    s.add("metric", key="area_um2", value=4689.5)
+    levels = feed(s)
+    own = [i.own for i in levels.queue if hasattr(i, "own")]
+    assert own == [
+        "Measured validation false alarms per day = 28.8 for thr-a",
+        "Measured test specificity = 0.989 for thr-a",
+        "Measured window sensitivity test = 0.968",
+        "Measured gates = 490",
+        "Measured area µm² = 4689.5",
+    ]
+
+
+def test_metric_value_drops_float_noise_and_keeps_small_values() -> None:
+    from chipin_backend.api.summaries import metric_value
+
+    assert metric_value(91.19999999999999) == "91.2"
+    assert metric_value(1.0) == "1" and metric_value(0.0) == "0" and metric_value(7) == "7"
+    assert metric_value(0.0004) == "0.0004" and metric_value(12958.24) == "12958.2"
+    assert metric_value("n/a") == "n/a" and metric_value(True) == "True"
+
+
+def _compile_then_verify(*, chosen: bool) -> Script:
+    s = Script()
+    s.add("run.started", prompt="An AF patch", agent="claude", runner="local")
+    s.stage("compile", "started")
+    s.tool("Ran chiplab synthesize", detail="490 gates")
+    if chosen:
+        s.add("chosen", chip="vdc0")
+    s.stage("compile", "done")
+    s.stage("verify", "started")
+    s.tool("Ran chiplab simulate", detail="300 vectors, 0 mismatches")
+    return s
+
+
+async def test_an_interim_run_line_never_calls_a_chip_final_before_one_is_chosen() -> None:
+    script = _compile_then_verify(chosen=False)
+    summariser = Upper(*["Built the final chip."] * 40)
+    out = await run_replay(script, summariser)
+    runs = [x for x in out if x.get("id") == "run" and not x["final"]]
+    assert runs and all("final chip" not in x["text"] for x in runs)
+    prompts = [json.loads(p) for _, p in summariser.calls if '"the whole run"' in p]
+    assert "no chip has been chosen yet" in prompts[0]["ended"]
+    assert "verify" in prompts[0]["ended"] and "compile" not in prompts[0]["ended"]
+    assert any("no chip has been chosen yet" in system for system, _ in summariser.calls)
+
+
+async def test_an_interim_run_line_may_name_the_chip_once_it_is_chosen() -> None:
+    script = _compile_then_verify(chosen=True)
+    summariser = Upper(*["Built the final chip."] * 40)
+    out = await run_replay(script, summariser)
+    runs = [x for x in out if x.get("id") == "run" and not x["final"]]
+    assert runs[0]["text"] == "Built the final chip." and runs[0]["source"] == "model"

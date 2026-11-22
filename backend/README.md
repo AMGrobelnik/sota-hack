@@ -311,7 +311,11 @@ python -m chipin_backend serve           # the Claude agent, port 8797
   `claude-sonnet-5-5` or `thinkingmachines/inkling-2-mini`) overrides
   `--agent` for that run. A stub server keeps every run on the stub and
   only records the model asked for. `GET /api/health` lists the agents a
-  run may name in `defaults.run_agents` (empty on a stub server).
+  run may name that can really run on this machine in `defaults.run_agents`
+  (empty on a stub server), and why each other one cannot in
+  `defaults.unavailable_agents` (`openrouter` needs the `openhands` extra and
+  `tmux` on PATH; `claude` needs its CLI on PATH). A run that names an
+  agent that cannot run is a 400 with that reason; no run is started.
 - A follow-up uses the run's own agent when its request named one, else the
   `--agent` given to `serve`, else the run's recorded agent; a
   follow-up that cannot start leaves a finished run finished, with its own error event.
@@ -785,7 +789,11 @@ optional `spec` object:
   `grading`; `place` takes `ward`, `home`, `patient`; `fa_unit` takes
   `hour`, `night` (12 hours), `day` (24 hours), default `hour`, and the
   agent's block states the hours; `op` takes `at_least` or
-  `at_most`; `data.mode` takes `public`, `own` or `simulate`. An unknown
+  `at_most`; `data.mode` takes `public`, `own` or `simulate`.
+  `constraints.layout` (true, false or null) says whether physical layout
+  is wanted; left out, it is false when the brief turns layout down (for
+  example "no physical layout needed"), and then the agent's block tells it
+  to run no layout, timing-power, tt-package, tt-export or bitstream call. An unknown
   field or a bad value is a 400 whose `error` names the field, for example
   `spec.fa_unit must be one of hour, night, day`; no run is started.
 - The run gets `workspace/spec.json` (the spec plus `data_used`), a short

@@ -32,7 +32,12 @@ spec, reference, propose and finetune are your own work. The lab serves the
 last three:
 
 - **compile**: `ingest-model` (or `compile-ir`) to bring in your model, then
-  `synthesize`, `count-luts` and `map-to-process`. `compose-chip` joins
+  `synthesize`, `count-luts` and `map-to-process`. Every design comes in this
+  way, rules and thresholds included (write them as chipir/1: `matvec`,
+  `sub`, `abs`, `cmp`): it gives the design the `ir.json` that `simulate`,
+  `prove-equivalence`, `rtl-simulate` and `chip-report` read. Never
+  hand-write Verilog for `submit-verilog` without `reference_ir`: such a
+  design has no `ir.json`, so all four fail on it. `compose-chip` joins
   several heads into one chip (decision votes, or `max` / `sum` of their
   scores against a threshold). `compile-stream` wraps a design for streaming
   hardware; its `postproc` option smooths the alarm on the chip (majority or
@@ -53,7 +58,10 @@ last three:
   report yourself.
 - **report**: `layout` / `timing-power` (pass `decision_rate_hz` = how often
   the chip decides, for the battery-relevant power), `tt-package`,
-  `bitstream`, `estimate-cost`, and `chip-report`.
+  `bitstream`, `estimate-cost`, and `chip-report`. When the brief says no
+  physical layout, skip `layout`, `timing-power`, `tt-package`, `tt-export`
+  and `bitstream` (they draw the layout and write GDS files) and report the
+  synthesis-based figures `chip-report` gives.
 
 Before you mark report done, call `chiplab chip-report --json '{"design_id": "<the chip you chose>", "decision_rate_hz": <decisions per second>}'` on the one chip you chose: the chip figures the user sees (area, power, energy, cost, verification) come from that call.
 

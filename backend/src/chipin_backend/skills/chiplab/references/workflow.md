@@ -20,6 +20,18 @@ A model written as a chipir/1 document goes through `compile-ir` instead of
 `ingest-model`. Several candidates: compile each, compare their gate counts,
 and keep the `design_id` of each.
 
+A hand-made rule is a chipir/1 document too. For example, "alarm when at
+least 6 of the 11 jumps between 12 heartbeat intervals exceed 40 ms":
+
+```bash
+chiplab compile-ir --json '{"ir": {"ir": "chipir/1", "name": "bigjump", "inputs": [{"name": "rr", "lanes": 12, "bits": 11, "signed": false}], "nodes": [{"id": "d", "op": "matvec", "src": "rr", "W": [[-1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, -1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, -1, 1, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, -1, 1, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, -1, 1, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, -1, 1, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, -1, 1, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, -1, 1, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, -1, 1, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 1, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 1]]}, {"id": "a", "op": "abs", "src": "d"}, {"id": "big", "op": "cmp", "src": "a", "rel": "gt", "t": 40}, {"id": "n", "op": "matvec", "src": "big", "W": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}, {"id": "af", "op": "cmp", "src": "n", "rel": "ge", "t": 6}], "outputs": [{"name": "af", "src": "af"}], "meta": {}}}'
+```
+
+Each row of the first `matvec` is one difference of neighbouring intervals. Hand-written
+Verilog through `submit-verilog` gets no `ir.json` unless you pass the same
+chipir/1 model as `reference_ir`, and without it `simulate`,
+`prove-equivalence`, `rtl-simulate` and `chip-report` all fail.
+
 ## verify
 
 ```bash
@@ -46,5 +58,7 @@ chiplab chip-report --json '{"design_id": "<id>", "decision_rate_hz": 2}'
 ```
 
 `layout`, `timing-power`, `tt-package` and `bitstream` are heavier steps; call
-them when the brief needs those figures and the machine can run them. Then
-write `report.md` from the `chip-report` answer and your own results.
+them when the brief needs those figures and the machine can run them, and
+never when the brief says no physical layout (they draw the layout and write
+GDS files). Then write `report.md` from the `chip-report` answer and your own
+results.
