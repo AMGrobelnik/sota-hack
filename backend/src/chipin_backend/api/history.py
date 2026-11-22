@@ -8,7 +8,8 @@ A dashboard plays an old run back from its ``events.jsonl`` (every event has a
 
 The facts are computed from the event log already in memory, so listing many
 runs reads no file. :func:`run_facts` is shared with the static export
-(``export.py``), so a run looks the same served or exported.
+(``export.py``), so a run looks the same served or exported, and so is
+:func:`with_summaries`, which adds the summaries written after the run.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from datetime import datetime
 from typing import Any
 
 from chipin_backend.api.events import FINISHED, STAGES
+from chipin_backend.api.summaries import SUMMARY
 
 #: The longest title shown in a picker; the full brief stays in ``prompt``.
 TITLE_CHARS = 90
@@ -124,6 +126,56 @@ def run_facts(record: Mapping[str, Any], events: Sequence[Mapping[str, Any]]) ->
     return {k: v for k, v in facts.items() if v is not None}
 
 
+def _anchor(cover: str, at: Mapping[str, int]) -> int:
+    """The seq a covered id stands at: ``e<seq>`` and ``i<seq>`` name it, a summary id was resolved."""
+    if cover in at:
+        return at[cover]
+    if cover[:1] in ("e", "i") and cover[1:].isdigit():
+        return int(cover[1:])
+    return 0
+
+
+def with_summaries(
+    events: Sequence[Mapping[str, Any]], summaries: Sequence[Mapping[str, Any]]
+) -> list[dict[str, Any]]:
+    """``events`` plus the summaries written after the run (``chipin-backend summarise``).
+
+    Summaries written live are already events (they carry a ``seq``) and are
+    left as they are. Those of a replay have no ``seq``: they follow the last
+    event, numbered on from it, with its ``ts`` (so the run's length does not
+    change) and ``at``, the seq of the newest event each one covers, so a
+    player can show it where it belongs. A later line with the same ``id``
+    replaces an earlier one, as on the live stream.
+    """
+    out = [dict(e) for e in events]
+    replayed = [
+        s
+        for s in summaries
+        if isinstance(s, Mapping) and str(s.get("type", "")).startswith(SUMMARY) and "seq" not in s
+    ]
+    if not out or not replayed:
+        return out
+    last = out[-1]
+    end = seq = int(last.get("seq", len(out)))
+    at: dict[str, int] = {}
+    for s in replayed:
+        seq += 1
+        covers = s.get("covers") if isinstance(s.get("covers"), list) else []
+        anchor = max((_anchor(str(c), at) for c in covers), default=0) or end
+        if isinstance(s.get("id"), str):
+            at[s["id"]] = anchor
+        out.append({"seq": seq, "ts": last.get("ts"), "run_id": last.get("run_id"), **s, "at": anchor})
+    return out
+
+
+def _finished(events: Sequence[Mapping[str, Any]]) -> bool:
+    """Whether the run has ended: its last event, summaries written after it aside, is ``run.finished``."""
+    for event in reversed(events):
+        if not str(event.get("type", "")).startswith(SUMMARY):
+            return event.get("type") == FINISHED
+    return False
+
+
 def history_page(
     events: Sequence[Mapping[str, Any]], *, start: int = 1, limit: int | None = None
 ) -> dict[str, Any]:
@@ -141,8 +193,16 @@ def history_page(
         "next": int(page[-1]["seq"]) + 1 if more and page else None,
         "total": len(events),
         "last_seq": int(events[-1]["seq"]) if events else 0,
-        "finished": bool(events) and events[-1].get("type") == FINISHED,
+        "finished": _finished(events),
     }
 
 
-__all__ = ["MAX_PAGE", "TITLE_CHARS", "counts_of", "history_page", "run_facts", "title_of"]
+__all__ = [
+    "MAX_PAGE",
+    "TITLE_CHARS",
+    "counts_of",
+    "history_page",
+    "run_facts",
+    "title_of",
+    "with_summaries",
+]

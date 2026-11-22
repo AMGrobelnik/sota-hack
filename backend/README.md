@@ -615,6 +615,13 @@ chipin-backend export <run id or folder> --out <site>/dashboard/data/runs/<name>
   fit is refused (exit 2).
 - `--index` adds or replaces the run's line in an index file, newest first.
 
+Both carry the run's `summary` events (see Summaries). Those written live
+are ordinary events. For a run recorded before summaries existed, run
+`chipin-backend summarise <run>` first: its `summaries.jsonl` is added
+after the run's last event, numbered on from it, with that event's `ts`
+and `at`, the seq of the newest event each line covers. The export
+scrubs summary text like every other event.
+
 ## Chip lab
 
 The chip lab (`chiplab/` on the `ant/chip-lab` branch, guide

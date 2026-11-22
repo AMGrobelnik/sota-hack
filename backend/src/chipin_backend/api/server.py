@@ -42,7 +42,7 @@ from loguru import logger
 
 from chipin_backend.api.config import ApiConfig
 from chipin_backend.api.events import public_text
-from chipin_backend.api.history import MAX_PAGE, history_page, run_facts
+from chipin_backend.api.history import MAX_PAGE, history_page, run_facts, with_summaries
 from chipin_backend.api.manager import ApiAgent, ApiRunner, RequestError, RunManager
 from chipin_backend.api.summaries import SUMMARIES_FILE, read_jsonl
 from chipin_backend.api.transcribe import CONTEXT_HEADER, add_transcribe_route, transcribe_ready
@@ -174,7 +174,8 @@ async def get_history(request: web.Request) -> web.Response:
     limit = _whole(request, "limit", None)
     if limit is not None and not 1 <= limit <= MAX_PAGE:
         raise RequestError(f"limit must be between 1 and {MAX_PAGE}")
-    page = history_page(item.log.since(1), start=start, limit=limit)
+    summaries = await asyncio.to_thread(read_jsonl, item.run.path / SUMMARIES_FILE)
+    page = history_page(with_summaries(item.log.since(1), summaries), start=start, limit=limit)
     return _json({"id": item.id, "state": item.record.get("status"), **page})
 
 

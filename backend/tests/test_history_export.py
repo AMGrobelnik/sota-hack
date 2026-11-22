@@ -12,10 +12,12 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from chipin_backend.api.config import ApiConfig
 from chipin_backend.api.history import history_page, run_facts, title_of
-from chipin_backend.api.server import TOKEN_HEADER, create_app
+from chipin_backend.api.server import MANAGER, TOKEN_HEADER, create_app
+from chipin_backend.api.summaries import SUMMARIES_FILE, SUMMARY, load_level_settings, summarise_folder
 from chipin_backend.cli import main
 from chipin_backend.config import BackendConfig
 from chipin_backend.export import ExportError, Scrubber, build_export, export_run
+from test_summaries import Scripted, plain_run
 
 TOKEN = "test-session-token"
 AUTH = {TOKEN_HEADER: TOKEN}
@@ -200,3 +202,72 @@ def test_export_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> N
     assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["events"] == 14
     assert out.is_file()
     assert main(["export", str(tmp_path / "missing"), "--out", str(out)]) == 2
+
+
+# ---- summaries in the history and the export ----
+
+
+def _levels(events: list[dict[str, Any]]) -> set[str]:
+    return {str(e["level"]) for e in events if e["type"] == SUMMARY}
+
+
+async def test_history_carries_live_and_later_summaries(client: TestClient) -> None:
+    run_id, streamed = await _finished_run(client, "a brief")
+    whole = await (await client.get(f"/api/runs/{run_id}/history", headers=AUTH)).json()
+    assert whole["events"] == streamed and {"item", "stage", "run"} <= _levels(whole["events"])
+
+    folder = client.app[MANAGER].get(run_id).run.path
+    await summarise_folder(folder, load_level_settings(), Scripted())
+    after = await (await client.get(f"/api/runs/{run_id}/history", headers=AUTH)).json()
+    added = after["events"][len(streamed) :]
+    assert after["events"][: len(streamed)] == streamed and added
+    assert [e["seq"] for e in added] == list(range(streamed[-1]["seq"] + 1, after["last_seq"] + 1))
+    assert {e["source"] for e in added if e["type"] == SUMMARY} >= {"model"}
+    assert all(e["ts"] == streamed[-1]["ts"] and 1 <= e["at"] <= streamed[-1]["seq"] for e in added)
+    assert after["finished"] is True and _levels(added) >= {"item", "group", "stage", "run"}
+
+
+def test_export_carries_scrubbed_summaries(tmp_path: Path) -> None:
+    folder = _run_folder(tmp_path / "runs")
+    private = f"Read {HOME}/brief.md, key {KEY}, mail {EMAIL}, on lab-mac-7 as someone"
+    lines = [
+        {"type": "summary", "id": "i9", "level": "item", "covers": ["e9"], "parent": "g1", "text": private},
+        {"type": "summary", "id": "g1", "level": "group", "covers": ["i9"], "parent": "run", "text": private},
+        {
+            "type": "summary",
+            "id": "run",
+            "level": "run",
+            "covers": ["g1"],
+            "text": "All done.",
+            "final": True,
+        },
+    ]
+    (folder / SUMMARIES_FILE).write_text("".join(json.dumps(s) + "\n" for s in lines), encoding="utf-8")
+    doc = build_export(folder, scrubber=Scrubber(home=HOME, host_names=("lab-mac-7",), user="someone"))
+    summaries = [e for e in doc["events"] if e["type"] == SUMMARY]
+    assert [s["id"] for s in summaries] == ["i9", "g1", "run"] and [s["at"] for s in summaries] == [9] * 3
+    assert [s["seq"] for s in summaries] == [15, 16, 17] and doc["run"]["counts"]["events"] == 17
+    text = json.dumps(summaries)
+    for secret in (HOME, KEY, EMAIL, "lab-mac-7", "someone"):
+        assert secret not in text
+    assert summaries[0]["text"].startswith("Read ~/brief.md, key [removed], mail [removed], on [host]")
+
+
+async def test_summarise_writes_an_old_run_so_export_has_every_level(tmp_path: Path) -> None:
+    folder = tmp_path / "runs" / "20261122-010000-0ld0ld"
+    folder.mkdir(parents=True)
+    events = plain_run().events  # recorded before summaries existed: no summary events
+    (folder / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events), encoding="utf-8")
+    assert not build_export(folder)["events"][-1]["type"].startswith(SUMMARY)
+
+    summariser = Scripted()
+    summaries, stats = await summarise_folder(folder, load_level_settings(), summariser)
+    assert summariser.calls and stats["usd"] > 0 and (folder / SUMMARIES_FILE).is_file()
+    doc = build_export(folder)
+    exported = doc["events"][len(events) :]
+    assert [e["seq"] for e in exported] == list(range(len(events) + 1, len(events) + len(summaries) + 1))
+    assert [e.get("id") for e in exported] == [s.get("id") for s in summaries]
+    assert _levels(exported) == {"item", "group", "stage", "run"}
+    final_run = [e for e in exported if e["type"] == SUMMARY and e["id"] == "run"][-1]
+    assert final_run["final"] and final_run["source"] == "model" and final_run["text"].startswith("U ")
+    assert history_page(doc["events"])["finished"] is True

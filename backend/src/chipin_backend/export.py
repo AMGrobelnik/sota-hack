@@ -6,13 +6,15 @@ writes::
 
     {"format": "chipin-recorded-run", "version": 1, "exported_at": ...,
      "run": {facts as GET /api/history gives them}, "summary": ..., "bullets": ...,
-     "events": [...every event with its seq and ts...],
+     "events": [...every event with its seq and ts, summary events included...],
      "files": [{"path", "size", "text", "truncated"}],   # small text artifacts the page shows
      "redactions": {"home_paths": n, "keys": n, "emails": n, "host": n, "user": n}}
 
 Everything written is scrubbed first: home folder paths become ``~``, anything
 that looks like a key or token and every e-mail address is replaced by
-``[removed]``, and this machine's host and user names are replaced too. The
+``[removed]``, and this machine's host and user names are replaced too, in
+summary lines as in every other event. Summaries written after the run by
+``chipin-backend summarise`` (``summaries.jsonl``) follow its events. The
 file is size-bounded: long tool details go first, then artifacts, and an
 export that still does not fit is refused.
 """
@@ -31,7 +33,8 @@ from typing import Any
 
 from loguru import logger
 
-from chipin_backend.api.history import run_facts
+from chipin_backend.api.history import run_facts, with_summaries
+from chipin_backend.api.summaries import SUMMARIES_FILE, read_jsonl
 
 FORMAT = "chipin-recorded-run"
 VERSION = 1
@@ -246,6 +249,7 @@ def build_export(
     events = _read_events(events_path)
     if not events:
         raise ExportError(f"{folder.name} has no events")
+    events = with_summaries(events, read_jsonl(folder / SUMMARIES_FILE))
     record = _record(folder, events)
     scrub = scrubber or Scrubber()
     doc: dict[str, Any] = {
