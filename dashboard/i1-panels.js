@@ -364,7 +364,7 @@
     var rows = rowsFor(ctx);
     var unit = unitWord(ctx);
     var d = ctx.chosen || ctx.selected;
-    var gatesTxt = d && d.gates > 0 ? fmtInt(d.gates) + " gates " + srcMark(d) : "2,500 gates (the model's default; no chip chosen yet)";
+    var gatesTxt = d && d.gates > 0 ? fmtInt(d.gates) + " gates " + (d.source === "measured" ? '<span class="mk mea">gates measured</span>' : '<span class="mk sim">gates simulated</span>') : "2,500 gates (the model's default; no chip chosen yet)";
     var maxShare = 0;
     rows.forEach(function (r) {
       if (r.chip_share > maxShare) maxShare = r.chip_share;
@@ -420,7 +420,7 @@
       : "";
     var minH = M().ILLUSTRATIVE_MIN_LIFE_HOURS;
     return '<div class="cpn-pan">' +
-      '<div class="cpn-h"><h2>What this means for the battery</h2><span class="cpn-sub">Chip of ' + gatesTxt + " at " + esc(dps(ctx)) + " decision" + (dps(ctx) === 1 ? "" : "s") + " a second</span></div>" +
+      '<div class="cpn-h"><h2>What this means for the battery</h2><span class="cpn-sub">Chip of ' + gatesTxt + " at " + esc(dps(ctx)) + " decision" + (dps(ctx) === 1 ? "" : "s") + " a second " + estT('<span class="mk no">power estimated</span>', M().describeEstimate("chip_power")) + "</span></div>" +
       (lede ? '<p class="cpn-lede">' + lede + "</p>" : "") +
       (story.more ? '<details class="cpn-more"><summary>More from the power model</summary><p>' + story.more + "</p></details>" : "") +
       '<p class="cpn-ask">' + ask + "</p>" +

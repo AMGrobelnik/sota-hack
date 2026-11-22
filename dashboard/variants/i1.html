@@ -584,11 +584,11 @@ select.gfin{padding:0 10px}
 .gchg:hover{text-decoration:underline}
 .gfx{font-size:12px;color:var(--i550)}
 .gie{display:flex;align-items:center;gap:4px}
-.gie input{flex:1;min-width:0;border:1px solid transparent;border-radius:8px;padding:2px 6px;margin-left:-7px;font-size:14px;font-weight:600;background:transparent;outline:0}
-.gie.sm input{font-size:13px;font-weight:400;color:var(--i700)}
-.gie input:hover{border-color:var(--i200)}
-.gie input:focus{border-color:var(--blue7);background:#fff;box-shadow:0 0 0 3px rgb(61 109 240/.14)}
-.gie input::placeholder{color:#8a6a3e;font-weight:400}
+.gie textarea{flex:1;min-width:0;border:1px solid transparent;border-radius:8px;padding:2px 6px;margin-left:-7px;font:inherit;font-size:14px;font-weight:600;line-height:1.35;background:transparent;outline:0;resize:none;overflow:hidden;field-sizing:content;white-space:pre-wrap;overflow-wrap:anywhere}
+.gie.sm textarea{font-size:13px;font-weight:400;color:var(--i700)}
+.gie textarea:hover{border-color:var(--i200)}
+.gie textarea:focus{border-color:var(--blue7);background:#fff;box-shadow:0 0 0 3px rgb(61 109 240/.14)}
+.gie textarea::placeholder{color:#8a6a3e;font-weight:400}
 .gsq{display:flex;flex-wrap:wrap;align-items:center;gap:14px 26px;margin-top:22px;padding:0 4px}
 .gsqi{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--i600)}
 .gseg{display:inline-flex;border-radius:99px;background:rgb(0 0 0/.045);padding:2px}
@@ -669,8 +669,8 @@ select.gfin{padding:0 10px}
 @media (max-width:767px){
   .cf{padding-top:0;flex-basis:100%}
   .cf-b{padding-left:50px}
-  .sab-st{grid-template-columns:repeat(5,minmax(0,1fr));width:100%}
-  .sab-st li{font-size:11px;gap:4px;padding-right:4px}
+  .sab-st{grid-template-columns:repeat(5,auto);justify-content:space-between;column-gap:6px;width:100%}
+  .sab-st li{font-size:11px;gap:4px}
   .sab-tx{flex-basis:100%}
 }
 /* ===== dash6 polish pass: larger chart, fewer labels, one convention (section 13 of the script) =====
@@ -1110,7 +1110,10 @@ const mFile = run => run.case !== "af" && !!designsOf(run).file;
 // which scope the overview chart plots: the user's pick, else pooled for a measured file (its worst-patient figures
 // can all sit at zero), else the run's own judging rule; pass and fail always follow the run's rule
 const yScope = run => run.ui.ys || (mFile(run) ? "pooled" : run.judge);
-const pooledOf = (run, d) => good({ ...run, judge: "pooled" }, d, run.primary) ?? -Infinity;
+// held-out events a design catches, all patients pooled (the file's own count); the measured file's
+// "best design so far" is one definition whatever metric the chart shows: most events caught, then fewer
+// false alarms, then fewer gates; a design that catches none is never the best
+const caughtOf = d => d.counts && d.counts.events_caught != null ? d.counts.events_caught : (d.metrics.sensitivity_pooled ?? 0) * ((d.counts && d.counts.events_total) || 1);
 function evaluate(run, ds) {
   const base = ds.find(d => d.role === "baseline") || null;
   ds = ds.filter(d => d.gates > 0 && d.role !== "baseline");
@@ -1119,8 +1122,10 @@ function evaluate(run, ds) {
   for (const d of ds) if (pass.has(d.id) && (!chosen || d.gates < chosen.gates || (d.gates === chosen.gates && good(run, d, run.primary) > good(run, chosen, run.primary)))) chosen = d;
   const fa = d => d.metrics.false_alarms_per_hour ?? Infinity;
   const nearest = chosen ? [] : mFile(run)
-    ? ds.slice().sort((a, b) => pooledOf(run, b) - pooledOf(run, a) || fa(a) - fa(b) || a.gates - b.gates).slice(0, 3)
+    ? ds.filter(d => caughtOf(d) > 0).sort((a, b) => caughtOf(b) - caughtOf(a) || fa(a) - fa(b) || a.gates - b.gates).slice(0, 3)
     : ds.slice().sort((a, b) => shortfall(run, a) - shortfall(run, b) || a.gates - b.gates).slice(0, 3);
+  // a design that ties a ringed one on events caught but is smaller is ringed too
+  if (!chosen && mFile(run)) for (const d of ds) if (!nearest.includes(d) && nearest.some(n => caughtOf(n) === caughtOf(d) && d.gates < n.gates) && !ds.some(x => x !== d && !nearest.includes(x) && caughtOf(x) === caughtOf(d) && x.gates < d.gates)) nearest.push(d);
   const fronts = budgetsOf(run).map(b => ({ b, pts: frontier(run, ds.filter(d => d.channels === b.ch), run.primary) }));
   return { pass, chosen, nearest, fronts, base, best: !chosen && mFile(run) };
 }
@@ -1147,7 +1152,7 @@ const CONDS = [
   [/sepsis/i, "sepsis"], [/arrhythmi\w*/i, "arrhythmia"], [/\bfalls?\b/i, "falls"], [/hypoglyc\w*/i, "hypoglycaemia"],
   [/desaturat\w*/i, "desaturation"], [/stroke/i, "stroke"], [/tremor/i, "tremor"], [/sleep stag\w*/i, "sleep stages"]
 ];
-const DEVN = /(patch|monitor|headband|wristband|band|wearable|watch|ring|implant|sensor|device|cap|mat|camera|earpiece|earbud|pod|bracelet|vest|belt|strap|necklace|glasses|insole|garment|shirt|helmet|clip|tag|sticker|mattress|tracker|alarm)s?\b/i;
+const DEVN = /(patch|monitor|headband|wristband|band|wearable|watch|ring|implant|sensor|device|cap|mat|camera|earpiece|earbud|pod|bracelet|vest|belt|strap|necklace|glasses|insole|garment|shirt|helmet|clip|tag|sticker|mattress|tracker|alarm|collar|harness|cuff|sock|anklet|pendant|badge|headset|earring|wristwatch|bandage|plaster|probe)s?\b/i;
 const TKEYS = [
   ["sensitivity", /sensitivit\w*|\brecall\b|detection rate/i], ["specificity", /specificit\w*/i],
   ["false_alarms_per_hour", /false[- ](?:alarm|positive)s?/i], ["accuracy", /accura\w*/i], ["expert_agreement", /agree\w*|kappa/i]
@@ -1159,13 +1164,16 @@ function parseBrief(text) {
   const lead = s.replace(/^(?:please\s+)?(?:(?:build|design|make|create|i want|we want|we need|i need)\s+(?:me\s+|us\s+)?)?(?:an?|the|our|my)\s+/i, "");
   const cut = lead.split(/\s*(?:[,;.:]|\b(?:that|which|to|detect\w*|warn\w*|flag\w*|raises?|with|using|catch\w*)\b)/i)[0].trim();
   if (cut && DEVN.test(cut) && cut.length <= 90) out.device = cut;
-  else { const m = s.match(/((?:[\w-]+\s+){0,4}?)(patch|monitor|headband|wristband|wearable|watch|implant|earpiece|bracelet|vest|belt|mattress|tracker)\b/i); if (m) out.device = (m[1] + m[2]).replace(/^(?:an?|the|our|my)\s+/i, "").trim(); }
+  else { const m = s.match(/((?:[\w-]+\s+){0,4}?)(patch|monitor|headband|wristband|wearable|watch|implant|earpiece|bracelet|vest|belt|mattress|tracker|collar|harness|cuff|sock|anklet|pendant)\b/i); if (m) out.device = (m[1] + m[2]).replace(/^(?:an?|the|our|my)\s+/i, "").trim(); }
+  // no device noun: the brief's short opening phrase names it
+  if (!out.device && cut && cut.length <= 60 && cut.split(" ").length <= 6 && /[a-z]/i.test(cut)) out.device = cut;
   // signals, with a lead or channel count where the text gives one
   for (const g of SIGNALS) if (g.re.test(s)) {
     let n = null; if (g.count) { const m = s.match(g.count); if (m) n = NUMW[m[1].toLowerCase()] || parseInt(m[1], 10) || null; }
     out.sigs.push({ name: g.name, n, unit: g.unit }); if (n && !out.chans) { out.chans = n; out.unit = g.unit; }
   }
   out.signal = out.sigs.map(x => x.n ? `${x.name}, ${x.n} ${x.unit}${x.n === 1 ? "" : "s"}` : x.name).join(" + ");
+  if (!out.device && out.sigs.length) out.device = `${out.sigs[0].name} device`;
   // battery life, when the brief gives one next to the word battery ("battery 5 days", "a 2-week battery")
   const bm = s.match(/batter\w*[^.;,\d]{0,24}(\d+(?:\.\d+)?)\s*-?\s*(hours?|hrs?|days?|weeks?)\b/i) || s.match(/(\d+(?:\.\d+)?)\s*-?\s*(hours?|hrs?|days?|weeks?)\b[^.;,\d]{0,16}batter/i);
   if (bm && +bm[1] > 0) { const u = bm[2].toLowerCase(); out.bat = /^w/.test(u) ? [+bm[1] * 7, "days"] : /^d/.test(u) ? [+bm[1], "days"] : [+bm[1], "hours"]; }
@@ -1946,7 +1954,7 @@ function dsCardHTML(s, k) {
 function cardHTML(s) {
   const L = specLines(s);
   const rows = L.map(r => r.k === "Device"
-    ? `<div class="gsr"><span class="k">Device</span><div class="v"><div class="gie"><input data-sf="device" data-voice value="${esc(s.device)}" placeholder="Name the device" aria-label="Device"></div><div class="gie sm"><input data-sf="signal" data-voice value="${esc(s.signal)}" placeholder="Name the signal or sensors" aria-label="Signal or sensors"></div><small>${esc(r.v.split(". ").slice(1).join(". "))}</small></div><button type="button" class="gchg" data-go="1" aria-label="Change the device">Change</button></div>`
+    ? `<div class="gsr"><span class="k">Device</span><div class="v"><div class="gie"><textarea data-sf="device" data-voice rows="1" placeholder="Name the device" aria-label="Device">${esc(s.device)}</textarea></div><div class="gie sm"><textarea data-sf="signal" data-voice rows="1" placeholder="Name the signal or sensors" aria-label="Signal or sensors">${esc(s.signal)}</textarea></div><small>${esc(r.v.split(". ").slice(1).join(". "))}</small></div><button type="button" class="gchg" data-go="1" aria-label="Change the device">Change</button></div>`
     : `<div class="gsr"><span class="k">${r.k}</span><div class="v">${esc(r.v)}</div>${r.go ? `<button type="button" class="gchg" data-go="${r.go}" aria-label="Change ${r.k.toLowerCase()}">Change</button>` : '<span class="gfx">Fixed</span>'}</div>`).join("");
   const af = s.case === "af" ? `<p class="gfr">${MEASURED.af ? "This brief is the AF patch case: Run replays its real search with your targets." : "This brief is the AF patch case: Run opens its measured run with your targets."}</p>` : "";
   return `<p class="gfl">Check it, change anything, then run.</p><div class="gsc">${rows}</div>
@@ -1975,9 +1983,13 @@ function renderSpec() {
   $("#demo").textContent = "";
   $("#main").innerHTML = `<div class="gf" id="gf"><div class="gfc">${progHTML(i)}<header class="gfh"><p class="gfn">${i < 5 ? `Step ${i + 1} of 5` : "Before you run"}</p><h1 tabindex="-1" id="gfH">${i < 5 ? STEPS[i].h : "Your spec"}</h1></header><div id="gfBody">${bodyHTML(s, i)}</div>${footHTML(i)}</div></div>`;
   const root = $("#gf");
-  const redraw = () => { const k = focusKey(document.activeElement); faUse(s); flowSave(); $("#gfBody").innerHTML = bodyHTML(s, i); const n = k && $("#gfBody " + k); if (n && !n.disabled) n.focus({ preventScroll: true }); };
+  // the spec card's name fields wrap: a one-line textarea that grows with its text
+  const fitS = () => document.querySelectorAll("#gf textarea[data-sf]").forEach(ta => { ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px"; });
+  const redraw = () => { const k = focusKey(document.activeElement); faUse(s); flowSave(); $("#gfBody").innerHTML = bodyHTML(s, i); fitS(); const n = k && $("#gfBody " + k); if (n && !n.disabled) n.focus({ preventScroll: true }); };
   const fit = ta => { ta.style.height = "auto"; ta.style.height = Math.min(220, Math.max(48, ta.scrollHeight)) + "px"; };
   if ($("#gfBrief")) fit($("#gfBrief"));
+  fitS();
+  root.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.matches && e.target.matches("textarea[data-sf]")) e.preventDefault(); });
   root.addEventListener("click", e => {
     const g = e.target.closest("[data-go]");
     if (g) { const v = g.dataset.go; if (v === "prev") { if (i === 0) { startState.text = s.brief; flowSave(); go("#/"); } else flowGo(i); } else if (v === "next") flowGo(i === 4 ? "spec" : i + 2); else flowGo(v); return; }
@@ -2004,7 +2016,7 @@ function renderSpec() {
       return;
     }
     if (el.id === "gfDetect") { s.detect = el.value; s.touched.detect = !!el.value.trim(); el.classList.toggle("ask", !el.value.trim()); }
-    if (el.dataset.sf) { s[el.dataset.sf] = el.value; s.touched[el.dataset.sf] = true; }
+    if (el.dataset.sf) { s[el.dataset.sf] = el.value.replace(/\s*\n\s*/g, " "); s.touched[el.dataset.sf] = true; fitS(); }
     if (el.id === "gfBat") { const v = parseFloat(el.value); if (!Number.isNaN(v) && v > 0) s.cons.batN = v; s.touched.cons = true; }
     if (el.dataset.tf === "value") {
       const t = s.targets[+el.closest("[data-i]").dataset.i], v = parseFloat(el.value), p = PLACES[s.place] || PLACES.ward;
@@ -2190,14 +2202,15 @@ function headHTML(run, v) {
     <div class="tgts" id="tgts">${chips}${run.targets.length < MET_KEYS.length ? `<button class="tgt add" id="addTgt" aria-haspopup="dialog" aria-expanded="false">${I("plus", "s12")} Add a target</button>` : ""}</div></div>`;
 }
 const pfHTML = ok => ok === true ? '<span class="pf ok">Pass</span>' : ok === false ? '<span class="pf no">Fail</span>' : '<span class="pf na">Not measured</span>';
-// the worst-patient line for a measured file: the best any design does on its worst held-out patient
+// the worst-patient line for a measured file: the best any design does on its worst held-out patient, always on
+// sensitivity (a fact of the file, not of the metric the chart shows)
 function mWorstLine(run) {
-  const c = caseOf(run), f = MET[run.primary].fields.find(x => /_worst$/.test(x)); if (!f) return "";
+  const c = caseOf(run), f = "sensitivity_worst";
   const vals = designsOf(run).designs.filter(d => d.role !== "baseline" && d.gates > 0).map(d => d.metrics[f]).filter(x => x != null);
   if (!vals.length) return "";
   const top = Math.max(...vals);
-  if (run.primary === "sensitivity" && top === 0) return `Every design misses every ${c.event} in at least one held-out ${c.who}.`;
-  return `The best any design does on its worst held-out ${c.who} is ${fmtVal(run.primary, top)}.`;
+  if (top === 0) return `Every design misses every ${c.event} in at least one held-out ${c.who}.`;
+  return `The best any design does on its worst held-out ${c.who} is ${fmtVal("sensitivity", top)} of ${c.events} caught.`;
 }
 // a note in the results file that matches a pattern, or null
 const fileNote = (run, re) => { const f = designsOf(run).file; const n = f && (f.notes || []).find(x => re.test(x)); return n ? n.match(re) : null; };
@@ -2217,7 +2230,7 @@ function tilesBest(run, v) {
   }
   const front = fileNote(run, /classifier only/i);
   out.push(`<div class="tile"><div class="tl">Chip size</div><div class="tv">${fmt(d.gates)}<small>gates</small></div><div class="ts">${esc(budgetLabel(run, d.channels))}, logic depth ${d.depth}${front ? "; classifier only" : ""}</div></div>`);
-  if (d.metrics.lead_time_s != null) out.push(`<div class="tile"><div class="tl">Time to alarm</div><div class="tv">${d.metrics.lead_time_s.toFixed(1)}<small>s</small></div><div class="ts">median, after each ${esc(c.event)} starts</div></div>`);
+  if (d.metrics.lead_time_s != null) out.push(`<div class="tile"><div class="tl">Lead time</div><div class="tv">${d.metrics.lead_time_s.toFixed(1)}<small>s</small></div><div class="ts">${leadNote(run)}</div></div>`);
   const seeds = fileNote(run, /(\d+) training seeds each/), spread = fileNote(run, /pooled sensitivity differs by a median of ([\d.]+) \(max ([\d.]+)\)/);
   const bWhat = fileNote(run, /Baseline, scored the same way: ([^:]+):/);
   const notes = [];
@@ -2226,6 +2239,8 @@ function tilesBest(run, v) {
   if (front) notes.push("Gates cover the classifier only; the feature front end is not included.");
   return out.join("") + `<p class="tnote">${notes.join(" ")}</p><span class="mk mea" style="position:absolute;right:12px;top:-9px">measured</span>`;
 }
+// the lead-time caption: a measured file gives lead_time_s without saying how it is summarised, so say only that
+const leadNote = run => isSim(run) ? "simulated, seconds from onset to alarm" : "seconds, as the results file gives it; how it is averaged is not stated";
 function bestNote(v) {
   const b = d => `<button class="lnk2" data-sel="${esc(d.id)}" style="color:#7c2d12;font-weight:600;text-decoration:underline">${esc(d.id)} (${fmt(d.gates)} gates)</button>`;
   const [d, ...rest] = v.ev.nearest;
@@ -2241,7 +2256,7 @@ function tilesHTML(run, v) {
     return `<div class="tile${d ? "" : " empty"}"><div class="tl">${esc(MET[t.metric].name)}, ${esc(m.f ? scopeText(run, t.metric, m.f) : lab)}</div><div class="tv">${d ? (m.v == null ? '<small style="margin:0">not measured</small>' : val) : "–"}</div><div class="ts">Target ${fmtTarget(t)} ${d ? pfHTML(meets(t, m.v)) : ""}</div></div>`;
   });
   out.push(`<div class="tile${d ? "" : " empty"}"><div class="tl">Chip size, ${lab}</div><div class="tv">${d ? fmt(d.gates) + "<small>gates</small>" : "–"}</div><div class="ts">${d ? `${esc(budgetLabel(run, d.channels))}, logic depth ${d.depth}` : "after the first designs are checked"}</div></div>`);
-  if (d && d.metrics.lead_time_s != null) out.push(`<div class="tile"><div class="tl">Time to alarm, ${lab}</div><div class="tv">${d.metrics.lead_time_s.toFixed(1)}<small>s</small></div><div class="ts">median, after each ${esc(c.event)} starts</div></div>`);
+  if (d && d.metrics.lead_time_s != null) out.push(`<div class="tile"><div class="tl">Lead time, ${lab}</div><div class="tv">${d.metrics.lead_time_s.toFixed(1)}<small>s</small></div><div class="ts">${leadNote(run)}</div></div>`);
   return out.join("") + `<span class="mk ${isSim(run) ? "sim" : "mea"}" style="position:absolute;right:12px;top:-9px">${isSim(run) ? "simulated" : "measured"}</span>`;
 }
 function funnelHTML(run, v) {
@@ -2266,7 +2281,7 @@ function inspHTML(run, v) {
     rows.push(["Sensitivity, per window", fmtVal("sensitivity", d.metrics.sensitivity_window)]);
     rows.push(["Specificity, per window", fmtVal("specificity", d.metrics.specificity_window)]);
   } else {
-    if (d.metrics.lead_time_s != null) rows.push(["Time to alarm, median", `${d.metrics.lead_time_s.toFixed(1)} s`]);
+    if (d.metrics.lead_time_s != null) rows.push(["Lead time", `${d.metrics.lead_time_s.toFixed(1)} s`]);
     if (d.counts.events_total) rows.push([`${capFirst(c.events)} caught`, `${fmt(d.counts.events_caught)} of ${fmt(d.counts.events_total)}, ${d.counts.patients} ${c.whoP}`]);
   }
   if (d.verified) rows.push(["Circuit against its model", run.case === "af" ? `${fmt(d.verified.vectors)} of ${fmt(d.verified.vectors)} test windows identical, ${d.verified.mismatches} mismatches` : `${fmt(d.verified.vectors)} test vectors, ${d.verified.mismatches} mismatches${d.verified.proved_equivalent ? ", proved equivalent" : ""}`]);
@@ -2497,12 +2512,17 @@ function drawChart(run, v) {
   // the user's bar
   if (tgt && barAbove) {
     g.font = font(700, 12); const lt = narrow ? `Your bar, ${fmtTarget(tgt)}, is above this chart` : `Your bar, ${fmtTarget(tgt)}${run.judge !== judged && judged !== "pooled" ? ` on the worst ${caseOf(run).who}` : ""}, is far above this chart`, tw = g.measureText(lt).width;
-    g.textAlign = "left"; g.fillStyle = "rgb(255 255 255 / .9)"; g.fillRect(x1 - tw - 8, y0 - 1, tw + 8, 17); g.fillStyle = "#141a2e"; g.fillText(lt, x1 - tw - 4, y0 + 12);
+    // keep the label off the 95% range bars: right-aligned, else left-aligned, else just under the top edge
+    const rx = rangeSegs(run, v, key).map(({ d }) => X(d.gates)), clear = l => !rx.some(x => x > l - 6 && x < l + tw + 14);
+    const lx = clear(x1 - tw - 8) ? x1 - tw - 8 : clear(x0 + 4) ? x0 + 4 : x1 - tw - 8, ly = clear(lx) ? y0 - 1 : y0 + 18;
+    g.textAlign = "left"; g.fillStyle = "rgb(255 255 255 / .9)"; g.fillRect(lx, ly, tw + 8, 17); g.fillStyle = "#141a2e"; g.fillText(lt, lx + 4, ly + 13);
   } else if (tgt) {
     const yy = Y(tgt.value); g.strokeStyle = "#141a2e"; g.setLineDash([6, 4]); g.lineWidth = 1.5; g.beginPath(); g.moveTo(x0, yy); g.lineTo(x1, yy); g.stroke(); g.setLineDash([]);
     const scoped = run.judge !== judged && judged !== "pooled" && MET[key].fields.some(f => /_worst$/.test(f) && v.all.some(d => d.metrics[f] != null));
     g.font = font(700, 12); const lt = `Your bar: ${fmtTarget(tgt)}${scoped ? `, judged on the worst ${caseOf(run).who}` : ""}`, tw = g.measureText(lt).width;
-    const bx = barLabelX(pts, v.ev.chosen ? { x: X(v.ev.chosen.gates), y: Y(metricOf(run, v.ev.chosen, key).v) } : null, { x0, x1, y0, yy, tw, W, cw: g.measureText(`Chosen: ${v.ev.chosen ? fmt(v.ev.chosen.gates) : ""} gates`).width });
+    // the 95% range bars count as many points, so the label moves off them
+    const avoid = pts.concat(rangeSegs(run, v, key).flatMap(({ d, iv }) => Array.from({ length: 40 }, (_, k) => ({ x: X(d.gates), y: Y(iv.low + (iv.high - iv.low) * k / 39) })).flatMap(p => Array(25).fill(p))));
+    const bx = barLabelX(avoid, v.ev.chosen ? { x: X(v.ev.chosen.gates), y: Y(metricOf(run, v.ev.chosen, key).v) } : null, { x0, x1, y0, yy, tw, W, cw: g.measureText(`Chosen: ${v.ev.chosen ? fmt(v.ev.chosen.gates) : ""} gates`).width });
     g.textAlign = "left"; g.fillStyle = "rgb(255 255 255 / .88)"; g.fillRect(bx.x - 4, yy + bx.dy - 12, tw + 8, 15); g.fillStyle = "#141a2e"; g.fillText(lt, bx.x, yy + bx.dy);
   }
   // nearest designs when none passes; then the chosen chip; then the selection
@@ -2606,7 +2626,6 @@ function sizeTip() {
 }
 const cfgText = d => `L${d.cfg.L}, ${d.cfg.bits}-bit, H${d.cfg.H}, ${d.cfg.weights} weights, ${d.cfg.feature} feature`;
 const afScopeWord = s => s === "record" ? "per recording" : "per window";
-const afBaseFor = key => { const B = MEASURED.af.baseline || {}, v = B[`${key}_${MEASURED.af.scope}`]; return Number.isFinite(v) ? v : null; };
 const sameTargets = (a, b) => JSON.stringify(a.map(t => [t.metric, t.op, t.value])) === JSON.stringify(b.map(t => [t.metric, t.op, t.value]));
 const baseClears = run => run.targets.length > 0 && run.targets.every(t => meets(t, t.metric === "sensitivity" ? AF_BASE.sensitivity_pooled : t.metric === "specificity" ? AF_BASE.specificity : null) === true);
 const baseWords = () => `sensitivity ${fmtVal("sensitivity", AF_BASE.sensitivity_pooled)} and specificity ${fmtVal("specificity", AF_BASE.specificity)} ${afScopeWord(MEASURED.af ? MEASURED.af.testScope : "record")} on the test set`;
@@ -2692,7 +2711,7 @@ function afYRange(run, key) {
   const vals = MEASURED.af.designs.map(d => metricOf(run, d, key).v).filter(x => x != null).sort((a, b) => a - b);
   if (!vals.length || MET[key].kind !== "frac") return { lo: 0, hi: 1, below: 0, n: vals.length };
   const tgt = run.targets.find(t => t.metric === key), q = vals[Math.floor(vals.length * 0.04)];
-  const lo = Math.max(0, Math.floor((Math.min(q, tgt ? tgt.value : 1, afBaseFor(key) ?? 1) - 0.03) * 20) / 20);
+  const lo = Math.max(0, Math.floor((Math.min(q, tgt ? tgt.value : 1, 1) - 0.03) * 20) / 20);
   return { lo, hi: 1, below: vals.filter(x => x < lo).length, n: vals.length };
 }
 function cfootAF(run) {
@@ -2774,10 +2793,10 @@ function drawChartAF(run, v) {
   }
   CH.pts = pts;
   // lines first (the bar, the full-precision model), then the marks, then every label placed so none covers another
-  const tgt = run.targets.find(t => t.metric === key), bv = afFinal(v) ? afBaseFor(key) : null;
+  const tgt = run.targets.find(t => t.metric === key);
   if (tgt) { const yy = Y(tgt.value); g.strokeStyle = "#141a2e"; g.setLineDash([6, 4]); g.lineWidth = 1.5; g.beginPath(); g.moveTo(x0, yy); g.lineTo(x1, yy); g.stroke(); g.setLineDash([]); }
-  // the full-precision model once the result is in: not a chip, so a line; its score here is per window, like the cloud
-  if (bv != null) { const yy = Y(bv); g.strokeStyle = "#6b46c1"; g.setLineDash([1.5, 3.5]); g.lineWidth = 1.6; g.beginPath(); g.moveTo(x0, yy); g.lineTo(x1, yy); g.stroke(); g.setLineDash([]); }
+  // no full-precision line here: the file gives that model's per-window figures without saying on which set, and
+  // this axis is validation; its per-recording test figures are in the tiles and the decision path
   const ringAt = (p, r, col, w) => { g.strokeStyle = col; g.lineWidth = w; g.beginPath(); g.arc(p.x, p.y, r, 0, 7); g.stroke(); };
   const pulseAt = (p, k, col) => { if (pulse !== k || !p) return; const a = since / 1.6; g.globalAlpha = 1 - a; ringAt(p, 10 + a * 18, col, 2); g.globalAlpha = 1; };
   // step 2: the best overall design, too large to synthesise; steps 3 to 5: the best under the cap, built, checked
@@ -2807,7 +2826,6 @@ function drawChartAF(run, v) {
   if (cp) place(ph >= 5 ? (narrow ? `Built: ${fmt(AF_DESIGN.gates)} gates, checked` : `Built: ${fmt(AF_DESIGN.gates)} gates, measured and checked`) : ph >= 4 ? `Built: ${fmt(AF_DESIGN.gates)} gates, measured` : "Best under the size cap", font(700, 12), "#141a2e", near(cp), cp);
   if (bp) place(narrow ? "Best overall: too large" : "Best overall: too large, synthesis did not finish", font(700, 12), "#9f2a20", near(bp), bp);
   if (tgt) place(`Your bar: ${fmtTarget(tgt)}`, font(700, 12), "#141a2e", along(Y(tgt.value), true));
-  if (bv != null) place(narrow ? `Full precision, ${afScopeWord(F.scope)}: ${fmtVal(key, bv)}` : `Full-precision model, ${afScopeWord(F.scope)}: ${fmtVal(key, bv)}`, font(600, 11.5), "#5b3aa6", along(Y(bv), false));
   const sd = run.ui.sel && v.vis.find(d => d.id === run.ui.sel); if (sd && sd !== C) { const p = pos(sd); if (p) ringAt(p, 7, "#2b55d0", 2.2); }
   const hd = CH.hover && v.vis.find(d => d.id === CH.hover); if (hd) { const p = pos(hd); if (p) ringAt(p, 6, "#141a2e", 1.2); }
   if (!v.vis.length) { g.fillStyle = "#4a5062"; g.font = font(500, 13); g.textAlign = "center"; g.fillText("The search's candidates appear here as the replay plays.", (x0 + x1) / 2, (y0 + y1) / 2); }
@@ -2831,7 +2849,8 @@ function wfVal(key, p) {
   if (key === "false_alarms_per_hour") return p.hours && p.false_alarms != null ? p.false_alarms / p.hours : null;
   if (key === "specificity") return p.neg_total ? p.neg_correct / p.neg_total : null;
   if (key === "expert_agreement") return p.graded ? p.agreed / p.graded : null;
-  if (key === "accuracy") { const n = (p.total || 0) + (p.neg_total || 0); return n ? ((p.caught || 0) + (p.neg_correct || 0)) / n : null; }
+  // accuracy needs the negatives too: without a per-patient negatives tally it cannot be computed
+  if (key === "accuracy") { if (p.neg_total == null || p.neg_correct == null) return null; const n = (p.total || 0) + p.neg_total; return n ? ((p.caught || 0) + p.neg_correct) / n : null; }
   return null;
 }
 // what counts as a miss for a metric, in counts, so "where the misses are" adds up
@@ -2915,7 +2934,7 @@ function wfBarsHTML(run, d, key, T, openId) {
 }
 function wfDetailHTML(run, d, p) {
   const c = caseOf(run), cont = p.hours != null, hrs = h => +h.toFixed(h < 10 ? 1 : 0);
-  return `<div class="wf-open"><div class="ptlh"><b>${esc(wfName(run, p))}</b><span>${p.total ? `${p.caught} of ${p.total} ${esc(c.events)} caught (${fmtVal("sensitivity", p.caught / p.total)})` : `no ${esc(c.events)} in this recording`}</span>${cont ? `<span>${p.false_alarms} false alarms in ${hrs(p.hours)} hours (${faNum(p.false_alarms / p.hours)} ${faWord()})</span>` : ""}${p.graded ? `<span>${p.agreed} of ${p.graded} graded hours agree with the experts</span>` : ""}${p.neg_total && !cont ? `<span>${p.neg_correct} of ${p.neg_total} negatives correct</span>` : ""}</div>
+  return `<div class="wf-open"><div class="ptlh"><b>${esc(wfName(run, p))}</b><span>${p.total ? `${p.caught} of ${p.total} ${esc(c.events)} caught (${fmtVal("sensitivity", p.caught / p.total)})` : `no ${esc(c.events)} in this recording`}</span>${cont ? `<span>${p.false_alarms} false alarm${p.false_alarms === 1 ? "" : "s"} in ${hrs(p.hours)} hour${hrs(p.hours) === 1 ? "" : "s"} (${faNum(p.false_alarms / p.hours)} ${faWord()})</span>` : ""}${p.graded ? `<span>${p.agreed} of ${p.graded} graded hours agree with the experts</span>` : ""}${p.neg_total && !cont ? `<span>${p.neg_correct} of ${p.neg_total} negatives correct</span>` : ""}</div>
       ${!cont ? "" : isSim(run) ? `<p class="wf-tk"><span class="mk sim">simulated</span>Times drawn by the simulation model to match the tallies.</p>${patientTimeline(run, d, p)}` : wfCountsHTML(run, p)}</div>`;
 }
 // a measured baby: only what the results file holds per baby (events caught of total, false alarms, hours),
@@ -2925,10 +2944,12 @@ function wfCountsHTML(run, p) {
   const sq = p.total ? Array.from({ length: p.total }, (_, i) => `<i class="${i < p.caught ? "c" : "m"}"></i>`).join("") : "";
   return `<div class="wf-cnt"><p class="wf-tk"><span class="mk mea">measured</span>Counts from the results file. It holds no event times, so there is no timeline.</p>
     ${p.total ? `<div class="wf-sq" role="img" aria-label="${p.caught} of ${p.total} ${esc(c.events)} caught">${sq}</div><p class="wf-sql"><span><i class="c"></i>${pl(p.caught, `${esc(c.event)} caught`, `${esc(c.events)} caught`)}</span><span><i class="m"></i>${fmt(p.total - p.caught)} missed</span><span>One square per ${esc(c.event)}, not in time order</span></p>` : `<p class="wf-sql">No ${esc(c.events)} in this recording.</p>`}
-    <p class="wf-sql"><span>${pl(p.false_alarms, "false alarm", "false alarms")} in ${+p.hours.toFixed(1)} hours of recording</span></p></div>`;
+    <p class="wf-sql"><span>${pl(p.false_alarms, "false alarm", "false alarms")} in ${+p.hours.toFixed(1)} ${+p.hours.toFixed(1) === 1 ? "hour" : "hours"} of recording</span></p></div>`;
 }
 function renderPatients(run, force) {
-  const v = viewAt(run), d = selDesign(run, v), c = caseOf(run), key = run.primary;
+  const v = viewAt(run), d = selDesign(run, v), c = caseOf(run);
+  // only metrics this design's per-patient tallies can give; the run's primary when it is one of them
+  const ysel = MET_KEYS.filter(k => (d && d.per_patient || []).some(p => wfVal(k, p) != null)), key = ysel.includes(run.primary) || !ysel.length ? run.primary : ysel[0];
   const sig = ["wf", d ? d.id : "-", run.ui.wfOpen || "", key, run.judge, JSON.stringify(run.targets)].join("|");
   if (!force && sig === cur.sig) return; cur.sig = sig;
   const head = (h, sub) => `<div class="vh wf-h"><p class="wf-k">${esc(run.case === "custom" ? "Your device" : CASES[run.case].title)} ${runMark(run)}</p><h2>${h}</h2>${sub ? `<p class="vs">${sub}</p>` : ""}</div>`;
@@ -2949,7 +2970,6 @@ function renderPatients(run, force) {
   const h1 = !T.worst ? `No ${esc(c.who)} has enough ${esc(c.events)} to judge` : tie > 1 ? `${tie} ${esc(c.whoP)} tie for worst, each at ${esc(wfPhrase(run, key, T.worst.v))}` : `Worst ${esc(c.who)}: ${esc(wfName(run, T.worst.p))}, ${esc(wfPhrase(run, key, T.worst.v))}`;
   const rule = key !== "sensitivity" ? "" : T.rest.length ? `Judged on ${c.whoP} with at least ${T.minEv} ${T.minEv === 1 ? c.event : c.events}: ${T.judged.length} of ${T.n} qualify${isMea(run) ? ", the rule the results file uses" : ""}. The others are shown below, not counted as failures.` : `All ${T.n} ${isSim(run) ? "simulated " : ""}${c.whoP} have ${c.events} to judge.`;
   const pooled = metricOf({ ...run, judge: "pooled" }, d, key).v;
-  const ysel = MET_KEYS.filter(k => pp.some(p => wfVal(k, p) != null));
   $("#body").innerHTML = `<div class="vis wf">${head(h1, esc(wfSummary(run, key, T)))}
     <div class="stage wf-stage">
       <div class="chh wf-chh"><h2>Each ${esc(c.who)}, worst first, on</h2><select class="ys" id="wfY" aria-label="Metric for the bars">${ysel.map(k => `<option value="${k}"${k === key ? " selected" : ""}>${esc(MET[k].name)}</option>`).join("")}</select></div>
@@ -2972,7 +2992,7 @@ function patientTimeline(run, d, p) {
   const missIdx = new Set(); while (missIdx.size < p.total - p.caught) missIdx.add(Math.floor(R() * p.total));
   const fas = Array.from({ length: p.false_alarms }, () => R() * H).sort((a, b) => a - b);
   const X = h => 20 + h / H * (W - 40), hm = h => `${String(Math.floor(h)).padStart(2, "0")}:${String(Math.floor(h % 1 * 60)).padStart(2, "0")}`;
-  let s = `<svg class="tl5" viewBox="0 0 ${W} 120" role="img" aria-label="${c.Who} ${p.id}: ${p.caught} caught, ${p.total - p.caught} missed, ${p.false_alarms} false alarms over ${H} hours">`;
+  let s = `<svg class="tl5" viewBox="0 0 ${W} 120" role="img" aria-label="${c.Who} ${p.id}: ${p.caught} caught, ${p.total - p.caught} missed, ${p.false_alarms} false alarms over ${+H.toFixed(1)} hour${+H.toFixed(1) === 1 ? "" : "s"}">`;
   s += `<line x1="20" x2="${W - 20}" y1="60" y2="60" stroke="#d5d8e0"/>`;
   const step = H > 12 ? 6 : H > 4 ? 1 : 0.5;
   for (let h = 0; h <= H + 1e-9; h += step) s += `<line x1="${X(h)}" x2="${X(h)}" y1="56" y2="64" stroke="#b2b6c2"/><text x="${X(h)}" y="112" font-size="12" text-anchor="middle" fill="#4a5062">${step < 1 && h % 1 ? Math.round(h * 60) + " min" : h + " h"}</text>`;
@@ -3011,9 +3031,9 @@ function renderSignal(run, force) {
     : run.case === "af" ? ["One ECG lead from the patch.", "Beats that come at irregular intervals with no P wave before them.", "A recording is flagged as AF when that pattern holds."]
     : run.case === "neonatal-eeg" ? [`${d ? budgetLabel(run, d.channels) : "EEG channels"} from the scalp.`, "Rhythmic, growing spikes that are not there in the background.", "A seizure alarm, shown here by the shaded band."]
     : ["The signals named in your brief.", "The event named in your brief.", "An alarm, shown by the shaded band."];
-  $("#body").innerHTML = `<div class="vis">${tabHead(run, "What the chip watches", "")}
+  $("#body").innerHTML = `<div class="vis"><div class="vh"><h2>What the chip watches <span class="mk no">illustration</span></h2></div>
     <div class="stage"><div class="sgl"><div class="cvw"><canvas class="sigc" id="sigc" role="img" aria-label="Illustration of the ${esc(c.who === "recording" ? "ECG" : "sensor")} signals with an event every 16 seconds"></canvas></div>
-      <div class="sexp"><h3>${esc(run.case === "custom" ? (run.detect || "Your event") : CASES[run.case].detect)}</h3><ol>
+      <div class="sexp"><h3>${esc(run.case === "custom" ? (run.detect || "Your event") : run.case === "neonatal-eeg" ? "Seizures" : CASES[run.case].detect)}</h3><ol>
         <li><i>1</i><span><b>What the sensors see</b>${what[0]}</span></li><li class="w"><i>2</i><span><b>What the chip looks for</b>${what[1]}</span></li><li class="e"><i>3</i><span><b>What it does</b>${what[2]}</span></li></ol>
         <p class="sn2">An illustration drawn from a simple formula, not a recording and not this design's output. The figures for this design are on the Overview.</p></div></div></div></div>`;
   const cv = $("#sigc"), g = cv.getContext("2d"), span = 8, t0 = performance.now() / 1000;
@@ -3052,7 +3072,7 @@ function renderChipTab(run, force) {
   const gtxt = A && !sz.m ? `about ${fmt(sz.g)} gates, estimated` : `${fmt(A ? sz.g : d ? d.gates : 0)} gates`;
   $("#body").innerHTML = `<div class="vis">${tabHead(run, d ? `Design ${esc(d.id)}: ${gtxt}` : "The chip", d ? `${A ? esc(cfgText(d)) : esc(budgetLabel(run, d.channels))}, ${dep != null ? `logic depth ${dep}` : "not synthesised"}. Drag to turn it.` : "The chip appears once the first designs are checked.")}
     <div class="stage s3"><div class="g3" id="g3"></div><div class="ccard cmodel" id="chipK" style="left:14px;top:14px">${chipCard(run, v, d)}</div></div>
-    <p class="vf">A drawing: the die's pattern grows with the gate count, but the layout is illustrative, not a place-and-route result. ${run.case === "af" ? "" : "Power figures are not estimated in this version."}</p></div>`;
+    <p class="vf">A drawing: the die's pattern grows with the gate count, but the layout is illustrative, not a place-and-route result. ${run.case === "af" ? "" : `Power on the Overview's battery view is estimated, scaled from other designs, not measured for this one. ${esc(window.ChipInModels ? window.ChipInModels.describeEstimate("chip_power") : "scaled from a layout run of other designs, not measured")}${mFile(run) ? " The results file has no power figure for these designs; layout and timing tools were not run on them." : ""}`}</p></div>`;
   mount3D($("#g3"), "chip-" + (c.kind3d || "electrode"), L => buildChip(L, c.kind3d || "electrode"), view => view.update(d), () => `<svg class="v" viewBox="0 0 200 120"><rect x="60" y="20" width="80" height="80" rx="6" fill="#1a2338"/><text x="100" y="64" fill="#fff" font-size="12" text-anchor="middle">${d ? fmt(d.gates) + " gates" : ""}</text></svg>`);
 }
 function chipCard(run, v, d) {
@@ -3278,7 +3298,7 @@ function panelsTick(run, v) {
 // legend lines for what panelsChart draws: the 95% range bars and the battery class dots
 function legendExtra(run, c) {
   const PX = PANELS(), parts = [], d = c.chosen;
-  if (d && !(run.case === "af" && afFile(run)) && MET[run.primary].kind === "frac" && PX.intervalFor(d, c.primary)) parts.push(`<span><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.5v11M4 1.5h6M4 12.5h6" stroke="#141a2e" stroke-width="1.4" fill="none"/></svg>95% range</span>`);
+  if (d && !(run.case === "af" && afFile(run)) && MET[run.primary].kind === "frac" && PX.intervalFor(d, c.primary)) parts.push(`<span><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.5v11M4 1.5h6M4 12.5h6" stroke="#141a2e" stroke-width="1.4" fill="none"/></svg><span class="est" title="95% Wilson score interval from the counts: events caught out of all events (or negatives correct out of all negatives), all ${esc(caseOf(run).whoP)} pooled; on the worst ${esc(caseOf(run).who)}, from that ${esc(caseOf(run).who)}'s own count.">95% range</span></span>`);
   if (c.caseKind && run.case !== "af") {
     const map = classesFor(c), seen = new Map();
     for (const b of budgetsOf(run)) { const k = map[String(b.ch)]; if (k && !seen.has(k.class)) seen.set(k.class, k); }
@@ -3286,6 +3306,16 @@ function legendExtra(run, c) {
     if (seen.size) parts.push(`<span>Battery:</span>${[...seen.values()].map(k => `<span><i style="background:${k.hex}"></i><span class="est" title="${tipB}">${esc(k.label.toLowerCase())}</span></span>`).join("")}`);
   }
   return parts.length ? `<span class="lg-x">${parts.join("")}</span>` : "";
+}
+// the 95% ranges the chart draws (chosen or best design, and the selection), for drawing and for keeping labels off them
+function rangeSegs(run, v, key) {
+  const PX = PANELS(); if (!PX || MET[key].kind !== "frac") return [];
+  const c = panelCtx(run, v), out = [];
+  for (const [d, col] of [[c.chosen, "#141a2e"], [c.selected, "#2b55d0"]]) {
+    if (!d || !v.vis.includes(d)) continue;
+    const f = metricOf(run, d, key).f, iv = f && PX.intervalFor(d, f); if (iv) out.push({ d, col, iv });
+  }
+  return out;
 }
 // drawn last on the chart: each frontier's battery class by its label, and the 95% ranges
 function panelsChart(run, v, g, o) {
@@ -3300,10 +3330,8 @@ function panelsChart(run, v, g, o) {
       g.fillStyle = k.hex; g.beginPath(); g.arc(x, l.y, 3.5, 0, 7); g.fill();
     }
   }
-  if (MET[o.key].kind === "frac") {
-    for (const [d, col] of [[c.chosen, "#141a2e"], [c.selected, "#2b55d0"]]) {
-      if (!d || !v.vis.includes(d)) continue;
-      const f = metricOf(run, d, o.key).f, iv = f && PX.intervalFor(d, f); if (!iv) continue;
+  for (const { d, col, iv } of rangeSegs(run, v, o.key)) {
+    {
       const x = o.X(d.gates), ya = o.Y(iv.low), yb = o.Y(iv.high);
       g.strokeStyle = col; g.globalAlpha = 0.8; g.lineWidth = 1.4; g.beginPath();
       g.moveTo(x, ya); g.lineTo(x, yb); g.moveTo(x - 4, ya); g.lineTo(x + 4, ya); g.moveTo(x - 4, yb); g.lineTo(x + 4, yb); g.stroke();
@@ -3339,7 +3367,7 @@ function afFacts(a) {
     { title: `AF patch circuit: ${fmt(ch ? ch.gates : AF_DESIGN.gates)} gates`, text: `The chosen design after synthesis${ch ? ` (${ch.id})` : ""}, logic depth ${ch ? ch.depth : AF_DESIGN.depth}.`, scope: "One synthesised design, single-lead ECG.", ...src },
     { title: `Bit for bit: ${fmt(ver.identical)} of ${fmt(ver.windows)} test windows identical`, text: "The compiled circuit agrees with its integer model on every test window.", scope: "Every test window of the AF run." },
     { title: "AF circuit on held-out recordings", text: `Per recording: sensitivity ${pc1(te.sensitivity_record)}, specificity ${pc1(te.specificity_record)}. Per window: ${pc1(te.sensitivity_window)} and ${pc1(te.specificity_window)}.`, scope: a && a.split ? a.split : CASES.af.split, ...src },
-    { title: "Full-precision model on the same test set", text: `Per recording: sensitivity ${pc1(bl.sensitivity_record)}, specificity ${pc1(bl.specificity_record)}. Per window: ${pc1(bl.sensitivity_window)} and ${pc1(bl.specificity_window)}.`, scope: `${bl.model ? capFirst(bl.model) + ". " : ""}The circuit falls short of it: a model gap, not a hardware gap.` },
+    { title: "Full-precision model on the same test set", text: `Per recording: sensitivity ${pc1(bl.sensitivity_record)}, specificity ${pc1(bl.specificity_record)}.`, scope: `${bl.model ? capFirst(bl.model) + ". " : ""}The circuit falls short of it: a model gap, not a hardware gap.` },
     { title: "Search speed", text: `About ${fmt(Math.floor(sr.batched_per_min))} candidates a minute trained in one batch of ${sr.batch}, against about ${sr.single_per_min} a minute one at a time.`, scope: `The AF run's candidate search${sr.device ? `, on ${sr.device}` : ""}.` }
   ];
   if (a && a.funnel) out.push({ title: `${fmt(a.funnel.trained)} candidates trained, ${fmt(a.funnel.under_cap)} under the size cap`, text: `${a.funnel.synthesised} synthesised, ${a.funnel.verified} verified bit for bit.`, scope: "The AF run's funnel." });

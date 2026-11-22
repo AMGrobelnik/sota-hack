@@ -251,7 +251,7 @@
       }
       case "stage.merged": x.merged[ev.stage] = { kept: Array.isArray(ev.kept) ? ev.kept : [], reason: ev.reason || "" }; push(x, { k: "merge", stage: ev.stage, kept: x.merged[ev.stage].kept, reason: ev.reason || "" }, ev); break;
       case "evidence": x.evidence = ev; break;
-      case "run.finished": push(x, { k: "fin", status: ev.status, summary: ev.summary || "" }, ev); break;
+      case "run.finished": x.fin = { status: ev.status, summary: ev.summary || "" }; push(x, { k: "fin", status: ev.status, summary: ev.summary || "" }, ev); break;
       default: break;
     }
   }
@@ -537,7 +537,10 @@
   };
 
   // the headline, in the page's voice
-  function headHTML(M) {
+  function headHTML(M0) {
+    // a follow-up after a finished run: the finished run's headline stays, with a quiet line under it
+    var follow = M0.running && M0.x.fin ? M0.x.fin : null;
+    var M = follow ? Object.assign({}, M0, { status: follow.status, running: false, lost: false }) : M0;
     var c = M.chosen, h1, st = M.status;
     var sizeTxt = function (d) { var s = sizeOf(d); return s ? (s.m ? fmt(s.g) + " gates" : "about " + fmt(s.g) + " gates (estimated)") : "size not reported"; };
     if (st === "failed") { var ls = lastStage(M), open = ls && M.st.stages[ls].state === "started"; h1 = "The run failed" + (ls ? (open ? " during " : " after ") + STAGE_N[ls].toLowerCase() : "") + "."; }
@@ -552,7 +555,8 @@
     else h1 = M.running || st === "connecting" ? (M.lost ? "Disconnected. No design scored yet." : "Running. No design scored yet.") : "The run finished without a design record.";
     var mark = dataMark(M.spec, M.designs), sp = M.spec || {};
     var chips = M.T.map(function (t) { var s = c ? meets(t, val(c, t.metric)) : null; return '<span class="tgt' + (t.metric === primaryOf(M) ? " pri" : "") + '">' + esc(metaOf(t.metric).n) + " " + esc(fmtT(t, M.spec)) + " " + (c ? pf(s) : "") + "</span>"; }).join("");
-    return '<div class="tx"><p class="k0"><span>' + esc(M.r.title || "Live run") + "</span>" + mark + "</p><h1>" + h1 + "</h1>" +
+    var fu = follow ? '<p class="k1 lv-mute lv-follow">' + (M0.lost ? "Disconnected while the agent answers your follow-up." : "The agent is answering your follow-up.") + "</p>" : "";
+    return '<div class="tx"><p class="k0"><span>' + esc(M.r.title || "Live run") + "</span>" + mark + "</p><h1>" + h1 + "</h1>" + fu +
       '<p class="k1">Device: ' + ng(sp.device) + ". Signal: " + ng(sp.signal) + ". Detects: " + ng(sp.detect) + ".</p>" +
       (M.T.length ? '<div class="tgts">' + chips + "</div>" : M.spec ? "" : '<p class="k1 lv-mute">The spec for this run has not arrived from the backend.</p>') + "</div>";
   }
