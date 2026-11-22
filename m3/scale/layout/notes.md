@@ -26,5 +26,23 @@ Finding: at the lab's default 40 % utilisation the XOR-heavy adder trees of
 a 125k-gate model do not route. A second run needs a lower utilisation (for
 example 20 %) or a bigger die, and more time for detailed routing.
 
+## ternary_10k on gf180: detailed placement failed after 8.5 minutes
+
+- 144,818 gf180 cells; die 5.77 mm², core 5.66 mm².
+- Post-placement repair inserted 33,334 buffers and resized 26,093 cells;
+  the following detailed placement could not legalise two cells
+  (DPL-0036), so LibreLane quit. Peak container memory 1.8 GiB.
+- Estimates before repair: leakage 7.2 µW, vectorless energy per
+  decision about 200 nJ; the timing at that point (-31.6 ns slack) is
+  before buffering and not meaningful.
+
+## 16 kbit constant ROM (folded package) on sky130: stopped at the 1 h cap
+
+- Plain Verilog through the lab's `timing_power_layout` (the `layout` tool
+  only takes design ids). 3,221 cells, die 0.053 mm², utilisation 53 %.
+- Global routing at 99.6 % usage, overflow 3,156; detailed routing ran
+  four iterations and the violations did not fall (24,797 to 26,373).
+- Estimates: 124 MHz, leakage 0.009 µW, 14 pJ per word read at 1 MHz.
+
 The Docker VM restarted once during the first attempt (04:02 UTC, not
 started by this run); that attempt died in global routing and was rerun.
