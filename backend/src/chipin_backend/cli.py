@@ -1,4 +1,4 @@
-"""Command line: ``chipin-backend run``, ``ask``, ``serve``, ``evidence`` and ``config``.
+"""Command line: ``chipin-backend run``, ``ask``, ``serve``, ``evidence``, ``export`` and ``config``.
 
 Examples::
 
@@ -9,6 +9,8 @@ Examples::
     chipin-backend ask --model cheap "Name one low-power EEG seizure feature"
     chipin-backend serve --agent stub
     chipin-backend evidence 20261122-001507-0ef5bb --json
+    chipin-backend export 20261122-001507-0ef5bb --out site/dashboard/data/runs/r1.json \
+        --index site/dashboard/data/runs/index.json
     chipin-backend skill export <project>/.claude/skills
 
 ``python -m chipin_backend`` is the same command.
@@ -35,6 +37,7 @@ from chipin_backend.api.manager import ApiAgent, RequestError, RunManager
 from chipin_backend.chiplab import SKILL_NAME, TOOLS_REFERENCE, chiplab_available, write_skill
 from chipin_backend.config import BackendConfig, ComputeTier, RunMode, load_config
 from chipin_backend.evidence import build_evidence, render_markdown
+from chipin_backend.export import ARTIFACT_MAX_BYTES, MAX_BYTES, ExportError, export_run
 from chipin_backend.llm import MissingKeyError, OpenRouterClient, expand_preset
 from chipin_backend.llm.providers import ProviderError, resolve_provider
 from chipin_backend.log import setup_logging
@@ -99,16 +102,33 @@ def _parser() -> argparse.ArgumentParser:
     )
     evidence.add_argument("run", help="a run id under the runs folder, or a run folder")
     evidence.add_argument("--json", action="store_true", help="print JSON instead of markdown")
+    export = sub.add_parser(
+        "export",
+        parents=[common],
+        help="write a recorded run as one static JSON file a page can play back (private details removed)",
+    )
+    export.add_argument("run", help="a run id under the runs folder, or a run folder")
+    export.add_argument("--out", type=Path, required=True, help="the JSON file to write")
+    export.add_argument("--index", type=Path, default=None, help="index JSON to add the run's line to")
+    export.add_argument(
+        "--max-bytes", type=int, default=MAX_BYTES, help=f"bound on the file (default {MAX_BYTES})"
+    )
+    export.add_argument(
+        "--artifact-max-bytes",
+        type=int,
+        default=ARTIFACT_MAX_BYTES,
+        help=f"bound on each artifact's text (default {ARTIFACT_MAX_BYTES})",
+    )
     add_serve_parser(sub, common)
     skill = sub.add_parser("skill", parents=[common], help="the chip-lab agent skill")
     skill_sub = skill.add_subparsers(dest="skill_command", required=True)
-    export = skill_sub.add_parser(
+    skill_export = skill_sub.add_parser(
         "export",
         parents=[common],
         help="write the chiplab skill folder into FOLDER (as FOLDER/chiplab), with the installed "
         "lab's reference when the lab is on",
     )
-    export.add_argument("folder", type=Path, help="where to write it, e.g. <project>/.claude/skills")
+    skill_export.add_argument("folder", type=Path, help="where to write it, e.g. <project>/.claude/skills")
     return parser
 
 
@@ -142,6 +162,15 @@ def _main(argv: list[str] | None) -> int:
         return run_serve(args, config)
     if args.command == "evidence":
         return _evidence(config, args.run, as_json=args.json)
+    if args.command == "export":
+        return _export(
+            config,
+            args.run,
+            args.out,
+            index=args.index,
+            max_bytes=args.max_bytes,
+            artifact_max_bytes=args.artifact_max_bytes,
+        )
     if args.command == "skill":
         return _skill_export(args.folder)
     if args.command == "ask":
@@ -180,19 +209,45 @@ def _main(argv: list[str] | None) -> int:
     return 1 if result.failed else 0
 
 
-def _evidence(config: BackendConfig, run: str, *, as_json: bool) -> int:
-    """``evidence``: compute it, write ``evidence.json`` and ``evidence.md`` into the run, print one."""
+def _run_folder(config: BackendConfig, run: str) -> Path | None:
+    """``run`` as a folder, or as a run id under the runs folder; ``None`` (logged) if neither."""
     folder = Path(run).expanduser()
     if not folder.is_dir():
         if not is_safe_run_id(run):
             logger.error("no run folder {}", run)
-            return 2
+            return None
         folder = config.resolved_runs_dir() / run
     if not folder.is_dir():
         logger.error("no run folder {} (nor {} under {})", run, run, config.resolved_runs_dir())
+        return None
+    return folder
+
+
+def _evidence(config: BackendConfig, run: str, *, as_json: bool) -> int:
+    """``evidence``: compute it, write ``evidence.json`` and ``evidence.md`` into the run, print one."""
+    folder = _run_folder(config, run)
+    if folder is None:
         return 2
     evidence = build_evidence(folder)
     print(json.dumps(evidence, indent=2, ensure_ascii=False) if as_json else render_markdown(evidence))
+    return 0
+
+
+def _export(
+    config: BackendConfig, run: str, out: Path, *, index: Path | None, max_bytes: int, artifact_max_bytes: int
+) -> int:
+    """``export``: one static, scrubbed JSON file of a recorded run; prints a short report as JSON."""
+    folder = _run_folder(config, run)
+    if folder is None:
+        return 2
+    try:
+        report = export_run(
+            folder, out, index=index, max_bytes=max_bytes, artifact_max_bytes=artifact_max_bytes
+        )
+    except ExportError as exc:
+        logger.error("{}", exc)
+        return 2
+    print(json.dumps(report, ensure_ascii=False))
     return 0
 
 

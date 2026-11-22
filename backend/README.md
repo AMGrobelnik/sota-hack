@@ -196,6 +196,8 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 | `GET /api/runs/{id}/evidence`  | run evidence, once finished  |
 | `GET /api/runs/{id}/files`     | `path`, `size` per file      |
 | `GET /api/runs/{id}/file`      | `?path=`: one file as text   |
+| `GET /api/history`             | runs with picker facts       |
+| `GET /api/runs/{id}/history`   | all events, or a page        |
 | `POST /api/transcribe`         | one spoken phrase to text    |
 | `run.started`                  | prompt, agent, runner        |
 | `stage`                        | `name`, `state`, `reason`    |
@@ -250,6 +252,38 @@ joined into one brief.
 chipin-backend run --preset pro --env-file <keys> \
     --prompt-file examples/seizure_eeg_prompt.md --prompt-file <more brief>
 ```
+
+## Playback of recorded runs
+
+A dashboard plays an old run back from its events (`api/history.py`).
+
+- `GET /api/history`: every run, newest first, with what a picker shows:
+  `id`, `title` (the brief's first line), `prompt`, `started_at`,
+  `finished_at`, `duration_s` (first to last event), `state`, `preset`,
+  `agent`, `chosen` (the latest chosen chip), `counts` (events, designs,
+  stages done, messages, tools, artifacts, metrics, subagents), `cost_usd`.
+- `GET /api/runs/{id}/history`: all of a run's events with their `seq` and
+  `ts` in one response. `?from=<seq>&limit=<n>` (n up to 5,000) gives one
+  page; `next` is the next page's `from`, `null` on the last one.
+
+`export` writes a recorded run as one static JSON file, so the public site
+can play it back without a server:
+
+```bash
+chipin-backend export <run id or folder> --out <site>/dashboard/data/runs/<name>.json \
+    --index <site>/dashboard/data/runs/index.json
+```
+
+- The file holds the run's facts (as above), its summary, every event and
+  the small text artifacts its events name (`--artifact-max-bytes`, default
+  64 KB each, the report first).
+- Home folder paths become `~`; anything shaped like a key or token, every
+  e-mail address and this machine's host and user names are replaced.
+  `redactions` counts what was replaced.
+- `--max-bytes` (default 1.5 MB) bounds the file: tool details and long
+  texts are cut first, then artifacts dropped; a run that still does not
+  fit is refused (exit 2).
+- `--index` adds or replaces the run's line in an index file, newest first.
 
 ## Chip lab
 
@@ -465,6 +499,7 @@ backend/
     orchestrate.py           run_agent(spec, config): one run end to end
     cli.py                   chipin-backend run / ask / serve / config / evidence / skill
     evidence.py              run evidence: number check, weights, timings
+    export.py                a recorded run as one scrubbed static file
     chiplab.py               the optional chip lab: agent PATH, settings, skill
     skills/chiplab/          the chip-lab agent skill (SKILL.md, references/)
     training.py              the optional training Python for the agent
