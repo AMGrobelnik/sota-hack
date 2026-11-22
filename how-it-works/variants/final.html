@@ -420,6 +420,8 @@ html.cam { scroll-snap-type: y mandatory; }
 #where .mr { fill: rgba(214, 228, 242, .07); stroke: rgba(214, 228, 242, .32); vector-effect: non-scaling-stroke; }
 #where .mc { fill: rgba(91, 228, 155, .12); stroke: var(--signal); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 #where .mc { pointer-events: none; }
+#where .mbg { fill: transparent; cursor: pointer; outline: none; }
+#where .mbg:focus-visible { stroke: var(--signal); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 #where .mr[data-go] { cursor: pointer; outline: none; transition: fill .2s ease, stroke .2s ease; }
 #where .mr[data-go]:hover, #where .mr[data-go]:focus-visible { fill: rgba(91, 228, 155, .3); stroke: var(--signal); }
 
@@ -1071,6 +1073,8 @@ html.cam { scroll-snap-type: y mandatory; }
   // ---------- minimap ----------
   var mini = document.getElementById('mini');
   mini.setAttribute('viewBox', ALL.x + ' ' + ALL.y + ' ' + ALL.w + ' ' + ALL.h);
+  // the mini map's background and the gaps between its rectangles: back to the whole map
+  var mbg = E('rect', { x: ALL.x, y: ALL.y, width: ALL.w, height: ALL.h, 'class': 'mbg', role: 'link', tabindex: '0', 'aria-label': C.where.overview }, mini);
   ['spec', 'run', 'agent', 'talk', 'tools', 'meas'].forEach(function (k) { var r = REG[k]; E('rect', { x: r.x, y: r.y, width: r.w, height: r.h, 'class': 'mr', rx: 30, 'data-go': k }, mini); });
   E('rect', { x: PX, y: orchY, width: PSTEP * 6 + PWID, height: orchH, 'class': 'mr', rx: 20, 'data-go': 'pipe' }, mini);
   for (var mi = 0; mi < 7; mi++) E('rect', { x: PX + mi * PSTEP, y: Y0, width: PWID, height: PH, 'class': 'mr', rx: 20, 'data-go': 'st' + mi }, mini);
@@ -1173,6 +1177,8 @@ html.cam { scroll-snap-type: y mandatory; }
   });
 
   // mini map: every rectangle jumps to the stop it stands for, on every stop
+  mbg.addEventListener('click', function () { go(0); });
+  mbg.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); go(0); } });
   [].slice.call(mini.querySelectorAll('.mr[data-go]')).forEach(function (r) {
     var n = firstStop(r.getAttribute('data-go'));
     r.setAttribute('role', 'link'); r.setAttribute('tabindex', '0'); r.setAttribute('aria-label', STEPS[n].title);
