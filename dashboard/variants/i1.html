@@ -765,6 +765,8 @@ select.gfin{padding:0 10px}
 <!-- LIVE HOOK: live mode (real runs from a local backend) lives in ../i1-live.js, on top of the ../live.js stream reader -->
 <script src="../live.js"></script>
 <script src="../i1-live.js"></script>
+<!-- PLAYBACK HOOK: one clock and one playback bar for example and recorded runs, in ../i1-playback.js -->
+<script src="../i1-playback.js"></script>
 <script type="module">
 "use strict";
 /* =====================================================================
@@ -1699,7 +1701,7 @@ function renderStart() {
       <textarea id="prompt" rows="2" aria-label="Describe your device" data-voice data-voice-anchor="#go" placeholder="For example: a single-lead ECG patch that detects atrial fibrillation, 90% sensitivity and 85% specificity">${esc(startState.text)}</textarea>
       <div class="crow"><div class="cpills">${agentPill(ag)}</div><span class="grow"></span><button class="chipin" id="go">${I("chip")}Chip in</button></div>
     </div>
-    <div class="xmp" role="group" aria-label="Examples">${EXAMPLES.map(x => `<button type="button" data-ex="${x.k}">${I(x.i, "s14")}${esc(x.n)}</button>`).join("")}</div>
+    <div class="xmp" role="group" aria-label="Examples">${EXAMPLES.map(x => `<button type="button" data-ex="${x.k}">${I(x.i, "s14")}${esc(x.n)}</button>`).join("")}</div>${window.ChipInPlayback?.pastLink("start") || "" /* PLAYBACK HOOK: Past runs */}
   </div></div>`;
   const ta = $("#prompt"), send = $("#go");
   const sync = () => { startState.text = ta.value; send.classList.toggle("ready", !!ta.value.trim()); ta.style.height = "auto"; ta.style.height = Math.min(280, Math.max(48, ta.scrollHeight)) + "px"; };
@@ -2048,8 +2050,8 @@ function renderRun() {
   $("#main").innerHTML = `<div class="top">
       <nav class="tabs" aria-label="Run views">${VIEWS.map(([k, n]) => `<a class="tab${route.view === k ? " on" : ""}" href="#/run/${run.id}/${k}">${n}</a>`).join("")}</nav>
       <span id="stp"></span>
-      ${!plays(run) ? '<span class="grow" style="flex:1"></span>' : `<div class="pbar"><button class="pbtn" id="pbtn" aria-label="Pause"></button><span class="clk" id="clk"></span><div class="track" id="trk"><i></i><b></b></div><span class="left2" id="left2"></span></div>`}
-      <div class="tright"><span class="mk ${isSim(run) ? "sim" : "mea"} topbadge">${esc(badgeText(run))}</span><button class="cpill rset" id="rset" title="Run settings"><span class="pv">${isMea(run) ? "Measured run" : esc(run.preset + " · " + agentLabel(run.agent))}</span></button><button class="ib" id="rmenu" aria-label="Run menu">${I("hdots", "s16")}</button></div>
+      ${!plays(run) || window.ChipInPlayback /* PLAYBACK HOOK: the bar goes under the header */ ? '<span class="grow" style="flex:1"></span>' : `<div class="pbar"><button class="pbtn" id="pbtn" aria-label="Pause"></button><span class="clk" id="clk"></span><div class="track" id="trk"><i></i><b></b></div><span class="left2" id="left2"></span></div>`}
+      <div class="tright">${window.ChipInPlayback?.pastLink("run") || "" /* PLAYBACK HOOK */}<span class="mk ${isSim(run) ? "sim" : "mea"} topbadge">${esc(badgeText(run))}</span><button class="cpill rset" id="rset" title="Run settings"><span class="pv">${isMea(run) ? "Measured run" : esc(run.preset + " · " + agentLabel(run.agent))}</span></button><button class="ib" id="rmenu" aria-label="Run menu">${I("hdots", "s16")}</button></div>
     </div><div class="body" id="body"></div>`;
   cur = { id: run.id, view: route.view, sig: "" };
   if ($("#pbtn")) $("#pbtn").onclick = () => {
@@ -2067,6 +2069,7 @@ function renderRun() {
   }, { width: 250, up: false });
   updTop(run, true);
   renderView(run, true);
+  if (plays(run)) window.ChipInPlayback?.mountExample(run, { elapsed, timeline, tick, saveRuns }); /* PLAYBACK HOOK: the shared bar drives run.clock */
 }
 function runSettings(run) {
   const pr = preset(run.preset), c = caseOf(run);
@@ -3393,7 +3396,7 @@ let runs = [];
 let route = { page: "start" };
 const findRun = id => runs.find(r => r.id === id);
 function parseRoute() {
-  const h = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
+  const h = (window.ChipInPlayback ? ChipInPlayback.cleanHash(location.hash) : location.hash).replace(/^#\/?/, "").split("/").filter(Boolean); /* PLAYBACK HOOK: ?t= keeps the moment */
   if (!h.length) return { page: "start" };
   if (h[0] === "new") return SPEC ? { page: "new", step: h[1] || "1" } : { page: "start" };
   if (h[0] === "configure") return { page: "configure" };
@@ -3409,12 +3412,14 @@ function render() {
   closePop(); closeModal(); closeDrawer();
   route = parseRoute();
   if (window.ChipInLive?.i1?.owns()) route = { page: "live" }; /* LIVE HOOK */
+  if (window.ChipInPlayback?.owns()) route = { page: "rec" }; /* PLAYBACK HOOK */
   faUse(route.page === "run" ? findRun(route.id) : SPEC);
   document.body.classList.remove("drawer"); $(".scrim")?.remove();
   document.body.classList.toggle("inrun", route.page === "run");
   renderSidebar(true);
   if (route.page !== "run") { teardown(); cur = { id: null, view: null, sig: "" }; }
   if (route.page === "live") { window.ChipInLive.i1.render(); return; } /* LIVE HOOK: a live run's view, drawn by ../i1-live.js */
+  if (route.page === "rec") { setBadge(null); window.ChipInPlayback.render(); return; } /* PLAYBACK HOOK: a recorded run, drawn by ../i1-playback.js */
   if (route.page === "start") { setBadge(null); renderStart(); }
   else if (route.page === "new") { setBadge(null); renderSpec(); }
   else if (route.page === "configure") renderConfigure();
