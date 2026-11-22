@@ -880,6 +880,8 @@
   function update(force) {
     if (!V || V.waiting || !W[V.id]) return;
     var M = modelOf(V.id), x = M.x, ch = function (k, s) { if (force || V.sig[k] !== s) { V.sig[k] = s; return true; } return false; };
+    // the run has ended (its stream sent run.finished): replace the timer view with the replay and its playback bar
+    if (M.st.finished && ended(M.status) && C.state === "on" && window.ChipInPlayback) { location.replace(location.pathname + location.search + recHref(V.id, V.view)); return; }
     // top bar
     var stTxt = M.lost ? '<span class="spill paused">Disconnected</span>' : M.status === "running" ? '<span class="spill lv-run"><span class="spin"></span>Running</span>' : M.status === "succeeded" ? '<span class="spill done">Finished</span>' : M.status === "failed" ? '<span class="spill lv-fail">Failed</span>' : M.status === "stopped" ? '<span class="spill paused">Stopped</span>' : '<span class="spill paused">Connecting</span>';
     if (ch("st", stTxt)) $("#lvSt").innerHTML = stTxt;
@@ -1139,12 +1141,16 @@
   }
 
   /* ---------- sidebar: the chip and the backend's runs, under Recents ---------- */
+  // a finished run is replayed by ../i1-playback.js (#/rec/mac/<id>), with the playback bar; only a running one opens here
+  var ended = function (s) { return s === "succeeded" || s === "failed" || s === "stopped"; };
+  var recHref = function (id, view) { return "#/rec/mac/" + encodeURIComponent(id) + "/" + (view === "chip" ? "chip" : view === "chat" ? "log" : "overview"); };
   function recents() {
-    var cur = parse(), s = C.state;
+    var cur = parse(), s = C.state, recId = (location.hash.match(/^#\/rec\/mac\/([^/?]+)/) || [])[1];
     var txt = s === "on" ? "Connected to local backend" : s === "checking" ? "Checking the backend" : s === "found" ? "Backend found: add its token" : (liveOpen() || C.lost) && C.base ? "Not connected to the backend" : "Not connected to a backend";
     var rows = shownRuns().slice(0, 8).map(function (r) {
       var g = r.status === "running" ? '<span class="spin"></span>' : r.status === "succeeded" ? I("check", "s12 ok") : r.status === "failed" ? I("x", "s12 lv-bad") : r.status === "stopped" ? I("minus", "s12") : "";
-      return '<a class="rrow lv-rrow' + (cur && cur.id === r.id ? " on" : "") + '" href="#/live/' + encodeURIComponent(r.id) + "/" + (cur ? cur.view : "overview") + '" title="' + esc(r.title + " (run " + r.id + ", " + r.status + ")") + '"><span class="g">' + g + '</span><span class="t">' + esc(r.title || r.id) + "</span></a>";
+      var on = (cur && cur.id === r.id) || (recId && decodeURIComponent(recId) === r.id);
+      return '<a class="rrow lv-rrow' + (on ? " on" : "") + '" href="' + (ended(r.status) ? recHref(r.id, cur && cur.view) : "#/live/" + encodeURIComponent(r.id) + "/" + (cur ? cur.view : "overview")) + '" title="' + esc(r.title + " (run " + r.id + ", " + r.status + ")") + '"><span class="g">' + g + '</span><span class="t">' + esc(r.title || r.id) + "</span></a>";
     }).join("");
     return '<a class="lv-conn hc" href="#/configure" data-s="' + s + '" title="' + esc(C.msg || (C.base ? C.base : "Set up a backend under Configure")) + '"><i></i><span>' + esc(txt) + "</span></a>" + rows;
   }
