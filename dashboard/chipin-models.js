@@ -9,7 +9,7 @@
  *     "measured", "estimate" (our own model or lab estimate) or "assumed"
  *     (from a search snippet, a vendor copy, or an assumed supply voltage or
  *     duty cycle). Nothing assumed is presented as a datasheet figure.
- *   - Cost figures are all illustrative: there are no sourced cost figures.
+ *   - Cost figures are all estimated from assumed inputs: there are no sourced cost figures.
  */
 (function (root) {
   "use strict";
@@ -1033,15 +1033,15 @@
   };
 
   // ------------------------------------------------------------------ D.
-  // Cost: an editable model. EVERY default below is illustrative; there are
+  // Cost: an editable model. EVERY default below is an assumption, so cost is estimated; there are
   // no sourced cost figures. Currency: US dollars.
 
   var COST_DEFAULTS = {
     annual_volume: 100000,
-    process_node: "130 nm (illustrative)",
+    process_node: "130 nm (assumed)",
     wafer_cost: 3000,
     wafer_diameter_mm: 200,
-    // Logic area per gate, placed, in square micrometres. Illustrative,
+    // Logic area per gate, placed, in square micrometres. Assumed,
     // in the range of a 130 nm standard-cell layout.
     area_per_gate_um2: 10,
     // Pad-limited floor: the input and output pads set a minimum die size,
@@ -1106,7 +1106,7 @@
       unit += l.cost;
     });
     var notes = [
-      "Every input is an illustrative assumption; there are no sourced cost figures.",
+      "Every input is an assumption, so the cost is estimated; there are no sourced cost figures.",
       padLimited
         ? "The die is pad-limited: its area is set by the input and output pads (" +
           i.pad_limited_floor_mm2 + " mm2), not by the " + fmtInt(gates) + " gates (" +
@@ -1180,8 +1180,8 @@
       : "the battery moves from " + A.battery.class + " to " + B.battery.class;
     var text =
       "Going from design A to design B " + gatesPart + "; " + costPart +
-      " (illustrative); the chip's share of device power goes from " +
-      pct(A.budget.chip_share) + " to " + pct(B.budget.chip_share) + " (estimate); and " +
+      " (estimated); the chip's share of device power goes from " +
+      pct(A.budget.chip_share) + " to " + pct(B.budget.chip_share) + " (estimated); and " +
       lifePart + ".";
     return {
       text: text,
@@ -1204,11 +1204,11 @@
       "the radio figure assumes a 3 V supply and a 1 s connection interval; the " +
       "chip is a layout estimate. Regulator losses are ignored.",
     area:
-      "Illustrative: logic area is gates times an assumed area per gate, and the " +
+      "Estimated: logic area is gates times an assumed area per gate, and the " +
       "die is never smaller than an assumed pad-limited floor.",
-    node: "Illustrative process node; the lab estimate used one process (sky130).",
+    node: "Assumed process node; the lab estimate used one process (sky130).",
     cost:
-      "Illustrative: every input (wafer cost, yield, package, test, battery, " +
+      "Estimated: every input (wafer cost, yield, package, test, battery, " +
       "assembly, volume) is an editable assumption, not a quote.",
     battery_life:
       "Cell energy (datasheet capacity times nominal voltage) divided by total " +

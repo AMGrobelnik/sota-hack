@@ -3,8 +3,9 @@
  *
  * Two short groups of entries, each from a cited public source: what starts to apply as the battery grows, and what
  * differs between a smaller and a larger chip. Each entry shows its title and rule; why it matters and the source
- * open on expand. Where the page's estimator (ChipInModels.deviceBudget and batteryClass) has a battery for the
- * chosen design and the larger candidates, an entry carries an estimated status; otherwise it is a checklist item.
+ * open on expand. Every entry is a point to check with a regulatory specialist; none carries a verdict.
+ * Above them, the battery class for this chip and the bigger sizes Why this size shows (ChipInWhySize.biggerOf),
+ * each from ChipInModels.deviceBudget and batteryClass, the same as Why this size.
  * tick(el, run, v, P, ctx): the same arguments as ChipInWhySize.tick, without the cost drawer.
  */
 (function () {
@@ -34,13 +35,10 @@
     ".rg-e>div p.w b{color:var(--i900);font-weight:600}",
     ".rg-e>div a{color:var(--blue7);font-weight:600}",
     ".rg-st{font-size:10.5px;font-weight:600;border-radius:99px;padding:1px 7px;white-space:nowrap;justify-self:end}",
-    ".rg-st.past{color:#991b1b;background:#fdecec}",
-    ".rg-st.near{color:#92400e;background:#fff3e0}",
-    ".rg-st.under{color:#0b5a3f;background:#e6f5ed}",
     ".rg-st.chk{color:var(--i600);background:var(--i100)}",
     ".rg-f{font-size:11.5px;color:var(--i600);margin:8px 0 0;border-top:1px solid var(--hair);padding-top:6px}",
     "@media (max-width:900px){.rg-g{grid-template-columns:1fr}.rg-grp+.rg-grp{margin-top:10px}}",
-    "@media (max-width:767px){.ov #regPanel{order:8}.rg{padding:12px 14px 8px}}",
+    "@media (max-width:767px){.ov #regPanel{order:8}.rg{padding:12px 14px 8px}.rg-bat span.b.mid{display:none}}",
   ].join("\n");
   function css() {
     if (document.getElementById("rg-styles")) return;
@@ -49,10 +47,8 @@
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   function est(txt, field) { return '<span class="est" title="' + esc(M().describeEstimate(field)) + '">' + esc(txt) + "</span>"; }
   function fmtInt(x) { return Math.round(x).toLocaleString("en-GB"); }
-  function life(days) { return days >= 2 ? fmtInt(days) + " days" : (days * 24).toFixed(1) + " h"; }
   var SHORT = { "primary coin cell": "coin cell", "rechargeable lithium": "rechargeable", "larger pack or mains": "larger pack" };
   var DOT = { "primary coin cell": "#047857", "rechargeable lithium": "#b45309", "larger pack or mains": "#b91c1c" };
-  var ST = { past: "past", near: "near", under: "clear", chk: "to check" };
 
   /* The entries: wording and thresholds as in the cited sources. */
   var BATTERY = [
@@ -78,10 +74,6 @@
       rule: "Portable batteries must be user-replaceable; some wearables too small to swap safely, or relying on a compact sealed enclosure, may allow removal by independent professionals only. Applies from 18 February 2027.",
       why: "A small sealed patch may qualify for this exemption, while a larger patch with an easy-to-reach cell may have to let users replace the battery.",
       src: [["Delegated Regulation amending Regulation (EU) 2023/1542, Council document ST 12056/2026", "https://data.consilium.europa.eu/doc/document/ST-12056-2026-INIT/en/pdf"], ["Dates as reported by UL", "https://www.ul.com/news/eu-expands-portable-battery-removability-derogations"]] },
-    { id: "change", title: "When a battery change needs review",
-      rule: "A new 510(k) is usually required for an energy type change, such as AC to battery; a voltage or battery-type change is treated as a performance specification or design change.",
-      why: "Moving a cleared design to a larger chip with a different battery would likely need a documented design-change assessment, and might need a new submission.",
-      src: [["Deciding When to Submit a 510(k) for a Change to an Existing Device, FDA guidance, 25 Oct 2017", "https://www.fda.gov/media/99812/download"]] },
     { id: "cyber", title: "Cyber device definition, firmware versus logic",
       rule: "A cyber device has sponsor-authorised software, can connect to the internet and could be vulnerable to cybersecurity threats; FDA counts firmware and programmable logic as software.",
       why: "A chip with fixed logic and no internet link may face fewer cybersecurity duties than one with updatable firmware, but the guidance does not exempt it.",
@@ -97,76 +89,39 @@
     return !!(v.done || (P.isMea && P.isMea(run)));
   }
   function count(d) { return d.sensors || d.channels || 1; }
-  // the estimator's battery for one design: class, cell, life and the cell's energy from its datasheet figures
+  // the estimator's battery class for one design, as Why this size computes it
   function battery(ctx, d) {
     var b = M().deviceBudget({ kind: ctx.caseKind, channels: d.channels, sensors: count(d), gates: d.gates, decisionsPerSecond: 1 });
-    var c = M().batteryClass(b.total_uw);
-    return { d: d, cls: c.class, cell: c.cell, life: c.life_days, wh: c.cell ? c.cell.capacity_mah * c.cell.voltage_v / 1000 : null };
+    return M().batteryClass(b.total_uw).class;
   }
-  // the chosen design, the next larger candidate and the largest one
-  function designs(v, d) {
-    var up = (v.vis || []).filter(function (x) { return x.gates > d.gates && x.role !== "baseline"; }).sort(function (a, b) { return a.gates - b.gates; });
-    var out = [{ d: d, tag: "this chip" }];
-    if (up.length) out.push({ d: up[0], tag: "next larger" });
-    if (up.length > 1) out.push({ d: up[up.length - 1], tag: "largest" });
-    return out;
+  // this chip and the bigger sizes Why this size shows, with its size wording
+  function designs(run, v, P, d) {
+    var W = window.ChipInWhySize, rows = W && W.biggerOf ? W.biggerOf(run, v, P, d) : [];
+    return [{ d: d, me: true }].concat(rows);
   }
-
-  // estimated status per entry, only where the estimator's numbers decide it; null leaves it a checklist item
-  function status(id, B) {
-    var me = B[0], all = B, has = function (c) { return all.some(function (b) { return b.cls === c; }); };
-    var big = all[all.length - 1];
-    if (id === "air") {
-      if (!me.cell) return { k: "chk", t: "The estimator sizes no cell for this design; check the pack against both limits." };
-      if (me.cell.type === "primary") return { k: "chk", t: "This design: " + SHORT[me.cls] + " (estimated), a lithium-metal cell. Its lithium content is not in the page's data; check it against 1 g on the cell datasheet." };
-      var k = me.wh > 20 ? "past" : me.wh >= 10 ? "near" : "under";
-      return { k: k, t: "This design: " + esc(me.cell.name) + ", " + est("about " + me.wh.toFixed(2) + " Wh", "battery_life") + " against the 20 Wh cell limit." };
-    }
-    if (id === "iec62133") {
-      if (me.cls === "rechargeable lithium") return { k: "past", t: "This design already needs a rechargeable lithium cell (" + est(SHORT[me.cls], "battery_class") + ")." };
-      if (has("rechargeable lithium")) return { k: "near", t: "This design: " + est(SHORT[me.cls], "battery_class") + "; the " + big.tag + " candidate at " + fmtInt(big.d.gates) + " gates moves to a rechargeable (estimated)." };
-      if (me.cls === "primary coin cell") return { k: "under", t: "All candidates shown run on a " + est("coin cell", "battery_class") + ", not a rechargeable." };
-      return null;
-    }
-    if (id === "skin") {
-      if (me.cls !== "primary coin cell") return null;
-      var k2 = me.life >= 20 ? "near" : "under";
-      return { k: k2, t: "This design's cell lasts " + est("about " + life(me.life), "battery_life") + "; " + (me.life > 30 ? "the battery alone does not stop wear past 30 days." : "a single cell keeps wear under 30 days.") };
-    }
-    if (id === "emc") {
-      if (has("larger pack or mains")) return { k: "near", t: "A candidate here needs a " + est("larger pack or mains", "battery_class") + "; mains would add a second power mode." };
-      return { k: "under", t: "All candidates shown run on a battery only (" + est(SHORT[me.cls], "battery_class") + " for this design)." };
-    }
-    if (id === "change") {
-      var diff = all.filter(function (b) { return b.cls !== me.cls; })[0];
-      if (diff) return { k: "near", t: "Going from this chip to " + fmtInt(diff.d.gates) + " gates changes the battery from " + est(SHORT[me.cls], "battery_class") + " to " + est(SHORT[diff.cls], "battery_class") + "." };
-      if (all.length > 1) return { k: "under", t: "The larger candidates shown keep the same battery type (" + est(SHORT[me.cls], "battery_class") + ")." };
-      return null;
-    }
-    return null;
+  function sizeText(P, r) {
+    return r.estSize ? '<span class="est" title="' + esc(P.sizeTip ? P.sizeTip() : M().describeEstimate("area")) + '">about ' + esc(P.about(r.d.gates)) + "</span>" : esc(P.fmt(r.d.gates));
   }
 
-  function entryHTML(e, B) {
-    var s = B ? status(e.id, B) : null, k = s ? s.k : "chk";
+  function entryHTML(e) {
     var src = e.src.map(function (x) { return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + "</a>"; }).join(" · ");
-    return '<details class="rg-e"><summary><b>' + esc(e.title) + '</b><span class="rg-st ' + k + '"' + (s ? ' title="Estimated from the page\'s battery model"' : "") + ">" + ST[k] + "</span>" +
+    return '<details class="rg-e"><summary><b>' + esc(e.title) + '</b><span class="rg-st chk" title="To check with a regulatory specialist">to check</span>' +
       '<span class="r">' + esc(e.rule) + "</span></summary><div>" +
       '<p class="w"><b>Why it matters here:</b> ' + esc(e.why) + "</p>" +
-      (s ? '<p><span class="mk no">estimated</span> ' + s.t + "</p>" : "") +
       "<p>Source: " + src + "</p></div></details>";
   }
-  function stripHTML(B) {
+  function stripHTML(P, B) {
+    // a phone keeps this chip and the largest, as the cost by size view does (its middle columns hide)
     return '<div class="rg-bat">' + B.map(function (b, i) {
-      var lt = b.cls === "primary coin cell" ? life(b.life) : b.cls === "rechargeable lithium" ? life(b.life) + "/charge" : "";
-      return '<span class="b' + (i === 0 ? " me" : "") + '"><i style="background:' + DOT[b.cls] + '"></i><span>' + esc(b.tag) + ", " + fmtInt(b.d.gates) + " gates: " +
-        est(SHORT[b.cls], "battery_class") + (lt ? ", " + est(lt, "battery_life") : "") + "</span></span>";
+      return '<span class="b' + (b.me ? " me" : i < B.length - 1 ? " mid" : "") + '"><i style="background:' + DOT[b.cls] + '"></i><span>' + (b.me ? "this chip, " : "") + sizeText(P, b) + " gates: " +
+        est(SHORT[b.cls], "battery_class") + "</span></span>";
     }).join("") + '<span class="mk no">estimated</span></div>';
   }
-  function innerHTML(B) {
-    var grp = function (name, c, list) { return '<div class="rg-grp" style="--rg-c:' + c + '"><h3>' + name + "</h3>" + list.map(function (e) { return entryHTML(e, B); }).join("") + "</div>"; };
-    return '<div class="rg-h"><h2>Regulation</h2></div>' + (B ? stripHTML(B) : "") +
+  function innerHTML(P, B) {
+    var grp = function (name, c, list) { return '<div class="rg-grp" style="--rg-c:' + c + '"><h3>' + name + "</h3>" + list.map(entryHTML).join("") + "</div>"; };
+    return '<div class="rg-h"><h2>Regulation</h2></div>' + (B ? stripHTML(P, B) : "") +
       '<div class="rg-g">' + grp("A larger battery", "#b45309", BATTERY) + grp("Smaller chip against larger chip", "#1d4ed8", CHIP) + "</div>" +
-      '<p class="rg-f">General information from the cited sources, not regulatory advice.</p>';
+      '<p class="rg-f">General information from the cited sources, not regulatory advice: check every point with a regulatory specialist.</p>';
   }
 
   function tick(el, run, v, P, ctx) {
@@ -175,14 +130,14 @@
     if (!on) { if (el.style.display !== "none") el.style.display = "none"; el._sig = ""; return; }
     css();
     el.style.display = "";
-    var list = designs(v, d);
+    var list = designs(run, v, P, d);
     var s = [run.id, list.map(function (x) { return x.d.id + ":" + x.d.gates + ":" + x.d.channels; }).join(","), ctx.caseKind].join("|");
     if (el._sig === s) return;
     el._sig = s;
     var B = null;
-    try { B = list.map(function (x) { var b = battery(ctx, x.d); b.tag = x.tag; return b; }); } catch (err) { B = null; }
+    try { B = list.map(function (x) { return { d: x.d, me: x.me, estSize: x.estSize, cls: battery(ctx, x.d) }; }); } catch (err) { B = null; }
     var open = {}; el.querySelectorAll(".rg-e[open]").forEach(function (x, i) { open[i] = 1; });
-    el.innerHTML = '<section class="rg" aria-label="Regulation">' + innerHTML(B) + "</section>";
+    el.innerHTML = '<section class="rg" aria-label="Regulation">' + innerHTML(P, B) + "</section>";
     el.querySelectorAll(".rg-e").forEach(function (x, i) { if (open[i]) x.open = true; });
   }
   // sources(): every entry with its cited sources, for the Sources tab (../i1-sources.js)

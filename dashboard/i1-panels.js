@@ -54,7 +54,7 @@
  *       Drawer "Cost assumptions": every ChipInModels.COST_DEFAULTS input editable, live
  *       recomputation with costModel and costDelta; onChange(inputs) after each valid edit.
  *       The battery class follows the design unless the user picks one.
- *   ChipInPanels.costLine(ctx) -> { unit_cost_text, unit_cost_short, delta_text, tip }
+ *   ChipInPanels.costLine(ctx) -> { unit_cost_text, unit_cost_short, delta_text, delta_short, tip }
  *       Unit cost of selected (or chosen) and costDelta's sentence, chosen against selected.
  *   ChipInPanels.openMeasured(facts) -> { close() }
  *       Drawer "Measured so far" listing only the facts handed in:
@@ -65,7 +65,7 @@
  *
  * Conventions match dashboard/variants/i1.html: estimates are italic with a dotted underline
  * and a title naming the assumption (ChipInModels.describeEstimate); small marks "measured",
- * "simulated", "illustrative"; pass and fail pills.
+ * "simulated", "estimated"; pass and fail pills.
  */
 (function (root) {
   "use strict";
@@ -254,7 +254,8 @@
   }
   var MK_SIM = '<span class="mk sim">simulated</span>';
   var MK_MEA = '<span class="mk mea">measured</span>';
-  var MK_ILL = '<span class="mk no">illustrative</span>';
+  var MK_EST = '<span class="mk no">estimated</span>';
+  var MK_ILL = '<span class="mk no">illustrative</span>'; // the battery-class minimum life only, never cost
   function srcMark(d) {
     return d && d.source === "measured" ? MK_MEA : MK_SIM;
   }
@@ -586,7 +587,7 @@
     var gen = ctx.dataSource === "simulated" || d.source === "simulated"
       ? MK_SIM + " <span" + tipA(genFull) + ">Shows the search, not a real device.</span>"
       : "<span" + tipA(genFull) + ">" + (n != null ? (few ? "Only " : "") + fmtInt(n) + " unseen " + esc(who) + "; " : "") + "no external validation yet.</span>";
-    var eng = estT("Power, area and cost are estimates", "Power from one layout run, area from an assumed size per gate and cost from illustrative inputs are estimates, not measurements. Gate counts come from synthesis. Power: " + M().describeEstimate("chip_power") + " Area: " + M().describeEstimate("area") + " Cost: " + M().describeEstimate("cost")) + "; gate counts come from synthesis.";
+    var eng = estT("Power, area and cost are estimates", "Power from one layout run, area from an assumed size per gate and cost from assumed inputs are estimates, not measurements. Gate counts come from synthesis. Power: " + M().describeEstimate("chip_power") + " Area: " + M().describeEstimate("area") + " Cost: " + M().describeEstimate("cost")) + "; gate counts come from synthesis.";
     return '<div class="cpn-pan">' +
       '<div class="cpn-h"><h2>How sure is this?</h2></div>' +
       '<div class="cpn-head"><span class="cpn-lvl ' + esc(head.level) + '" aria-hidden="true"><i></i><i></i><i></i></span><b>' + esc(head.text) + "</b></div>" +
@@ -632,14 +633,24 @@
     var r = M().costDelta(designFor(ctx, ctx.chosen), designFor(ctx, ctx.selected), o);
     return r.text.replace("Going from design A to design B", "Going from the chosen chip to the selected design");
   }
+  // one line for the inspector: the unit cost change against the chosen chip; the full sentence goes in its title
+  function deltaShort(ctx, inputs) {
+    if (!ctx.chosen || !ctx.selected || ctx.chosen.id === ctx.selected.id) return "";
+    var o = {};
+    for (var k in inputs || {}) o[k] = inputs[k];
+    o.kind = ctx.caseKind;
+    var dc = M().costDelta(designFor(ctx, ctx.chosen), designFor(ctx, ctx.selected), o).unit_cost_delta;
+    return Math.abs(dc) < 0.005 ? "Same unit cost as the chosen chip" : (dc < 0 ? "-" : "+") + money(dc) + " a unit against the chosen chip";
+  }
   function costLine(ctx) {
     var d = ctx.selected || ctx.chosen;
     if (!d) return { unit_cost_text: "", delta_text: "", tip: M().describeEstimate("cost") };
     var m = costFor(ctx, d, ctx.costInputs);
     return {
-      unit_cost_text: money(m.unit_cost) + " per unit for chip, battery and assembly (illustrative)",
-      unit_cost_short: money(m.unit_cost) + " a unit (illustrative)",
+      unit_cost_text: money(m.unit_cost) + " per unit for chip, battery and assembly (estimated)",
+      unit_cost_short: money(m.unit_cost) + " a unit (estimated)",
       delta_text: deltaText(ctx, ctx.costInputs),
+      delta_short: deltaShort(ctx, ctx.costInputs),
       tip: M().describeEstimate("cost"),
     };
   }
@@ -741,7 +752,7 @@
       ctl = '<input id="' + id + '" data-k="' + esc(f.key) + '" type="' + (f.type === "text" ? "text" : "number") + '" step="any"' + (f.nullable ? ' placeholder="from gates"' : "") + ' value="' + esc(val === null ? "" : val) + '">';
       return '<div class="cpn-f' + (cur !== undefined ? " edited" : "") + '"><label for="' + id + '">' + esc(f.label) + (f.unit ? ' <span style="font-weight:400;color:var(--cpn-ink3)">(' + esc(f.unit) + ")</span>" : "") + '</label><span class="d">Default ' + esc(defText(dv)) + "</span>" + ctl + "</div>";
     }).join("");
-    var body = '<div data-out></div><h4>Inputs</h4><p class="cpn-note" style="margin:0 0 4px"' + tipA("Every input is an assumption with an illustrative default; enter your own quotes and the figures above recompute.") + ">Assumptions with illustrative defaults; edit to recompute.</p>" + fields + '<button type="button" class="cpn-reset">Reset to the illustrative defaults</button>';
+    var body = '<div data-out></div><h4>Inputs</h4><p class="cpn-note" style="margin:0 0 4px"' + tipA("Every input is an assumption with a default value, so the cost is estimated; enter your own quotes and the figures above recompute.") + ">Assumptions with default values; edit to recompute.</p>" + fields + '<button type="button" class="cpn-reset">Reset to the defaults</button>';
     var dr = drawer("Cost assumptions", body);
     var out = dr.body.querySelector("[data-out]");
     function renderOut() {
@@ -752,7 +763,7 @@
       var m = costFor(ctx, subject, inputs);
       var dt = deltaText(ctx, inputs);
       out.innerHTML = "<h4>" + (ctx.chosen ? "The chosen chip" : "The selected design") + ", " + fmtInt(subject.gates) + " gates " + srcMark(subject) + "</h4>" +
-        '<div class="cpn-big" data-unit>' + est(money(m.unit_cost), "cost") + "<small>per unit, " + MK_ILL + "</small></div>" +
+        '<div class="cpn-big" data-unit>' + est(money(m.unit_cost), "cost") + "<small>per unit, " + MK_EST + "</small></div>" +
         m.lines.map(function (l) {
           return '<div class="cpn-kv"><span>' + esc(l.name) + "</span><span>" + est(money(l.cost), "cost") + "</span></div>";
         }).join("") +

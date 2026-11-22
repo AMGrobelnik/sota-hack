@@ -6,8 +6,7 @@
  *                         model (ChipInModels.costModel and costDelta) and the pad-limited note;
  *   battery               total device power with the chip's share (deviceBudget), the channel-count lever
  *                         and where it tips from a coin cell to a rechargeable (classBoundaries, channelStory);
- *   what changes          coin cell against rechargeable, illustrative, to confirm with a regulatory team;
- *   to check              three one-line points a device maker asks about.
+ *   regulation            a one-line pointer to the Regulation panel (i1-regulation.js), the one place for it;
  * The page's battery band (#batBand, ChipInPanels.mountBattery) moves into the panel as its detail.
  * Every power, battery and cost figure comes from ChipInModels; this file only picks designs and words.
  * tick(el, run, v, P, ctx, openCost): P = the page helpers (the summary module's), ctx = panelCtx(run, v).
@@ -24,6 +23,8 @@
     ".ws-g{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) minmax(0,1.2fr);border-top:1px solid var(--hair)}",
     ".ws-g.two{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);border-top-color:rgb(0 0 0/.08)}",
     ".ws-g.two .ws-c:nth-child(2){padding-right:0}",
+    ".ws-g.one{grid-template-columns:minmax(0,1fr)}",
+    ".ws-lk{border:0;background:none;padding:0;font:inherit;color:var(--blue7);font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:3px}",
     ".ws-c{padding:10px 16px 4px;border-left:1px solid var(--hair);min-width:0}",
     ".ws-c:first-child{border-left:0;padding-left:0}.ws-c:last-child{padding-right:0}",
     ".ws-c h3{font-size:12.5px;font-weight:650;color:var(--i900);margin:0 0 6px;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}",
@@ -44,23 +45,12 @@
     ".ws-l li.me{font-weight:600;color:var(--i900)}",
     ".ws-l i{width:7px;height:7px;border-radius:50%;flex:none;align-self:center}",
     ".ws-l li span{color:var(--i600);font-weight:400}",
-    ".ws-x{display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;font-size:12.5px}",
-    ".ws-x b{display:block;font-size:12px;font-weight:650;color:var(--i900);margin-bottom:2px}",
-    ".ws-x b em{font-style:normal;font-weight:500;color:var(--i600);margin-left:6px}",
-    ".ws-x ul{list-style:none;margin:0;padding:0;display:grid;gap:2px}",
-    ".ws-x li{color:var(--i700);line-height:1.4}",
-    ".ws-x .all{grid-column:1/-1;margin-top:4px;color:var(--i700)}",
-    ".ws-k{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 16px;border-top:1px solid var(--hair);margin-top:10px;padding-top:9px}",
-    ".ws-k p{margin:0;font-size:12.5px;color:var(--i700);line-height:1.45}",
-    ".ws-k p b{color:var(--i900);font-weight:600}",
-    ".ws-k .mk{margin-right:6px}",
     ".ws-d{border-top:1px solid var(--hair);margin-top:10px;padding-top:8px;font-size:12.5px}",
     ".ws-d>summary{cursor:pointer;color:var(--blue7);font-weight:600;width:fit-content;max-width:100%}",
     ".ws-d>div{margin-top:8px}",
     "@media (max-width:1100px){.ws-g{grid-template-columns:1fr 1fr}.ws-c:nth-child(3){grid-column:1/-1;border-left:0;padding-left:0;border-top:1px solid var(--hair)}.ws-c:nth-child(2){padding-right:0}}",
     "@media (max-width:767px){.ws-g.two{grid-template-columns:1fr}}",
-    "@media (max-width:767px){.ov #whySize{order:8}.ws{padding:12px 14px 10px}.ws-g{grid-template-columns:1fr}.ws-c{border-left:0;padding:10px 0 4px;border-top:1px solid var(--hair)}.ws-c:first-child{border-top:0}.ws-k{grid-template-columns:1fr}}",
-    "@media (max-width:420px){.ws-x{grid-template-columns:1fr}}",
+    "@media (max-width:767px){.ov #whySize{order:8}.ws{padding:12px 14px 10px}.ws-g{grid-template-columns:1fr}.ws-c{border-left:0;padding:10px 0 4px;border-top:1px solid var(--hair)}.ws-c:first-child{border-top:0}}",
   ].join("\n");
   function css() {
     if (document.getElementById("ws-styles")) return;
@@ -75,7 +65,6 @@
   function est(txt, field) { return '<span class="est" title="' + esc(M().describeEstimate(field)) + '">' + txt + "</span>"; }
   var DOT = { "primary coin cell": "#047857", "rechargeable lithium": "#b45309", "larger pack or mains": "#b91c1c" };
   var SHORT = { "primary coin cell": "coin cell", "rechargeable lithium": "rechargeable", "larger pack or mains": "larger pack" };
-  var MK = function (t) { return '<span class="mk no">' + t + "</span>"; };
   var EST_MK = '<span class="mk est">estimated</span>';
   var srcMark = function (d) { return d && d.source === "measured" ? '<span class="mk mea">measured</span>' : '<span class="mk sim">simulated</span>'; };
 
@@ -171,32 +160,6 @@
     return { html: html, cls: M().batteryClass(mine.total_uw).class };
   }
 
-  /* ----------------------------------------------------------- coin cell against rechargeable */
-  function changesHTML(cls) {
-    var un = (M().CONSEQUENCES["primary coin cell"] || []).filter(function (c) { return /UN 38\.3/.test(c.text); })[0];
-    var tr = un && un.source_url ? '<a href="' + esc(un.source_url) + '" target="_blank" rel="noopener">UN 38.3</a>' : "UN 38.3";
-    var me = function (c) { return cls === c ? "<em>this design</em>" : ""; };
-    return '<div class="ws-c"><h3>Coin cell or rechargeable ' + MK("illustrative, to confirm with your regulatory team") + "</h3>" +
-      '<div class="ws-x"><div><b>Coin cell' + me("primary coin cell") + "</b><ul><li>Single use</li><li>No charging</li><li>No reprocessing between patients</li></ul></div>" +
-      "<div><b>Rechargeable" + me("rechargeable lithium") + "</b><ul><li>Charging circuit</li><li>Thermal limits for parts on the skin</li><li>Cleaning and reprocessing validation if reused</li><li>Battery life and wear</li><li>A reusable product</li></ul></div>" +
-      '<p class="all">Both: lithium transport rules (' + tr + ").</p></div></div>";
-  }
-
-  /* ----------------------------------------------------------------------------- to check */
-  function checksHTML(run, P, d) {
-    var vf = d.verified, af = run.case === "af";
-    var ver = "";
-    if (vf && vf.vectors > 0) {
-      var same = vf.identical != null ? vf.identical : vf.vectors - (vf.mismatches || 0);
-      ver = " This chip: " + P.fmt(same) + " of " + P.fmt(vf.vectors) + " " + (af ? "test windows" : "test vectors") + " identical " + srcMark(d);
-    }
-    return '<div class="ws-k">' +
-      "<p>" + MK("to check") + "<b>Hard-wired model:</b> a locked algorithm. It cannot drift, which simplifies the evidence; changing it means a new chip.</p>" +
-      "<p>" + MK("to check") + "<b>Bit-exact verification report:</b> usable as design verification evidence." + ver + "</p>" +
-      "<p>" + MK("to check") + "<b>Decisions on the device:</b> no raw signal has to leave it, a smaller cybersecurity and data-protection burden.</p>" +
-      "</div>";
-  }
-
   /* ------------------------------------------------------------------------------ the panel */
   function ledeText(run, v, P, ctx, d, rows) {
     var big = rows.length ? rows[rows.length - 1].d : null, r = big ? delta(ctx, d, big) : null;
@@ -214,8 +177,8 @@
     var SC = window.ChipInSizeCost, cost = SC ? SC.html(run, v, P, ctx, d, rows) : "";
     return '<div class="ws-h"><h2>Why this size</h2></div>' +
       '<p class="ws-lede">' + ledeText(run, v, P, ctx, d, rows) + "</p>" + cost +
-      '<div class="ws-g' + (cost ? " two" : "") + '">' + (cost ? "" : costHTML(run, v, P, ctx, d, rows)) + b.html + changesHTML(b.cls) + "</div>" +
-      checksHTML(run, P, d);
+      '<div class="ws-g ' + (cost ? "one" : "two") + '">' + (cost ? "" : costHTML(run, v, P, ctx, d, rows)) + b.html + "</div>" +
+      '<p class="ws-p">Regulatory points to check with a regulatory specialist are in one place: <button type="button" class="ws-lk" data-ws-reg>the Regulation panel</button>.</p>';
   }
 
   function tick(el, run, v, P, ctx, openCost) {
@@ -232,7 +195,11 @@
     if (!el.querySelector(".ws")) {
       var u = M().DEVICE_KINDS[ctx.caseKind].unit;
       el.innerHTML = '<section class="ws" aria-label="Why this size"><div class="ws-in"></div><details class="ws-d"><summary>Battery by ' + esc(u) + ": parts, sources and your wear time</summary><div class=\"ws-slot\"></div></details></section>";
-      el.querySelector(".ws").addEventListener("click", function (e) { if (e.target.closest("[data-ws-cost]") && openCost) openCost(); });
+      el.querySelector(".ws").addEventListener("click", function (e) {
+        if (e.target.closest("[data-ws-cost]") && openCost) openCost();
+        var rg = e.target.closest("[data-ws-reg]") && document.getElementById("regPanel");
+        if (rg) rg.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
     }
     var slot = el.querySelector(".ws-slot");
     if (band && !slot.contains(band)) slot.appendChild(band);
@@ -242,5 +209,5 @@
     el._sig = s;
     el.querySelector(".ws-in").innerHTML = innerHTML(run, v, P, ctx, d);
   }
-  window.ChipInWhySize = { tick: tick };
+  window.ChipInWhySize = { tick: tick, biggerOf: biggerOf };
 })();
