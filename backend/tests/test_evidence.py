@@ -443,6 +443,57 @@ def test_the_chip_the_report_names_is_selected(tmp_path: Path) -> None:
     run = _run(tmp_path, [], "We picked chip bbb; aaa was larger. bbb ships.\n", files)
     result = weight_bytes(run)
     assert result["chip"] == "bbb" and "names this chip most often" in result["chip_selected_by"]
+    assert result["chip_inferred"] is True
+    assert result["chip_selected_by"].startswith("inferred, the run has no chosen event: ")
+
+
+def _three_chips() -> dict[str, Any]:
+    ir = {"nodes": [{"id": "l0", "W": [[2, -3]], "b": [1]}]}
+    return {
+        **_chip("aaa", ir, {"a": {"type": "$_AND_"}}),
+        **_chip("bbb", ir, {"a": {"type": "$_AND_"}, "b": {"type": "$_OR_"}}),
+        **_chip("ccc", ir, {"a": {"type": "$_AND_"}, "b": {"type": "$_OR_"}, "c": {"type": "$_XOR_"}}),
+    }
+
+
+def test_the_last_chosen_event_selects_the_chip_when_the_report_names_several_equally(tmp_path: Path) -> None:
+    events = [_event(1, 0, "chosen", chip="bbb"), _event(2, 1, "chosen", chip="ccc")]
+    report = "We compared aaa, bbb and ccc; aaa is small, bbb is fast, ccc is verified.\n"
+    run = _run(tmp_path, events, report, _three_chips())
+    result = weight_bytes(run)
+    assert result["chip"] == "ccc" and result["chip_inferred"] is False
+    assert result["chip_selected_by"] == "the run's chosen chip (its last chosen event)"
+    assert result["chip_netlist"]["cells"] == 3
+    assert build_evidence(run, write=False)["weights"]["chip"] == "ccc"
+
+
+def test_the_chosen_chip_wins_over_the_chip_the_report_names_most(tmp_path: Path) -> None:
+    report = "aaa aaa aaa was the first try; we chose bbb.\n"
+    run = _run(tmp_path, [_event(1, 0, "chosen", chip="bbb")], report, _three_chips())
+    result = weight_bytes(run)
+    assert (result["chip"], result["chip_inferred"]) == ("bbb", False)
+
+
+def test_without_a_chosen_event_the_chip_is_inferred_and_says_how(tmp_path: Path) -> None:
+    report = "We compared aaa, bbb and ccc.\n"  # all named equally: no single winner
+    run = _run(tmp_path, [], report, _three_chips())
+    result = weight_bytes(run)
+    assert result["chip"] == "aaa" and result["chip_inferred"] is True
+    assert result["chip_selected_by"] == (
+        "inferred, the run has no chosen event: the run named no chip and laid none out; "
+        "first chip folder (by name) with weights"
+    )
+    written = build_evidence(run)
+    on_disk = json.loads((run / "evidence.json").read_text(encoding="utf-8"))
+    assert on_disk["weights"]["chip_inferred"] is True
+    assert written["weights"]["chip_selected_by"] == on_disk["weights"]["chip_selected_by"]
+
+
+def test_a_chosen_chip_without_a_folder_is_inferred(tmp_path: Path) -> None:
+    run = _run(tmp_path, [_event(1, 0, "chosen", chip="zzz")], "We chose bbb.\n", _three_chips())
+    result = weight_bytes(run)
+    assert (result["chip"], result["chip_inferred"]) == ("bbb", True)
+    assert result["chip_selected_by"].startswith("inferred, the chosen chip zzz has no folder under chips/: ")
 
 
 def test_one_width_rule_and_the_chip_named_in_plain_words(tmp_path: Path) -> None:
@@ -461,7 +512,9 @@ def test_one_width_rule_and_the_chip_named_in_plain_words(tmp_path: Path) -> Non
     run = _run(tmp_path, events, "We built two chips.\n", files)
     result = weight_bytes(run)
     assert result["chip"] == "aaa"
-    assert result["chip_selected_by"] == "the run named no chip; first laid-out design with weights"
+    assert result["chip_selected_by"] == (
+        "inferred, the run has no chosen event: the run named no chip; first laid-out design with weights"
+    )
     software = result["software"]
     widths = {t["field"]: (t["bits"], t["min_bits"]) for t in software["tensors"]}
     assert widths == {"nodes[c].W": (8, 2), "nodes[c].b": (16, 9)}  # ternary in int8; 200 needs int16
@@ -471,7 +524,7 @@ def test_one_width_rule_and_the_chip_named_in_plain_words(tmp_path: Path) -> Non
     other = result["other_laid_out_chips"][0]
     assert (other["chip"], other["software_bytes_per_decision"]) == ("bbb", 12)  # float32
     md = render_markdown(build_evidence(run, write=False))
-    assert "These figures are for chip `aaa`. Why this chip: the run named no chip; first laid-out" in md
+    assert "These figures are for chip `aaa`. Why this chip: inferred, the run has no chosen event" in md
 
 
 # ---- C. stage timings ----
