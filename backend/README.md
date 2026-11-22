@@ -207,6 +207,8 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 | `GET /api/runs/{id}/files`     | `path`, `size` per file      |
 | `GET /api/runs/{id}/file`      | `?path=`: one file as text   |
 | `POST /api/transcribe`         | one spoken phrase to text    |
+| `POST /api/helper/messages`    | Chippy: one question, stream |
+| `POST /api/helper/suggestions` | example prompts for a view   |
 | `run.started`                  | prompt, agent, runner        |
 | `stage`                        | `name`, `state`, `reason`    |
 | `stage.merged`                 | fan-out: a batch's merge     |
@@ -492,6 +494,107 @@ counted when a subagent ends, so subagents already running can carry the
 total a little past `max_usd`. With fan-out off nothing changes: no
 helper, no extra instructions, no new events or fields.
 
+## Chippy, the helper agent
+
+Chippy is the dashboard's guide to the product and its results. It reads
+the runs on this server and the product's own explanations, answers
+questions, and moves the page. It is not the agent that designs chips: that
+agent is reached through the run's own chat box.
+
+Code: `api/helper.py` (routes, turn loop, limits), `api/helper_tools.py`
+(read tools), `api/helper_ui.py` (actions, proposals, example prompts),
+`api/helper_model.py` (the model), `api/helper_instructions.md` (standing
+instructions) and `api/helper_facts.md` (the fact sheet). Settings are
+`helper:` in `api/api.yaml`.
+
+`POST /api/helper/messages` takes `text`, an optional `conversation_id` (1
+to 64 letters, digits, `-` or `_`; a new one is made when absent) and
+`view`, what the page shows:
+
+| Field         | What it is                                 |
+| ------------- | ------------------------------------------ |
+| `route`       | the hash route, e.g. `#/run/<id>/chip`     |
+| `run_id`      | the open run (also read from the route)    |
+| `tab`         | a tab key: `overview`, `patients`, `chip`  |
+| `design_id`   | the selected design                        |
+| `playback_s`  | the run clock, in seconds                  |
+| `flow_step`   | `1` to `5` or `spec` in the guided flow    |
+| `spec_draft`  | the spec being written (4 KB at most)      |
+
+The answer is a stream of server-sent events, one JSON object per `data:`
+line:
+
+| `type`     | What it carries                                |
+| ---------- | ---------------------------------------------- |
+| `start`    | `conversation_id`                              |
+| `text`     | `delta`: the next piece of the answer          |
+| `tool`     | `name`, `ok`: a read tool ran                  |
+| `action`   | a view change for the page to carry out        |
+| `proposal` | a button to show; never executed by the server |
+| `error`    | `message`: plain text to show                  |
+| `done`     | `cost_usd`, `usage`, `model`; always last      |
+
+An action, for example:
+
+```json
+{"type": "action", "id": "a1", "kind": "switch_tab", "run_id": "<id>",
+ "tab": "chip", "label": "Chip", "route": "#/run/<id>/chip"}
+```
+
+Action kinds: `go_to`, `open_run`, `switch_tab`, `select_design`,
+`set_playback`, `open_file` (workspace files), `new_spec` (opens `#/new/1`
+with `brief`) and `highlight` (`element_id`, one of the ids listed in
+`helper_ui.ELEMENTS`). Each is checked first: the run, tab, design or file
+must exist. A proposal carries the request its button would send; the page
+sends it, with the token, only when the user presses it:
+
+```json
+{"type": "proposal", "id": "p1", "kind": "start_run", "executed": false,
+ "label": "Start a Lite run", "request": {"method": "POST",
+ "path": "/api/runs", "body": {"prompt": "<brief>", "preset": "lite"}}}
+```
+
+Proposal kinds: `start_run`, `message_agent` and `stop_run`; the last two
+only for a run that is running.
+
+`POST /api/helper/suggestions` takes `{"view": ...}` and returns up to four
+`{"id", "label", "prompt"}` example prompts for that view and run state:
+the start page, each guided-flow step and the spec card, Configure, a
+running run, a finished run, a selected design and the Where it fails tab.
+Each names the run or design it is about, so it can be answered from the
+data.
+
+Read tools, all read-only and limited to the runs folder: `list_runs`,
+`get_run`, `get_spec`, `get_stages`, `get_designs`, `get_design`,
+`get_chosen`, `get_metrics`, `get_summaries`, `get_report`, `list_files`,
+`read_file`, `search_messages`, `compare_runs` and `product_facts`. Numbers
+carry a `basis`: `measured`, `estimate` or `measured on simulated data`.
+A path must stay inside its run folder; hidden folders, raw agent
+transcripts and instruction or key files (`CLAUDE.md`, `AGENTS.md`, `.env`)
+are refused. One result is at most 4 KB of JSON and one file read at most
+3 KB, paged with `next_offset`.
+
+The model and its route follow the helper of the product this backend came
+from: OpenRouter chat completions, streamed, with usage on the last chunk. First
+`z-ai/glm-5.3-flash` pinned to DigitalOcean then Together, then
+`deepseek/deepseek-v4.1-flash` pinned to CoreWeave then Wafer; each attempt
+names one provider with fallbacks off, and the walk stops once words have
+reached the page. No temperature or token cap is set. The key is read from
+the variable named in `helper.key_env` (`OPENROUTER_API_KEY`).
+
+Limits: 8 tool round trips per answer, then one closing call with tools
+off; the same call three times ends the answer; 240 s per answer; one
+answer at a time per conversation (429); 24 messages of history per
+conversation and 200 conversations, in memory only; USD 0.05 per
+conversation and USD 0.50 per UTC day, after which the stream says so in
+plain words. With no key, or when no model answers, the stream carries one
+plain `error` line and ends; `GET /api/health` reports `helper`.
+
+Not done: conversations are lost when the server stops and a dropped
+connection ends the answer (the product it is modelled on keeps the turn
+running and lets the page resume it); the dashboard panel itself is on the
+interface branch.
+
 ## Chip lab
 
 The chip lab (`chiplab/` on the `ant/chip-lab` branch, guide
@@ -770,7 +873,7 @@ Names only; values go in the gitignored `backend/.env`.
 
 | Name                  | Needed for                          |
 | --------------------- | ----------------------------------- |
-| `OPENROUTER_API_KEY`  | `ask`, summaries, `openrouter`      |
+| `OPENROUTER_API_KEY`  | `ask`, summaries, agent, Chippy     |
 | `RUNPOD_API_KEY`      | `on_demand` mode and RunPod checks  |
 | `CLAUDE_CONFIG_DIR`   | optional: another CLI login folder  |
 | `CHIPIN_CONFIG`       | optional: another config file       |
