@@ -352,6 +352,7 @@
     var spec = buildSpec(s), ag = s.agent || {}, srv = C.defaults && C.defaults.agent;
     var body = { prompt: s.brief, spec: spec };
     if (s.preset) body.preset = String(s.preset).toLowerCase();
+    if (body.preset) body.fanout = true; // the spec card promises the preset's subagents per stage
     var notes = [];
     if (ag.backend && ag.backend !== "auto") {
       body.agent = ag.backend;
@@ -541,24 +542,37 @@
     // a follow-up after a finished run: the finished run's headline stays, with a quiet line under it
     var follow = M0.running && M0.x.fin ? M0.x.fin : null;
     var M = follow ? Object.assign({}, M0, { status: follow.status, running: false, lost: false }) : M0;
-    var c = M.chosen, h1, st = M.status;
+    var c = M.chosen, h1, st = M.status, held = "";
     var sizeTxt = function (d) { var s = sizeOf(d); return s ? (s.m ? fmt(s.g) + " gates" : "about " + fmt(s.g) + " gates (estimated)") : "size not reported"; };
     if (st === "failed") { var ls = lastStage(M), open = ls && M.st.stages[ls].state === "started"; h1 = "The run failed" + (ls ? (open ? " during " : " after ") + STAGE_N[ls].toLowerCase() : "") + "."; }
     else if (st === "stopped") h1 = "The run was stopped" + (M.designs.length ? " after " + M.designs.length + " design" + (M.designs.length === 1 ? "" : "s") + " were scored." : " before any design was scored.");
     else if (c) {
       var miss = M.T.filter(function (t) { return meets(t, val(c, t.metric)) === false; }).map(function (t) { return metaOf(t.metric).n.toLowerCase(); });
       var hit = M.T.filter(function (t) { return meets(t, val(c, t.metric)) === true; }).map(function (t) { return metaOf(t.metric).n.toLowerCase(); });
-      h1 = !M.T.length ? "The chosen chip: " + sizeTxt(c) + "." : !miss.length && hit.length === M.T.length ? "The chosen chip clears every target: " + sizeTxt(c) + ", " + esc(budgetName(c)) + "." :
-        "The chosen chip, " + sizeTxt(c) + ", misses your " + andList(miss) + " target" + (miss.length === 1 ? "" : "s") + (hit.length ? " and clears " + andList(hit) : "") + ".";
+      var on = c.basis === "validation" ? " on validation" : c.basis === "test" ? " on the test set" : "";
+      h1 = !M.T.length ? "The chosen chip: " + sizeTxt(c) + "." : !miss.length && hit.length === M.T.length ? "The chosen chip clears every target" + on + ": " + sizeTxt(c) + ", " + esc(budgetName(c)) + "." :
+        "The chosen chip, " + sizeTxt(c) + ", misses your " + andList(miss) + " target" + (miss.length === 1 ? "" : "s") + (hit.length ? " and clears " + andList(hit) : "") + on + ".";
+      var hm = c.basis === "test" ? [] : heldMiss(M, c);
+      if (hm.length) held = '<p class="k1 lv-held">On the held-out patients it misses your ' + andList(hm.map(function (x) { return metaOf(x.t.metric).n.toLowerCase(); })) + " target" + (hm.length === 1 ? "" : "s") + ": " +
+        andList(hm.map(function (x) { return fmtV(x.t.metric, x.v, M.spec) + " against " + fmtT(x.t, M.spec); })) + ".</p>";
     } else if (M.chosenId) h1 = "Chip " + esc(M.chosenId) + " is chosen; its design record has not arrived.";
     else if (M.designs.length) h1 = M.designs.length + " design" + (M.designs.length === 1 ? "" : "s") + " scored" + (M.running ? " so far; none chosen yet." : "; none chosen.");
     else h1 = M.running || st === "connecting" ? (M.lost ? "Disconnected. No design scored yet." : "Running. No design scored yet.") : "The run finished without a design record.";
     var mark = dataMark(M.spec, M.designs), sp = M.spec || {};
     var chips = M.T.map(function (t) { var s = c ? meets(t, val(c, t.metric)) : null; return '<span class="tgt' + (t.metric === primaryOf(M) ? " pri" : "") + '">' + esc(metaOf(t.metric).n) + " " + esc(fmtT(t, M.spec)) + " " + (c ? pf(s) : "") + "</span>"; }).join("");
     var fu = follow ? '<p class="k1 lv-mute lv-follow">' + (M0.lost ? "Disconnected while the agent answers your follow-up." : "The agent is answering your follow-up.") + "</p>" : "";
-    return '<div class="tx"><p class="k0"><span>' + esc(M.r.title || "Live run") + "</span>" + mark + "</p><h1>" + h1 + "</h1>" + fu +
+    return '<div class="tx"><p class="k0"><span>' + esc(M.r.title || "Live run") + "</span>" + mark + "</p><h1>" + h1 + "</h1>" + held + fu +
       '<p class="k1">Device: ' + ng(sp.device) + ". Signal: " + ng(sp.signal) + ". Detects: " + ng(sp.detect) + ".</p>" +
       (M.T.length ? '<div class="tgts">' + chips + "</div>" : M.spec ? "" : '<p class="k1 lv-mute">The spec for this run has not arrived from the backend.</p>') + "</div>";
+  }
+  // targets the chosen chip misses on the held-out patients, from the chip-tagged metrics the agent reported
+  function heldMiss(M, c) {
+    var m = M.st.metricsByChip[c.id] || {}, out = [];
+    M.T.forEach(function (t) {
+      var k = ["chip_heldout_", "heldout_", "held_out_", "chip_test_", "test_"].map(function (p) { return p + t.metric; }).filter(function (x) { return num(m[x]) != null; })[0];
+      if (k && meets(t, num(m[k])) === false) out.push({ t: t, v: num(m[k]) });
+    });
+    return out;
   }
   var ng = function (s) { return s ? esc(s) : '<span style="color:#9a7a4e">not given</span>'; };
   var pf = function (ok) { return ok === true ? '<span class="pf ok">Pass</span>' : ok === false ? '<span class="pf no">Fail</span>' : '<span class="pf na">Not reported</span>'; };
@@ -905,7 +919,7 @@
     if (ch("st", stTxt)) $("#lvSt").innerHTML = stTxt;
     var clk = M.elapsed == null ? "–" : clock(M.elapsed); var ce = $("#lvClk"); if (ce.textContent !== clk) ce.textContent = clk; ce.classList.toggle("live", M.running && !M.lost);
     $("#lvLost").hidden = !M.lost;
-    var cost = M.st.cost && num(M.st.cost.usd) != null ? "$" + M.st.cost.usd.toFixed(2) + " agent cost" : ""; if (ch("cost", cost)) { $("#lvCost").textContent = cost; $("#lvCost").title = M.st.cost ? fmt(M.st.cost.tokens_in || 0) + " tokens in, " + fmt(M.st.cost.tokens_out || 0) + " out" : ""; }
+    var cost = M.st.cost && num(M.st.cost.usd) != null ? "$" + M.st.cost.usd.toFixed(2) + " agent cost" + (num(M.st.cost.summaries_usd) > 0 ? ", $" + M.st.cost.summaries_usd.toFixed(2) + " summaries" : "") : ""; if (ch("cost", cost)) { $("#lvCost").textContent = cost; $("#lvCost").title = M.st.cost ? fmt(M.st.cost.tokens_in || 0) + " tokens in, " + fmt(M.st.cost.tokens_out || 0) + " out" : ""; }
     var bt = M.running || M.status === "connecting" ? "Live run" : "Finished run"; if (ch("badge", bt)) { $("#lvBadge").textContent = bt; $("#lvBadge").className = "mk topbadge " + (bt === "Live run" ? "lv-live" : "no"); setDemo(bt); }
     var setT = (M.r.preset ? cap(M.r.preset) + " · " : "") + (M.r.agent && M.r.agent !== "auto" ? AGN[M.r.agent] || M.r.agent : "Auto"); if (ch("set", setT)) $("#lvSetT").textContent = setT;
     var stop = $("#lvStop"); stop.hidden = !M.running;
@@ -1080,7 +1094,7 @@
   function patientsHTML(M) {
     var withPP = M.designs.filter(function (d) { return d.per_patient.length; });
     var d = selected(M); if (d && !d.per_patient.length) d = withPP.filter(function (x) { return x.id === M.chosenId; })[0] || withPP[withPP.length - 1] || null;
-    if (!d) return '<div class="vh"><h2>Where it fails</h2><p class="vs">' + (M.running ? "No per-patient results yet. They appear when the agent reports a design with its held-out patients." : "This run reported no per-patient results.") + "</p></div>";
+    if (!d) return '<div class="vh"><h2>Where it fails</h2><p class="vs">' + (M.running ? "No per-patient results yet. They appear when the agent reports a design with its per-patient results." : "This run reported no per-patient results.") + "</p></div>";
     var t = M.T.filter(function (x) { return x.metric === "sensitivity"; })[0];
     var rows = d.per_patient.slice().sort(function (a, b) { return a.caught / (a.total || 1) - b.caught / (b.total || 1); });
     var w = rows[0], wr = w.total ? w.caught / w.total : null, below = t ? rows.filter(function (p) { return p.total && p.caught / p.total < t.value; }).length : null;
@@ -1091,7 +1105,7 @@
       return '<div class="lv-pr"><span class="lv-pid">' + esc(p.id) + '</span><span class="lv-pb"><i style="width:' + (r * 100).toFixed(1) + "%;background:" + (ok ? "var(--caught)" : "var(--missed)") + '"></i>' + (t ? '<s style="left:' + (t.value * 100).toFixed(1) + '%"></s>' : "") + '</span><span class="lv-pv">' + p.caught + " of " + p.total + " caught, " + (r * 100).toFixed(1) + "%</span>" + (fa ? '<span class="lv-pf">' + (num(p.false_alarms) != null ? p.false_alarms + " false alarm" + (p.false_alarms === 1 ? "" : "s") + (num(p.hours) ? " in " + dur(p.hours) : "") : "") + "</span>" : "") + "</div>";
     }).join("");
     return '<div class="vh"><p class="lv-k">Design ' + esc(d.id) + (d.id === M.chosenId ? ", the chosen chip" : "") + " " + dataMark(M.spec, [d]) + "</p><h2>Worst patient: " + esc(w.id) + ", " + (wr == null ? "no events" : (wr * 100).toFixed(1) + "% caught") + '</h2><p class="vs">' +
-      "One bar per held-out patient, worst first" + (d.basis ? ", on the " + esc(d.basis) + " set" : "") + "." + (t ? " The line is your bar, " + esc(fmtT(t, M.spec)) + "; " + below + " of " + pl(rows.length, "patient") + (below === 1 ? " falls" : " fall") + " below it." : "") + "</p></div>" + picks +
+      "One bar per patient, worst first" + (d.basis ? ", on the " + esc(d.basis) + " set" : "") + "." + (t ? " The line is your bar, " + esc(fmtT(t, M.spec)) + "; " + below + " of " + pl(rows.length, "patient") + (below === 1 ? " falls" : " fall") + " below it." : "") + "</p></div>" + picks +
       '<div class="stage lv-pp">' + bars + "</div>";
   }
   function chipHTML(M) {

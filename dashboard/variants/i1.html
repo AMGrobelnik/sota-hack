@@ -1183,7 +1183,8 @@ function parseBrief(text) {
   if (out.conds.length) out.detect = capFirst(andList(out.conds));
   else { const m = s.match(/\b(?:detects?|detecting|to detect|flags?|spots?|warns? (?:of|about)|catch(?:es)?|screens? for|monitors? for|recogni[sz]es?)\s+(?:an?\s+|the\s+)?([^,;.]+?)(?=\s*(?:[,;.]|\bwith\b|\bat\b|\busing\b|\bfrom\b|\d|$))/i); if (m && m[1].length < 70) out.detect = capFirst(m[1].trim()); }
   // targets: split into clauses, then pair each metric word with the number next to it
-  const clauses = s.split(/[,;]|\band\b(?=\s*(?:at most|at least|no more|fewer|less|under|above|over|[<>≤≥]|\d))/i);
+  // sentence ends split too (a period not inside a number), so a gate limit in one sentence never sets the operator of the next
+  const clauses = s.split(/[,;]|(?<!\d)\.(?!\d)|\band\b(?=\s*(?:at most|at least|no more|fewer|less|under|above|over|[<>≤≥]|\d))/i);
   const seen = new Set();
   for (const cl of clauses) {
     const ks = TKEYS.map(([k, re]) => { const m = cl.match(re); return m ? { k, i: m.index } : null; }).filter(Boolean).sort((a, b) => a.i - b.i);
@@ -1194,7 +1195,10 @@ function parseBrief(text) {
       const m = nums.length === ks.length ? nums[idx] : nums.slice().sort((a, b) => Math.abs(a.index - kk.i) - Math.abs(b.index - kk.i))[0];
       if (!m) return;
       let v = parseFloat(m[1]); const isPct = !!m[2];
-      const lower = /at most|no more|fewer|less than|under|below|[<≤]/i.test(cl);
+      // the operator word nearest the number, within the metric's own phrase, decides the direction
+      const win = cl.slice(Math.max(0, Math.min(m.index, kk.i) - 24), Math.max(m.index + m[0].length, kk.i + 1));
+      const ops = [...win.matchAll(/at most|no more|fewer|less than|under|below|[<≤]|at least|no less|more than|above|over|minimum|[>≥]/gi)];
+      const lower = ops.length ? /^(?:at most|no more|fewer|less than|under|below|[<≤])$/i.test(ops[ops.length - 1][0]) : false;
       if (MET[kk.k].kind === "frac") { if (isPct || v > 1) v = v / 100; if (v <= 0 || v > 1) return; }
       else { if (/per\s+day|a\s+day|\/\s*day|each day|per 24|daily/i.test(cl)) v = v / 24; else if (/a night|per night/i.test(cl)) v = v / 12; }
       seen.add(kk.k);

@@ -292,7 +292,7 @@
         return ["onArtifact", a];
       }
       case "cost":
-        st.cost = { usd: ev.usd, tokens_in: ev.tokens_in, tokens_out: ev.tokens_out };
+        st.cost = { usd: ev.usd, tokens_in: ev.tokens_in, tokens_out: ev.tokens_out, summaries_usd: ev.summaries_usd };
         return ["onCost", st.cost];
       case "error":
         st.errors.push(ev.message);
