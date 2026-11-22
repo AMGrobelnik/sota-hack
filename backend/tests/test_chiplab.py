@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import subprocess
 import sys
 from dataclasses import replace
@@ -54,7 +55,7 @@ from chipin_backend.runs import RunDir
 #: docs/CHIPIN_INTEGRATION.md section 2.
 LAB_METRIC_UNITS = {
     "gates": "gates",
-    "depth": "gates",
+    "depth": "levels",
     "transistors": "transistors",
     "luts_ice40": "LUT4",
     "luts_xc7": "LUT6",
@@ -71,7 +72,10 @@ LAB_METRIC_UNITS = {
     "leakage_uw": "uW",
     "power_uw_at_rate": "uW",
     "candidates": "designs",
-    "best_gates": "gates",
+    "event_sensitivity": "fraction",
+    "fa_per_hour": "FA/h",
+    "worst_patient_sensitivity": "fraction",
+    "auc": "AUC",
 }
 #: One value per key, in the forms the lab sends (ints, rounded floats, a negative slack).
 LAB_VALUES: dict[str, int | float] = {
@@ -93,10 +97,22 @@ LAB_VALUES: dict[str, int | float] = {
     "leakage_uw": 0.004512,
     "power_uw_at_rate": 0.0078,
     "candidates": 12,
-    "best_gates": 1904,
+    "event_sensitivity": 0.875,
+    "fa_per_hour": 0.25,
+    "worst_patient_sensitivity": 0.5,
+    "auc": 0.93,
 }
-#: The lab's metrics about a batch of designs, not one.
-BATCH_METRICS = {"candidates", "best_gates"}
+#: The lab's metrics about no one design: the run counters (summed over every chip of the
+#: run) and the event scores of score-events (which takes no design id).
+BATCH_METRICS = {
+    "candidates",
+    "vectors_checked",
+    "mismatches",
+    "event_sensitivity",
+    "fa_per_hour",
+    "worst_patient_sensitivity",
+    "auc",
+}
 DESIGN = "765fa47586bd"
 FAKE_CLAUDE = Path(__file__).with_name("fake_claude_cli.py")
 #: What the fake lab prints for ``chiplab agent-doc`` (the real lab prints its AGENT.md).
@@ -591,7 +607,7 @@ async def test_lab_metrics_take_the_design_its_status_line_names(tmp_path: Path)
     lines = [
         {"type": "status", "text": "ChipIn is synthesising chip aaa111"},
         {"type": "metric", "key": "gates", "value": 40, "unit": "gates"},
-        {"type": "metric", "key": "depth", "value": 10, "unit": "gates"},
+        {"type": "metric", "key": "depth", "value": 10, "unit": "levels"},
         {"type": "status", "text": "ChipIn is counting LUTs for chip bbb222"},
         {"type": "metric", "key": "luts_xc7", "value": 17, "unit": "LUT6"},
         {"type": "metric", "key": "accuracy", "value": 0.98},  # the agent's own, untagged: left so
@@ -602,13 +618,16 @@ async def test_lab_metrics_take_the_design_its_status_line_names(tmp_path: Path)
         {"type": "metric", "key": "gates", "value": 7},  # a lab key without the lab's unit: the agent's
         {"type": "status", "text": "ChipIn is ranking candidate chips"},  # a batch: about no one design
         {"type": "metric", "key": "candidates", "value": 3, "unit": "designs"},
-        {"type": "metric", "key": "best_gates", "value": 15, "unit": "gates"},
+        {"type": "metric", "key": "best_gates", "value": 15, "unit": "gates"},  # an older lab's batch count
         {"type": "metric", "key": "gates", "value": 99, "unit": "gates"},
         {"type": "status", "text": "ChipIn is synthesising chip eee555"},
         {"type": "status", "text": "ChipIn is synthesising chip"},  # no id: clears too
-        {"type": "metric", "key": "depth", "value": 3, "unit": "gates"},
+        {"type": "metric", "key": "depth", "value": 3, "unit": "levels"},
         {"type": "status", "text": "ChipIn found a problem while proving the clocked chip ddd444"},
         {"type": "metric", "key": "verification_level", "value": 0, "unit": "level"},
+        # the run counters count over every chip of the run: never one design's, even after its status line
+        {"type": "metric", "key": "vectors_checked", "value": 3000, "unit": "vectors"},
+        {"type": "metric", "key": "mismatches", "value": 0, "unit": "vectors"},
     ]
     progress_file = tmp_path / "progress.jsonl"
     progress_file.write_text("".join(json.dumps(line) + "\n" for line in lines))
@@ -629,6 +648,8 @@ async def test_lab_metrics_take_the_design_its_status_line_names(tmp_path: Path)
         ("gates", None),
         ("depth", None),
         ("verification_level", "ddd444"),
+        ("vectors_checked", None),
+        ("mismatches", None),
     ]
 
 
@@ -826,6 +847,29 @@ def test_skill_contents(tmp_path: Path) -> None:
     assert header.startswith("> Copied from the installed chip lab (chiplab")
     assert "chiplab agent-doc" in header
     assert rest.strip() == LAB_REFERENCE
+
+
+def test_skill_names_only_tools_the_installed_lab_has() -> None:
+    """Every `tool` the skill names is one the real lab lists (needs a lab: CHIPIN_CHIPLAB_BIN)."""
+    if not chiplab_available():
+        pytest.skip("no chip lab installed for this backend")
+    env = chiplab_env()
+    listed = subprocess.run(
+        ["chiplab", "list-tools"],
+        env={**os.environ, **env},
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=True,
+    )
+    lab_tools = set(json.loads(listed.stdout))
+    text = "".join(
+        (skill_files() / name).read_text(encoding="utf-8") for name in ("SKILL.md", "references/workflow.md")
+    )
+    pattern = r"chiplab ([a-z][a-z-]+) --json|`([a-z]+-[a-z-]+)`"
+    named = {name for pair in re.findall(pattern, text) for name in pair if name}
+    assert {"score-events", "compile-stream", "chip-report", "estimate-cost"} <= named
+    assert named <= lab_tools, sorted(named - lab_tools)
 
 
 def test_skill_install_is_idempotent(tmp_path: Path) -> None:

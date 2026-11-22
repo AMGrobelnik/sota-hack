@@ -43,17 +43,19 @@ HELPER_NAME = "progress"
 ARTIFACT_KINDS = ("file", "report", "chip")
 STAGE_STATES = ("started", "done", "skipped")
 
-#: The chip lab reports through this helper by itself, without ``--chip``: before a tool
+#: The chip lab reports through this helper by itself. With ``CHIPIN_PROGRESS_CHIP=1`` it adds
+#: ``--chip <design_id>`` to every figure of one chip; an older lab sends none. Before a tool
 #: about one design it writes a status line naming it ("ChipIn is synthesising chip
 #: <design_id>", its ``VERB`` table), then that tool's metrics. These are the lab's metric
 #: keys about one design and the unit it always sends with each (its ``METRIC_KEYS`` less
-#: the batch counts ``candidates`` and ``best_gates``). An untagged metric with such a key
-#: and unit takes the design of the lab's latest status line; a lab status line about no
-#: one design (a batch, an import) clears it, so a metric about no design stays untagged.
-#: The agent's own status lines change nothing.
+#: the run counters ``candidates``, ``vectors_checked`` and ``mismatches``, which count over
+#: the whole run, and the event scores of ``score-events``, which name no design). An
+#: untagged metric with such a key and unit takes the design of the lab's latest status
+#: line; a lab status line about no one design (a batch, an import) clears it, so a metric
+#: about no design stays untagged. The agent's own status lines change nothing.
 LAB_DESIGN_METRICS: dict[str, str] = {
     "gates": "gates",
-    "depth": "gates",
+    "depth": "levels",
     "transistors": "transistors",
     "luts_ice40": "LUT4",
     "luts_xc7": "LUT6",
@@ -61,8 +63,6 @@ LAB_DESIGN_METRICS: dict[str, str] = {
     "ge": "GE",
     "tt_tiles": "tiles",
     "cost_eur": "EUR",
-    "vectors_checked": "vectors",
-    "mismatches": "vectors",
     "verification_level": "level",
     "timing_slack_ns": "ns",
     "fmax_mhz": "MHz",

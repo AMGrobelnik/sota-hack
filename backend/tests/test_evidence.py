@@ -570,6 +570,25 @@ def test_stage_timings_with_a_skip_and_a_run_cut_off() -> None:
     assert tools["longest"] == {"summary": "compile B", "seconds": 23}
 
 
+def test_stage_vectors_count_the_labs_running_total_once() -> None:
+    """The lab's untagged vectors_checked is a running total per folder; a chip's count adds up."""
+    lab = {"unit": "vectors"}
+    events = [
+        _event(1, 0, "stage", name="compile", state="started"),
+        _event(2, 5, "metric", key="vectors_checked", value=1000, **lab),
+        _event(3, 10, "stage", name="compile", state="done"),
+        _event(4, 10, "stage", name="verify", state="started"),
+        _event(5, 12, "metric", key="vectors_checked", value=1512, **lab),
+        _event(6, 13, "metric", key="vectors_checked", value=4096, **lab),
+        _event(7, 14, "metric", key="vectors_checked", value=300, agent="a1", **lab),
+        _event(8, 15, "metric", key="vectors_checked", value=50, chip="c1", **lab),
+        _event(9, 20, "stage", name="verify", state="done"),
+    ]
+    stages = {s["stage"]: s for s in stage_timings(events)["stages"]}
+    assert stages["compile"]["items"] == [{"item": "vectors checked", "count": 1000}]
+    assert stages["verify"]["items"] == [{"item": "vectors checked", "count": 4096 - 1000 + 300 + 50}]
+
+
 # ---- wiring: CLI, API, the run's hook ----
 
 

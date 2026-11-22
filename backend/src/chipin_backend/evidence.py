@@ -1258,9 +1258,7 @@ def _stage_items(
         and len(Path(str(e.get("path"))).parts) > 3
     }
     metrics = Counter(str(e.get("key")) for e in inside if e["type"] == "metric")
-    vectors = sum(
-        e.get("value") or 0 for e in inside if e["type"] == "metric" and e.get("key") == "vectors_checked"
-    )
+    vectors = _vectors_checked(stamped, spans)
     items: list[tuple[str, float]] = []
     if chips:
         items.append(("chip folders written", len(chips)))
@@ -1270,6 +1268,34 @@ def _stage_items(
     if vectors:
         items.append(("vectors checked", vectors))
     return [{"item": label, "count": count} for label, count in items]
+
+
+def _vectors_checked(stamped: list[tuple[dict[str, Any], datetime]], spans: list[dict[str, Any]]) -> float:
+    """Vectors checked inside the stage's spans.
+
+    A ``vectors_checked`` metric with a ``chip`` counts one check of that chip, so those add up.
+    One without a chip is the lab's running total for the folder that sent it (the
+    orchestrator's, or one subagent's): the stage's share of it is how far it rose inside the
+    spans, counted per agent.
+    """
+    total: float = 0
+    running: dict[str, float] = {}
+    for event, at in stamped:
+        value = event.get("value")
+        if event["type"] != "metric" or event.get("key") != "vectors_checked":
+            continue
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            continue
+        inside = any(s["start"] <= at <= s["end"] for s in spans)
+        if event.get("chip"):
+            total += value if inside else 0
+            continue
+        agent = str(event.get("agent") or "")
+        before = running.get(agent, 0)
+        running[agent] = max(before, value)
+        if inside:
+            total += running[agent] - before
+    return total
 
 
 def _tool_calls(stamped: list[tuple[dict[str, Any], datetime]]) -> dict[str, Any]:
