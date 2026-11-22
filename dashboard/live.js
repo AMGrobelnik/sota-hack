@@ -189,7 +189,8 @@
     return api("GET", "/api/runs/" + encodeURIComponent(id) + "/file?path=" + encodeURIComponent(path), undefined, "text");
   }
   function sendMessage(id, text) {
-    return api("POST", "/api/runs/" + encodeURIComponent(id) + "/messages", { text: text }).then(function () { return true; });
+    // resolves to the backend's answer, { accepted, id, delivery } (truthy as before)
+    return api("POST", "/api/runs/" + encodeURIComponent(id) + "/messages", { text: text }).then(function (r) { return r || true; });
   }
   function stopRun(id) {
     return api("POST", "/api/runs/" + encodeURIComponent(id) + "/stop").then(function () { return true; });
@@ -307,11 +308,13 @@
     }
   }
 
-  function watch(id, handlers) {
+  // opts.state: carry on from an earlier watcher's state (the stream reopens at its next seq),
+  // as a follow-up message does after the stream closed at run.finished.
+  function watch(id, handlers, opts) {
     handlers = handlers || {};
-    var state = newState();
+    var state = (opts && opts.state) || newState();
     var es = null, timer = null, closed = false, attempt = 0;
-    var self = { state: state, close: stop, kick: kick };
+    var self = { state: state, close: stop, kick: kick, isClosed: function () { return closed; } };
 
     function open() {
       timer = null;
@@ -325,15 +328,20 @@
         try { ev = JSON.parse(msg.data); } catch (e) { return; }
         if (!ev || typeof ev.seq !== "number" || ev.seq <= state.lastSeq) return; // never twice
         state.lastSeq = ev.seq;
+        if (state.finished && ev.type !== "run.finished") {
+          // A follow-up: the run went back to running after its run.finished.
+          state.status = "running"; state.finished = null; state.finishedAt = null;
+        }
         var out = reduce(state, ev);
         if (out) call(handlers, out[0], out[1], state);
         call(handlers, "onEvent", ev, state);
-        if (ev.type === "run.finished") stop();
       };
       es.onerror = function () {
         // Reconnect ourselves so the stream resumes from the last seq seen.
         if (es) es.close();
         es = null;
+        // The server ends the stream after the log's last run.finished (follow-ups included).
+        if (state.finished) { stop(); return; }
         if (closed) return;
         setStatus("reconnecting");
         if (attempt >= 3) {

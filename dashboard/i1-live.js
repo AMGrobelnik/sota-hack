@@ -14,6 +14,11 @@
  *   ChipInLive.i1.recents()         sidebar HTML: the connection chip and the backend's runs
  *   ChipInLive.i1.sig()             changes whenever that HTML has to be redrawn
  *   ChipInLive.i1.state()           { connection, base, runs } (for tests)
+ *   ChipInLive.i1.exampleBox()      the message box, disabled and explained, for an example run's Chat tab
+ *
+ * The message box (under the Overview's log and in the Chat tab) talks to the run's agent through
+ * POST /api/runs/{id}/messages: your message shows at once, then its delivery from the stream
+ * (sent, waiting, reached the agent). On a finished run it sends a follow-up and reopens the stream.
  *
  * The server address and token are kept in this browser's localStorage only (never in the URL or
  * the page). A page served by the backend itself finds it on its own origin and asks only for the
@@ -147,17 +152,27 @@
   var W = {}; // id -> { w (reader watcher), st, x (extra state), open }
   function watchRun(id) {
     if (W[id]) return W[id];
-    var x = { designs: {}, order: [], items: [], tools: {}, subs: {}, subOrder: [], merged: {}, spec: null, specTried: false, evidence: null, v: 0, files: null, filesAt: 0, filesN: -1, chips: {} };
-    var rec = { x: x, open: true, st: null, w: null };
-    rec.w = L.watch(id, {
+    var x = { designs: {}, order: [], items: [], tools: {}, subs: {}, subOrder: [], merged: {}, spec: null, specTried: false, evidence: null, v: 0, files: null, filesAt: 0, filesN: -1, chips: {}, umsg: {}, lastUser: null, wantLive: false };
+    var rec = { id: id, x: x, open: true, st: null, w: null, h: null };
+    rec.h = {
       onEvent: function (ev, st) {
         rec.st = st; reduce(x, ev, st);
         if (ev.type === "run.started") { var rr = findRun(id); if (rr && (rr.title === id || !rr.title) && ev.prompt) { rr.title = clip(ev.prompt, 60); rr.brief = ev.prompt; saveRuns(); bump(); } }
-        if (ev.type === "run.finished") { rec.open = false; var r = findRun(id); if (r) { r.status = ev.status; saveRuns(); } bump(); } }
-    });
+        if (ev.type === "run.finished") { rec.open = false; var r = findRun(id); if (r) { r.status = ev.status; saveRuns(); } bump(); }
+        else if (!rec.open) { rec.open = true; var f = findRun(id); if (f) { f.status = "running"; saveRuns(); } bump(); } // a follow-up
+      }
+    };
+    rec.w = L.watch(id, rec.h);
     rec.st = rec.w.state;
     W[id] = rec;
     return rec;
+  }
+  // After a follow-up is sent: the reader's stream closed at run.finished, so open it again from the next seq.
+  function resume(rec) {
+    var w = rec.w;
+    if (typeof w.isClosed !== "function") return; // an older reader: the next page load catches up
+    if (w.isClosed()) { rec.w = L.watch(rec.id, rec.h, { state: rec.st }); rec.x.wantLive = false; }
+    else if (!rec.st.finished) rec.x.wantLive = false; // the open stream carried the follow-up
   }
   function push(x, it, ev) { it.seq = ev.seq; it.ts = ev.ts; if (ev.agent) it.agent = ev.agent; x.items.push(it); }
   function normDesign(d) {
@@ -176,8 +191,20 @@
     switch (ev.type) {
       case "run.started": if (ev.spec && typeof ev.spec === "object") x.spec = ev.spec; break;
       case "stage": push(x, { k: "stage", n: ev.stage || ev.name, state: ev.state, reason: ev.reason || "" }, ev); break;
-      case "status": push(x, { k: "status", text: ev.text || "" }, ev); break;
-      case "message": push(x, { k: "msg", role: ev.role, author: ev.author, text: ev.text || "" }, ev); break;
+      case "status": {
+        // the delivery of your message is shown on the message itself, not as a line of its own
+        var um = ev.message_id ? x.umsg[ev.message_id] : null;
+        if (um && /reached/i.test(ev.text || "")) { um.dlv = "reached"; um.chg = x.v; break; }
+        if (/^Your message waits/i.test(ev.text || "") && x.lastUser && x.lastUser.dlv === "sent") { x.lastUser.dlv = "waiting"; x.lastUser.chg = x.v; break; }
+        push(x, { k: "status", text: ev.text || "" }, ev);
+        break;
+      }
+      case "message": {
+        var mi = { k: "msg", role: ev.role, author: ev.author, text: ev.text || "" };
+        if (ev.role === "user") { mi.mid = ev.message_id || null; mi.dlv = mi.mid ? "sent" : null; if (mi.mid) x.umsg[mi.mid] = mi; x.lastUser = mi; }
+        push(x, mi, ev);
+        break;
+      }
       case "tool": {
         var t = x.tools[ev.call_id];
         if (!t) { t = { k: "tool", id: ev.call_id, name: ev.name, summary: ev.summary, state: ev.state, detail: ev.detail || null }; x.tools[ev.call_id] = t; push(x, t, ev); }
@@ -425,10 +452,7 @@
   }
   function wireTop(rec) {
     $("#lvSet").onclick = function () { settingsModal(modelOf(V.id)); };
-    $("#lvStop").onclick = function () {
-      var b = $("#lvStop"); b.disabled = true; b.lastChild.textContent = "Stopping";
-      L.stopRun(V.id).catch(function (e) { b.disabled = false; b.lastChild.textContent = "Stop"; note("The run did not stop: " + e.message); });
-    };
+    $("#lvStop").onclick = function () { stopRun(); };
   }
 
   /* ----- overview ----- */
@@ -437,7 +461,7 @@
       '<div class="lv-stages" id="lvStages"></div><div id="lvSubs"></div><div class="tiles" id="lvTiles" style="position:relative"></div>' +
       '<section class="cgrid2"><div class="pan chartp"><div class="chh"><h2>Chip size against</h2><select class="ys" id="lvY" aria-label="Metric on the chart"></select><span class="grow"></span><span id="lvChMark"></span></div>' +
       '<div class="cwrap" id="lvWrap"><canvas id="lvChart" tabindex="0" role="img" aria-label="Trade-off chart"></canvas><div class="ctip" id="lvTip"></div></div><div class="legend" id="lvLegend"></div><div id="lvUnsized"></div></div>' +
-      '<div class="side"><section class="pan lv-log" id="lvLog" aria-label="Agent log"><div class="lv-lh"><h2>Agent log</h2><span class="lv-n" id="lvLogN"></span></div><div class="lv-feed" id="lvFeed" role="log" aria-live="polite"></div><button class="lv-jump" id="lvJump" hidden>' + I("down", "s12") + 'Latest</button></section><aside class="pan insp" id="lvInsp" aria-label="Selected design"></aside></div></section>' +
+      '<div class="side"><section class="pan lv-log" id="lvLog" aria-label="Agent log"><div class="lv-lh"><h2>Agent log</h2><span class="lv-n" id="lvLogN"></span></div><div class="lv-fw"><div class="lv-feed" id="lvFeed" role="log" aria-live="polite"></div><button class="lv-jump" id="lvJump" hidden>' + I("down", "s12") + 'Latest</button></div>' + boxHTML() + '</section><aside class="pan insp" id="lvInsp" aria-label="Selected design"></aside></div></section>' +
       '<div class="fun" id="lvFun"></div><p class="funn" id="lvFunN"></p><section class="pan lv-files" id="lvFiles" aria-label="Files"></section>' +
       '<div class="ovf"><span id="lvFoot"></span><span>' + esc(CREDIT) + "</span></div></div>";
   }
@@ -447,6 +471,7 @@
     feed.addEventListener("scroll", function () { V.follow = feed.scrollTop + feed.clientHeight >= feed.scrollHeight - 24; $("#lvJump").hidden = V.follow; });
     feed.addEventListener("click", toggleTool);
     $("#lvJump").onclick = function () { V.follow = true; feed.scrollTop = feed.scrollHeight; $("#lvJump").hidden = true; };
+    wireBox();
     $("#lvInsp").addEventListener("click", function (e) { var b = e.target.closest("[data-open]"); if (b) openFile(b.dataset.open); });
     $("#lvFiles").addEventListener("click", function (e) { var b = e.target.closest("[data-open]"); if (b) openFile(b.dataset.open); });
     $("#lvUnsized").addEventListener("click", function (e) { var b = e.target.closest("[data-sel]"); if (b) select(b.dataset.sel); });
@@ -731,7 +756,10 @@
     var w = '<span class="lv-w">' + rel(M, it.ts) + "</span>", who = it.agent ? '<span class="lv-ag">' + esc(it.agent) + "</span>" : "";
     switch (it.k) {
       case "msg":
-        if (it.role === "user") return chat ? '<div class="you"><p>' + esc(it.text) + "</p></div>" : '<div class="lv-r lv-m lv-u"><div class="lv-mh"><b>You</b>' + w + '</div><div class="lv-md">' + md(it.text) + "</div></div>";
+        if (it.role === "user") {
+          var mid = it.mid ? ' data-mid="' + esc(it.mid) + '"' : "", ust = it.dlv ? dlvHTML(it.dlv) : "";
+          return chat ? '<div class="you lv-y"' + mid + "><p>" + esc(it.text) + "</p>" + ust + "</div>" : '<div class="lv-r lv-m lv-u"' + mid + '><div class="lv-mh"><b>You</b>' + ust + w + '</div><div class="lv-md">' + md(it.text) + "</div></div>";
+        }
         return chat ? '<div class="msg lv-cm" style="--rc:#2b55d0"><span class="mav" style="background:#2b55d01a;color:#2b55d0">' + I("chip", "s16") + '</span><div><div class="who">' + esc(it.author || "ChipIn") + who + '<span class="when">' + rel(M, it.ts) + '</span></div><div class="mt lv-md">' + md(it.text) + "</div></div></div>"
           : '<div class="lv-r lv-m"><div class="lv-mh"><b>' + esc(it.author || "ChipIn") + "</b>" + who + w + '</div><div class="lv-md">' + md(it.text) + "</div></div>";
       case "status": return '<div class="lv-r lv-s"><i></i><span>' + who + esc(it.text) + "</span>" + w + "</div>";
@@ -858,6 +886,7 @@
     var bt = M.running || M.status === "connecting" ? "Live run" : "Finished run"; if (ch("badge", bt)) { $("#lvBadge").textContent = bt; $("#lvBadge").className = "mk topbadge " + (bt === "Live run" ? "lv-live" : "no"); setDemo(bt); }
     var setT = (M.r.preset ? cap(M.r.preset) + " · " : "") + (M.r.agent && M.r.agent !== "auto" ? AGN[M.r.agent] || M.r.agent : "Auto"); if (ch("set", setT)) $("#lvSetT").textContent = setT;
     var stop = $("#lvStop"); stop.hidden = !M.running;
+    if (!M.running && stop.disabled) { stop.disabled = false; stop.lastChild.textContent = "Stop"; var cs = $("#lvCxStop"); if (cs) { cs.disabled = false; cs.lastChild.textContent = "Stop the run"; } }
     if (V.view === "overview") updOverview(M, ch, force);
     else if (V.view === "chat") updChat(M, ch);
     else if (ch("tab", V.view + "|" + x.v + "|" + (V.sel || "") + "|" + M.status)) paintTab(M);
@@ -888,6 +917,7 @@
     if (ch("logn", M.x.items.length + "|" + M.status)) $("#lvLogN").textContent = M.x.items.length ? (M.running ? "live" : M.x.items.length + " entries") : "";
     if (!M.x.items.length && !feed.firstChild) feed.innerHTML = '<p class="lv-wait">' + (M.running || M.status === "connecting" ? "Waiting for the agent's first message." : "Nothing was logged.") + "</p>";
     else if (M.x.items.length) { var w = $(".lv-wait", feed); if (w) w.remove(); }
+    updBox(M, ch);
     var foot = (C.base ? "Live run on " + C.base.replace(/^https?:\/\//, "") + ". " : "") + "Run " + M.id + ".";
     if (ch("foot", foot)) $("#lvFoot").textContent = foot;
     drawChart();
@@ -896,26 +926,114 @@
   /* ----- chat: the same stream, full width ----- */
   function chatHTML() {
     return '<div class="chat"><div class="feed" id="lvChatFeed"><div class="fin" id="lvChatFin"><p class="cnote2" id="lvChatNote"></p></div></div>' +
-      '<div class="comp" id="lvComp"><div class="box"><textarea id="lvMsg" rows="1" placeholder="Message the agent while it works" aria-label="Message the agent"></textarea><button class="send" id="lvSend" aria-label="Send">' + I("up", "s16") + "</button></div></div></div>";
+      '<div class="comp lv-cxw">' + boxHTML() + "</div></div>";
   }
   function wireChat() {
-    var ta = $("#lvMsg"), send = $("#lvSend"), feed = $("#lvChatFeed");
+    var feed = $("#lvChatFeed");
     feed.addEventListener("scroll", function () { V.follow = feed.scrollTop + feed.clientHeight >= feed.scrollHeight - 24; });
     $("#lvChatFin").addEventListener("click", toggleTool);
-    ta.addEventListener("input", function () { send.classList.toggle("ready", !!ta.value.trim()); ta.style.height = "auto"; ta.style.height = Math.min(200, ta.scrollHeight) + "px"; });
-    var go = function () {
-      var t = ta.value.trim(); if (!t) return;
-      send.disabled = true;
-      L.sendMessage(V.id, t).then(function () { ta.value = ""; send.classList.remove("ready"); }).catch(function (e) { note("The message did not reach the agent: " + e.message); }).then(function () { send.disabled = false; });
-    };
-    send.onclick = go;
-    ta.addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); go(); } });
+    wireBox();
   }
   function updChat(M, ch) {
     var fin = $("#lvChatFin"), feed = $("#lvChatFeed");
-    if (ch("cnote", M.status)) $("#lvChatNote").textContent = M.running ? "The agent's messages, status lines and tool calls as they arrive. A message you send reaches the agent at its next step." : "The run's whole conversation, as it happened.";
+    if (ch("cnote", M.status)) $("#lvChatNote").textContent = M.running ? "The agent's messages, status lines and tool calls as they arrive. Write below to steer it." : "The run's whole conversation, as it happened. A follow-up continues it with the same agent.";
     if (paintFeed(M, fin, true, "chatN") && V.follow) feed.scrollTop = feed.scrollHeight;
-    $("#lvComp").style.display = M.running ? "" : "none";
+    updBox(M, ch);
+  }
+
+  /* ----- the message box: talk to the run's agent (Overview, under the log, and the Chat tab) ----- */
+  var MAXMSG = 4000;
+  var DLV = { sent: "Sent", waiting: "Waiting for the agent's current step", reached: "Reached the agent", sending: "Sending", failed: "Not sent" };
+  function dlvHTML(d) { return '<span class="lv-ust" data-d="' + d + '"><i></i>' + DLV[d] + "</span>"; }
+  function boxHTML() {
+    return '<div class="lv-cx" id="lvCx" data-mode="off"><div class="lv-cxb"><textarea id="lvCxT" rows="1" maxlength="' + MAXMSG + '" aria-label="Message the agent" aria-describedby="lvCxN" data-voice data-voice-anchor="#lvCxSend"></textarea>' +
+      '<button class="send lv-cxs" id="lvCxSend" aria-label="Send to the agent">' + I("up", "s16") + "</button></div>" +
+      '<div class="lv-cxf"><span class="lv-cxn" id="lvCxN" role="status" aria-live="polite"></span><button class="lv-cxstop" id="lvCxStop" hidden>' + I("stop", "s12") + "Stop the run</button></div></div>";
+  }
+  // what the box offers for this run right now
+  function boxMode(M) {
+    if (C.state !== "on") return { m: "off", ph: "Message the agent", n: "No backend is connected, so the agent cannot be reached. Connect one under Configure." };
+    if (M.status === "connecting") return { m: "off", ph: "Message the agent", n: "Connecting to the run…" };
+    if (M.running) return { m: "live", ph: "Message the agent", n: "It reads your message when its current step ends." };
+    if (M.status === "failed") return { m: "off", ph: "This run failed", n: "A failed run cannot take messages. Start a new run to go on." };
+    return { m: "follow", ph: "Ask a follow-up", n: "The same agent picks up in the same workspace." };
+  }
+  function wireBox() {
+    var ta = $("#lvCxT"), send = $("#lvCxSend");
+    var grow = function () { ta.style.height = "auto"; ta.style.height = Math.min(160, ta.scrollHeight) + "px"; };
+    ta.addEventListener("input", function () { send.classList.toggle("ready", !!ta.value.trim() && !ta.disabled); grow(); if (V.cxErr) { V.cxErr = ""; V.sig.box = ""; } });
+    ta.addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendBox(); } });
+    send.onclick = sendBox;
+    $("#lvCxStop").onclick = stopRun;
+  }
+  function errText(e) {
+    var s = e && e.status;
+    if (s === 413) return "The message is longer than 4,000 characters. Shorten it and send again.";
+    if (s === 429) return "Too many runs are going on this backend. Stop one, then send again.";
+    if (s === 404) return "The backend no longer knows this run.";
+    if (s === 409) return cap(String(e.message || "the run cannot take messages now")) + ".";
+    if (s === 401) return "The backend did not accept this page's token. Connect again under Configure.";
+    if (s === 0) return "The backend did not answer. Check that it is still running.";
+    return cap(String((e && e.message) || "the backend refused the message")).replace(/\.?$/, ".");
+  }
+  function sendBox() {
+    if (!V || !W[V.id] || V.cxBusy) return;
+    var ta = $("#lvCxT"), t = ta.value.trim(), rec = W[V.id], M = modelOf(V.id), mode = boxMode(M).m;
+    if (!t || mode === "off") return;
+    if (t.length > MAXMSG) { V.cxErr = errText({ status: 413 }); V.sig.box = ""; return; }
+    // shown at once in the stream, marked as yours, until the stream's own record of it arrives
+    var pend = { text: t, seq: M.st.lastSeq, id: null, el: [] };
+    V.pend = pend; V.cxBusy = true; V.cxErr = ""; V.sig.box = "";
+    drawPending(M);
+    ta.value = ""; ta.style.height = "auto"; $("#lvCxSend").classList.remove("ready");
+    L.sendMessage(V.id, t).then(function (r) {
+      pend.id = r && r.id || null;
+      if (mode === "follow" || (r && r.delivery === "follow_up")) { rec.x.wantLive = true; resume(rec); }
+    }).catch(function (e) {
+      if (V && V.pend === pend) { V.cxErr = "Not sent: " + errText(e); pend.el.forEach(function (el) { el.remove(); }); V.pend = null; }
+      var box = $("#lvCxT"); if (box && !box.value) { box.value = t; box.dispatchEvent(new Event("input")); }
+    }).then(function () { if (V) { V.cxBusy = false; V.sig.box = ""; } });
+  }
+  function drawPending(M) {
+    var p = V.pend; if (!p) return;
+    p.el.forEach(function (el) { el.remove(); }); p.el = [];
+    var fake = { k: "msg", role: "user", text: p.text, dlv: "sending", ts: new Date().toISOString() };
+    [["#lvFeed", false], ["#lvChatFin", true]].forEach(function (f) {
+      var host = $(f[0]); if (!host) return;
+      var tmp = document.createElement("div"); tmp.innerHTML = itemHTML(M, fake, f[1]);
+      var el = tmp.firstChild; el.classList.add("lv-pend"); host.appendChild(el); p.el.push(el);
+      var w = $(".lv-wait", host); if (w) w.remove();
+      host = f[1] ? $("#lvChatFeed") : host; host.scrollTop = host.scrollHeight;
+    });
+  }
+  function stopRun() {
+    var top = $("#lvStop"), btns = [top, $("#lvCxStop")].filter(Boolean);
+    btns.forEach(function (x) { x.disabled = true; x.lastChild.textContent = "Stopping"; });
+    L.stopRun(V.id).catch(function (e) { btns.forEach(function (x) { x.disabled = false; x.lastChild.textContent = x === top ? "Stop" : "Stop the run"; }); note("The run did not stop: " + e.message); });
+  }
+  function updBox(M, ch) {
+    var box = $("#lvCx"); if (!box) return;
+    var x = M.x, p = V.pend;
+    // the pending copy goes once the stream holds the message
+    if (p && x.items.some(function (it) { return it.k === "msg" && it.role === "user" && it.seq > p.seq && ((p.id && it.mid === p.id) || it.text === p.text); })) { p.el.forEach(function (el) { el.remove(); }); V.pend = null; }
+    if (x.wantLive) resume(W[V.id]);
+    // delivery marks that changed since they were drawn
+    Object.keys(x.umsg).forEach(function (id) {
+      var u = x.umsg[id]; if (!u.chg || u.drawn === u.chg) return;
+      document.querySelectorAll('[data-mid="' + CSS.escape(id) + '"] .lv-ust').forEach(function (s) { s.outerHTML = dlvHTML(u.dlv); });
+      u.drawn = u.chg;
+    });
+    var bm = boxMode(M), sg = bm.m + "|" + bm.n + "|" + (V.cxErr || "") + "|" + (V.cxBusy ? 1 : 0) + "|" + M.status;
+    if (!ch("box", sg)) return;
+    var ta = $("#lvCxT"), send = $("#lvCxSend"), n = $("#lvCxN"), stop = $("#lvCxStop");
+    box.dataset.mode = bm.m;
+    ta.disabled = bm.m === "off"; ta.placeholder = bm.ph; ta.setAttribute("aria-label", bm.m === "follow" ? "Ask the agent a follow-up" : "Message the agent");
+    var mic = $(".cv-mic", box); if (mic) mic.disabled = ta.disabled;
+    send.disabled = ta.disabled || !!V.cxBusy; send.classList.toggle("ready", !ta.disabled && !!ta.value.trim());
+    send.setAttribute("aria-label", bm.m === "follow" ? "Send the follow-up" : "Send to the agent");
+    n.className = "lv-cxn" + (V.cxErr ? " err" : "");
+    n.innerHTML = V.cxErr ? esc(V.cxErr) : V.cxBusy ? "Sending…" : esc(bm.n) + (bm.m === "off" && C.state !== "on" ? ' <a href="#/configure">Open Configure</a>' : "");
+    stop.hidden = !M.running;
   }
 
   /* ----- the other tabs ----- */
@@ -992,6 +1110,14 @@
     bg.onclick = function (e) { if (e.target === bg || e.target.closest(".mx")) bg.remove(); };
     document.body.appendChild(bg);
     $(".mx", bg).focus();
+  }
+
+  // an example run's Chat tab: the same box, disabled, saying why
+  function exampleBox() {
+    var t = C.state === "on" ? "Example run: no agent works on it. Start a new run to talk to its agent." : "Example run: connect a backend to talk to the agent.";
+    return '<div class="comp lv-cxw"><div class="lv-cx" data-mode="off"><div class="lv-cxb"><textarea rows="1" disabled placeholder="Message the agent" aria-label="Message the agent" aria-describedby="lvExN"></textarea>' +
+      '<button class="send lv-cxs" disabled aria-label="Send to the agent">' + I("up", "s16") + '</button></div><div class="lv-cxf"><span class="lv-cxn" id="lvExN">' + esc(t) +
+      (C.state === "on" ? ' <a href="#/">New run</a>' : ' <a href="#/configure">Open Configure</a>') + "</span></div></div></div>";
   }
 
   /* ---------- Configure: the Backend section ---------- */
@@ -1071,7 +1197,7 @@
     ".lv-stages span{font-size:12px;font-weight:600;color:var(--i800);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}.lv-stages li:not(.done):not(.now):not(.fail) span{color:var(--i550);font-weight:500}",
     ".lv-stages small{font-size:11px;color:var(--i550);font-variant-numeric:tabular-nums;white-space:nowrap;min-height:14px}",
     ".lv-log{display:flex;flex-direction:column;padding:12px 0 0;min-height:260px}",
-    "@media (min-width:1101px){.lv-ov .side .lv-log{flex:1.25 1 0;min-height:0}.lv-ov .side .insp{flex:1 1 0}}",
+    "@media (min-width:1101px){.lv-ov .side .lv-log{flex:1.9 1 0;min-height:0}.lv-ov .side .insp{flex:1 1 0}}",
     ".lv-lh{display:flex;align-items:baseline;gap:8px;padding:0 16px 8px;border-bottom:1px solid var(--hair)}.lv-lh h2{font-size:13px;font-weight:650;margin:0}.lv-n{font-size:11.5px;color:var(--i550)}",
     ".lv-feed{flex:1;overflow:auto;min-height:0;padding:6px 10px 10px 12px;overscroll-behavior:contain}",
     "@media (max-width:1100px){.lv-feed{max-height:340px}.lv-log{min-height:0}}",
@@ -1116,6 +1242,26 @@
     ".lv-runerr{flex-basis:100%;margin:8px 0 0;font-size:12.5px;color:#9f2a20}",
     ".lv-empty{padding-top:60px}",
     "#lvBan:empty,#lvSubs:empty{display:none}",
+    /* the message box */
+    ".lv-fw{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}",
+    ".lv-log .lv-cx{border-top:1px solid var(--hair);padding:10px 12px 10px}",
+    ".lv-cxb{display:flex;align-items:flex-end;gap:6px;background:#fff;border:1px solid rgb(0 0 0/.1);border-radius:14px;padding:5px 5px 5px 12px;transition:border-color .15s,box-shadow .15s}",
+    ".lv-cxb:focus-within{border-color:var(--blue7);box-shadow:0 0 0 3px rgb(61 109 240/.14)}",
+    ".lv-cxb textarea{flex:1;min-width:0;border:0;outline:0;resize:none;background:transparent;font:inherit;font-size:13.5px;line-height:1.5;padding:5px 0;min-height:22px;max-height:160px;color:var(--i900);display:block}",
+    ".lv-cxb textarea::placeholder{color:var(--i500)}.lv-cxb textarea:disabled{cursor:not-allowed}",
+    ".lv-cx[data-mode=off] .lv-cxb{background:var(--i100);border-color:var(--i150)}.lv-cx[data-mode=off] textarea::placeholder{color:var(--i550)}",
+    ".lv-cxs{width:30px;height:30px}.lv-cxs:disabled{cursor:not-allowed}.lv-cxs.ready{background:var(--blue7);color:#fff;box-shadow:none}.lv-cxs.ready:hover{background:#2347b3}",
+    ".lv-cxs:focus-visible,.lv-cxstop:focus-visible,.lv-cxn a:focus-visible{outline:2px solid var(--blue7);outline-offset:2px}",
+    ".lv-cxf{display:flex;align-items:baseline;gap:10px;margin:6px 2px 0;font-size:11.5px;line-height:1.45;color:var(--i550)}",
+    ".lv-cxn{flex:1;min-width:0}.lv-cxn.err{color:#9f2a20}.lv-cxn a{color:var(--blue7);white-space:nowrap}",
+    ".lv-cxstop{display:inline-flex;align-items:center;gap:5px;flex:none;font-size:11.5px;font-weight:600;color:var(--i600);padding:2px 7px;border-radius:6px}.lv-cxstop:hover{background:var(--i100);color:var(--i900)}.lv-cxstop[hidden]{display:none}",
+    ".lv-cxw .lv-cx{max-width:760px;margin:0 auto}.lv-cxw .lv-cxb{border-radius:22px;padding:8px 8px 8px 18px;box-shadow:0 1px 2px rgb(0 0 0/.04),0 8px 28px -14px rgb(30 40 90/.16)}.lv-cxw .lv-cxb textarea{font-size:14px;padding:7px 0}.lv-cxw .lv-cxs{width:36px;height:36px}.lv-cxw .lv-cxf{margin:7px 18px 0}",
+    ".lv-ust{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:500;color:var(--i550);white-space:nowrap}",
+    ".lv-ust i{width:6px;height:6px;border-radius:50%;border:1.3px solid var(--i300);box-sizing:border-box}",
+    ".lv-ust[data-d=reached]{color:var(--blue7)}.lv-ust[data-d=reached] i{background:var(--blue7);border-color:var(--blue7)}.lv-ust[data-d=waiting] i{border-color:#b45309}.lv-ust[data-d=failed]{color:#9f2a20}",
+    "@media (prefers-reduced-motion:no-preference){.lv-ust[data-d=sending] i{animation:lvpulse 1s ease-in-out infinite alternate}@keyframes lvpulse{to{background:var(--i300)}}}",
+    ".lv-mh .lv-ust{margin-left:2px}.you.lv-y{flex-direction:column;align-items:flex-end;gap:4px}.you.lv-y .lv-ust{margin-right:6px}.lv-pend{opacity:.75}",
+    "@media (max-width:1100px){.lv-fw{flex:none}}",
     "@media (max-width:767px){.lv-stages small{display:none}.lv-stages span{font-size:10.5px}.lv-pr{grid-template-columns:44px minmax(0,1fr);row-gap:2px}.lv-pv,.lv-pf{grid-column:2;font-size:11.5px}.lv-sb{grid-template-columns:1fr}.lv-sl,.lv-mg{grid-column:1;grid-row:auto}.lv-cost{display:none}.lv-in{max-width:none}.lv-cfg .crow2{flex-wrap:wrap}.lv-runnote{flex-basis:100%;margin:0 0 8px}}"
   ].join("\n");
   document.head.appendChild(css);
@@ -1137,6 +1283,7 @@
     recents: recents,
     sig: sig,
     buildSpec: buildSpec,
+    exampleBox: exampleBox,
     state: function () { return { connection: C.state, base: C.base, message: C.msg, runs: RUNS.map(function (r) { return { id: r.id, status: r.status, title: r.title }; }) }; }
   };
   init();
