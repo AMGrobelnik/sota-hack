@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
+from pathlib import Path
 from typing import Any, ClassVar
 
 from loguru import logger
@@ -32,6 +33,7 @@ from chipin_backend.agents.output import (
     written_files,
 )
 from chipin_backend.agents.types import AgentEvent, AgentResult, AgentSpec, EventSink
+from chipin_backend.chiplab import SKILL_DIRS
 from chipin_backend.config import AgentsConfig, OpenRouterAgentConfig
 from chipin_backend.llm.providers import DEFAULT_PROVIDER, Provider, resolve_provider
 
@@ -91,6 +93,26 @@ def mcp_servers_for(raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
             continue
         usable[name] = dict(server)
     return usable
+
+
+def workspace_skills(workdir: Path) -> list[Any]:
+    """The AgentSkills-format skills (``SKILL.md`` folders) in ``workdir/.agents/skills``.
+
+    The backend installs the chip-lab skill there (``chiplab.install_skill``).
+    They go into the agent's ``AgentContext``: the SDK lists each skill's name
+    and description in the system prompt's ``<available_skills>`` and attaches
+    its ``invoke_skill`` tool, which returns the skill's body when the agent
+    calls it. Only this folder is read: the SDK's own project loading would
+    also pick up instruction files (``AGENTS.md`` and the like) from parent
+    folders up to the git root.
+    """
+    from openhands.sdk import load_skills_from_dir
+
+    folder = workdir / SKILL_DIRS["openrouter"]
+    if not folder.is_dir():
+        return []
+    _, _, agent_skills = load_skills_from_dir(folder, root=workdir.resolve())
+    return list(agent_skills.values())
 
 
 def _texts(content: Any) -> str:
@@ -353,9 +375,15 @@ class OpenRouterAgentBackend(AgentBackend):
         terminal_params = {"env": build_agent_env(spec.env), "terminal_type": "subprocess"}
         tools = [Tool(name=classes[n].name, params=terminal_params if n == "terminal" else {}) for n in names]
         kwargs: dict[str, Any] = {"llm": llm, "tools": tools}
+        # One context for both: the instructions are appended to OpenHands' own
+        # system message (which keeps its tool rules) and the skills are listed in it.
+        context: dict[str, Any] = {}
         if spec.system_prompt:
-            # Appended to OpenHands' own system message, which keeps its tool rules.
-            kwargs["agent_context"] = AgentContext(system_message_suffix=spec.system_prompt)
+            context["system_message_suffix"] = spec.system_prompt
+        if spec.workdir is not None and (skills := workspace_skills(spec.workdir)):
+            context["skills"] = skills
+        if context:
+            kwargs["agent_context"] = AgentContext(**context)
         if servers := mcp_servers_for(spec.mcp_servers):
             kwargs["mcp_config"] = servers
         return Agent(**kwargs)
@@ -445,4 +473,10 @@ async def _run_until_idle(conversation: Any, activity: _Activity, deadline: floa
             continue
 
 
-__all__ = ["OpenRouterAgentBackend", "mcp_servers_for", "normalize_model", "translate_event"]
+__all__ = [
+    "OpenRouterAgentBackend",
+    "mcp_servers_for",
+    "normalize_model",
+    "translate_event",
+    "workspace_skills",
+]

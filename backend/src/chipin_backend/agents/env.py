@@ -13,6 +13,7 @@ import os
 from collections.abc import Mapping
 
 from chipin_backend.chiplab import chiplab_env
+from chipin_backend.training import train_env
 
 #: Names copied from the launcher's environment when present.
 AGENT_ENV_ALLOWED_NAMES: frozenset[str] = frozenset(
@@ -76,7 +77,8 @@ def build_agent_env(
 
     ``base`` (default ``os.environ``) is filtered through the allowlist; when
     ``base`` names a chip lab install (:mod:`chipin_backend.chiplab`), its
-    ``PATH`` entry and the lab's own path settings are added. Then ``extra``
+    ``PATH`` entry and the lab's own path settings are added, and so is a
+    training Python (:mod:`chipin_backend.training`). Then ``extra``
     (the spec's non-secret values) and :data:`AGENT_ENV_FORCED` are laid on
     top; scrubbed names are removed last, whatever their source.
     """
@@ -87,6 +89,7 @@ def build_agent_env(
         if name in AGENT_ENV_ALLOWED_NAMES or name.startswith(AGENT_ENV_ALLOWED_PREFIXES)
     }
     env.update(chiplab_env(source))
+    env.update(train_env(source))
     env.update(extra or {})
     env.update(AGENT_ENV_FORCED)
     for name in AGENT_ENV_SCRUBBED_NAMES:

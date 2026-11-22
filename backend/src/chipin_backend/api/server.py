@@ -13,6 +13,7 @@ Routes::
     GET  /api/runs                   -> {"runs": [...]} newest first
     GET  /api/runs/{id}
     GET  /api/runs/{id}/events?token=...&from=<seq>   (text/event-stream)
+    GET  /api/runs/{id}/evidence     -> the run's evidence (409 while it runs)
     POST /api/runs/{id}/messages     -> 202
     POST /api/runs/{id}/stop         -> 202
     GET  /api/runs/{id}/files        -> {"files": [{"path", "size"}]} the agent's working folder
@@ -40,6 +41,7 @@ from chipin_backend.api.config import ApiConfig
 from chipin_backend.api.manager import ApiAgent, ApiRunner, RequestError, RunManager
 from chipin_backend.api.transcribe import CONTEXT_HEADER, add_transcribe_route, transcribe_ready
 from chipin_backend.config import BackendConfig
+from chipin_backend.evidence import build_evidence
 from chipin_backend.llm.providers import provider_status
 
 API_VERSION = 1
@@ -146,6 +148,19 @@ async def list_runs(request: web.Request) -> web.Response:
 async def get_run(request: web.Request) -> web.Response:
     """One run with its summary and cost."""
     return _json(request.app[MANAGER].get(request.match_info["run_id"]).detail_view())
+
+
+async def get_evidence(request: web.Request) -> web.Response:
+    """Number check, weight bytes per decision and stage timings of a finished run, computed now."""
+    item = request.app[MANAGER].get(request.match_info["run_id"])
+    if item.record.get("status") == "running":
+        raise RequestError("the run is still in progress", status=409)
+    try:
+        evidence = await asyncio.to_thread(build_evidence, item.run.path, write=False)
+    except Exception as exc:  # a broken run folder must give a clean answer, not an unhandled 500
+        logger.exception("run {}: evidence not computed", item.id)
+        return _error(f"the evidence could not be computed ({type(exc).__name__})", 500)
+    return _json(evidence)
 
 
 async def post_message(request: web.Request) -> web.Response:
@@ -291,6 +306,7 @@ def create_app(
     app.router.add_get("/api/runs", list_runs)
     app.router.add_get("/api/runs/{run_id}", get_run)
     app.router.add_get("/api/runs/{run_id}/events", stream_events)
+    app.router.add_get("/api/runs/{run_id}/evidence", get_evidence)
     app.router.add_post("/api/runs/{run_id}/messages", post_message)
     app.router.add_post("/api/runs/{run_id}/stop", stop_run)
     app.router.add_get("/api/runs/{run_id}/files", list_files)

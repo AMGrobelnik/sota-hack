@@ -7,6 +7,7 @@ started through the backend's own runner, plus:
     events.jsonl        # contract events (seq from 1), replayable
     agent_events.jsonl  # the backend's raw AgentEvents
     progress.jsonl      # what the agent reported through ./progress
+    evidence.json/.md   # number check, weight bytes, stage timings (see evidence.py)
     workspace/brief.md  # the user's brief, answers and attached-file list
     workspace/progress  # the progress helper
 
@@ -46,11 +47,13 @@ from chipin_backend.api.translate import Translator, clip
 from chipin_backend.chiplab import chiplab_available, chiplab_instructions
 from chipin_backend.compute.base import Runner
 from chipin_backend.config import BackendConfig, RunMode
+from chipin_backend.evidence import emit_evidence
 from chipin_backend.llm.keys import MissingKeyError
 from chipin_backend.llm.presets import expand_preset
 from chipin_backend.llm.providers import ProviderError, resolve_provider
 from chipin_backend.orchestrate import run_agent
 from chipin_backend.runs import JsonlEventSink, RunDir, is_safe_run_id, new_run_id
+from chipin_backend.training import train_available, training_instructions
 
 API_RECORD_FILE = "api.json"
 RAW_EVENTS_FILE = "agent_events.jsonl"
@@ -401,6 +404,7 @@ class RunManager:
                 if requests is not None:
                     requests.cancel()
                 cost = await self._close_fanout(item, cost)
+            emit_evidence(item.run.path, item.log.append)
             item.log.append("run.finished", status=status, summary=summary, bullets=bullets)
             item.record.update(
                 status=status, finished_at=utc_now(), summary=summary, bullets=bullets, cost=cost
@@ -472,8 +476,10 @@ class RunManager:
 
 
 def standing_instructions(source: Mapping[str, str] | None = None) -> str:
-    """The agent's standing instructions, plus the chip-lab paragraph when an agent can reach the lab."""
+    """The agent's standing instructions, plus the training and chip-lab paragraphs when each is on."""
     text = INSTRUCTIONS_PATH.read_text(encoding="utf-8")
+    if train_available(source):
+        text = f"{text.rstrip()}\n\n{training_instructions()}"
     if chiplab_available(source):
         text = f"{text.rstrip()}\n\n{chiplab_instructions()}"
     return text

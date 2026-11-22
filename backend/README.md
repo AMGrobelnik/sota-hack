@@ -200,6 +200,7 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 | `GET /api/runs/{id}/events`    | the stream, `from=<seq>`     |
 | `POST /api/runs/{id}/messages` | `text` to the agent          |
 | `POST /api/runs/{id}/stop`     | stop the run                 |
+| `GET /api/runs/{id}/evidence`  | run evidence, once finished  |
 | `GET /api/runs/{id}/files`     | `path`, `size` per file      |
 | `GET /api/runs/{id}/file`      | `?path=`: one file as text   |
 | `POST /api/transcribe`         | one spoken phrase to text    |
@@ -214,6 +215,7 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 | `artifact`                     | a file, such as the report   |
 | `cost`                         | agent cost and tokens        |
 | `error`                        | what went wrong              |
+| `evidence`                     | the three evidence summaries |
 | `run.finished`                 | status, summary, `bullets`   |
 
 Stages, in order: `spec`, `reference`, `propose`, `finetune`, `compile`,
@@ -452,15 +454,61 @@ Point the backend at a lab install (in the environment, `backend/.env` or
   ok. The lab's `chiplab doctor --agent-env` checks only the default
   install.
 
-What the agent can do with it: when the lab is on, the standing
-instructions get the lab's paragraph (`api/chiplab.md`, section 6 of the
-guide). The agent calls `chiplab <tool> --json '{...}'` from its working
+What the agent can do with it: when the lab is on, the agent gets the
+chip-lab skill (below) and the standing instructions get a short paragraph
+(`api/chiplab.md`) naming the skill, the required `chip-report` call and a
+fallback. The agent calls `chiplab <tool> --json '{...}'` from its working
 folder: compile (`ingest-model` or `compile-ir`, `synthesize`,
 `count-luts`, `map-to-process`), verify (`simulate`, `prove-equivalence`,
 `rtl-simulate`, `verification-level`) and the chip part of report
 (`layout`, `timing-power`, `tt-package`, `bitstream`, `estimate-cost`,
 and always `chip-report` on the one chosen chip before report is done). It marks the compile and verify stages itself, or passes
 `"progress_stages": true`.
+
+### The chip-lab skill
+
+The lab's tools also reach the agent as a skill named `chiplab`
+(`src/chipin_backend/skills/chiplab/`, shipped in the package): `SKILL.md`
+says when to use the lab, the call shape, the exit codes, which tools serve
+compile, verify and report, the required `chip-report` call and how
+results go through `./progress`; `references/` holds a worked sequence
+and, per run, `tools.md`: the installed lab's own reference
+(`chiplab agent-doc`) under a header naming the lab's version and commit,
+so it never drifts from the lab. If the lab's reference cannot be read,
+the skill is installed without it, the agent is told to run
+`chiplab agent-doc`, and a warning is logged.
+
+When the lab is on, the runner installs the skill into each run's
+working folder before the agent starts; nothing is written outside the
+run folder, and with the lab off nothing is installed.
+
+| Harness      | Installed at                        | How it loads   |
+| ------------ | ----------------------------------- | -------------- |
+| `claude_cli` | `workspace/.claude/plugins/chipin`  | `Skill` tool   |
+| `openrouter` | `workspace/.agents/skills/chiplab`  | `invoke_skill` |
+
+- `claude_cli`: the skill sits in a session-only plugin (manifest
+  `.claude-plugin/plugin.json`, skill under `skills/chiplab`), passed
+  with `--plugin-dir`; the CLI lists it as `chipin:chiplab`.
+  `--setting-sources` stays as configured (`[]` by default): the
+  `project` source would also find `.claude/skills`, but it loads every
+  `CLAUDE.md` above the working folder and the user's own, which a run
+  must not see.
+- `openrouter`: the folder's skills go into the OpenHands agent's
+  `AgentContext`; the SDK lists name and description under
+  `<available_skills>` and returns the body when the agent calls
+  `invoke_skill`. Only this folder is read, not the SDK's wider project
+  loading.
+
+To use the skill in another project:
+
+```bash
+chipin-backend skill export <project>/.claude/skills   # writes .../chiplab
+```
+
+It writes the same folder, with the lab's reference when the lab is on
+here, only where it is told; it refuses a tool folder in the home
+directory (`~/.claude`, `~/.agents` and the like).
 
 What reaches the dashboard: the lab runs `./progress` as a program, so
 its lines go through the same checks as the agent's and become ordinary
@@ -471,6 +519,106 @@ event stream. Metrics use the lab's fixed keys (`gates`, `luts_ice40`,
 section 2 of the guide), each with its unit. Chip files land under
 `workspace/chips/<design_id>/`. The helper and the tailer refuse a metric
 that is not a finite number; the lab treats a refused line as non-fatal.
+
+## Training Python
+
+The agent's own `python3` may have no numpy or torch, and then the
+reference and finetune stages are skipped. Name a Python that can train
+(a path, not a secret):
+
+| Name                  | What it is                             |
+| --------------------- | -------------------------------------- |
+| `CHIPIN_TRAIN_PYTHON` | a Python interpreter that can train    |
+
+- It passes to the agent as `CHIPIN_TRAIN_PYTHON`; it is not put on the
+  agent's `PATH`. The chip lab's `.venv/bin/python` will do: it has
+  numpy, torch, scikit-learn and xgboost, the libraries behind the lab's
+  `ingest-model` formats.
+- When it is set, the standing instructions get the training paragraph
+  (`api/training.md`): run training and data scripts with
+  `"$CHIPIN_TRAIN_PYTHON"`; with no recordings attached, simulate them and
+  write the assumptions down; split by patient before training; score
+  sensitivity and false alarms per hour on held-out patients only, per
+  patient and pooled, labelled "synthetic data"; hand the trained weights
+  to the lab with `ingest-model`. The pooled figures of the chosen design
+  arrive as the metrics `synthetic_sensitivity_pct` and
+  `synthetic_false_alarms_per_h`, with `patients_pass` / `patients_total`.
+- Unset, or not an executable file (one warning in the log), training is
+  off: the environment and instructions are as before, and the agent
+  skips reference and finetune with its reason.
+
+## Run evidence
+
+Three measurements computed only from a finished run's own folder, with
+no network and no model calls (`evidence.py`):
+
+```bash
+chipin-backend evidence <run id or run folder> [--json]
+```
+
+The command prints the markdown (or JSON) and writes `evidence.json` and
+`evidence.md` into the run folder. `GET /api/runs/{id}/evidence` returns
+the same dict for a finished run (409 while it runs). At the end of every
+dashboard run the backend computes it once and emits one `evidence` event
+with the three summaries, just before `run.finished`; a failure there is
+logged and never fails the run.
+
+- **Number check.** Every number in `workspace/report.md` lands in one
+  of three classes, never added together: *no source*, *value found,
+  unit or meaning unclear* (for a human to check) and *source found*
+  (a machine-produced source in this run holds this value in this unit);
+  plus *excluded* (dates, times, numbering, versions, file names, ids,
+  code blocks, numbers quoted from the prompt). The output lists the no
+  source numbers first, then the unclear ones, then the source found
+  ones with the named source (a path or an event sequence number). JSON
+  keys: `no_source`, `value_found_unclear`, `source_found`, `excluded`,
+  and a `limits` string. What the check establishes, word for word:
+
+  > A "no source" number means nothing the tools measured in this run has this value: treat it as unsupported until shown otherwise. "Source found" means a machine-produced source in this run holds this value in this unit. It does not establish which design or stage the sentence gives the value to, which of several quantities sharing that unit it means, nor relations between numbers, nor negations, nor the direction of a margin. The check reads only the run folder.
+
+  Sources are `metric` events, the stored weight count of each model
+  file, and the numeric fields of files the chip lab wrote. The value
+  must round to the digits shown. When both the number and the source
+  carry a unit, they must agree after both are converted to the base
+  unit (20 ms is not 20 ns; a rate in words is in hertz, so 1 per minute
+  is not 1 Hz; minutes, hours and days, and the noun seconds after a
+  number, are time units with their scale, so 1.35 seconds is not
+  1.35 ns); when only one carries a unit, the unit is unclear.
+  Spelled-out units (microwatts, nanoseconds, picojoules), both micro
+  signs, and "k" or "thousand" after a number are read as scales. A
+  negative source (a timing slack) matches only a negative number or a
+  sentence of shortfall ("misses by", "short by", "negative slack",
+  "late"); a sentence of a margin met ("to spare", "positive slack")
+  does not match, and one with neither is unclear. A width in bits about
+  weights matches only a weight width, not a port width. The unit or
+  noun next to the number must match the source through a small synonym
+  table (gates/cells, ns/slack/period, uW/power, um2/area, levels/depth,
+  parameters/params, ...), or, with no such noun, the number's words
+  must share a whole non-generic word with the source key's last
+  segment. A percent matches only a percentage or a 0-to-1 ratio. A noun
+  that agrees with no source leaves the number with no source.
+  Structural fields (line counts, sizes, tool durations, seeds, indices)
+  count only when the claim names them. Metric events can also come from
+  the agent's own `./progress metric` calls, and lab answers echo the
+  agent's inputs.
+- **Weight bytes per decision.** For one chip, named in the output with
+  the reason it was picked (the one the report names most; otherwise the
+  first laid-out design with weights): the bytes of weights software must
+  read for one decision, by one rule for every design (each stored array
+  in the smallest machine integer type, float32 for decimals; and,
+  separately, packed at the fewest bits), the stored value count and the
+  declared parameter count where they differ, and the memory cells and
+  flip-flops in the chip's netlist (`net.json`, else `gates.v`). No memory
+  cells means 0 weight bytes fetched: the weights are constants in the
+  logic. A memory is reported with its bits, never 0. It claims nothing
+  about energy or speed.
+- **Stage timings.** Wall time per stage from the `stage` events, each
+  stage's share, counts of what it processed, and for the largest stage
+  both bounds: if every other stage cost nothing, the run is at most
+  1/share faster; if this stage cost nothing, at most 1/(1-share) faster.
+  No per-second rates: stage time includes the agent's thinking. It also
+  reports per-tool-call wall times and the longest call, for one run on
+  one machine.
 
 ## Layout
 
@@ -484,8 +632,11 @@ backend/
     log.py                   loguru: stderr plus logs/backend.log
     runs.py                  run folders: run.json, events.jsonl, workspace/
     orchestrate.py           run_agent(spec, config): one run end to end
-    cli.py                   chipin-backend run / ask / serve / config
-    chiplab.py               the optional chip lab: agent PATH and settings
+    cli.py                   chipin-backend run / ask / serve / config / evidence / skill
+    evidence.py              run evidence: number check, weights, timings
+    chiplab.py               the optional chip lab: agent PATH, settings, skill
+    skills/chiplab/          the chip-lab agent skill (SKILL.md, references/)
+    training.py              the optional training Python for the agent
     api/                     the local API server for the dashboards
     llm/                     OpenRouter client, key, retry, presets, summaries
     agents/                  AgentBackend interface and the backends
@@ -538,16 +689,17 @@ retried, so one answer is never paid for twice.
 
 Names only; values go in the gitignored `backend/.env`.
 
-| Name                 | Needed for                          |
-| -------------------- | ----------------------------------- |
-| `OPENROUTER_API_KEY` | `ask`, summaries, `openrouter`      |
-| `RUNPOD_API_KEY`     | `on_demand` mode and RunPod checks  |
-| `CLAUDE_CONFIG_DIR`  | optional: another CLI login folder  |
-| `CHIPIN_CONFIG`    | optional: another config file       |
-| `HF_TOKEN`           | optional: passed to agents          |
-| `CHIPIN_CHIPLAB_BIN` | optional: the chip lab, see above   |
-| `CHIPLAB_CONFIG`     | optional: the lab's config file     |
-| `CHIPLAB_USER_DIR`   | optional: the lab's tool folder     |
+| Name                  | Needed for                          |
+| --------------------- | ----------------------------------- |
+| `OPENROUTER_API_KEY`  | `ask`, summaries, `openrouter`      |
+| `RUNPOD_API_KEY`      | `on_demand` mode and RunPod checks  |
+| `CLAUDE_CONFIG_DIR`   | optional: another CLI login folder  |
+| `CHIPIN_CONFIG`       | optional: another config file       |
+| `HF_TOKEN`            | optional: passed to agents          |
+| `CHIPIN_CHIPLAB_BIN`  | optional: the chip lab, see above   |
+| `CHIPLAB_CONFIG`      | optional: the lab's config file     |
+| `CHIPLAB_USER_DIR`    | optional: the lab's tool folder     |
+| `CHIPIN_TRAIN_PYTHON` | optional: training Python, above    |
 
 The backend sets two more itself: `CHIPIN_LLM_CALLS` (where `ask` logs a
 call) and `CHIPIN_WORKER_TOKEN` (a pod's worker token).
