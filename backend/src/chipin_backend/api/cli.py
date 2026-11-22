@@ -63,7 +63,11 @@ def run_serve(args: argparse.Namespace, config: BackendConfig) -> int:
 
 async def _serve(config: BackendConfig, api: ApiConfig, args: argparse.Namespace) -> int:
     port = args.port if args.port is not None else api.port
-    token = load_or_create_token(config.resolved_runs_dir(), rotate=args.new_token)
+    try:
+        token = load_or_create_token(config.resolved_runs_dir(), rotate=args.new_token)
+    except ValueError as exc:
+        logger.error("{}", exc)
+        return 2
     app = create_app(config, api, token=token, agent=args.agent, runner=args.runner, frontend=args.frontend)
     agent = args.agent or "claude"
     try:
