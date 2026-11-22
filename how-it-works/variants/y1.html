@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>ChipIn</title>
+<title>ChipIn: how it works</title>
 <meta name="theme-color" content="#0f1a2a">
 <link rel="icon" type="image/svg+xml" href="../../assets/brand/favicon.svg">
 <script>
@@ -23,6 +23,15 @@
    - measured figures: dashboard/data/af-candidates.json and
      dashboard/data/runs/index.json plus the run file
      dashboard/data/runs/20261122-050322-2c7896.json, on gh-pages.
+   - how long it takes: run durations 235.516 to 1896.954 s in
+     dashboard/data/runs/index.json (gh-pages); 12 to 36 months from
+     OpenROAD (GOMACTech 2019), quoted in its introduction; batch
+     training 1,625.5 against 27.6 candidates a minute from search_rate
+     in dashboard/data/af-candidates.json (gh-pages); 13 minutes per
+     run, six runs per configuration, from arXiv 2605.29994, Section IV-A.
+   - summaries by a smaller model; proofs that can time out on large
+     designs: backend/README.md and llm/summaries.yaml on main,
+     chiplab/README.md section 4 on ant/chip-lab.
    ===================================================================== */
 window.COPY = {
   brand: 'ChipIn',
@@ -62,18 +71,22 @@ window.COPY = {
               'Green tools are named in a stage. Grey ones are called when needed.'] },
     { key: 'report', rail: 'How a run reports', title: 'How a run reports',
       lines: ['Every stage, number, file and candidate becomes an event on one stream. The dashboard draws from it.',
-              'A smaller, cheaper model writes short summaries in levels, so a long run with many subagents stays readable.'] },
+              'A smaller model writes short summaries in levels, so a long run with many subagents stays readable.'] },
     { key: 'talk', rail: 'Talking to the agent', title: 'Talking to the agent, and to Chippy',
       lines: ['During a run you can message the orchestrator: steer it, ask it something, or stop the run.',
               'Chippy, a helper on the dashboard, reads the runs, answers questions and moves the page for you.'] },
     { key: 'checks', rail: 'Checks on the chip', title: 'Checks on the chip',
-      lines: ['Every design is checked bit for bit against its model and proved equivalent. This proves the gates equal the model, not that the model is clinically good.',
+      lines: ['Every design is checked bit for bit against its model, then a formal proof is tried. On the largest designs it can time out; the level says which check passed.',
+              'This shows the gates equal the model, not that the model is clinically good.',
               'Patients are split so none is in both training and test, and designs are judged on the worst unseen patient.'] },
     { key: 'source', rail: 'Checks on the numbers', title: 'Checks on the numbers',
       lines: ['A source check marks which numbers in a report have a machine-produced source in the run.',
               'Measured values are shown plain, estimates carry their assumption, simulated data is labelled.'] },
     { key: 'meas', rail: 'Measured so far', title: 'Measured so far',
-      lines: ['Only these four figures are stated as measured, each with its scope and its file.'] },
+      lines: ['Only these figures are stated as measured, each with its scope and its file.',
+              'Typical hardware design cycle without a large team: 12 to 36 months (OpenROAD, 2019). Our runs, brief to verified gates only: 4 to 32 minutes.',
+              'Different scopes: our minutes cover only brief to verified gate-level design on synthetic data; layout, signoff, fabrication, testing and clinical approval are not included.'],
+      papers: true },
     { key: 'limits', rail: 'Limits', title: 'Limits',
       lines: ['ChipIn is a feasibility tool, not clinical evidence.',
               'The device maker keeps clinical validation and regulatory responsibility.',
@@ -266,7 +279,7 @@ window.COPY = {
     stream: ['Event stream', 'Kept in the run folder and sent live to the page.'],
     dash: ['Dashboard', 'Draws stages, numbers, files, candidates and the chosen chip.'],
     sumTitle: 'Summaries in levels',
-    sumModel: 'Written by a smaller, cheaper model, through a fallback chain of providers.',
+    sumModel: 'Written by a smaller model, through a fallback chain of providers.',
     levelsNote: 'Counts from one recorded run with subagent batches.',
     levels: [
       ['Item', 'a message or tool call', '595'],
@@ -347,7 +360,18 @@ window.COPY = {
       { fig: 'One run with subagent batches: 15 subagents in five batches of three, 1,765 events.',
         scope: 'Synthetic data; 1,897 s from start to finish (the run’s own file).' }
     ],
-    note: 'Nothing else on this page is stated as measured. Files are under dashboard/data/.'
+    note: 'Nothing else on this page is stated as measured. Files are under dashboard/data/.',
+    timeTitle: 'How long it takes',
+    time: 'Teams without large design staffs typically see hardware design cycles of 12 to 36 months (OpenROAD, 2019). Our five recorded runs went from a one-paragraph brief to verified logic gates in 4 to 32 minutes, on synthetic data. Layout, fabrication and approval are not included.',
+    timeCaveat: 'Different scopes: our minutes cover only brief to verified gate-level design on synthetic data; layout, signoff, fabrication, testing and clinical approval are not included.',
+    batchTitle: 'Training candidates as one batch',
+    batch: 'Training 256 candidate designs as one batch on one GPU ran about 59 times faster than one at a time: 1,625.5 against 27.6 candidates a minute (measured in the AF feasibility run). One run on one machine (af-candidates.json).',
+    scale: 'For scale: a 2026 study of AF detection on a small FPGA reports about 13 minutes per training run on one GPU, with six runs per configuration (Einhaus et al., 2026). Our AF run trained 256 candidate designs as one batch at 1,625.5 a minute. Different models and training budgets: not a like-for-like benchmark.',
+    papersLabel: 'Papers cited',
+    papers: [
+      { short: 'OpenROAD, 2019', title: 'OpenROAD: Toward a Self-Driving, Open-Source Digital Layout Implementation Tool Chain (GOMACTech, 2019)', href: 'https://vlsicad.ucsd.edu/Publications/Conferences/370/c370.pdf' },
+      { short: 'Einhaus et al., 2026', title: 'Precomputed 1D-CNNs for Atrial Fibrillation Detection on Tiny Smart Sensor Systems (2026)', href: 'https://arxiv.org/abs/2605.29994' }
+    ]
   }
 };
 /* ======================= END OF VISIBLE COPY ======================= */
@@ -442,7 +466,11 @@ html.cam { scroll-snap-type: y mandatory; }
 .flow #rail { display: none; }
 .flow #viewport { left: 0; right: auto; width: 1px; height: 1px; opacity: 0; pointer-events: none; border: 0; }
 .flow .step { padding: clamp(36px, 7vh, 64px) clamp(18px, 4vw, 48px); border-bottom: 1px solid var(--rule); }
-.flow main { padding-top: var(--bar); }
+.flow main { padding-top: var(--bar); padding-bottom: 88px; }
+.step p.papers { font-size: 16px; color: var(--mute); }
+.step p.papers a { color: #dbe5ef; font-weight: 600; text-underline-offset: 3px; }
+.detail .cav { color: var(--amber); }
+.detail a { color: #dbe5ef; text-underline-offset: 3px; }
 .flow .step p, .flow .step ul.lim li { max-width: 60ch; }
 .detail { font-size: 16px; color: #c9d5e2; max-width: 70ch; }
 .detail h3 { font-size: 17px; color: #fff; margin: 20px 0 6px; font-weight: 650; }
@@ -980,7 +1008,22 @@ html.cam { scroll-snap-type: y mandatory; }
       y += h; P(g, 'M' + X + ' ' + y + 'H' + (X + W), 'rule');
     });
     y += 18;
-    y += T(g, X, y, M.note, { size: 17, cls: 'c3' });
+    y += T(g, X, y, M.note, { size: 17, w: W, lh: 23, cls: 'c3' });
+    // how long it takes: the comparison with its caveat beside it, then the batch figure
+    y += 44;
+    T(g, X, y, M.timeTitle, { size: 20, weight: 650, cls: 'c1' }); y += 36;
+    y += T(g, X, y, M.time, { size: 18, w: W, lh: 25, cls: 'c1' }) + 16;
+    var chH = HT(NL(M.timeCaveat, 17, 500, false, W - 40), 17, 23) + 32;
+    R(g, X, y, W, chH, 'bxa', 10);
+    T(g, X + 20, y + 16, M.timeCaveat, { size: 17, weight: 500, w: W - 40, lh: 23, cls: 'ca' });
+    y += chH + 34;
+    P(g, 'M' + X + ' ' + (y - 16) + 'H' + (X + W), 'rule');
+    T(g, X, y, M.batchTitle, { size: 20, weight: 650, cls: 'c1' }); y += 36;
+    y += T(g, X, y, M.batch, { size: 18, w: W, lh: 25, cls: 'c1' }) + 16;
+    var scH = HT(NL(M.scale, 17, 400, false, W - 40), 17, 23) + 32;
+    R(g, X, y, W, scH, 'bx2', 10);
+    T(g, X + 20, y + 16, M.scale, { size: 17, w: W - 40, lh: 23, cls: 'c2' });
+    y += scH;
     reg('meas', X - 8, ROWC - 8, W + 16, y - ROWC + 16);
   })();
 
@@ -1022,7 +1065,7 @@ html.cam { scroll-snap-type: y mandatory; }
       o.stage = si; o.kicker = 'Stage ' + (si + 1) + ' of 7'; o.title = sd.name; o.rail = sd.name; o.lines = [sd.lead];
       o.rect = REG[s.key]; o.show = [s.key]; o.keep = [s.key];
     } else {
-      o.title = fill(s.title); o.rail = s.rail; o.lines = s.lines.map(fill); o.hint = s.hint;
+      o.title = fill(s.title); o.rail = s.rail; o.lines = s.lines.map(fill); o.hint = s.hint; o.papers = !!s.papers;
       if (s.key === 'intro' || s.key === 'limits') { o.rect = ALL; o.show = []; o.keep = null; }
       else if (s.key === 'pipe') { o.rect = REG.pipe; o.show = ['glance']; o.keep = ['glance'].concat(PANELS); }
       else { o.rect = REG[s.key]; o.show = [s.key]; o.keep = [s.key]; }
@@ -1111,6 +1154,11 @@ html.cam { scroll-snap-type: y mandatory; }
       var M = C.measured;
       dl(box, M.rows.map(function (r) { return [r.fig, M.head[1] + ': ' + r.scope]; }));
       H('p', '', M.note, box);
+      H('h3', '', M.timeTitle, box); H('p', '', M.time, box); H('p', 'cav', M.timeCaveat, box);
+      H('h3', '', M.batchTitle, box); H('p', '', M.batch, box); H('p', '', M.scale, box);
+      H('h3', '', M.papersLabel, box);
+      var pu = H('ul', '', null, box);
+      M.papers.forEach(function (pp) { var a = H('a', '', pp.title, H('li', '', null, pu)); a.href = pp.href; a.rel = 'noopener'; });
     }
   }
   var sections = STOPS.map(function (st, i) {
@@ -1127,6 +1175,13 @@ html.cam { scroll-snap-type: y mandatory; }
       H('footer', '', C.footer, tx);
     } else {
       st.lines.forEach(function (l) { H('p', '', l, tx); });
+      if (st.papers) {
+        var pp = H('p', 'papers', C.measured.papersLabel + ': ', tx);
+        C.measured.papers.forEach(function (q, qi) {
+          if (qi) pp.appendChild(document.createTextNode('; '));
+          var a = H('a', '', q.short, pp); a.href = q.href; a.title = q.title; a.rel = 'noopener';
+        });
+      }
       if (st.hint) H('p', 'hint', st.hint, tx);
     }
     // stacked flow only: this stop's crop of the same map; the whole map stays silent
