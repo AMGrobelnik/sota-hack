@@ -32,6 +32,24 @@ SHUTTLE = {"name": "TTSKY26", "pdk": "sky130A", "closes": "2026-11-30", "tile_eu
            "devkit_individual_eur": 100, "submit_url": "https://app.tinytapeout.com/"}
 
 
+LGPL_MODULE = re.compile(r"\bchipin_alk_\w+")
+LGPL_FIX = ("regenerate the design with the clean emitter (compile with optimizer=alkaid on a lab version whose RTL "
+            "has no chipin_alk_* modules), or compile without the optimizer")
+
+
+def lgpl_modules(verilog: str) -> list[str]:
+    """Names of alkaid's LGPL-3.0 helper modules (chipin_alk_*) that older optimised emitters pasted into the RTL."""
+    return sorted(set(LGPL_MODULE.findall(verilog)))
+
+
+def refuse_lgpl_rtl(files) -> None:
+    """Tiny Tapeout projects are Apache-2.0: refuse RTL that carries alkaid's LGPL-3.0 Verilog helper modules."""
+    found = sorted({m for f in files if Path(f).exists() for m in lgpl_modules(Path(f).read_text(errors="ignore"))})
+    if found:
+        raise ValueError(f"RTL contains alkaid's LGPL-3.0 helper modules ({', '.join(found[:4])}"
+                         f"{', ...' if len(found) > 4 else ''}); Tiny Tapeout requires Apache-2.0: {LGPL_FIX}")
+
+
 def _ck(name, ok, detail="", fix=None, severity="error"):
     d = {"check": name, "ok": bool(ok), "severity": severity, "detail": detail}
     if not ok and fix:
@@ -236,6 +254,9 @@ def readiness(project_dir, run_tests: bool = True, run_precheck_if_hardened: boo
     checks.append(_ck("docs/info.md sections", not probs, "; ".join(probs) or "How it works / How to test / External hardware",
                       "chiplab.hw.tt_submit.fix_project(project)"))
     vtxt = "\n".join(s.read_text() for s in srcs if s.exists())
+    lgpl = lgpl_modules(vtxt)
+    checks.append(_ck("no LGPL code in RTL (Apache-2.0)", not lgpl, f"alkaid modules: {', '.join(lgpl[:4])}" if lgpl else "ok",
+                      LGPL_FIX))
     ports = _ports(vtxt, top) if vtxt else None
     checks.append(_ck("top module ports", ports == TT_TOP_PORTS, f"{sorted(ports) if ports else 'top module not found'}",
                       f"ports must be exactly {sorted(TT_TOP_PORTS)}"))
@@ -319,6 +340,8 @@ def export_submission_repo(project_dir, out_dir=None, mode: str = "standalone") 
     .github/workflows). mode=monorepo: staged under chiplab/tt_projects/<top>/ for the tt-gds.yaml workflow."""
     from chiplab.hw.tinytapeout import TT_TEMPLATE
     proj = Path(project_dir)
+    pre = yaml.safe_load((proj / "info.yaml").read_text())
+    refuse_lgpl_rtl(proj / "src" / s for s in (pre.get("project") or {}).get("source_files", []))
     fix = fix_project(proj)
     info = yaml.safe_load((proj / "info.yaml").read_text())
     pj = info["project"]; top = pj["top_module"]
