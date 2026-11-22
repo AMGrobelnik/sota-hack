@@ -24,7 +24,21 @@
      presets (lite 3, pro 10, ultra 20; 10, 20, 30 min each), levels of
      summaries, messages and stop, no fork, Chippy, training Python.
    - AF = dashboard/data/af-candidates.json (gh-pages): 2,330 gates,
-     3,880 of 3,880 windows, 256 candidates in one batch.
+     3,880 of 3,880 windows, 256 candidates in one batch; search_rate:
+     batched_per_min 1625.5 against single_per_min 27.6 (1,625.5 / 27.6
+     = 58.9, so about 59 times), one run on one machine.
+   - RUNS = dashboard/data/runs/index.json (gh-pages): five recorded runs,
+     duration_s 235.516 to 1896.954, so 4 to 32 minutes.
+   - PAPER = OpenROAD: Toward a Self-Driving, Open-Source Digital Layout
+     Implementation Tool Chain, GOMACTech 2019 (introduction): typical
+     hardware design cycles of 12-36 months for teams without large
+     design staffs. https://vlsicad.ucsd.edu/Publications/Conferences/370/c370.pdf
+   - AFPAPER = Precomputed 1D-CNNs for Atrial Fibrillation Detection on
+     Tiny Smart Sensor Systems, 2026, Section IV-A: one run takes about
+     13 minutes on one GPU, six runs per configuration.
+     https://arxiv.org/abs/2605.29994
+   - Summaries by a smaller model through a fallback chain:
+     backend/src/chipin_backend/llm/summaries.yaml (main).
    - RUN = dashboard/data/runs/20261122-050322-2c7896.json (gh-pages):
      1,897 s, 15 subagents, 139 tool calls, chosen chip 45 gates,
      0 mismatches, level 3, held-out sensitivity 0.714.
@@ -68,7 +82,7 @@ window.COPY = {
               'The full table is the last stop but one.'] },
     { key: 'stream', title: 'How a run reports',
       lines: ['Agents report stages, numbers, files and the chosen chip. Tool calls and messages join them in one event stream.',
-              'A smaller, cheaper open model writes short summaries at several levels, so a long run with many subagents stays easy to read.'] },
+              'A smaller model writes short summaries at several levels, so a long run with many subagents stays easy to read.'] },
     { key: 'talk', title: 'Talking to the agent, and to Chippy',
       lines: ['During a run you can message the orchestrator: steer it, ask it something, or stop it. It answers in the same stream.',
               'No fork: one run is one conversation.',
@@ -77,14 +91,18 @@ window.COPY = {
       lines: ['Every kept design is checked bit for bit against its model, then formally proved equivalent. It carries a verification level.',
               'This proves the gates equal the model. It does not show the model is clinically good.'] },
     { key: 'meas', title: 'Measured so far',
-      lines: ['Only these figures are stated as measured. Each comes with its scope.'] },
+      lines: ['Only these figures are stated as measured. Each comes with its scope.',
+              'Typical hardware design cycle without a large team: 12 to 36 months (OpenROAD, 2019). Our runs, brief to verified gates only: 4 to 32 minutes.',
+              'Different scopes: our minutes cover only brief to verified gate-level design on synthetic data; layout, signoff, fabrication, testing and clinical approval are not included.'],
+      links: [{ text: 'The OpenROAD paper (2019)', href: 'https://vlsicad.ucsd.edu/Publications/Conferences/370/c370.pdf' },
+              { text: 'The AF detection paper (2026)', href: 'https://arxiv.org/abs/2605.29994' }] },
     { key: 'table', title: 'All {n} tools, for reference',
       lines: ['The same lab as a table: each tool, what it does, and the stage that calls it.',
               'Any: used from any stage.'] },
     { key: 'limits', title: 'Limits',
       lines: ['ChipIn is a feasibility tool, not clinical evidence.',
               'The device maker keeps clinical validation and regulatory responsibility.',
-              'Area, power and cost are estimates from one open process.',
+              'Area, power and cost are estimates.',
               'Results on simulated data are labelled synthetic.'] }
   ],
 
@@ -181,7 +199,7 @@ window.COPY = {
       keeps: 'Only designs with zero mismatches and a proof.' },
     { key: 'report', name: 'Report', alone: true,
       lead: 'The orchestrator names one chip and reports it, misses included.',
-      does: 'Names the chosen chip, calls chip-report on it and writes the report. Area, power and cost are estimates from one open process.',
+      does: 'Names the chosen chip, calls chip-report on it and writes the report. Area, power and cost are marked as estimates.',
       out: 'The chosen chip, its figures and files, and a written report.',
       keeps: 'One chip, sent to the dashboard.' }
   ],
@@ -275,7 +293,7 @@ window.COPY = {
       ['stage', 'stage, when it closes', 'its groups and batches'],
       ['run', 'the run', 'the stage lines']
     ],
-    note: 'Written by a smaller, cheaper open model, with a fallback chain. A long final answer also gets a one-line label, and the run gets three bullets. Any line opens down to the full message or tool call.'
+    note: 'Written by a smaller model, with a fallback chain. A long final answer also gets a one-line label, and the run gets three bullets. Any line opens down to the full message or tool call.'
   },
 
   talk: {
@@ -307,7 +325,7 @@ window.COPY = {
     markTitle: 'How numbers are marked',
     marks: [
       { kind: 'Measured', sample: '2,330 gates', tag: '', text: 'Shown plain.' },
-      { kind: 'Estimate', sample: 'Area, power, cost', tag: 'estimate', text: 'Marked with its assumption: from layout tools, in one open process.' },
+      { kind: 'Estimate', sample: 'Area, power, cost', tag: 'estimate', text: 'Marked as an estimate, with its basis.' },
       { kind: 'Synthetic', sample: 'Simulated data', tag: 'synthetic', text: 'Results on simulated data say so.' }
     ]
   },
@@ -318,12 +336,19 @@ window.COPY = {
     rows: [
       { fig: '2,330 gates. Outputs matched the model on 3,880 of 3,880 test windows.',
         scope: 'One atrial-fibrillation feasibility circuit.' },
-      { fig: 'Candidate models trained 256 at a time, in one GPU batch.',
-        scope: 'A fair one-at-a-time baseline has not been measured, so there is no speed-up figure.' },
+      { fig: '256 candidate designs trained as one batch on one GPU: about 59 times faster than one at a time.',
+        scope: '1,625.5 against 27.6 candidates a minute. One run on one machine, the same feasibility search.' },
       { fig: 'One run with subagent batches: 15 subagents, five batches of three, 139 tool calls, 31 min 37 s.',
         scope: 'Lite preset, synthetic data. Its 45-gate chip had zero mismatches and reached level 3; on held-out patients it missed the targets, and the report says so.' }
     ],
-    note: 'Nothing else on this page is stated as measured.'
+    note: 'Nothing else on this page is stated as measured.',
+    time: {
+      label: 'How long it takes',
+      text: 'Teams without large design staffs typically see hardware design cycles of 12 to 36 months (OpenROAD, 2019). Our five recorded runs went from a one-paragraph brief to verified logic gates in 4 to 32 minutes, on synthetic data. Layout, fabrication and approval are not included.',
+      caveat: 'Different scopes: our minutes cover only brief to verified gate-level design on synthetic data; layout, signoff, fabrication, testing and clinical approval are not included.',
+      scale: 'For scale: a 2026 study of AF detection on a small FPGA reports about 13 minutes per training run on one GPU, with six runs per configuration (Einhaus et al., 2026). Our AF run trained 256 candidate designs as one batch at 1,625.5 a minute. Different models and training budgets: not a like-for-like benchmark.',
+      source: 'Run times: dashboard/data/runs/index.json. Batch rate: af-candidates.json.'
+    }
   }
 };
 /* ======================= END OF VISIBLE COPY ======================= */
@@ -377,6 +402,7 @@ main { padding-top: var(--bar); }
 .step p { margin: 0 0 12px; color: #c4d1df; font-size: 17.5px; line-height: 1.48; max-width: 36ch; }
 .step .kick { font-size: 15px; color: var(--signal); font-weight: 600; margin-bottom: 10px; }
 .step .hint { color: var(--mute); font-size: 15px; margin-top: 22px; }
+.step p.src a { color: var(--signal); font-weight: 600; text-underline-offset: 4px; }
 .step .tl { margin: 10px 0 0; max-width: 360px; }
 .step .tl .tlh { display: block; font-size: 14px; color: var(--mute); margin-bottom: 8px; }
 .step .tl code { display: inline-block; font: 500 14.5px/1 var(--mono); color: #062418; background: var(--signal); border-radius: 6px; padding: 6px 8px; margin: 0 6px 7px 0; }
@@ -920,7 +946,19 @@ html.cam { scroll-snap-type: y mandatory; }
       y += h; P(g, 'M' + DX + ' ' + y + 'H' + (DX + DW), 'rule');
     });
     y += 18;
-    y += T(g, DX, y, ME.note, { size: 18, cls: 'c3' });
+    y += T(g, DX, y, ME.note, { size: 18, cls: 'c3' }) + 28;
+    // design time: the comparison with its scope caveat beside it, then the training scale line
+    var tm = ME.time, tw = DW - 48, TL = function (s, sz, wt, lh) { return (NL(s, sz, wt, false, tw) - 1) * lh + sz; };
+    var th = 20 + 22 + 12 + TL(tm.text, 22, 600, 30) + 16 + TL(tm.caveat, 19, 500, 26) + 22 + TL(tm.scale, 19, 400, 26) + 14 + 16 + 20;
+    R(g, DX, y, DW, th, 'bxa', 12);
+    var ty = y + 20;
+    ty += T(g, DX + 24, ty, tm.label, { size: 19, weight: 650, cls: 'ca' }) + 12;
+    ty += T(g, DX + 24, ty, tm.text, { size: 22, weight: 600, w: tw, lh: 30, cls: 'c1' }) + 16;
+    ty += T(g, DX + 24, ty, tm.caveat, { size: 19, weight: 500, w: tw, lh: 26, cls: 'ca' }) + 10;
+    P(g, 'M' + (DX + 24) + ' ' + ty + 'H' + (DX + DW - 24), 'rule'); ty += 12;
+    ty += T(g, DX + 24, ty, tm.scale, { size: 19, w: tw, lh: 26, cls: 'c2' }) + 14;
+    T(g, DX + 24, ty, tm.source, { size: 16, cls: 'c3' });
+    y += th;
     reg('meas', DX - 20, m0 - 20, DW + 40, y - m0 + 40);
     // report stage to dashboard
     var rx = PX + 6 * PSTEP + PWID;
@@ -981,7 +1019,7 @@ html.cam { scroll-snap-type: y mandatory; }
       o.rect = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
       o.labX = SLOT[si];
     } else {
-      o.title = fill(s.title); o.lines = s.lines.map(fill); o.hint = s.hint;
+      o.title = fill(s.title); o.lines = s.lines.map(fill); o.hint = s.hint; o.links = s.links;
       var camKey = { intro: 'all', limits: 'all', lab: 'labStep' }[s.key] || s.key;
       o.rect = REG[camKey]; o.whole = camKey === 'all';
       o.labX = HOME;
@@ -1034,6 +1072,7 @@ html.cam { scroll-snap-type: y mandatory; }
     } else if (k === 'meas') {
       dl(box, ME.rows.map(function (r) { return [r.fig, ME.head[1] + ': ' + r.scope]; }));
       H('p', '', ME.note, box);
+      H('h3', '', ME.time.label, box); H('p', '', ME.time.text, box); H('p', '', ME.time.caveat, box); H('p', '', ME.time.scale, box); H('p', '', ME.time.source, box);
     } else if (k === 'table') {
       TO.groups.forEach(function (g) {
         H('h3', '', g.name + ' (' + g.tools.length + ')', box);
@@ -1070,6 +1109,7 @@ html.cam { scroll-snap-type: y mandatory; }
       H('footer', '', C.footer, sec);
     } else {
       st.lines.forEach(function (l) { H('p', '', l, sec); });
+      if (st.links) { var lp = H('p', 'src', null, sec); st.links.forEach(function (lk, li) { if (li) lp.appendChild(document.createTextNode(' · ')); var la = H('a', '', lk.text, lp); la.href = lk.href; la.rel = 'noopener'; }); }
       if (st.tools) {
         var tl = H('div', 'tl', null, sec);
         H('span', 'tlh', PI.narrCalls + ' (' + st.tools.length + ')', tl);

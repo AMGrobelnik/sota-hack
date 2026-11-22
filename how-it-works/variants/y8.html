@@ -12,7 +12,7 @@
    Change wording here only. {n} is filled with the number of tools in
    tools.groups, so the count always matches the list.
 
-   Short cut: nine stops, a five-minute talk. One stage (fine-tune) is
+   Short cut: ten stops, a five-minute talk. One stage (fine-tune) is
    shown in full depth; the other six are compact strips that open in
    the same panel when picked.
 
@@ -23,7 +23,21 @@
      was kept (stage.merged), the chosen chip's metrics, run.counts,
      run.duration_s (1,897 s), the summary levels (summary events).
    - AF = dashboard/data/af-candidates.json (gh-pages): 2,330 gates,
-     3,880 of 3,880 windows identical, 256 candidates in one GPU batch.
+     3,880 of 3,880 windows identical, 256 candidates in one GPU batch;
+     search_rate: batched_per_min 1625.5 against single_per_min 27.6
+     (1,625.5 / 27.6 = 58.9, so about 59 times), one run on one machine.
+   - RUNS = dashboard/data/runs/index.json (gh-pages): five recorded runs,
+     duration_s 235.516 to 1896.954, so 4 to 32 minutes.
+   - PAPER = OpenROAD: Toward a Self-Driving, Open-Source Digital Layout
+     Implementation Tool Chain, GOMACTech 2019 (introduction): typical
+     hardware design cycles of 12-36 months for teams without large
+     design staffs. https://vlsicad.ucsd.edu/Publications/Conferences/370/c370.pdf
+   - AFPAPER = Precomputed 1D-CNNs for Atrial Fibrillation Detection on
+     Tiny Smart Sensor Systems, 2026, Section IV-A: one run takes about
+     13 minutes on one GPU, six runs per configuration.
+     https://arxiv.org/abs/2605.29994
+   - Summaries by a smaller model through a fallback chain:
+     backend/src/chipin_backend/llm/summaries.yaml (main).
    - README = backend/README.md (main): seven stages, batches in five,
      presets (lite 3, pro 10, ultra 20; low, high, max effort; 10, 20,
      30 min each), summary levels, run chat box, stop, Chippy, the
@@ -34,7 +48,7 @@ window.COPY = {
   brand: 'ChipIn',
   pageTitle: 'ChipIn: how it works',
   pageLabel: 'How it works',
-  description: 'How ChipIn works, in nine stops: from a rough idea to a spec, through seven agent stages, to a verified chip.',
+  description: 'How ChipIn works, in ten stops: from a rough idea to a spec, through seven agent stages, to a verified chip.',
   nav: { home: 'Home', dashboard: 'Open the dashboard' },
   dashHref: '../../dashboard/variants/i1.html',
   rail: { label: 'Stops', stop: '{n}. {title}' },
@@ -45,7 +59,7 @@ window.COPY = {
     { key: 'intro', title: 'How ChipIn designs a chip',
       lines: ['You describe a medical sensing device. Agents design, train, compile and check the small chip at its core.',
               'You get the smallest chip that meets your targets, with every number traced to a tool.',
-              'Nine stops on one map.'],
+              'Ten stops on one map.'],
       hint: 'Scroll, or press Page Down, Space or the down arrow.' },
     { key: 'spec', title: 'From a rough idea to a spec',
       lines: ['You write a sentence or two.',
@@ -71,13 +85,18 @@ window.COPY = {
     { key: 'talk', title: 'Watching and steering a run',
       lines: ['Everything lands in one event stream, summarised level by level by a smaller model.',
               'You can message the orchestrator to steer, ask or stop. Chippy, the helper, explains the dashboard.'] },
+    { key: 'time', title: 'How long it takes',
+      lines: ['Typical hardware design cycle without a large team: 12 to 36 months (OpenROAD, 2019). Our runs, brief to verified gates only: 4 to 32 minutes.',
+              'Different scopes: our minutes cover only brief to verified gate-level design on synthetic data; layout, signoff, fabrication, testing and clinical approval are not included.'],
+      links: [{ text: 'The OpenROAD paper (2019)', href: 'https://vlsicad.ucsd.edu/Publications/Conferences/370/c370.pdf' },
+              { text: 'The AF detection paper (2026)', href: 'https://arxiv.org/abs/2605.29994' }] },
     { key: 'end', title: 'What is checked, and what is not',
       lines: ['ChipIn is a feasibility tool, not clinical evidence.',
               'Verification proves the gates equal the model; it says nothing about clinical performance.',
               'Area, power and cost are estimates.'] }
   ],
 
-  overview: ['Spec', 'Run size', 'Pipeline', 'Up close', 'Agent', 'Chip lab', 'Stream', 'Checks'],
+  overview: ['Spec', 'Run size', 'Pipeline', 'Up close', 'Agent', 'Chip lab', 'Stream', 'How long', 'Checks'],
 
   spec: {
     ideaLabel: 'Your rough idea (the recorded run’s brief)',
@@ -213,7 +232,7 @@ window.COPY = {
     /* README "Levels of summaries"; counts: RUN summary events, final versions */
     levels: [['Run', 'three bullets for the whole run'], ['Stage', 'one line per stage'], ['Batch', 'one line per batch'], ['Agent', 'one line per subagent'], ['Group', 'one line per run of one agent’s steps'], ['Item', 'one line per message or tool call']],
     levelNote: 'Recorded run: 1,765 events. Its summaries hold 595 item lines, 86 group lines, 15 agent lines, 5 batch lines and one run summary.',
-    model: 'Written by a smaller, cheaper model, with a fallback. A long answer also gets a one-line label.',
+    model: 'Written by a smaller model, with a fallback. A long answer also gets a one-line label.',
     chatLabel: 'The run’s chat box, from the recorded run',
     you: 'You',
     /* RUN: message event 05:08:11 and status 05:08:26 */
@@ -227,6 +246,18 @@ window.COPY = {
     chippy: 'Reads the runs, answers questions, opens a run, a tab or a file, and offers example prompts for the view you are on.'
   },
 
+  time: {
+    title: 'How long it takes',
+    label: 'Design time',
+    text: 'Teams without large design staffs typically see hardware design cycles of 12 to 36 months (OpenROAD, 2019). Our five recorded runs went from a one-paragraph brief to verified logic gates in 4 to 32 minutes, on synthetic data. Layout, fabrication and approval are not included.',
+    caveat: 'Different scopes: our minutes cover only brief to verified gate-level design on synthetic data; layout, signoff, fabrication, testing and clinical approval are not included.',
+    batchLabel: 'Training in one batch',
+    batch: '256 candidate designs trained as one batch on one GPU: about 59 times faster than one at a time.',
+    batchScope: '1,625.5 against 27.6 candidates a minute, measured in the AF feasibility run. One run on one machine.',
+    scale: 'For scale: a 2026 study of AF detection on a small FPGA reports about 13 minutes per training run on one GPU, with six runs per configuration (Einhaus et al., 2026). Our AF run trained 256 candidate designs as one batch at 1,625.5 a minute. Different models and training budgets: not a like-for-like benchmark.',
+    source: 'Run times: dashboard/data/runs/index.json. Batch rates: af-candidates.json.'
+  },
+
   checks: {
     title: 'What is checked',
     levels: [['1', 'Bit-exact simulation', 'simulate'], ['2', 'Formal equivalence proof', 'prove-equivalence'], ['3', 'Streaming RTL test and lint', 'rtl-simulate'],
@@ -235,11 +266,11 @@ window.COPY = {
     measTitle: 'Measured so far',
     meas: [
       ['2,330 gates, matching the model on 3,880 of 3,880 test windows.', 'One atrial-fibrillation feasibility circuit (af-candidates.json).'],
-      ['256 candidate models trained in one GPU batch.', 'The same feasibility search (af-candidates.json).'],
+      ['256 candidate designs trained as one batch on one GPU: about 59 times faster than one at a time.', '1,625.5 against 27.6 candidates a minute. One run on one machine, the same feasibility search (af-candidates.json).'],
       ['A 45-gate chip, proved equal to its model, from a 31 min 37 s run with 15 subagents.', 'Synthetic data. It missed both held-out targets (the recorded run file).']
     ],
     limitsTitle: 'Not claimed',
-    limits: ['No clinical validation; the device maker keeps that and the regulatory work.', 'Area, power and cost are estimates from one open process.', 'No claim of beating published work.']
+    limits: ['No clinical validation; the device maker keeps that and the regulatory work.', 'Area, power and cost are estimates.', 'No claim of beating published work.']
   }
 };
 /* ======================= END OF VISIBLE COPY ======================= */
@@ -286,6 +317,7 @@ main { padding-top: var(--bar); }
 .step p { margin: 0 0 12px; color: #c4d1df; font-size: 18.5px; line-height: 1.46; max-width: 34ch; }
 .step .kick { font-size: 15px; color: var(--signal); font-weight: 650; margin-bottom: 12px; letter-spacing: .02em; font-variant-numeric: tabular-nums; }
 .step .hint { color: var(--mute); font-size: 15px; margin-top: 22px; }
+.step p.src a { color: var(--signal); font-weight: 600; text-underline-offset: 4px; }
 .acts { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; margin: 18px 0 22px; }
 .acts a:not(.btn) { font-weight: 600; color: #dbe5ef; text-underline-offset: 4px; }
 .acts .btn { padding: 11px 18px; font-size: 16px; }
@@ -316,6 +348,7 @@ html.cam { scroll-snap-type: y mandatory; }
 #rail .tip { position: absolute; right: 40px; top: 50%; transform: translateY(-50%); white-space: nowrap; background: #1a2d47; color: #fff; border: 1px solid rgba(214, 228, 242, .3); border-radius: 8px; padding: 6px 10px; font: 600 15px/1.2 var(--f); opacity: 0; pointer-events: none; transition: opacity .15s ease; }
 #rail a:hover + .tip, #rail a:focus-visible + .tip { opacity: 1; }
 .flow #viewport, .flow #rail { display: none; }
+.flow main { padding-bottom: 72px; } /* room for the variant switcher pill */
 
 /* flow mode: reduced motion, smaller screens */
 .flow .step { padding: clamp(32px, 6vh, 56px) clamp(18px, 4vw, 48px); border-bottom: 1px solid var(--rule); max-width: 1180px; margin: 0 auto; }
@@ -779,10 +812,40 @@ html.cam { scroll-snap-type: y mandatory; }
     T(dg, sx + 16, sy0 + 50, PI.stream, { size: 20, w: 480, cls: 'c3' });
   })();
 
-  // 8 checks, measured, limits
+  // 8 how long it takes: design time with its caveat, batch training, the training scale line
+  var TM = C.time, TX = DX + 1100 + 200;
+  (function () {
+    var g = G('time'), X = TX, W = 1100, y = LOW, iw = W - 48;
+    T(g, X, y, TM.title, { size: 30, weight: 650, cls: 'c1' }); y += 50;
+    var h1 = 20 + 20 + 12 + TH(TM.text, 23, 600, iw, 31) + 16 + TH(TM.caveat, 20, 500, iw, 27) + 22;
+    R(g, X, y, W, h1, 'bxa', 12);
+    var ty = y + 20;
+    ty += T(g, X + 24, ty, TM.label, { size: 19, weight: 650, cls: 'ca' }) + 12;
+    ty += T(g, X + 24, ty, TM.text, { size: 23, weight: 600, w: iw, lh: 31, cls: 'c1' }) + 16;
+    T(g, X + 24, ty, TM.caveat, { size: 20, weight: 500, w: iw, lh: 27, cls: 'ca' });
+    y += h1 + 20;
+    var h2 = 20 + 20 + 12 + TH(TM.batch, 23, 600, iw, 31) + 12 + TH(TM.batchScope, 20, 400, iw, 27) + 22;
+    R(g, X, y, W, h2, 'bxg', 12);
+    ty = y + 20;
+    ty += T(g, X + 24, ty, TM.batchLabel, { size: 19, weight: 650, cls: 'cg' }) + 12;
+    ty += T(g, X + 24, ty, TM.batch, { size: 23, weight: 600, w: iw, lh: 31, cls: 'c1' }) + 12;
+    T(g, X + 24, ty, TM.batchScope, { size: 20, w: iw, lh: 27, cls: 'c2' });
+    y += h2 + 20;
+    var h3 = 20 + TH(TM.scale, 21, 400, iw, 29) + 22;
+    R(g, X, y, W, h3, 'bx2', 12);
+    T(g, X + 24, y + 20, TM.scale, { size: 21, w: iw, lh: 29, cls: 'c2' });
+    y += h3 + 16;
+    y += T(g, X, y, TM.source, { size: 17, cls: 'c3' });
+    REG.time = { x: X, y: LOW, w: W, h: y - LOW };
+    // the stream feeds this stop
+    var tg = GROUPS.talk, ay = LOW + 60;
+    P(tg, 'M' + (DX + 1100 + 20) + ' ' + ay + 'H' + (X - 14), 'ln'); head(tg, X - 4, ay, 'right');
+  })();
+
+  // 9 checks, measured, limits
   var CK = C.checks;
   (function () {
-    var g = G('end'), X = DX + 1100 + 200, W = 1100, y = LOW;
+    var g = G('end'), X = TX + 1100 + 200, W = 1100, y = LOW;
     T(g, X, y, CK.title, { size: 30, weight: 650, cls: 'c1' }); y += 50;
     CK.levels.forEach(function (lv) {
       var h = 58;
@@ -813,13 +876,13 @@ html.cam { scroll-snap-type: y mandatory; }
       y += h + 8;
     });
     REG.end = { x: X, y: LOW, w: W, h: y - 8 - LOW };
-    // the stream feeds the dashboard checks
-    var tg = GROUPS.talk, ty = LOW + 60;
-    P(tg, 'M' + (DX + 1100 + 20) + ' ' + ty + 'H' + (X - 14), 'ln'); head(tg, X - 4, ty, 'right');
+    // on to the dashboard checks
+    var tg = GROUPS.time, ty = LOW + 60;
+    P(tg, 'M' + (TX + 1100 + 20) + ' ' + ty + 'H' + (X - 14), 'ln'); head(tg, X - 4, ty, 'right');
   })();
 
   // ---------- whole map, overview numbers ----------
-  var ORDER = ['spec', 'run', 'pipe', 'deep', 'agent', 'tools', 'talk', 'end'];
+  var ORDER = ['spec', 'run', 'pipe', 'deep', 'agent', 'tools', 'talk', 'time', 'end'];
   var maxX = 0, maxY = 0;
   ORDER.forEach(function (k) { var r = REG[k]; maxX = Math.max(maxX, r.x + r.w); maxY = Math.max(maxY, r.y + r.h); });
   REG.all = { x: -60, y: -200, w: maxX + 120, h: maxY + 260 };
@@ -836,7 +899,7 @@ html.cam { scroll-snap-type: y mandatory; }
 
   // ---------- steps ----------
   var STEPS = C.steps.map(function (s) {
-    return { key: s.key, title: fill(s.title), lines: s.lines.map(fill), hint: s.hint, rect: REG[s.key === 'intro' ? 'all' : s.key], focus: s.key === 'intro' ? null : s.key };
+    return { key: s.key, title: fill(s.title), lines: s.lines.map(fill), hint: s.hint, links: s.links, rect: REG[s.key === 'intro' ? 'all' : s.key], focus: s.key === 'intro' ? null : s.key };
   });
   var N = STEPS.length, DEEP = STEPS.findIndex(function (s) { return s.key === 'deep'; });
 
@@ -883,6 +946,10 @@ html.cam { scroll-snap-type: y mandatory; }
       H('h3', '', TK.streamLabel, box); dlist(box, TK.levels); H('p', '', TK.levelNote, box); H('p', '', TK.model, box);
       H('h3', '', TK.chatLabel, box); dlist(box, [[TK.you, TK.msg], [TK.replyWho, TK.reply]]); H('p', '', TK.chatNote, box);
       H('h3', '', TK.chippyLabel, box); H('p', '', TK.chippy, box);
+    } else if (k === 'time') {
+      H('h3', '', TM.label, box); H('p', '', TM.text, box); H('p', '', TM.caveat, box);
+      H('h3', '', TM.batchLabel, box); H('p', '', TM.batch + ' ' + TM.batchScope, box);
+      H('p', '', TM.scale, box); H('p', '', TM.source, box);
     } else if (k === 'end') {
       H('h3', '', CK.title, box); var o4 = H('ol', '', null, box); CK.levels.forEach(function (l) { var li = H('li', '', l[1] + (l[2] ? ' ' : ''), o4); if (l[2]) li.appendChild(codes([l[2]])); });
       H('p', '', CK.levelNote, box);
@@ -896,6 +963,7 @@ html.cam { scroll-snap-type: y mandatory; }
     if (i > 0) H('p', 'kick', i + 1 + ' / ' + N, sec);
     var h = H(i === 0 ? 'h1' : 'h2', '', st.title, sec); h.id = 'h-' + st.key; sec.setAttribute('aria-labelledby', h.id);
     st.lines.forEach(function (l) { H('p', '', l, sec); });
+    if (st.links) { var lp = H('p', 'src', null, sec); st.links.forEach(function (lk, li) { if (li) lp.appendChild(document.createTextNode(' · ')); var la = H('a', '', lk.text, lp); la.href = lk.href; la.rel = 'noopener'; }); }
     if (st.hint) H('p', 'hint', st.hint, sec);
     if (st.key === 'deep') {
       var fs = H('fieldset', 'pick', null, sec); H('legend', '', PI.pick, fs);
