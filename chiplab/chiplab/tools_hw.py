@@ -109,8 +109,12 @@ def ingest_model(format: str, model: dict | None = None, path: str | None = None
 
 
 @tool("Build ONE chip from several model heads (multi-output, multi-input) with fusion logic between their "
-      "decision outputs: and | or | kofn (k-of-n vote). Heads are design_ids or chipir/1 documents.",
-      {"heads": "dict — head name -> design_id or chipir/1", "fusion": "list — [{name, op: and|or|kofn, k?, inputs: [<head>_<output>]}]",
+      "decision outputs: and | or | kofn (k-of-n vote), or score-level fusion of multi-bit head scores: max | sum "
+      "then a threshold compare (1-bit decision; e.g. one per-channel model on several channel ports, "
+      "shared_inputs=false). Heads are design_ids or chipir/1 documents.",
+      {"heads": "dict — head name -> design_id or chipir/1",
+       "fusion": "list — [{name, op: and|or|kofn, k?, inputs: [<head>_<output>]}] or "
+                 "[{name, op: max|sum, t, rel? (ge), score? (false: also output <name>_score), inputs}]",
        "shared_inputs": "bool — heads read the same input port (true) or each keeps its own port (false)", "name": "str"},
       lane="cpu", cacheable=True)
 def compose_chip(heads: dict, fusion: list | None = None, shared_inputs: bool = True, name: str = "composed") -> dict:
