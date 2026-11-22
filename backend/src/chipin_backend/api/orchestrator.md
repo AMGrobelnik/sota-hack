@@ -12,10 +12,15 @@ For each of reference, propose, finetune, compile and verify, in order:
    For example:
    - reference: different baseline model families or feature sets;
    - propose: different design families (tiny integer network, threshold
-     logic, lookup features, fewer channels, different bit widths);
+     logic, lookup features, fewer channels, different bit widths), each
+     written as a chipir/1 document or a trained model the lab can ingest,
+     never as Verilog;
    - finetune: different training strategies or settings for the kept
      candidates;
-   - compile: different kept designs and different compile choices;
+   - compile: different kept designs and different compile choices, each
+     through `chiplab compile-ir` or `chiplab ingest-model` so the design
+     has the `ir.json` that verify and chip-report need (never
+     `submit-verilog` without `reference_ir`);
    - verify: different kept designs and different checks (own held-out
      vectors, random vectors, formal proof, RTL simulation), each design
      verified by a subagent that did not build it.
@@ -43,7 +48,10 @@ For each of reference, propose, finetune, compile and verify, in order:
    (its file paths and design ids) into the next stage's briefs.
 
 At report, name the chosen chip with `./progress chosen <design_id>` and
-call the chip-report tool on it yourself. Subagents run on {subagent};
+call the chip-report tool on it yourself, with its `design_id` and the
+chip's `decision_rate_hz`. When the brief says no physical layout, run no
+layout, timing-power, tt-package, tt-export or bitstream call, not even
+when chip-report fails. Subagents run on {subagent};
 do not pass `--agent` or `--model` unless the user asked for it. This run
 allows {max_total} subagents in all and {timeout_min} minutes each; a
 start beyond a limit is refused with a message that says why, and then

@@ -23,7 +23,9 @@ offered by this server.
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
+import shutil
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -91,6 +93,36 @@ ORCHESTRATOR_NUDGE = (
     "as one batch of {width} subagents with different strategies (./subagent start, all before "
     "you wait), wait for them, merge the best (./subagent merge), then move on."
 )
+
+
+def _importable(module: str) -> bool:
+    """Whether ``module`` can be imported here (a missing parent package counts as no)."""
+    try:
+        return importlib.util.find_spec(module) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def _on_path(command: str) -> bool:
+    return shutil.which(command) is not None
+
+
+def agent_unavailable(agent: str, config: BackendConfig) -> str:
+    """Why ``agent`` cannot run on this machine (``""`` when it can).
+
+    ``openrouter`` needs the ``openhands`` extra importable and ``tmux`` on PATH (its
+    terminal tool runs in tmux); ``claude`` needs the configured ``claude`` CLI on PATH.
+    """
+    if agent == "openrouter":
+        if not _importable("openhands.sdk") or not _importable("openhands.tools"):
+            return "the openrouter agent needs the openhands extra (uv sync --extra openhands)"
+        if not _on_path("tmux"):
+            return "the openrouter agent needs tmux on PATH"
+    elif agent == "claude":
+        cli = config.agents.claude_cli.cli_path
+        if not _on_path(cli):
+            return f"the claude agent needs the claude CLI ({cli}) on PATH"
+    return ""
 
 
 class RequestError(ValueError):
@@ -388,7 +420,19 @@ class RunManager:
             return self.agent
         if asked not in REQUEST_AGENTS:
             raise RequestError(f"agent must be one of {sorted(REQUEST_AGENTS)}")
-        return self.agent if self.agent == "stub" else asked
+        if self.agent == "stub":
+            return self.agent
+        why = agent_unavailable(asked, self.config)
+        if why:
+            raise RequestError(f"agent {asked} cannot run on this server: {why}")
+        return asked
+
+    def agent_status(self) -> tuple[list[str], dict[str, str]]:
+        """The agents a run may name that can really run here, and why each other one cannot."""
+        if self.agent == "stub":
+            return [], {}
+        why = {name: agent_unavailable(name, self.config) for name in sorted(REQUEST_AGENTS)}
+        return [n for n, reason in why.items() if not reason], {n: r for n, r in why.items() if r}
 
     def _provider_choice(self, body: dict[str, Any], agent: ApiAgent) -> tuple[str | None, str | None]:
         """The body's ``provider`` and ``model`` for ``agent``, checked before a run folder is made.
@@ -716,6 +760,7 @@ __all__ = [
     "ApiRunner",
     "RequestError",
     "RunManager",
+    "agent_unavailable",
     "standing_instructions",
     "subagent_standing_instructions",
 ]

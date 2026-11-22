@@ -104,6 +104,7 @@ def test_a_full_spec_is_accepted_and_normalised() -> None:
         "find_best": False,
         "battery_hours": 24,
         "reusable": True,
+        "layout": None,
     }
     assert run_spec.data_used == {
         "use": "synthetic",
@@ -142,6 +143,7 @@ def test_a_full_spec_is_accepted_and_normalised() -> None:
         ({"constraints": {"channels": 0}}, "spec.constraints.channels must be more than 0"),
         ({"constraints": {"find_best": "yes"}}, "spec.constraints.find_best must be true, false or null"),
         ({"constraints": {"wires": 2}}, "spec.constraints has unknown field(s) wires"),
+        ({"constraints": {"layout": "no"}}, "spec.constraints.layout must be true, false or null"),
         ({"data": {"mode": "cloud"}}, "spec.data.mode must be one of public, own, simulate"),
         ({"data": {}}, "spec.data.mode is required"),
     ],
@@ -150,6 +152,35 @@ def test_a_bad_spec_is_refused_naming_the_field(change: dict[str, Any], message:
     with pytest.raises(SpecError) as err:
         parse_spec({**copy.deepcopy(SPEC), **change})
     assert message in str(err.value)
+
+
+@pytest.mark.parametrize(
+    ("brief", "layout"),
+    [
+        ("A single-lead ECG patch for AF. Use synthetic data; no physical layout needed.", False),
+        ("An EEG patch, without a layout please", False),
+        ("Seizure flag; the physical layout is not needed yet.", False),
+        ("Skip layout. Just gates.", False),
+        ("A seizure flag chip ready for tape-out", None),
+        ("Make a clean layout of the report", None),
+    ],
+)
+def test_a_brief_that_turns_layout_down_tells_the_agent_to_skip_it(brief: str, layout: bool | None) -> None:
+    """The live run's brief said no physical layout, yet it drew a layout image and wrote a GDS file."""
+    run_spec = parse_spec({**copy.deepcopy(SPEC), "brief": brief})
+    assert run_spec.spec["constraints"]["layout"] is layout
+    said = "- Physical layout: NOT wanted" in run_spec.block
+    assert said is (layout is False)
+    if said:
+        assert "Do not call layout, timing-power, tt-package, tt-export or bitstream" in run_spec.block
+
+
+def test_an_explicit_layout_choice_wins_over_the_brief() -> None:
+    body = {**copy.deepcopy(SPEC), "brief": "no layout needed"}
+    body["constraints"] = {**body["constraints"], "layout": True}
+    run_spec = parse_spec(body)
+    assert run_spec.spec["constraints"]["layout"] is True
+    assert "- Physical layout: wanted" in run_spec.block
 
 
 def test_data_modes_resolve_to_what_the_run_can_use(tmp_path: Path) -> None:

@@ -16,6 +16,7 @@ from aiohttp import ClientResponse
 from aiohttp.test_utils import TestClient, TestServer
 
 from chipin_backend.agents.types import AgentEvent
+from chipin_backend.api import manager as manager_mod
 from chipin_backend.api.config import ApiConfig, load_api_config
 from chipin_backend.api.events import STAGES, EventLog
 from chipin_backend.api.manager import API_RECORD_FILE, ApiRun, RunManager
@@ -101,7 +102,7 @@ async def test_health_needs_no_token(client: TestClient) -> None:
     assert await resp.json() == {
         "ok": True,
         "version": 1,
-        "defaults": {"agent": "stub", "runner": "local", "run_agents": []},
+        "defaults": {"agent": "stub", "runner": "local", "run_agents": [], "unavailable_agents": {}},
         "transcribe": False,
         "helper": False,
         "providers": [
@@ -112,11 +113,61 @@ async def test_health_needs_no_token(client: TestClient) -> None:
     }
 
 
-async def test_default_agent_is_claude_on_this_mac(config: BackendConfig) -> None:
+async def test_default_agent_is_claude_on_this_mac(
+    config: BackendConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(manager_mod, "agent_unavailable", lambda agent, config: "")
     app = create_app(_config(config), _api(0.01), token=TOKEN)
     async with TestClient(TestServer(app)) as c:
         body = await (await c.get("/api/health")).json()
-    assert body["defaults"] == {"agent": "claude", "runner": "local", "run_agents": ["claude", "openrouter"]}
+    assert body["defaults"] == {
+        "agent": "claude",
+        "runner": "local",
+        "run_agents": ["claude", "openrouter"],
+        "unavailable_agents": {},
+    }
+
+
+def _machine(monkeypatch: pytest.MonkeyPatch, *, openhands: bool, missing: str = "") -> None:
+    """This machine as ``agent_unavailable`` sees it: the extra installed or not, one command absent."""
+    monkeypatch.setattr(
+        manager_mod, "_importable", lambda module: openhands or not module.startswith("openhands")
+    )
+    monkeypatch.setattr(manager_mod, "_on_path", lambda command: command != missing)
+
+
+def test_openrouter_needs_the_openhands_extra(config: BackendConfig, monkeypatch: pytest.MonkeyPatch) -> None:
+    _machine(monkeypatch, openhands=False)
+    assert "openhands extra" in manager_mod.agent_unavailable("openrouter", config)
+    assert manager_mod.agent_unavailable("claude", config) == ""
+
+
+def test_openrouter_needs_tmux(config: BackendConfig, monkeypatch: pytest.MonkeyPatch) -> None:
+    _machine(monkeypatch, openhands=True, missing="tmux")
+    assert manager_mod.agent_unavailable("openrouter", config) == "the openrouter agent needs tmux on PATH"
+    _machine(monkeypatch, openhands=True, missing="claude")
+    assert manager_mod.agent_unavailable("openrouter", config) == ""
+    assert "claude CLI" in manager_mod.agent_unavailable("claude", config)
+
+
+def test_importable_is_false_for_a_missing_parent_package() -> None:
+    assert manager_mod._importable("json")
+    assert not manager_mod._importable("no_such_package_xyz.sdk")
+
+
+async def test_health_lists_only_agents_that_can_run_and_a_run_on_another_is_400(
+    config: BackendConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _machine(monkeypatch, openhands=False)
+    app = create_app(_config(config), _api(0.01), token=TOKEN)
+    async with TestClient(TestServer(app)) as c:
+        body = await (await c.get("/api/health")).json()
+        assert body["defaults"]["run_agents"] == ["claude"]
+        assert "openhands extra" in body["defaults"]["unavailable_agents"]["openrouter"]
+        resp = await c.post("/api/runs", json={"prompt": "p", "agent": "openrouter"}, headers=AUTH)
+        assert resp.status == 400
+        assert "openhands extra" in (await resp.json())["error"]
+        assert (await (await c.get("/api/runs", headers=AUTH)).json())["runs"] == []
 
 
 @pytest.mark.parametrize("headers", [{}, {TOKEN_HEADER: "wrong"}])

@@ -121,6 +121,30 @@ def test_run_facts_counts_and_chosen() -> None:
     assert [e["seq"] for e in page["events"]] == [4, 5, 6] and page["next"] == 7 and page["finished"] is True
 
 
+async def test_design_count_matches_designs_json_when_a_candidate_takes_a_lab_id(tmp_path: Path) -> None:
+    """The live run counted 13 designs in its facts while designs.json kept 10: renames via previous_id."""
+    import asyncio
+
+    from chipin_backend.api.designs import emit_design, read_designs
+    from chipin_backend.api.events import EventLog
+
+    log = EventLog(tmp_path / "events.jsonl", "r1", asyncio.get_running_loop())
+
+    def design(id_: str, previous: str | None = None) -> dict[str, Any]:
+        record = {"id": id_, "label": id_, "budget": {"channels": 1, "name": "1 lead"}, "gates": 10}
+        record |= {"metrics": {"sensitivity": 0.9}, "basis": "validation", "data": "synthetic"}
+        return record | ({"previous_id": previous} if previous else {})
+
+    emit_design(log, tmp_path, design("own-a"))
+    emit_design(log, tmp_path, design("own-b"))
+    emit_design(log, tmp_path, design("lab-1", "own-a"))  # compiled: renamed to the lab's id
+    emit_design(log, tmp_path, design("lab-1"))  # verified later under the lab's id
+    emit_design(log, tmp_path, design("lab-2"))
+    emit_design(log, tmp_path, design("lab-2", "own-b"))  # a rename after the new id was already seen
+    facts = run_facts({"id": "r1"}, log.since(1))
+    assert facts["counts"]["designs"] == len(read_designs(tmp_path)) == 2
+
+
 def test_scrubber_removes_private_details() -> None:
     s = Scrubber(home=HOME, host_names=("lab-mac-7",), user="someone")
     text = s.text(

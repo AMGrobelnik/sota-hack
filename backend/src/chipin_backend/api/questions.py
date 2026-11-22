@@ -203,7 +203,9 @@ changes for the agent.
 Reply with one JSON object only, no other text:
 {{"questions": [{{"id": "short_snake_case", "question": "...", "why": "...",
   "kind": "choice", "options": ["...", "..."], "default": "..."}}]}}
-"kind" is "choice" (2 to {o} options; the default is one of them) or "text" (no options)."""
+"kind" is "choice" (2 to {o} options; the default is one of them) or "text" (no options).
+Options and the default are the words the person reads ("A missed event", "A false alarm",
+"Both equally"), never code keys such as missed_event."""
 
 
 def system_prompt(config: QuestionsConfig) -> str:
@@ -228,6 +230,17 @@ def _one_line(value: Any, limit: int) -> str:
     return cut(" ".join(value.split()), limit) if isinstance(value, str) and value.strip() else ""
 
 
+_KEY_LIKE = re.compile(r"[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+")
+
+
+def readable(value: str) -> str:
+    """An option a person reads: a snake_case key (``missed_event``) becomes words ("Missed event")."""
+    if not _KEY_LIKE.fullmatch(value):
+        return value
+    words = re.sub(r"_+", " ", value).strip()
+    return words[:1].upper() + words[1:]
+
+
 def _slug(value: Any) -> str:
     if not isinstance(value, str):
         return ""
@@ -247,14 +260,16 @@ def _question(raw: Any, config: QuestionsConfig) -> dict[str, Any] | None:
         return None
     if FIXED_TOPICS.search(text) or EXCLUDED_TOPICS.search(text):
         return None
-    default = _one_line(raw.get("default"), config.default_max_chars)
+    default = readable(_one_line(raw.get("default"), config.default_max_chars))
     out: dict[str, Any] = {"id": qid, "question": text, "why": why, "kind": kind}
     if kind == "choice":
         raw_options = raw.get("options")
         if not isinstance(raw_options, list):
             return None
         options = list(
-            dict.fromkeys(o for o in (_one_line(x, config.option_max_chars) for x in raw_options) if o)
+            dict.fromkeys(
+                readable(o) for o in (_one_line(x, config.option_max_chars) for x in raw_options) if o
+            )
         )
         options = options[: config.max_options]
         if len(options) < 2:

@@ -31,7 +31,12 @@ from chipin_backend.agents.env import build_agent_env
 from chipin_backend.api.config import ApiConfig
 from chipin_backend.api.events import EventLog
 from chipin_backend.api.helper_tools import RunFolder, designs_of
-from chipin_backend.api.manager import ApiAgent, RunManager, standing_instructions
+from chipin_backend.api.manager import (
+    ApiAgent,
+    RunManager,
+    standing_instructions,
+    subagent_standing_instructions,
+)
 from chipin_backend.api.progress import LAB_DESIGN_METRICS, LAB_EVENT_METRICS, ProgressTailer, write_helper
 from chipin_backend.api.server import TOKEN_HEADER, create_app
 from chipin_backend.chiplab import (
@@ -307,6 +312,51 @@ def test_verify_stage_means_the_chip_against_its_model() -> None:
     assert "bit for bit" in stage
     assert "even with no recordings" in " ".join(stage.split())
     assert "the chip against your model" in _skill_md()
+
+
+def test_designs_enter_the_lab_with_an_ir_so_verify_and_report_can_run(tmp_path: Path) -> None:
+    """A live run hand-wrote Verilog for submit-verilog: no ir.json, so simulate, prove-equivalence,
+    rtl-simulate and chip-report all failed and the chosen chip stayed at level 1."""
+    paragraph = " ".join(chiplab_instructions().split())
+    assert "never as hand-written Verilog" in paragraph
+    for phrase in ("chiplab compile-ir", "chiplab ingest-model", "`ir.json`", "`reference_ir`"):
+        assert phrase in paragraph
+    for tool in ("`simulate`", "`prove-equivalence`", "`rtl-simulate`", "`chip-report`"):
+        assert tool in paragraph
+    assert "`ir.json`" in _skill_md() and "without `reference_ir`" in " ".join(_skill_md().split())
+    workflow = (skill_files() / "references" / "workflow.md").read_text(encoding="utf-8")
+    example = re.search(r"chiplab compile-ir --json '(\{.*\})'", workflow)
+    assert example is not None
+    ir = json.loads(example.group(1))["ir"]
+    assert ir["ir"] == "chipir/1" and [n["op"] for n in ir["nodes"]] == [
+        "matvec",
+        "abs",
+        "cmp",
+        "matvec",
+        "cmp",
+    ]
+    assert len(ir["nodes"][0]["W"]) == 11 and all(len(row) == 12 for row in ir["nodes"][0]["W"])
+    plan = " ".join(subagent_standing_instructions(_lab_env(tmp_path)).split())
+    assert "never as hand-written Verilog" in plan
+    from chipin_backend.api.fanout import ORCHESTRATOR_PATH
+
+    orchestrator = " ".join(ORCHESTRATOR_PATH.read_text(encoding="utf-8").split())
+    assert (
+        "never as Verilog" in orchestrator
+        and "`chiplab compile-ir` or `chiplab ingest-model`" in orchestrator
+    )
+    assert "`design_id` and the chip's `decision_rate_hz`" in orchestrator
+    assert "When the brief says no physical layout" in orchestrator
+
+
+def test_no_physical_layout_means_no_layout_tools() -> None:
+    """A live run's brief said no physical layout; it ran timing-power anyway and wrote a GDS file."""
+    paragraph = " ".join(chiplab_instructions().split())
+    assert "When the brief or the spec says no physical layout" in paragraph
+    for tool in ("`layout`", "`timing-power`", "`tt-package`", "`tt-export`", "`bitstream`"):
+        assert tool in paragraph
+    assert "not even when another call fails" in paragraph
+    assert "When the brief says no physical layout" in " ".join(_skill_md().split())
 
 
 def test_both_run_paths_get_the_same_instructions(

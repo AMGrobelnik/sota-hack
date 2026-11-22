@@ -47,7 +47,12 @@ def title_of(prompt: str) -> str:
 
 
 def _design_ids(events: Sequence[Mapping[str, Any]]) -> list[str]:
-    """Design ids in arrival order; a design renamed through ``prev_id`` counts once."""
+    """Design ids in arrival order, counted as ``designs.json`` keeps them.
+
+    A record with ``previous_id`` (``prev_id`` in older runs) takes over the design of
+    that id, as :func:`chipin_backend.api.designs.emit_design` does: a candidate renamed
+    to the lab's ``design_id`` once compiled counts once, not twice.
+    """
     order: list[str] = []
     for ev in events:
         if ev.get("type") != "design":
@@ -55,12 +60,16 @@ def _design_ids(events: Sequence[Mapping[str, Any]]) -> list[str]:
         d = ev.get("design") or ev.get("record")
         if not isinstance(d, Mapping) or not isinstance(d.get("id"), str):
             continue
-        prev = d.get("prev_id")
-        if isinstance(prev, str) and prev in order and prev != d["id"]:
-            order[order.index(prev)] = d["id"]
-        elif d["id"] not in order:
-            order.append(d["id"])
-    return list(dict.fromkeys(order))
+        new = d["id"]
+        prev = d.get("previous_id") or d.get("prev_id")
+        if isinstance(prev, str) and prev in order and prev != new:
+            if new in order:
+                order.remove(prev)
+            else:
+                order[order.index(prev)] = new
+        elif new not in order:
+            order.append(new)
+    return order
 
 
 def counts_of(events: Sequence[Mapping[str, Any]]) -> dict[str, int]:

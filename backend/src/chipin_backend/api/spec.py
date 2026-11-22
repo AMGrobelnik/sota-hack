@@ -7,14 +7,17 @@
      "place": "ward" | "home" | "patient", "fa_unit": "hour" | "night" | "day",
      "targets": [{"metric", "op": "at_least" | "at_most", "value", "unit"}],
      "primary",
-     "constraints": {"channels", "find_best", "battery_hours", "reusable"},
+     "constraints": {"channels", "find_best", "battery_hours", "reusable", "layout"},
      "data": {"mode": "public" | "own" | "simulate", "dataset"}}
 
 :func:`parse_spec` checks it (a ``SpecError`` names the field), and resolves
 the data: ``simulate`` is synthetic data; ``public`` uses a dataset only when
 the server's ``datasets`` setting maps its name to a local folder, else the
 agent is told it is not available and falls back to synthetic data; ``own``
-is not available in this build. The run gets ``workspace/spec.json``, a short
+is not available in this build. ``constraints.layout`` false means no physical
+layout (no layout, timing after layout, GDS or tape-out files); left out, it is
+false when the brief says so ("no physical layout needed") and else unset. The
+run gets ``workspace/spec.json``, a short
 "The user's spec" block at the top of the agent's first message, and the
 paragraph in ``spec.md`` added to its standing instructions.
 """
@@ -53,8 +56,16 @@ FIELDS = (
     "data",
 )
 REQUIRED = ("device", "signal", "detect", "targets", "primary", "data")
-CONSTRAINT_FIELDS = ("channels", "find_best", "battery_hours", "reusable")
+CONSTRAINT_FIELDS = ("channels", "find_best", "battery_hours", "reusable", "layout")
 _METRIC = re.compile(r"[a-z][a-z0-9_]{0,59}")
+#: A brief that turns physical layout down: "no physical layout needed", "without a layout", "skip layout".
+_NO_LAYOUT = re.compile(
+    r"\b(?:no|without(?: an?| any)?|skip(?: the)?|(?:do not|don't|doesn't|does not) need(?: an?| the| any)?)"
+    r"\s+(?:physical\s+|chip\s+)?layout\b"
+    r"|\b(?:physical\s+)?layout\s+(?:is\s+)?not\s+(?:needed|required|wanted)\b"
+    r"|\bno need for (?:an? |the )?(?:physical )?layout\b",
+    re.IGNORECASE,
+)
 
 
 class SpecError(ValueError):
@@ -146,6 +157,14 @@ def _targets(value: Any) -> list[dict[str, Any]]:
     return out
 
 
+def _layout(value: Any, brief: Any) -> bool | None:
+    """``constraints.layout`` as given, else false when the brief turns physical layout down."""
+    given = _flag("constraints.layout", value)
+    if given is not None:
+        return given
+    return False if isinstance(brief, str) and _NO_LAYOUT.search(brief) else None
+
+
 def _missing(where: str) -> str:
     raise SpecError(f"spec.{where} is required")
 
@@ -183,6 +202,7 @@ def parse_spec(raw: Any, datasets: Mapping[str, Path] | None = None) -> RunSpec:
                 "constraints.battery_hours", constraints.get("battery_hours"), positive=True
             ),
             "reusable": _flag("constraints.reusable", constraints.get("reusable")),
+            "layout": _layout(constraints.get("layout"), body.get("brief")),
         },
         "data": {
             "mode": _choice("data.mode", data.get("mode"), DATA_MODES) or _missing("data.mode"),
@@ -247,6 +267,14 @@ def render_block(spec: dict[str, Any], data_used: dict[str, Any]) -> str:
         lines.append(f"- Battery: {_value(c['battery_hours'])} h")
     if c["reusable"] is not None:
         lines.append(f"- Reusable device: {'yes' if c['reusable'] else 'no'}")
+    if c.get("layout") is False:
+        lines.append(
+            "- Physical layout: NOT wanted (the user said so). Do not call layout, timing-power, "
+            "tt-package, tt-export or bitstream; report the synthesis-based chip figures and say "
+            "layout was left out at the user's request."
+        )
+    elif c.get("layout") is True:
+        lines.append("- Physical layout: wanted (run layout and timing-power on the chosen chip)")
     if data_used["use"] == "synthetic":
         lines.append(
             f"- Data: SYNTHETIC ({data_used['reason']}). Generate synthetic recordings and write "
