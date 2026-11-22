@@ -463,7 +463,7 @@ async def test_a_user_message_reaches_the_agent(slow_client: TestClient) -> None
     await slow_client.post(f"/api/runs/{run_id}/stop", headers=AUTH)
     await _read_stream(resp)
     late = await slow_client.post(f"/api/runs/{run_id}/messages", json={"text": "hi"}, headers=AUTH)
-    assert late.status == 409
+    assert late.status == 202 and (await late.json())["delivery"] == "follow_up", "a stopped run continues"
 
 
 async def test_message_needs_text(slow_client: TestClient) -> None:

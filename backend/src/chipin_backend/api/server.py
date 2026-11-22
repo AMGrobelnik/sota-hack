@@ -14,7 +14,7 @@ Routes::
     GET  /api/runs/{id}
     GET  /api/runs/{id}/events?token=...&from=<seq>   (text/event-stream)
     GET  /api/runs/{id}/evidence     -> the run's evidence (409 while it runs)
-    POST /api/runs/{id}/messages     -> 202
+    POST /api/runs/{id}/messages     -> 202 {"accepted", "id", "delivery"} (see api/steer.py)
     POST /api/runs/{id}/stop         -> 202
     GET  /api/runs/{id}/files        -> {"files": [{"path", "size"}]} the agent's working folder
     GET  /api/runs/{id}/file?path=workspace/report.md   -> the file as UTF-8 text
@@ -166,8 +166,8 @@ async def get_evidence(request: web.Request) -> web.Response:
 async def post_message(request: web.Request) -> web.Response:
     """A message from the user to the running agent."""
     body = await _body(request)
-    await request.app[MANAGER].message(request.match_info["run_id"], body.get("text"))  # type: ignore[arg-type]
-    return _json({"accepted": True}, status=202)
+    answer = await request.app[MANAGER].message(request.match_info["run_id"], body.get("text"))  # type: ignore[arg-type]
+    return _json(answer, status=202)
 
 
 async def stop_run(request: web.Request) -> web.Response:

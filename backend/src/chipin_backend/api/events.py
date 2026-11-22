@@ -34,6 +34,7 @@ class EventLog:
         self._lock = threading.Lock()
         self._events: list[dict[str, Any]] = []
         self._changed = asyncio.Event()
+        self._reopened = False
         if path.is_file():
             self._events = _read_jsonl(path)
 
@@ -55,9 +56,9 @@ class EventLog:
             return self._events[-1]["seq"] if self._events else 0
 
     def append(self, type_: str, **fields: Any) -> dict[str, Any] | None:
-        """Write one event; ``None`` (dropped) once the run has finished."""
+        """Write one event; ``None`` (dropped) once the run has finished, unless reopened."""
         with self._lock:
-            if self._events and self._events[-1]["type"] == FINISHED:
+            if self._events and self._events[-1]["type"] == FINISHED and not self._reopened:
                 logger.debug("run {}: {} after run.finished dropped", self.run_id, type_)
                 return None
             event = {
@@ -73,8 +74,15 @@ class EventLog:
             except OSError as exc:
                 logger.error("run {}: event write to {} failed: {}", self.run_id, self.path, exc)
             self._events.append(event)
+            if type_ == FINISHED:
+                self._reopened = False
         self._wake()
         return event
+
+    def reopen(self) -> None:
+        """Take events again after ``run.finished`` (a follow-up), until the next ``run.finished``."""
+        with self._lock:
+            self._reopened = True
 
     def since(self, seq: int) -> list[dict[str, Any]]:
         """Every event with ``seq >= seq``, oldest first."""

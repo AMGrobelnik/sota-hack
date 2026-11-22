@@ -39,6 +39,7 @@ from chipin_backend.agents._claude.screen import (
     submit_held,
     visible_text,
 )
+from chipin_backend.agents._claude.steer import TypedMessages
 
 #: Longest wait for the TUI to settle after a spawn.
 START_WINDOW_S = 30.0
@@ -130,6 +131,8 @@ class ReplSession:
         on_record: Callable[[dict[str, Any]], None],
         break_when: Callable[[], bool] = lambda: False,
         deadline: float | None = None,
+        inbox: Callable[[], list[str]] = list,
+        on_message_delivered: Callable[[str], None] = lambda _text: None,
     ) -> None:
         self._argv_for = argv_for
         self._cli_path = cli_path
@@ -151,6 +154,8 @@ class ReplSession:
         self._first_turn = True
         self.last_delivered = False
         self._trust: TrustGrant | None = None
+        #: Messages typed into the running turn (see ``_claude/steer.py``).
+        self.typed = TypedMessages(inbox, on_message_delivered)
 
     # ---- transcript ----
 
@@ -222,6 +227,12 @@ class ReplSession:
     def _check_deadline(self) -> None:
         if self._deadline is not None and time.monotonic() >= self._deadline:
             raise RunDeadlineError("the agent's time budget is spent")
+
+    def continue_session(self, session_id: str) -> None:
+        """Take over an earlier session (a follow-up): the next ``start(resume=True)`` reloads it,
+        and its standing instructions are not typed again."""
+        self.session_id = session_id
+        self._first_turn = False
 
     def start(self, *, resume: bool) -> None:
         """Spawn the CLI and wait until it can take a prompt.
@@ -354,8 +365,18 @@ class ReplSession:
             body = f"<system-prompt>\n{system_prompt.strip()}\n</system-prompt>\n\n{body}"
         return typeable(body)
 
-    def turn(self, prompt: str, *, system_prompt: str | None = None) -> TurnResult:
+    def turn(
+        self,
+        prompt: str,
+        *,
+        system_prompt: str | None = None,
+        on_journaled: Callable[[], None] | None = None,
+    ) -> TurnResult:
         """Type ``prompt`` and block until the turn ends.
+
+        ``on_journaled`` is called once, when the transcript shows the prompt.
+        Messages from the inbox are typed while the turn runs; the turn ends
+        only once every one of them reached the model and its turn ended.
 
         Raises ``TimeoutError`` (a stall: nothing journaled, or no progress and
         an idle process tree for a whole window) or :class:`RunDeadlineError`.
@@ -404,6 +425,9 @@ class ReplSession:
                 raise TimeoutError(f"REPL turn stalled (no progress for {self._stall_s:.0f}s)")
             if self.last_delivered and self._break_when():
                 return TurnResult(final_text="\n".join(texts), interrupted=True)
+            if self.last_delivered:  # the CLI queues what is typed now; see _claude/steer.py
+                self.typed.type_waiting(self._short_write)
+                self.typed.nudge(self._short_write)
             screen = self._drain_screen(screen)
             held = None if self.last_delivered else submit_held(screen)
             if held and held not in visible_text(outgoing):
@@ -417,15 +441,24 @@ class ReplSession:
                 self.last_delivered = check_delivery(new, outgoing)
             if self.last_delivered:
                 deadline = time.monotonic() + self._stall_s
-            self._deliver(new)
+                if on_journaled is not None:
+                    on_journaled, journaled = None, on_journaled
+                    journaled()
             texts += _assistant_texts(new)
-            for rec in new:
+            for i, rec in enumerate(new):
+                # Record by record, so a delivery is reported before the answer to it.
+                self.typed.observe([rec])
+                self._deliver([rec])
                 if rec.get("isSidechain"):
                     continue
                 if rec.get("type") in ("user", "assistant"):
                     waiting_on_background = False
                 if rec.get("type") == "system" and rec.get("subtype") == "turn_duration":
+                    if self.typed:
+                        continue  # a typed message still queued goes out as the next turn
                     if not self._background.holds_turn_open():
+                        self.typed.observe(new[i + 1 :])
+                        self._deliver(new[i + 1 :])
                         return TurnResult(final_text="\n".join(texts))
                     waiting_on_background = True
                     logger.info(
@@ -438,6 +471,9 @@ class ReplSession:
                     final_text="\n".join(texts), api_error_status=status, api_error_message=banner
                 )
         return TurnResult(final_text="\n".join(texts))
+
+    def _short_write(self, data: str) -> None:
+        self._write(data, deadline=time.monotonic() + SHORT_WRITE_S)
 
     def capture_cost(self, *, idle_s: float = 2.5, max_wait_s: float = 8.0) -> str:
         """Send ``/cost``, return what the dialog drew, and dismiss it; ``""`` with no CLI.

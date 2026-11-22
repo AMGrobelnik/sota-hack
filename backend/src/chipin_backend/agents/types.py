@@ -97,6 +97,8 @@ class AgentSpec:
     timeout_s: int | None = None  # whole-agent wall clock
     retries: int = 1  # whole-agent restarts after a crash or stall
     env: dict[str, str] = field(default_factory=dict)
+    #: A follow-up: continue this backend session (``AgentResult.session_id``) in the same workdir.
+    resume_session: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Plain JSON-ready dict (``workdir`` as a string)."""

@@ -223,6 +223,49 @@ run's chosen chip; a later one replaces an earlier one. Presets map to agent eff
 A run cut short ends `stopped`, its summary saying whether the user
 stopped it or the server was shut down.
 
+### Talking to the agent
+
+`POST /api/runs/{id}/messages` with `{"text": "..."}` (the token header,
+at most 4,000 characters) talks to the run's agent, the orchestrator only.
+It answers 202 with `id` (`m1`, `m2`, ...) and `delivery`: `live` (it went
+to the running agent), `after_run` (the agent was between its last step
+and the end of the run; it goes as a follow-up then) or `follow_up`.
+
+- The message is recorded at once as
+  `{"type": "message", "role": "user", "author": "you", "text", "message_id"}`.
+- When the agent has it, a `status` event follows with
+  `"text": "Your message reached the agent"` and the same `message_id`.
+  The agent's answer and what it does next are ordinary events. Several
+  messages are delivered in the order sent; the run is never restarted.
+- After the run ended (`succeeded` or `stopped`), a message is a
+  follow-up: the same session continues in the same folder, in the same
+  event stream. The run goes back to `running` and ends with another
+  `run.finished` carrying `follow_up: <n>`; the delivery status comes when
+  the agent starts answering. The `cost` event and the run's cost are the
+  totals so far (`turn_usd` is the follow-up's own); `run.json` lists each
+  follow-up under `result.follow_ups`. A stream that closed at the first
+  `run.finished` must be opened again with `from=<next seq>`.
+- Errors: 404 unknown run, 400 empty text, 413 too long, 409 a failed run,
+  429 too many runs in progress (for a follow-up), 401 no token.
+- The standing instructions say a user message takes priority over the
+  plan where they conflict: answer briefly, say what changes, carry on.
+
+What "delivered" means per harness:
+
+- `claude_cli`: the message is typed into the running CLI, which queues
+  it and hands it to the model as soon as the running tool calls finish,
+  inside the same turn (Claude Code docs, "Queue messages while Claude
+  works"). Delivered is the transcript record that hands it over
+  (`queue-operation` `remove` with `absorbed_mid_turn`, or the user record
+  of the next turn when it came as a turn ended). A follow-up resumes the
+  session with `--resume <session id>`; the cost is this turn's share.
+- `openrouter`: `Conversation.send_message` while the loop runs; the
+  agent's next step reads it. Delivered is when it is in the conversation.
+  A follow-up continues the conversation kept in memory (the last four);
+  after a server restart it starts a new one in the same folder, told to
+  read the files there.
+- `stub`: answered at its next step and noted in `report.md`.
+
 The files routes cover the agent's working folder only. Paths are
 run-folder paths such as `workspace/report.md`, the same as an `artifact`
 event's `path`; the `progress` helper and hidden files are not listed, a
