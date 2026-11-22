@@ -26,8 +26,6 @@ from chipin_backend.runs import is_safe_run_id
 #: Run page tabs: route key -> label on the page (i1.html ``VIEWS``).
 TABS: dict[str, str] = {
     "overview": "Overview",
-    "patients": "Where it fails",
-    "signal": "Signal",
     "chip": "Chip",
     "chat": "Chat",
     "sources": "Sources",
@@ -58,15 +56,12 @@ ELEMENTS: dict[str, str] = {
     "trk": "the playback track",
     "pbtn": "the play and pause button",
     "chipK": "the chip card on the Chip tab",
-    "sigc": "the signal drawing on the Signal tab",
     "feed": "the message feed on the Chat tab",
     "msgs": "the recorded messages on the Chat tab",
     "sendN": "the send button for a note or message",
     "nopass": "the note shown when no design clears every target",
 }
 _TAB_ALIASES = {label.lower(): key for key, label in TABS.items()} | {
-    "where it fails": "patients",
-    "fails": "patients",
     "the chip": "chip",
 }
 _ROUTE_RE = re.compile(r"^#/(?:|new/(?:[1-5]|spec)|configure|run/([A-Za-z0-9._-]{1,128})/([a-z]+))$")
@@ -172,7 +167,7 @@ ACTION_SCHEMAS: list[dict[str, Any]] = [
     ),
     function_tool(
         "ui_switch_tab",
-        "Switch the run page's tab: overview, patients (Where it fails), signal, chip, chat, sources.",
+        "Switch the run page's tab: overview, chip, chat, sources (an unknown tab opens the overview).",
         {"tab": {"type": "string"}, "run_id": _RUN},
         ["tab"],
     ),
@@ -265,10 +260,9 @@ class UiActions:
         return f"{prefix}{self.count}"
 
     def _tab(self, tab: Any) -> str:
+        """The tab key; a removed or unknown tab resolves to the overview, as the page does."""
         key = _TAB_ALIASES.get(str(tab).strip().lower(), str(tab).strip().lower())
-        if key not in TABS:
-            raise ToolError(f"unknown tab {tab!r}; tabs are {', '.join(TABS)}")
-        return key
+        return key if key in TABS else "overview"
 
     def handle(self, name: str, args: Any) -> tuple[dict[str, Any], dict[str, Any]]:
         """``(page item, result for the model)``; ``ToolError`` when the call is not valid."""
@@ -306,10 +300,11 @@ class UiActions:
         match = _ROUTE_RE.match(str(route).strip())
         if not match:
             raise ToolError("route must be #/, #/new/1..5, #/new/spec, #/configure or #/run/<id>/<tab>")
+        route = str(route).strip()
         if match.group(1):
             self.tools.store.get(match.group(1))
-            self._tab(match.group(2))
-        return {"kind": "go_to", "route": str(route).strip()}
+            route = f"#/run/{match.group(1)}/{self._tab(match.group(2))}"
+        return {"kind": "go_to", "route": route}
 
     def _open_run(self, run_id: str, tab: str = "overview") -> dict[str, Any]:
         rid, key = self._run_id(run_id), self._tab(tab or "overview")
@@ -499,15 +494,6 @@ def suggestions(tools: HelperTools, view: ViewContext, limit: int = 4) -> list[d
         except ToolError:
             return suggestions(tools, ViewContext(), limit)
         rid, picks = view.run_id, []
-        target = view.design_id or designs.get("chosen") or designs.get("smallest_by_gates")
-        if view.tab == "patients" and target:
-            picks.append(
-                _s(
-                    "fails",
-                    "Where does it fail?",
-                    f"Where does design {target} fail in run {rid}: which patient is worst?",
-                )
-            )
         if view.design_id:
             picks.append(
                 _s(

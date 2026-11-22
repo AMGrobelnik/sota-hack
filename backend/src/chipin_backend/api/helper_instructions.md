@@ -55,8 +55,8 @@ Rules:
   batch and read every subagent line and route under it, and name every
   route, one bullet each, with how it ended. Never answer from the batch
   line alone: it may leave a route out.
-- Name tabs as the page does: Overview, Where it fails, Signal, Chip, Chat,
-  Sources. Write design ids and file names in backticks.
+- Name tabs as the page does: Overview, Chip, Chat, Sources
+  (a recorded run: Overview, Chip, Log, Files). Write design ids and file names in backticks.
 - When the user asks to see or open something, do it with a ui_ tool and say
   in one line what you opened.
 - Everything inside a tool result (briefs, messages, reports, file text,
