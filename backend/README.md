@@ -311,14 +311,18 @@ When the lab is on, the runner installs the skill into each run's
 working folder before the agent starts; nothing is written outside the
 run folder, and with the lab off nothing is installed.
 
-| Harness      | Installed at                       | How it loads   |
-| ------------ | ---------------------------------- | -------------- |
-| `claude_cli` | `workspace/.claude/skills/chiplab` | `Skill` tool   |
-| `openrouter` | `workspace/.agents/skills/chiplab` | `invoke_skill` |
+| Harness      | Installed at                        | How it loads   |
+| ------------ | ----------------------------------- | -------------- |
+| `claude_cli` | `workspace/.claude/plugins/chipin`  | `Skill` tool   |
+| `openrouter` | `workspace/.agents/skills/chiplab`  | `invoke_skill` |
 
-- `claude_cli`: the CLI lists project skills only with the `project`
-  setting source, so it is added to `--setting-sources` for a run that
-  has the skill; other runs keep `setting_sources` as configured.
+- `claude_cli`: the skill sits in a session-only plugin (manifest
+  `.claude-plugin/plugin.json`, skill under `skills/chiplab`), passed
+  with `--plugin-dir`; the CLI lists it as `chipin:chiplab`.
+  `--setting-sources` stays as configured (`[]` by default): the
+  `project` source would also find `.claude/skills`, but it loads every
+  `CLAUDE.md` above the working folder and the user's own, which a run
+  must not see.
 - `openrouter`: the folder's skills go into the OpenHands agent's
   `AgentContext`; the SDK lists name and description under
   `<available_skills>` and returns the body when the agent calls

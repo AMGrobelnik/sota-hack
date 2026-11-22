@@ -23,7 +23,7 @@ import yaml
 from aiohttp.test_utils import TestClient, TestServer
 from loguru import logger
 
-from chipin_backend.agents.claude_cli import setting_sources
+from chipin_backend.agents.claude_cli import build_argv, plugin_dirs
 from chipin_backend.agents.env import build_agent_env
 from chipin_backend.agents.types import AgentResult, AgentSpec
 from chipin_backend.api.config import ApiConfig
@@ -33,6 +33,7 @@ from chipin_backend.api.progress import ProgressTailer, write_helper
 from chipin_backend.api.server import TOKEN_HEADER, create_app
 from chipin_backend.chiplab import (
     CHIPLAB_BIN_ENV,
+    CLAUDE_PLUGIN_NAME,
     PROGRESS_CHIP_ENV,
     TOOLS_REFERENCE,
     chiplab_available,
@@ -598,8 +599,8 @@ def _front_matter(text: str) -> tuple[dict[str, Any], str]:
 @pytest.mark.parametrize(
     ("harness", "folder"),
     [
-        ("claude_cli", ".claude/skills/chiplab"),
-        ("claude", ".claude/skills/chiplab"),
+        ("claude_cli", ".claude/plugins/chipin/skills/chiplab"),
+        ("claude", ".claude/plugins/chipin/skills/chiplab"),
         ("openrouter", ".agents/skills/chiplab"),
     ],
 )
@@ -609,7 +610,10 @@ def test_skill_installed_where_each_harness_finds_it(tmp_path: Path, harness: st
     dest = install_skill(workspace, harness, _lab_env(tmp_path))
     assert dest == workspace / folder
     files = sorted(str(p.relative_to(workspace)) for p in workspace.rglob("*") if p.is_file())
+    # The claude CLI loads the skill as a plugin: its manifest sits at the plugin root.
+    manifest = [".claude/plugins/chipin/.claude-plugin/plugin.json"] if folder.startswith(".claude") else []
     assert files == [
+        *manifest,
         f"{folder}/SKILL.md",
         f"{folder}/references/tools.md",
         f"{folder}/references/workflow.md",
@@ -729,7 +733,7 @@ class _SkillCheckBackend:
 @pytest.mark.parametrize(
     ("harness", "expected"),
     [
-        ("claude_cli", [".claude/skills/chiplab/SKILL.md"]),
+        ("claude_cli", [".claude/plugins/chipin/skills/chiplab/SKILL.md"]),
         ("openrouter", [".agents/skills/chiplab/SKILL.md"]),
         ("stub", []),
     ],
@@ -764,14 +768,30 @@ async def test_the_runner_installs_nothing_with_the_lab_off(
     assert list(run.workspace.iterdir()) == []
 
 
-def test_claude_loads_project_skills_only_when_the_run_has_them(tmp_path: Path) -> None:
+def test_claude_loads_the_skill_as_a_plugin_without_setting_sources(tmp_path: Path) -> None:
+    """The skill comes in by ``--plugin-dir``; the setting sources stay as configured.
+
+    The ``project`` source would load every CLAUDE.md above the run folder and
+    the user's own, so a run with the skill must not add it.
+    """
     cli = ClaudeCliConfig()
-    spec = AgentSpec(name="a", prompts=["p"], workdir=tmp_path)
-    assert setting_sources(spec, cli) == []
-    install_skill(tmp_path, "claude_cli", _lab_env(tmp_path / "lab"))
-    assert setting_sources(spec, cli) == ["project"]
-    user = cli.model_copy(update={"setting_sources": ["user", "project"]})
-    assert setting_sources(spec, user) == ["user", "project"]
+    workdir = tmp_path / "ws"
+    spec = AgentSpec(name="a", prompts=["p"], workdir=workdir)
+    argv = build_argv(spec, cli, session_id="sid", resume=False)
+    assert plugin_dirs(spec) == [] and "--plugin-dir" not in argv
+    install_skill(workdir, "claude_cli", _lab_env(tmp_path / "lab"))
+    root = (workdir / ".claude" / "plugins" / CLAUDE_PLUGIN_NAME).resolve()
+    assert plugin_dirs(spec) == [root]
+    manifest = json.loads((root / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    assert manifest["name"] == CLAUDE_PLUGIN_NAME
+    assert (root / "skills" / "chiplab" / "SKILL.md").is_file()
+    for resume in (False, True):
+        argv = build_argv(spec, cli, session_id="sid", resume=resume)
+        assert argv[argv.index("--plugin-dir") + 1] == str(root)
+        assert argv[argv.index("--setting-sources") + 1] == ""
+    configured = cli.model_copy(update={"setting_sources": ["user"]})
+    argv = build_argv(spec, configured, session_id="sid", resume=False)
+    assert argv[argv.index("--setting-sources") + 1] == "user"
 
 
 def test_openhands_agent_gets_the_skill_in_its_context(tmp_path: Path, config: BackendConfig) -> None:

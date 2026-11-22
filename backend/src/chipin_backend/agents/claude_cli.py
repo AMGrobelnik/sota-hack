@@ -25,6 +25,7 @@ import subprocess
 import threading
 import time
 from collections import deque
+from pathlib import Path
 from typing import Any, ClassVar
 
 from loguru import logger
@@ -52,7 +53,7 @@ from chipin_backend.agents.output import (
     written_files,
 )
 from chipin_backend.agents.types import AgentEvent, AgentResult, AgentSpec, EventSink
-from chipin_backend.chiplab import SKILL_DIRS
+from chipin_backend.chiplab import CLAUDE_PLUGIN_DIR, CLAUDE_PLUGIN_MANIFEST
 from chipin_backend.config import AgentsConfig, ClaudeCliConfig
 
 #: API-error statuses worth another turn (auth blips, rate limits, overload).
@@ -364,19 +365,18 @@ class _TurnDriver:
         time.sleep(wait_s)
 
 
-def setting_sources(spec: AgentSpec, cli: ClaudeCliConfig) -> list[str]:
-    """``cli.setting_sources``, plus ``project`` when the working folder holds skills.
+def plugin_dirs(spec: AgentSpec) -> list[Path]:
+    """The session-only plugins for ``spec``: the run's chip-lab plugin when it is installed.
 
-    The CLI reads project skills (``.claude/skills/<name>/SKILL.md`` under its
-    working folder) only with the ``project`` source; the backend installs the
-    chip-lab skill there when the lab is on (``chiplab.install_skill``). A run
-    without that folder keeps the configured sources unchanged.
+    ``chiplab.install_skill`` writes the skill as a plugin folder
+    (:data:`~chipin_backend.chiplab.CLAUDE_PLUGIN_DIR`) in the working folder
+    when the lab is on; ``--plugin-dir`` loads its skills without any setting
+    source, so no CLAUDE.md from outside the run folder comes with it.
     """
-    sources = list(cli.setting_sources)
-    has_skills = spec.workdir is not None and (spec.workdir / SKILL_DIRS["claude_cli"]).is_dir()
-    if has_skills and "project" not in sources:
-        sources.append("project")
-    return sources
+    if spec.workdir is None:
+        return []
+    root = spec.workdir / CLAUDE_PLUGIN_DIR
+    return [root.resolve()] if (root / CLAUDE_PLUGIN_MANIFEST).is_file() else []
 
 
 def build_argv(spec: AgentSpec, cli: ClaudeCliConfig, *, session_id: str, resume: bool) -> list[str]:
@@ -385,7 +385,8 @@ def build_argv(spec: AgentSpec, cli: ClaudeCliConfig, *, session_id: str, resume
     Flags: ``--session-id`` or
     ``--resume``, ``--model``, ``--effort``, ``--permission-mode``,
     ``--dangerously-skip-permissions``, ``--setting-sources``, ``--settings``
-    (JSON), ``--allowed-tools``, ``--disallowed-tools``, ``--mcp-config``.
+    (JSON), ``--plugin-dir`` (:func:`plugin_dirs`), ``--allowed-tools``,
+    ``--disallowed-tools``, ``--mcp-config``.
     The system prompt is not a flag: it is typed with the first prompt, so a
     resumed session keeps it without sending it twice.
     """
@@ -407,7 +408,9 @@ def build_argv(spec: AgentSpec, cli: ClaudeCliConfig, *, session_id: str, resume
     if cli.skip_permissions:
         argv.append("--dangerously-skip-permissions")
     argv += ["--settings", json.dumps(settings)]
-    argv += ["--setting-sources", ",".join(setting_sources(spec, cli))]
+    argv += ["--setting-sources", ",".join(cli.setting_sources)]
+    for plugin in plugin_dirs(spec):
+        argv += ["--plugin-dir", str(plugin)]
     argv += ["--effort", spec.effort or cli.effort]
     if spec.allowed_tools is not None:
         argv += ["--allowed-tools", ",".join(spec.allowed_tools)]
@@ -486,4 +489,4 @@ def translate_record(record: dict[str, object], agent: str) -> list[AgentEvent]:
     return events
 
 
-__all__ = ["ClaudeCliBackend", "build_argv", "setting_sources", "transcript_path", "translate_record"]
+__all__ = ["ClaudeCliBackend", "build_argv", "plugin_dirs", "transcript_path", "translate_record"]

@@ -29,6 +29,7 @@ installed lab's own tool reference copied in as ``references/tools.md``.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -94,11 +95,19 @@ def chiplab_instructions() -> str:
 
 #: The skill's name: its folder name and the ``name`` in its front matter.
 SKILL_NAME = "chiplab"
-#: Where each agent harness discovers project skills, relative to its working folder:
-#: the claude CLI reads ``.claude/skills/<name>/SKILL.md``; OpenHands reads
-#: AgentSkills folders from ``.agents/skills/`` (see ``agents/openrouter_agent.py``).
+#: The claude CLI gets the skill as a session-only plugin (``--plugin-dir``, see
+#: ``agents/claude_cli.py``): this folder under its working folder is the plugin's
+#: root, with the manifest and a ``skills/`` folder. The project setting source
+#: would also find ``.claude/skills/``, but it loads every CLAUDE.md above the
+#: working folder and the user's own, so it stays off.
+CLAUDE_PLUGIN_NAME = "chipin"
+CLAUDE_PLUGIN_DIR = Path(".claude") / "plugins" / CLAUDE_PLUGIN_NAME
+CLAUDE_PLUGIN_MANIFEST = Path(".claude-plugin") / "plugin.json"
+#: Where each agent harness discovers skills, relative to its working folder:
+#: the claude CLI reads ``skills/<name>/SKILL.md`` in the plugin above; OpenHands
+#: reads AgentSkills folders from ``.agents/skills/`` (see ``agents/openrouter_agent.py``).
 SKILL_DIRS: dict[str, Path] = {
-    "claude_cli": Path(".claude") / "skills",
+    "claude_cli": CLAUDE_PLUGIN_DIR / "skills",
     "openrouter": Path(".agents") / "skills",
 }
 #: The dashboard's agent names for the same harnesses.
@@ -123,11 +132,19 @@ def install_skill(workspace: Path, harness: str, source: Mapping[str, str] | Non
     test as :func:`chiplab_env`) and only for a harness that loads skills
     (``claude_cli``/``claude`` or ``openrouter``); otherwise nothing is written
     and ``None`` is returned. Idempotent: a second call rewrites the same files.
-    Returns the skill's folder.
+    For the claude CLI the skill sits in a plugin folder
+    (:data:`CLAUDE_PLUGIN_DIR`) whose manifest is written too. Returns the
+    skill's folder.
     """
-    folder = SKILL_DIRS.get(HARNESS_ALIASES.get(harness, harness))
+    name = HARNESS_ALIASES.get(harness, harness)
+    folder = SKILL_DIRS.get(name)
     if folder is None or not chiplab_env(source):
         return None
+    if name == "claude_cli":
+        manifest = workspace / CLAUDE_PLUGIN_DIR / CLAUDE_PLUGIN_MANIFEST
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        body = {"name": CLAUDE_PLUGIN_NAME, "description": "ChipIn run tools: the chip-lab skill"}
+        manifest.write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8")
     dest = write_skill(workspace / folder / SKILL_NAME, source)
     logger.info("chip-lab skill installed for {} at {}", harness, folder / SKILL_NAME)
     return dest
@@ -263,6 +280,9 @@ __all__ = [
     "CHIPLAB_COMMAND",
     "CHIPLAB_INSTRUCTIONS_PATH",
     "CHIPLAB_PASSED_NAMES",
+    "CLAUDE_PLUGIN_DIR",
+    "CLAUDE_PLUGIN_MANIFEST",
+    "CLAUDE_PLUGIN_NAME",
     "PROGRESS_CHIP_ENV",
     "SKILL_DIRS",
     "SKILL_NAME",
