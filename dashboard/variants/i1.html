@@ -820,6 +820,7 @@ select.gfin{padding:0 10px}
 <script src="../i1-chippy.js"></script>
 <script src="../i1-questions.js"></script>
 <script src="../i1-search.js"></script><!-- SEARCH HOOK: the five search steps between Run and the run view, replayed on examples (window.ChipInSearch) --><!-- QUESTIONS HOOK: follow-up questions from a connected backend, one extra step before the spec card (window.ChipInQuestions) -->
+<script src="../i1-summary.js"></script><!-- SUMMARY HOOK: the result page's summary card, trade-off sentence and the chart's default view (window.ChipInSummary) -->
 <script type="module">
 "use strict";
 /* =====================================================================
@@ -2341,9 +2342,10 @@ function renderOverview(run, force) {
     $("#body").innerHTML = `<div class="ov" id="ovRoot">
       <header class="ovh" id="ovh"></header>
       <div class="status" id="ovStatus" role="status"></div>
+      <div id="sumCard" style="display:none"></div><!-- SUMMARY HOOK -->
       <div class="tiles" id="tiles" style="position:relative"></div>
       <section class="cgrid2">
-        <div class="pan chartp"><div class="chh"><h2>Chip size against</h2><select class="ys" id="ysel" aria-label="Metric on the chart"></select><span class="grow"></span><span id="chMark"></span></div>
+        <div class="pan chartp"><div class="chh"><h2>Chip size against</h2><select class="ys" id="ysel" aria-label="Metric on the chart"></select><span class="grow"></span><span id="allHost"></span><span id="chMark"></span></div>
           <div class="cwrap" id="cwrap"><canvas id="tchart" tabindex="0" role="img" aria-label="Trade-off chart"></canvas><div class="ctip" id="ctip"></div></div>
           <div class="legend" id="legend"></div>${A ? '<p class="cfoot" id="cfoot"></p>' : ""}<div id="nopass"></div><p class="sr" id="chLive" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)"></p></div>
         ${A ? `<div class="side"><section class="pan alog" id="alog" aria-label="Decision path, replayed" aria-live="polite"></section>${insp}</div>` : insp}
@@ -2355,6 +2357,7 @@ function renderOverview(run, force) {
     cur.sig = ""; cur.chartSig = "";
     $("#srcLink").onclick = () => openSources(run);
     $("#ysel").onchange = e => { const [k, sc] = e.target.value.split("|"); run.primary = k; run.ui.ys = sc || null; saveRuns(); cur.sig = ""; cur.chartSig = ""; updOverview(run); };
+    $("#allHost").onchange = e => { if (e.target.id !== "allTog") return; run.ui.all = e.target.checked; saveRuns(); cur.sig = ""; cur.chartSig = ""; updOverview(run); }; /* SUMMARY HOOK: Show all designs */
     $("#ovh").addEventListener("click", e => {
       const t = e.target.closest("[data-t]"); if (t) { editTarget(run, t, +t.dataset.t); return; }
       const a = e.target.closest("#addTgt"); if (a) addTarget(run, a);
@@ -2365,7 +2368,7 @@ function renderOverview(run, force) {
 }
 function updOverview(run) {
   const v = viewAt(run);
-  let sig = [v.ev.key, v.done, run.ui.sel, v.stage.k].join("|");
+  let sig = [v.ev.key, v.done, run.ui.sel, v.stage.k, run.ui.all].join("|");
   const A = afFile(run) && !!$("#alog");
   // the AF tiles fill one by one after the last step, so their signature follows the clock there
   if (A) { const s6 = v.tl.af.steps.at(-1); sig += "|" + (v.t >= s6 ? Math.min(3, Math.floor((v.t - s6) / AF_TL.tile)) : -1); }
@@ -2375,7 +2378,8 @@ function updOverview(run) {
     $("#tiles").innerHTML = A ? tilesAF(run, v) : tilesHTML(run, v);
     $("#insp").innerHTML = A ? inspAF(run, v) : inspHTML(run, v);
     const f = A ? funnelAF(run, v) : funnelHTML(run, v); $("#fun").innerHTML = f.html; $("#fun").style.display = f.html ? "" : "none"; $("#funn").textContent = f.note;
-    $("#legend").innerHTML = A ? legendAF(run, v) : legendHTML(run, v);
+    $("#legend").innerHTML = SUM()?.legendHTML(run, v, sumP()) || (A ? legendAF(run, v) : legendHTML(run, v)); /* SUMMARY HOOK: the default view's legend */
+    if (SUM()) $("#allHost").innerHTML = SUM().toggleHTML(run, v, sumP());
     if (A) { $("#alog").innerHTML = logAF(run, v); $("#cfoot").innerHTML = cfootAF(run, v); }
     $("#chMark").innerHTML = runMark(run);
     const avail = MET_KEYS.filter(k => run.targets.some(t => t.metric === k) || v.all.some(d => metricOf(run, d, k).v != null));
@@ -2393,7 +2397,12 @@ function updOverview(run) {
   if (v.funnel && !v.done) { const f = funnelHTML(run, v); if ($("#fun").innerHTML !== f.html) $("#fun").innerHTML = f.html; }
   drawChart(run, v);
   panelsTick(run, v);
+  SUM()?.tick($("#sumCard"), run, v, sumP(), cur.sig); /* SUMMARY HOOK: the summary card */
 }
+// the summary module (../i1-summary.js) and the page helpers it reads
+const SUM = () => window.ChipInSummary && window.ChipInModels ? window.ChipInSummary : null;
+let SUMP = null;
+const sumP = () => SUMP || (SUMP = { metricOf, targetState, frontier, MET, fmt, fmtVal, fmtTarget, esc, caseOf, budgetLabel, isSim, isMea, mFile, panelKind, AF_DESIGN, MEASURED, afFinal, afScopeWord, about, sizeTip });
 // target editing on the overview: value, comparison, which one the chart plots, remove
 function editTarget(run, anchor, i) {
   const t = run.targets[i]; if (!t) return;
@@ -2460,8 +2469,9 @@ function drawChart(run, v) {
   const judged = run.judge; run = { ...run, judge: yScope(run) }; // the chart's Y scope; pass and fail (v.ev) keep the run's rule
   const wrap = $("#cwrap"), W = Math.max(280, wrap.clientWidth), H = chartFitH(W, Math.round(clamp(W * 0.5, 300, 470))), dpr = Math.min(2, devicePixelRatio || 1);
   const newest = v.vis.reduce((a, d) => Math.max(a, d.at || 0), 0), flash = !v.done && v.t - newest < 1.2;
-  const sig = [W, H, v.ev.key, run.judge, run.ui.sel, CH.hover, flash ? Math.floor(v.t * 4) : 0].join("|");
+  const sig = [W, H, v.ev.key, run.judge, run.ui.sel, CH.hover, flash ? Math.floor(v.t * 4) : 0, run.ui.all, v.done].join("|");
   if (sig === cur.chartSig) return; cur.chartSig = sig;
+  const SP = sumP(), simple = !!SUM()?.simple(run, v, SP); /* SUMMARY HOOK: the default view draws the frontier, the bar and the chosen chip */
   if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.height = H + "px"; }
   const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
   const key = run.primary, M = MET[key], narrow = W < 520;
@@ -2504,7 +2514,8 @@ function drawChart(run, v) {
   // dots: failing ones first, grey; passing ones on top in their budget's colour and shape
   const pass = v.ev.pass, ok = d => pass.has(d.id), pts = [];
   const shape = (x, y, i, r) => { g.beginPath(); if (i % 4 === 0) g.arc(x, y, r, 0, 7); else if (i % 4 === 1) g.rect(x - r * 0.9, y - r * 0.9, r * 1.8, r * 1.8); else if (i % 4 === 2) { g.moveTo(x, y - r * 1.15); g.lineTo(x + r * 1.1, y + r * 0.8); g.lineTo(x - r * 1.1, y + r * 0.8); g.closePath(); } else { g.moveTo(x, y - r * 1.2); g.lineTo(x + r * 1.2, y); g.lineTo(x, y + r * 1.2); g.lineTo(x - r * 1.2, y); g.closePath(); } };
-  const ordered = v.vis.filter(d => d.gates > 0 && d.role !== "baseline").sort((a, b) => (ok(a) ? 1 : 0) - (ok(b) ? 1 : 0));
+  const keepIds = simple ? SUM().keep(run, v, SP, run, key) : null;
+  const ordered = v.vis.filter(d => d.gates > 0 && d.role !== "baseline" && (!keepIds || keepIds.has(d.id))).sort((a, b) => (ok(a) ? 1 : 0) - (ok(b) ? 1 : 0));
   const big = run.case === "af" ? 7 : narrow ? 2.6 : 3.3;
   for (const d of ordered) {
     const val = metricOf(run, d, key).v; if (val == null) continue;
@@ -2515,7 +2526,7 @@ function drawChart(run, v) {
     g.globalAlpha = 1; pts.push({ x, y, d });
   }
   // the file's baseline: scored the same way, not a design of ours, so drawn hollow and named
-  const bd = v.ev.base, bval = bd && v.vis.includes(bd) ? metricOf(run, bd, key).v : null;
+  const bd = v.ev.base, bval = bd && !simple && v.vis.includes(bd) ? metricOf(run, bd, key).v : null;
   if (bval != null) {
     const x = X(bd.gates), y = Y(bval); g.strokeStyle = "#3a4052"; g.lineWidth = 1.6; g.fillStyle = "#fff"; g.beginPath(); g.rect(x - 4.5, y - 4.5, 9, 9); g.fill(); g.stroke();
     g.font = font(600, 11.5); g.fillStyle = "#3a4052"; g.textAlign = "left"; g.fillText(narrow ? "Baseline" : "Baseline, not ours", x + 9, y - 7);
@@ -2523,7 +2534,8 @@ function drawChart(run, v) {
   }
   CH.pts = pts;
   // frontiers, one per channel budget, on the chart's scope, with direct labels at their right ends
-  const labels = [], fronts = run.judge === judged ? v.ev.fronts : budgetsOf(run).map(b => ({ b, pts: frontier(run, v.vis.filter(d => d.gates > 0 && d.role !== "baseline" && d.channels === b.ch), key) }));
+  const labels = [], fronts0 = run.judge === judged ? v.ev.fronts : budgetsOf(run).map(b => ({ b, pts: frontier(run, v.vis.filter(d => d.gates > 0 && d.role !== "baseline" && d.channels === b.ch), key) }));
+  const focusCh = simple ? (v.ev.chosen || v.ev.nearest[0]).channels : null, fronts = simple ? fronts0.filter(f => f.b.ch === focusCh) : fronts0;
   if (run.case !== "af") for (const f of fronts) {
     if (f.pts.length < 2) continue;
     const bi = budgetIdx(run, f.b.ch), hi = budgetHi(run, f.b.ch); g.strokeStyle = BCOL[bi]; g.lineWidth = hi < 1 ? 1.2 : run.constraints && !run.constraints.findBest ? 2.6 : 1.8; g.globalAlpha = 0.95 * hi; g.beginPath();
@@ -2537,6 +2549,7 @@ function drawChart(run, v) {
     for (const l of labels) { g.strokeStyle = l.c; g.globalAlpha = 0.5; g.lineWidth = 1; g.beginPath(); g.moveTo(l.x + 4, l.y + (l.y > 0 ? 0 : 0)); g.lineTo(x1 + 6, l.y); g.stroke(); g.globalAlpha = 1; g.fillStyle = l.c; g.fillText(l.t, x1 + 10, l.y + 4); }
   }
   // the user's bar
+  const boxes = []; // label boxes the summary module's marks keep clear of
   if (tgt && barAbove) {
     g.font = font(700, 12); const lt = narrow ? `Your bar, ${fmtTarget(tgt)}, is above this chart` : `Your bar, ${fmtTarget(tgt)}${run.judge !== judged && judged !== "pooled" ? ` on the worst ${caseOf(run).who}` : ""}, is far above this chart`, tw = g.measureText(lt).width;
     // keep the label off the 95% range bars: right-aligned, else left-aligned, else just under the top edge
@@ -2551,6 +2564,7 @@ function drawChart(run, v) {
     const avoid = pts.concat(rangeSegs(run, v, key).flatMap(({ d, iv }) => Array.from({ length: 40 }, (_, k) => ({ x: X(d.gates), y: Y(iv.low + (iv.high - iv.low) * k / 39) })).flatMap(p => Array(25).fill(p))));
     const bx = barLabelX(avoid, v.ev.chosen ? { x: X(v.ev.chosen.gates), y: Y(metricOf(run, v.ev.chosen, key).v) } : null, { x0, x1, y0, yy, tw, W, cw: g.measureText(`Chosen: ${v.ev.chosen ? fmt(v.ev.chosen.gates) : ""} gates`).width });
     g.textAlign = "left"; g.fillStyle = "rgb(255 255 255 / .88)"; g.fillRect(bx.x - 4, yy + bx.dy - 12, tw + 8, 15); g.fillStyle = "#141a2e"; g.fillText(lt, bx.x, yy + bx.dy);
+    boxes.push({ l: bx.x - 4, r: bx.x + tw + 4, t: yy + bx.dy - 12, b: yy + bx.dy + 3 });
   }
   // nearest designs when none passes; then the chosen chip; then the selection
   const ring = (d, r, col, w) => { const val = metricOf(run, d, key).v; if (val == null) return null; const x = X(d.gates), y = Y(val); g.strokeStyle = col; g.lineWidth = w; g.beginPath(); g.arc(x, y, r, 0, 7); g.stroke(); return { x, y }; };
@@ -2560,8 +2574,10 @@ function drawChart(run, v) {
     let lx = p.x - 14 - tw, ly = p.y - 18; if (lx < x0 + 4) lx = p.x + 14; lx = Math.max(4, Math.min(lx, W - tw - 6)); if (ly < y0 + 8) ly = p.y + 26;
     g.strokeStyle = col; g.lineWidth = 1; g.beginPath(); g.moveTo(p.x + (lx < p.x ? -8 : 8), p.y + (ly < p.y ? -6 : 6)); g.lineTo(lx < p.x ? lx + tw + 2 : lx - 2, ly - 4); g.stroke();
     g.fillStyle = "rgb(255 255 255 / .92)"; g.fillRect(lx - 4, ly - 14, tw + 8, 19); g.fillStyle = col; g.textAlign = "left"; g.fillText(txt, lx, ly);
+    boxes.push({ l: lx - 4, r: lx + tw + 4, t: ly - 14, b: ly + 5 }, { l: p.x - 10, r: p.x + 10, t: p.y - 10, b: p.y + 10 });
   };
   if (v.ev.chosen) { const p = ring(v.ev.chosen, 8.5, "#141a2e", 2.2); callout(p, `Chosen: ${fmt(v.ev.chosen.gates)} gates`, "#141a2e"); }
+  if (SUM() && v.ev.chosen && (v.done || isMea(run))) SUM().drawMarks(g, SUM().marks(run, v, SP).map(m => { const val = metricOf(run, m.d, key).v; return { ...m, p: val == null ? null : { x: X(m.d.gates), y: Y(val) } }; }), { boxes: labels.map(l => ({ l: x1 + 6, r: W, t: l.y - 10, b: l.y + 8 })).concat(boxes), x0, x1, y0, y1, W, narrow }); /* SUMMARY HOOK: smaller and bigger labels */
   else if (v.ev.nearest[0] && (v.done || isMea(run))) { const d = v.ev.nearest[0], val = metricOf(run, d, key).v; if (val != null) callout({ x: X(d.gates), y: Y(val) }, run.case === "af" ? `Measured circuit: ${fmt(d.gates)} gates` : v.ev.best ? `Best so far: ${fmt(d.gates)} gates` : `Nearest: ${fmt(d.gates)} gates`, "#9f2a20"); }
   const sd = run.ui.sel && selDesign(run, v); if (sd && sd.id === run.ui.sel && (!v.ev.chosen || sd.id !== v.ev.chosen.id)) ring(sd, 7, "#2b55d0", 2.2);
   const hd = CH.hover && v.vis.find(d => d.id === CH.hover); if (hd) ring(hd, 6, "#141a2e", 1.2);
@@ -2741,9 +2757,9 @@ function afYRange(run, key) {
   const lo = Math.max(0, Math.floor((Math.min(q, tgt ? tgt.value : 1, 1) - 0.03) * 20) / 20);
   return { lo, hi: 1, below: vals.filter(x => x < lo).length, n: vals.length };
 }
-function cfootAF(run) {
-  const r = afYRange(run, run.primary);
-  return `${esc(MEASURED.af.basis || "")}${r.below ? ` ${fmt(r.below)} candidate${r.below === 1 ? "" : "s"} below ${Math.round(r.lo * 100)}% ${r.below === 1 ? "sits" : "sit"} on the bottom edge.` : ""}`;
+function cfootAF(run, v) {
+  const r = afYRange(run, run.primary), simple = !!SUM()?.simple(run, v, sumP());
+  return `${esc(MEASURED.af.basis || "")}${r.below && !simple ? ` ${fmt(r.below)} candidate${r.below === 1 ? "" : "s"} below ${Math.round(r.lo * 100)}% ${r.below === 1 ? "sits" : "sit"} on the bottom edge.` : ""}`;
 }
 function nopassAF(run, v) {
   const F = MEASURED.af; if (!afFinal(v) || !run.targets.length) return "";
@@ -2765,8 +2781,9 @@ function drawChartAF(run, v) {
   let sNow = -1; if (!v.done) st.forEach((s, i) => { if (v.t >= s) sNow = i; });
   const since = sNow >= 0 ? v.t - st[sNow] : 99, pulse = since < 1.6 ? sNow + 1 : 0;
   const slide = v.done || st[3] == null ? 1 : clamp((v.t - st[3]) / 1.2), anim = flash || pulse || (slide > 0 && slide < 1);
-  const sig = [W, H, v.ev.key, run.ui.sel, CH.hover, anim ? Math.floor(v.t * 10) : 0].join("|");
+  const sig = [W, H, v.ev.key, run.ui.sel, CH.hover, anim ? Math.floor(v.t * 10) : 0, run.ui.all, afFinal(v)].join("|");
   if (sig === cur.chartSig) return; cur.chartSig = sig;
+  const SP = sumP(), simple = !!SUM()?.simple(run, v, SP); /* SUMMARY HOOK: once final, the default view draws the frontier, the bar and the built chip */
   if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.height = H + "px"; }
   const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
   const key = run.primary, M = MET[key], narrow = W < 520, font = (w, s) => `${w} ${s}px Inter, system-ui, -apple-system, sans-serif`;
@@ -2807,7 +2824,12 @@ function drawChartAF(run, v) {
     return { x: X(gx), y: Y(val), low: val < vLo };
   };
   const over = d => ph >= 3 && !d.under;
-  const list = v.vis.slice().sort((a, b) => (over(b) ? 1 : 0) - (over(a) ? 1 : 0));
+  const keepIds = simple ? SUM().keep(run, v, SP, run, key) : null;
+  const list = v.vis.filter(d => !keepIds || keepIds.has(d.id)).sort((a, b) => (over(b) ? 1 : 0) - (over(a) ? 1 : 0));
+  if (simple) { // the frontier: the best validation score at each estimated size
+    g.strokeStyle = "#4a5062"; g.lineWidth = 1.4; g.globalAlpha = 0.9; g.beginPath();
+    frontier(run, v.vis, key).forEach((d, i) => { const p = pos(d); if (p) i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y); }); g.stroke(); g.globalAlpha = 1;
+  }
   for (const d of list) {
     const p = pos(d); if (!p) continue;
     pts.push({ x: p.x, y: p.y, d });
