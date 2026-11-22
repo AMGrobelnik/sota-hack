@@ -60,6 +60,20 @@
   place();
   window.addEventListener('load', place);
 
+  /* on a phone the sections fill the width, so a fixed pill would cover them while scrolling: show it only at the end of the page, by the footer */
+  nav.style.transition = 'opacity .2s';
+  function peek() {
+    var narrow = innerWidth <= 600;
+    var se = document.scrollingElement || document.documentElement;
+    var show = !narrow || scrollY + innerHeight >= se.scrollHeight - 160;
+    nav.style.opacity = show ? '1' : '0';
+    nav.style.pointerEvents = show ? 'auto' : 'none';
+    nav.style.visibility = show ? 'visible' : 'hidden';
+  }
+  peek();
+  window.addEventListener('scroll', peek, { passive: true });
+  window.addEventListener('resize', peek);
+
   /* capture phase: a variant that steps a control with the arrow keys must not swallow these, unless focus is in a form field or slider */
   window.addEventListener('keydown', function (e) {
     if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
