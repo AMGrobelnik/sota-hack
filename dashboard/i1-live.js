@@ -24,7 +24,8 @@
  * the page). A page served by the backend itself finds it on its own origin and asks only for the
  * token, or takes it once from a #token=... fragment, which is removed from the address at once.
  *
- * What a run sends: POST /api/runs { prompt, preset, agent?, model?, spec }. spec follows the
+ * What a run sends: POST /api/runs { prompt, preset, agent, model, spec }: agent and model from the
+ * chosen one of the four models (RUN_MODELS in chipin-models.js). spec follows the
  * dashboard contract (brief, device, signal, detect, task_types, patient_group, place, fa_unit,
  * targets, primary, constraints, data); the backend checks it, saves it as workspace/spec.json and
  * puts it on run.started.
@@ -299,31 +300,36 @@
     };
   }
   var AGN = { claude: "Claude", openrouter: "OpenRouter", stub: "the scripted stub" };
+  // the model a live run really used: what it sent, else its agent's default (run.started names the agent)
+  function usedModel(M) { var a = M.st && M.st.agent; return window.ChipInModels.usedModelName(a === "stub" ? a : M.r.agent || a, a === "stub" ? null : M.r.model); }
   function start(s, done) {
     if (!s || !s.brief) return false;
     if (C.state !== "on") {
       note(C.state === "bad" ? "The backend is not answering, so this is an example run on demo data." : "No backend is connected, so this is an example run on demo data.");
       return false;
     }
-    var spec = buildSpec(s), ag = s.agent || {}, srv = C.defaults && C.defaults.agent;
+    var spec = buildSpec(s), mod = window.ChipInModels.runModel(s.agent && s.agent.model), D = C.defaults || {}, srv = D.agent;
     var body = { prompt: s.brief, spec: spec };
+    // a backend that lists run_agents takes a run's own agent and model; an older one only a model for its own agent
+    if (!srv || srv === mod.agent || Array.isArray(D.run_agents)) { body.agent = mod.agent; body.model = mod.id; }
     if (s.preset) body.preset = String(s.preset).toLowerCase();
     if (body.preset) body.fanout = true; // the spec card promises the preset's subagents per stage
     var fu = window.ChipInQuestions && window.ChipInQuestions.payload(s); // QUESTIONS HOOK: the follow-up answers (../i1-questions.js)
     if (fu) body.follow_up = fu;
     var notes = [];
-    if (ag.backend && ag.backend !== "auto") {
-      body.agent = ag.backend;
-      if (ag.backend === "openrouter" && srv === "openrouter" && ag.model) body.model = ag.model;
-      if (srv && srv !== ag.backend) notes.push("This backend runs the " + (AGN[srv] || srv) + " agent, so your choice of " + (AGN[ag.backend] || ag.backend) + " was not applied.");
-      else if (ag.backend === "claude") notes.push("The Claude agent picks its own model on this backend; the model choice was not sent.");
-    }
+    if (srv === "stub") notes.push("This backend runs the scripted stub: no model was called" + (body.model ? "; " + mod.name + " is recorded as the choice." : "."));
     var btn = $('.gfa [data-a="run"]');
+    // an older backend runs only the agent it was started with; never send a model it cannot run
+    if (srv && srv !== "stub" && srv !== mod.agent && (D.run_agents || []).indexOf(mod.agent) < 0) {
+      var g0 = $(".gfa");
+      if (g0) { var p0 = $(".lv-runerr", g0) || g0.appendChild(document.createElement("p")); p0.className = "lv-runerr"; p0.textContent = "The run did not start: this backend cannot run " + mod.name + ". Pick another model or update the backend."; }
+      return true;
+    }
     if (btn) { btn.disabled = true; btn.dataset.lvTxt = btn.innerHTML; btn.textContent = "Starting the run…"; }
     fetch(C.base + "/api/runs", { method: "POST", cache: "no-store", headers: { "Content-Type": "application/json", "X-ChipIn-Token": C.token || "" }, body: JSON.stringify(body) })
       .then(function (res) { return res.json().catch(function () { return {}; }).then(function (j) { if (!res.ok) throw new Error(j.error || "the backend answered HTTP " + res.status); return j; }); })
       .then(function (j) {
-        RUNS.unshift({ id: j.id, base: C.base, title: s.device ? clip(cap(s.device), 60) : clip(s.brief, 60), brief: s.brief, spec: spec, preset: body.preset || null, agent: ag.backend || "auto", model: body.model || null, notes: notes, created: new Date().toISOString(), status: "running" });
+        RUNS.unshift({ id: j.id, base: C.base, title: s.device ? clip(cap(s.device), 60) : clip(s.brief, 60), brief: s.brief, spec: spec, preset: body.preset || null, agent: srv === "stub" ? "stub" : mod.agent, model: srv === "stub" ? null : mod.id, notes: notes, created: new Date().toISOString(), status: "running" });
         saveRuns(); bump();
         if (typeof done === "function") done();
         location.hash = "#/live/" + encodeURIComponent(j.id) + "/overview";
@@ -884,7 +890,7 @@
     var co = F.cost(x.f), cost = co && num(co.usd) != null ? "$" + co.usd.toFixed(2) + " agent cost" + (num(co.summaries_usd) > 0 ? ", $" + co.summaries_usd.toFixed(2) + " summaries" : "") : ""; if (ch("cost", cost)) { $("#lvCost").textContent = cost; $("#lvCost").title = co ? fmt(co.tokens_in || 0) + " tokens in, " + fmt(co.tokens_out || 0) + " out" : ""; }
     var cm = $("#lvCostM"); if (cm && cm.textContent !== cost) cm.textContent = cost; // the same figure, under the headline on phones
     var bt = M.running || M.status === "connecting" ? "Live run" : "Finished run"; if (ch("badge", bt)) { $("#lvBadge").textContent = bt; $("#lvBadge").className = "mk topbadge " + (bt === "Live run" ? "lv-live" : "no"); setDemo(bt); }
-    var setT = (M.r.preset ? cap(M.r.preset) + " · " : "") + (M.r.agent && M.r.agent !== "auto" ? AGN[M.r.agent] || M.r.agent : "Auto"); if (ch("set", setT)) $("#lvSetT").textContent = setT;
+    var setT = (M.r.preset ? "Run size: " + cap(M.r.preset) + " · " : "") + "Model: " + usedModel(M); if (ch("set", setT)) $("#lvSetT").textContent = setT;
     var stop = $("#lvStop"); stop.hidden = !M.running;
     if (M.lost || V.wasLost) { var lb = [stop, $("#lvCxStop")].filter(Boolean); lb.forEach(function (b) { b.disabled = !!M.lost; if (!M.lost && b.lastChild.textContent === "Stopping") b.lastChild.textContent = b === stop ? "Stop" : "Stop the run"; }); V.wasLost = !!M.lost; }
     if (!M.running && stop.disabled) { stop.disabled = false; stop.lastChild.textContent = "Stop"; var cs = $("#lvCxStop"); if (cs) { cs.disabled = false; cs.lastChild.textContent = "Stop the run"; } }
@@ -1085,7 +1091,7 @@
   }
   function settingsModal(M) {
     var bg = document.createElement("div"); bg.className = "mbg";
-    var rows = [["Run", M.id], ["Backend", C.base || "not connected"], ["Preset", M.r.preset ? cap(M.r.preset) : "the backend's default"], ["Agent", M.r.agent && M.r.agent !== "auto" ? (AGN[M.r.agent] || M.r.agent) + (M.r.model ? ", " + M.r.model : "") : "Auto: the backend's default"]].concat(specRows(M.spec));
+    var rows = [["Run", M.id], ["Backend", C.base || "not connected"], ["Preset", M.r.preset ? cap(M.r.preset) : "the backend's default"], ["Model", usedModel(M)]].concat(specRows(M.spec));
     bg.innerHTML = '<div class="modal" role="dialog" aria-label="Run settings"><button class="mx" aria-label="Close">' + I("x", "s16") + '</button><h3>Run settings</h3><p style="margin:0 0 10px">Sent with the run when it started.</p>' +
       rows.map(function (r) { return '<div class="kv"><span>' + esc(r[0]) + "</span><span>" + esc(r[1]) + "</span></div>"; }).join("") + ((M.r.notes || []).length ? '<p class="lv-mute">' + esc(M.r.notes.join(" ")) + "</p>" : "") + "</div>";
     bg.onclick = function (e) { if (e.target === bg || e.target.closest(".mx")) bg.remove(); };

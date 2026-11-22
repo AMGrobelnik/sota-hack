@@ -537,12 +537,15 @@
     loadLists().then(paintPicker);
   }
   function closePicker(nav) { var s = $(".pb-scrim"); if (s) s.remove(); if (!nav && pickerFrom && pickerFrom.isConnected) pickerFrom.focus(); pickerFrom = null; }
+  // the model a recorded run really used: the one it recorded, else its agent's default
+  function usedModel(r) { return window.ChipInModels.usedModelName(r.agent, r.model); }
   function rowHTML(r) {
     var c = r.counts || {}, bits = [];
     bits.push('<span class="mk mea">recorded</span>');
     bits.push("<span>" + (r.src === "mac" ? "on this computer" + (r.alsoSite ? ", copy on the site" : "") : "copy on this site") + "</span>");
     if (r.state && r.state !== "succeeded") bits.push("<span>" + esc(r.state) + "</span>");
-    if (r.preset) bits.push("<span>" + esc(String(r.preset).charAt(0).toUpperCase() + String(r.preset).slice(1)) + (r.agent ? " · " + esc(r.agent === "claude" ? "Claude" : r.agent) : "") + "</span>");
+    if (r.preset) bits.push("<span>Run size: " + esc(String(r.preset).charAt(0).toUpperCase() + String(r.preset).slice(1)) + "</span>");
+    if (r.agent || r.model) bits.push("<span>Model: " + esc(usedModel(r)) + "</span>");
     if (r.chosen) bits.push("<span>chosen <b>" + esc(clip(r.chosen, 18)) + "</b></span>");
     if (c.designs) bits.push("<span>" + fmtN(c.designs) + " designs</span>");
     if (c.subagents) bits.push("<span>" + fmtN(c.subagents) + " subagents</span>");
@@ -879,7 +882,8 @@
     var rec = V.rec, f = rec.facts || {}, st = M.st, ck = V.clock;
     once("head", [st.chosen, M.ended, st.finished && st.finished.status, M.pts.length, M.n > 0, ck.live, heldText(M)].join("|"), function () {
       var k0 = ['<span class="mk mea">recorded</span>', "<span>" + esc(dateTxt(f.started_at)) + "</span>"];
-      if (f.preset) k0.push("<span>" + esc(String(f.preset).charAt(0).toUpperCase() + String(f.preset).slice(1)) + (f.agent ? " · " + esc(f.agent === "claude" ? "Claude" : f.agent) : "") + "</span>");
+      if (f.preset) k0.push("<span>Run size: " + esc(String(f.preset).charAt(0).toUpperCase() + String(f.preset).slice(1)) + "</span>");
+      if (f.agent || f.model) k0.push("<span>Model: " + esc(usedModel(f)) + "</span>");
       if (rec.running || ck.live) k0[0] = '<span class="mk sim">still running</span>';
       $("#rvK0").innerHTML = k0.join("");
       var h1;

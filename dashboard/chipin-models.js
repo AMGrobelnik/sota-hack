@@ -1223,8 +1223,50 @@
     return ESTIMATE_TEXT[field] || "Estimate: the assumption behind this figure is not stated.";
   }
 
+  // ---------------------------------------------------------------------------
+  // The model a run uses: exactly four, by name; default Opus 5.5. agent and id
+  // are what POST /api/runs gets as "agent" and "model" on the local backend:
+  // the Claude models run on its default claude agent, the Inkling models on
+  // its openrouter agent through OpenRouter (backend/README.md, "Providers").
+  var RUN_MODELS = [
+    { id: "claude-opus-5-5", name: "Opus 5.5", agent: "claude" },
+    { id: "claude-sonnet-5-5", name: "Sonnet 5.5", agent: "claude" },
+    { id: "thinkingmachines/inkling-2-mini", name: "Inkling 2 Mini", agent: "openrouter" },
+    { id: "thinkingmachines/inkling-2-small", name: "Inkling 2 Small", agent: "openrouter" },
+  ];
+  var DEFAULT_RUN_MODEL = RUN_MODELS[0];
+
+  /** runModel(id): the RUN_MODELS entry for a model id; anything else (an old
+   *  stored "auto", an id from before this list) becomes the closest of the four,
+   *  else the default. */
+  function runModel(id) {
+    var s = String(id || "").toLowerCase();
+    var exact = RUN_MODELS.filter(function (m) { return m.id === s; })[0];
+    if (exact) return exact;
+    if (/sonnet/.test(s)) return RUN_MODELS[1];
+    if (/inkling-2-mini/.test(s)) return RUN_MODELS[2];
+    if (/inkling-2-small/.test(s)) return RUN_MODELS[3];
+    return DEFAULT_RUN_MODEL;
+  }
+
+  /** usedModelName(agent, model): the name of the model a run really used. A run
+   *  that sent no model ran on its agent's default: claude runs Opus 5.5
+   *  (agents.claude_cli.model); any other agent's default is not known here. */
+  function usedModelName(agent, model) {
+    if (model) {
+      var m = RUN_MODELS.filter(function (x) { return x.id === String(model).toLowerCase(); })[0];
+      return m ? m.name : String(model);
+    }
+    if (!agent || agent === "claude" || agent === "auto") return DEFAULT_RUN_MODEL.name;
+    return agent === "stub" ? "none (scripted stub)" : "the backend's default";
+  }
+
   var api = {
     version: 1,
+    RUN_MODELS: RUN_MODELS,
+    DEFAULT_RUN_MODEL: DEFAULT_RUN_MODEL,
+    runModel: runModel,
+    usedModelName: usedModelName,
     wilson: wilson,
     confidenceHeadline: confidenceHeadline,
     cannotTellApart: cannotTellApart,
