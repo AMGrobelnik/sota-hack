@@ -6,6 +6,7 @@ so these tests run without the ``openhands`` extra; the live test needs it.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -167,6 +168,45 @@ async def test_faked_run_never_writes_the_key(
     leaked = [p for p in workdir.rglob("*") if p.is_file() and FAKE_KEY.encode() in p.read_bytes()]
     assert leaked == []
     assert not (workdir / ".chipin" / "openhands").exists()
+
+
+async def test_a_cancelled_run_still_reports_its_cost(
+    config: BackendConfig, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run cancelled from outside (a timeout, a stop) emits its cost before it goes."""
+    pytest.importorskip("openhands.sdk")
+    from openhands.sdk.testing import TestLLM
+    from pydantic import SecretStr
+
+    from chipin_backend.agents.openrouter_agent import OpenRouterAgentBackend
+
+    def idle_llm(
+        self: Any, model: str, key: str, provider: Any, *, usage_id: str, fallback: Any = None
+    ) -> Any:
+        return TestLLM.from_messages([], usage_id=usage_id, api_key=SecretStr(key))
+
+    async def hang(self: Any, *args: Any) -> None:
+        await asyncio.sleep(60)
+
+    events: list[Any] = []
+
+    class Sink:
+        def emit(self, event: Any) -> None:
+            events.append(event)
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", FAKE_KEY)
+    monkeypatch.setattr(OpenRouterAgentBackend, "_build_llm", idle_llm)
+    monkeypatch.setattr(OpenRouterAgentBackend, "_turn", hang)
+    spec = AgentSpec(name="a", prompts=["wait"], workdir=tmp_path / "work", timeout_s=60)
+    task = asyncio.create_task(backend_for("openrouter", config.agents).run(spec, Sink()))
+    async with asyncio.timeout(30):
+        while not any(e.kind == "agent_start" for e in events):
+            await asyncio.sleep(0.05)
+    await asyncio.sleep(0.1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert events[-1].kind == "cost" and events[-1].data["usd"] == 0.0
 
 
 @pytest.mark.live

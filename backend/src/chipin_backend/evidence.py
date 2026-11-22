@@ -1,0 +1,1537 @@
+"""Run evidence: three measurements computed only from a finished run's own files.
+
+A. Number check: every number the final report states, in one of three
+   classes that are never added together: source found (a machine-produced
+   source in the run folder, a ``metric`` event, a model file's stored
+   parameter count or a numeric field of a file the chip lab wrote, holds
+   this value in this unit), value found with the unit or meaning unclear
+   (for a human to check), or no source; plus excluded (dates, versions,
+   list numbers, ...). A number with no source is not called wrong: it only
+   has no machine source. Which design, stage or quantity a sentence gives
+   a number is not checked (see ``LIMITS``).
+B. Weight bytes per decision: the bytes of trained weights a software
+   implementation of the selected chip's model reads for one decision (one
+   width rule for every design), and the memory cells (and flip-flops) in the
+   chip's compiled netlist.
+C. Stage timings: wall time per stage from the ``stage`` events, each
+   stage's share, both speed-up bounds of the largest share, counts of what
+   each stage processed, and per-tool-call wall times.
+
+Pure functions over a run folder: no network, no model calls. The entry
+point :func:`build_evidence` returns a JSON-ready dict and writes
+``evidence.json`` and ``evidence.md`` into the run folder. Paths in the
+output are relative to the run folder.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import re
+from collections import Counter
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+from loguru import logger
+
+EVIDENCE_JSON = "evidence.json"
+EVIDENCE_MD = "evidence.md"
+EVENTS_FILE = "events.jsonl"
+#: An integer at or below this (absolute) has a source only when its words share a term with the source key.
+SMALL_INT_MAX = 10
+#: Source files larger than this are not read.
+MAX_SOURCE_BYTES = 5_000_000
+#: Lab files that are not measurements: the netlist (structure) and the model the agent handed in.
+NOT_MEASUREMENTS = frozenset({"net.json", "ir.json"})
+
+# ---------------------------------------------------------------- reading
+
+
+def read_events(run: Path) -> list[dict[str, Any]]:
+    """The run's contract events (lines of ``events.jsonl`` with a ``type``)."""
+    path = run / EVENTS_FILE
+    if not path.is_file():
+        return []
+    events = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(item, dict) and "type" in item:
+            events.append(item)
+    return events
+
+
+def _load_json(path: Path) -> Any:
+    try:
+        if path.stat().st_size > MAX_SOURCE_BYTES:
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _rel(run: Path, path: Path) -> str:
+    try:
+        return path.relative_to(run).as_posix()
+    except ValueError:
+        return path.name
+
+
+def _ts(value: Any) -> datetime | None:
+    try:
+        return datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+
+
+def _workspace(run: Path) -> Path:
+    return run / "workspace" if (run / "workspace").is_dir() else run
+
+
+def find_report(run: Path, events: list[dict[str, Any]]) -> Path | None:
+    """The run's final report: ``workspace/report.md``, else a ``report`` artifact outside ``chips/``."""
+    candidates = [_workspace(run) / "report.md"]
+    for event in events:
+        path = str(event.get("path") or "")
+        if event.get("type") == "artifact" and event.get("kind") == "report" and "chips/" not in path:
+            candidates.append(run / path)
+    return next((p for p in candidates if p.is_file() and p.suffix == ".md"), None)
+
+
+def find_prompt(run: Path, events: list[dict[str, Any]]) -> str:
+    """The user's prompt: ``run.started``, else ``api.json``, else ``workspace/brief.md``."""
+    for event in events:
+        if event.get("type") == "run.started" and isinstance(event.get("prompt"), str):
+            return event["prompt"]
+    record = _load_json(run / "api.json")
+    if isinstance(record, dict) and isinstance(record.get("prompt"), str):
+        return record["prompt"]
+    brief = _workspace(run) / "brief.md"
+    return brief.read_text(encoding="utf-8") if brief.is_file() else ""
+
+
+# ---------------------------------------------------------------- A. number check
+
+_STOP = frozenset(
+    re.findall(
+        r"\w+",
+        "a an and are as at be by for from has in is it its of on or per than that the this to was were "
+        "with which while each all one two three about into over under after before we our my me us",
+    )
+)
+#: Words too generic to tie a claim to a source on their own (rule: never enough for a match).
+GENERIC_WORDS = frozenset(
+    {"line", "size", "count", "number", "value", "total", "time", "second", "num", "max", "min", "id"}
+)
+#: Kinds of counted things: the claim words (stemmed) that name each kind.
+_CLAIM_NOUNS: dict[str, frozenset[str]] = {
+    "gate": frozenset({"gate", "cell", "ge"}),
+    "vector": frozenset({"vector"}),
+    "parameter": frozenset({"parameter", "param", "weight"}),
+    "level": frozenset({"level"}),
+    "patient": frozenset({"patient", "subject", "recording"}),
+    "byte": frozenset({"byte", "kb", "mb"}),
+    "bit": frozenset({"bit"}),
+    "tile": frozenset({"tile"}),
+    "lut": frozenset({"lut", "lut4", "lut6"}),
+    "transistor": frozenset({"transistor"}),
+    "lane": frozenset({"lane"}),
+    "design": frozenset({"design"}),
+    "line": frozenset({"line"}),
+    "decision": frozenset({"decision"}),
+    "seconds": frozenset({"second", "sec"}),
+    "eur": frozenset({"eur", "euro"}),
+}
+#: The source key words (stemmed) that agree with each kind: the synonym table.
+_SOURCE_NOUNS: dict[str, frozenset[str]] = {
+    **_CLAIM_NOUNS,
+    "vector": frozenset({"vector", "identical"}),
+    "parameter": frozenset({"parameter", "param"}),
+    "level": frozenset({"level", "depth"}),
+    "seconds": frozenset({"second", "wall", "elapsed", "duration"}),
+    "unit:s": frozenset({"slack", "period", "delay", "latency", "path"}),
+    "unit:W": frozenset({"power", "leakage"}),
+    "unit:m2": frozenset({"area"}),
+    "unit:J": frozenset({"energy"}),
+    "unit:Hz": frozenset({"frequency", "fmax", "clock"}),
+    "unit:V": frozenset({"voltage", "vdd"}),
+}
+_NOUN_OF_WORD = {word: kind for kind, words in _CLAIM_NOUNS.items() for word in words}
+#: Source key words that make it a percentage (value as written) or a 0-to-1 ratio.
+_PERCENT_WORDS = frozenset({"percent", "pct"})
+_RATIO_WORDS = frozenset({"rate", "sensitivity", "specificity", "accuracy", "share", "fraction", "ratio"})
+#: Source key words of structural fields that describe files or tools, not results.
+_STRUCTURAL_WORDS = frozenset(
+    {
+        "line",
+        "byte",
+        "size",
+        "second",
+        "wall",
+        "cpu",
+        "elapsed",
+        "duration",
+        "seed",
+        "exit",
+        "returncode",
+        "rc",
+        "ts",
+        "timestamp",
+        "index",
+        "idx",
+        "seq",
+        "offset",
+    }
+)
+_LOOP_SIZE_KEYS = frozenset({"vectors", "n_vectors", "num_vectors", "vector_count"})
+
+#: The three classes of a reported number (never added together), plus excluded.
+SOURCE_FOUND = "source_found"
+VALUE_UNCLEAR = "value_found_unclear"
+NO_SOURCE = "no_source"
+EXCLUDED = "excluded"
+CLASS_NAMES = {
+    SOURCE_FOUND: "source found",
+    VALUE_UNCLEAR: "value found, unit or meaning unclear",
+    NO_SOURCE: "no source",
+    EXCLUDED: "excluded",
+}
+#: What the number check establishes: one fixed paragraph, the same in the markdown, the JSON and the README.
+LIMITS = (
+    'A "no source" number means nothing the tools measured in this run has this value: treat it as '
+    'unsupported until shown otherwise. "Source found" means a machine-produced source in this run holds '
+    "this value in this unit. It does not establish which design or stage the sentence gives the value to, "
+    "which of several quantities sharing that unit it means, nor relations between numbers, nor negations, "
+    "nor the direction of a margin. The check reads only the run folder."
+)
+_PREFIX = {"p": 1e-12, "n": 1e-9, "u": 1e-6, "µ": 1e-6, "m": 1e-3, "": 1.0, "k": 1e3, "M": 1e6, "G": 1e9}
+_BASES = ("Hz", "W", "J", "s", "m2", "m²", "m", "V")
+#: Spelled-out units (``microwatts``, ``nanosecond``, ``seconds``, ...) and their symbols.
+_UNIT_WORDS = {
+    f"{word_prefix}{word}{plural}": f"{symbol_prefix}{symbol}"
+    for word_prefix, symbol_prefix in (
+        ("pico", "p"),
+        ("nano", "n"),
+        ("micro", "u"),
+        ("milli", "m"),
+        ("", ""),
+        ("kilo", "k"),
+        ("mega", "M"),
+        ("giga", "G"),
+    )
+    for word, symbol in (("watt", "W"), ("joule", "J"), ("second", "s"), ("hertz", "Hz"), ("volt", "V"))
+    for plural in (("",) if word == "hertz" else ("", "s"))
+}
+#: Time words and their scale in seconds (a rate in words is separate: see ``_RATE``).
+_TIME_WORDS = {
+    **dict.fromkeys(("sec", "secs"), 1.0),
+    **dict.fromkeys(("minute", "minutes", "min", "mins"), 60.0),
+    **dict.fromkeys(("hour", "hours", "hr", "hrs", "h"), 3600.0),
+    **dict.fromkeys(("day", "days"), 86400.0),
+}
+#: A rate written in words (``per hour``, ``decision/s``): the unit's factor in hertz.
+_RATE_UNITS = {"/s": 1.0, "/min": 1 / 60, "/h": 1 / 3600, "/day": 1 / 86400}
+_RATE = re.compile(
+    r"^(?:[A-Za-z][\w-]*\s*)?(?:per\s+|/\s*)"
+    r"(?:(?P<s>seconds?|secs?|s)|(?P<min>minutes?|mins?)|(?P<h>hours?|hrs?|h)|(?P<day>days?))\b",
+    re.I,
+)
+#: Words that scale the number before them (``2.6 thousand gates``).
+_SCALE_WORDS = {"thousand": 1e3, "million": 1e6, "billion": 1e9}
+#: Words of a shortfall (a negative margin) and of a margin met, in the claim's sentence.
+_SHORTFALL = re.compile(r"\b(?:miss(?:es|ed|ing)?|short|negative|violat\w*|late)\b", re.I)
+_MARGIN_MET = re.compile(r"\b(?:spare|meets?|met|positive|headroom|ahead|early)\b", re.I)
+#: Words that make a width claim one about weights (a port width is a different meaning).
+_WEIGHT_WORDS = frozenset({"weight", "parameter", "param", "coefficient", "kernel"})
+_COUNT_UNITS = (
+    "gates|GE|LUTs?|LUT4|LUT6|tiles?|bits?|bytes?|B|KB|kB|MB|vectors?|cells?|params?|designs?|"
+    "transistors?|patients?|levels?|EUR"
+)
+_UNIT = re.compile(
+    rf"^(?:%|x|\u00d7|[kMGK]|(?:[pnuµ\u03bcmkMG]?(?:Hz|W|J|s|m2|m²|m|V))|{_COUNT_UNITS}"
+    rf"|(?i:{'|'.join(sorted({*_UNIT_WORDS, *_TIME_WORDS}, key=len, reverse=True))}))$"
+)
+_RANGE_UNIT = re.compile(r"^\s*[-–]\s*\d[\d.,]*\s*([^\s.,;:)*|]+)")  # noqa: RUF001
+_NUMBER = re.compile(r"(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?(?:[eE]([-+]?\d+))?")
+_BOUNDARY = set(" \t()[]{};|*\"'`=:<>≈~!?,–—→")  # noqa: RUF001 (dashes and arrows separate numbers)
+_MONTH = (
+    r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|"
+    r"Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\b\.?"
+)
+#: Words this close to a number are its context, for the small-integer guard and key ranking.
+CONTEXT_WORDS = 5
+_SPANS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("date", re.compile(r"\b\d{4}-\d{2}-\d{2}(?:[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?")),
+    ("date", re.compile(rf"\b\d{{1,2}}\s+{_MONTH}(?:\s+\d{{4}})?")),
+    ("date", re.compile(rf"\b{_MONTH}\s+\d{{1,2}}(?:,?\s+\d{{4}})?")),
+    ("time", re.compile(r"\b\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?\b")),
+    ("version", re.compile(r"(?<![\w.])v?\d+(?:\.\d+){2,}(?:[+-]\w+)?|\b\d+\.\d+\+\d+\b")),
+    ("code", re.compile(r"`[^`]*[A-Za-z][^`]*`")),
+    ("list numbering", re.compile(r"^\s*(?:#+\s*)?\d+(?:\.\d+)*[.)](?=\s)")),
+    ("section numbering", re.compile(r"^\s*#+\s*\d+(?:\.\d+)*(?=\s)")),
+)
+
+
+def _stem(word: str) -> str:
+    """``word`` lower-cased with an English plural ending removed (``passes`` -> ``pass``)."""
+    low = word.lower()
+    if len(low) > 4 and low.endswith("ies"):
+        return low[:-3] + "y"
+    if len(low) > 4 and low.endswith(("sses", "shes", "ches", "xes")):
+        return low[:-2]
+    if len(low) > 3 and low.endswith("s") and not low.endswith(("ss", "us", "is")):
+        return low[:-1]
+    return low
+
+
+def _terms(text: str) -> set[str]:
+    """Stemmed lower-case content words of ``text`` (``_`` and ``-`` split words)."""
+    words = re.findall(r"[A-Za-z][A-Za-z0-9]+", text.replace("_", " "))
+    return {_stem(word) for word in words if word.lower() not in _STOP}
+
+
+def _noun_kind(word: str | None) -> str | None:
+    """The kind of counted thing or physical quantity ``word`` names, if it is in the table."""
+    if not word:
+        return None
+    scaled = _unit_scale(word)
+    if scaled is not None:
+        return f"unit:{scaled[0]}"
+    return _NOUN_OF_WORD.get(_stem(word.strip("*_")))
+
+
+def _unit_scale(unit: str | None) -> tuple[str, float] | None:
+    """``(base, factor)`` for a physical unit with an SI prefix, e.g. ``nW`` -> ``("W", 1e-9)``.
+
+    Spelled-out units and both micro signs count (``microwatts``, ``μW`` -> ``µW``); a rate
+    in words is in hertz (``/min`` -> ``("Hz", 1/60)``).
+    """
+    if not unit:
+        return None
+    if unit in _RATE_UNITS:
+        return "Hz", _RATE_UNITS[unit]
+    if unit.lower() in _TIME_WORDS:
+        return "s", _TIME_WORDS[unit.lower()]
+    unit = _UNIT_WORDS.get(unit.lower(), unit).replace("μ", "µ")
+    unit = unit.replace("um", "µm") if unit.startswith("um") else unit
+    for base in _BASES:
+        if unit.endswith(base) and unit[: -len(base)] in _PREFIX:
+            prefix = _PREFIX[unit[: -len(base)]]
+            squared = base in ("m2", "m²")
+            return ("m2" if squared else base, prefix**2 if squared else prefix)
+    return None
+
+
+_KEY_UNIT = re.compile(r"(?<=_)(um2|mm2|ns|ps|us|ms|pj|nj|uw|nw|mw|mhz|khz|hz|eur)(?=_|$)")
+
+
+def _key_unit(key: str) -> str | None:
+    """The unit a key names as a word of its own (``power_uw_at_rate`` -> ``uW``); the last one wins."""
+    found = _KEY_UNIT.findall(key.lower())
+    if not found:
+        return None
+    raw = found[-1]
+    fixed = {
+        "pj": "pJ",
+        "nj": "nJ",
+        "uw": "uW",
+        "nw": "nW",
+        "mw": "mW",
+        "mhz": "MHz",
+        "khz": "kHz",
+        "hz": "Hz",
+    }
+    return fixed.get(raw, raw)
+
+
+@dataclass
+class Claim:
+    """One number written in the report."""
+
+    line: int
+    snippet: str
+    text: str
+    value: float
+    resolution: float
+    unit: str | None
+    percent: bool
+    terms: set[str] = field(default_factory=set)
+    excluded: str | None = None
+    #: The kind the unit or noun right next to the number names (``gate``, ``unit:s``, ...).
+    noun: str | None = None
+    noun_word: str | None = None
+    #: The sentence's direction: -1 a shortfall ("misses by"), 1 a margin met ("to spare"), 0 neither.
+    direction: int = 0
+
+
+@dataclass
+class Source:
+    """One machine-produced number in the run folder.
+
+    ``terms`` are the words of the key's last meaningful segment; ``kinds`` the counted things
+    or physical quantities the key or unit names; ``reproduced`` is False for a figure a file
+    declares that the run's own data does not reproduce.
+    """
+
+    label: str
+    key: str
+    value: float
+    unit: str | None
+    terms: set[str]
+    from_event: bool
+    kinds: set[str] = field(default_factory=set)
+    percent: bool = False
+    ratio: bool = False
+    structural: bool = False
+    reproduced: bool = True
+    #: The lab tool a ``metric`` event names as its ``source`` (``score-events``); None: the agent's own.
+    origin: str | None = None
+
+
+def _word_around(line: str, start: int, end: int) -> tuple[int, int]:
+    """The whitespace/punctuation-delimited word containing ``line[start:end]``."""
+
+    def part_of_word(i: int) -> bool:
+        ch = line[i]
+        if ch == ",":
+            return 0 < i < len(line) - 1 and line[i - 1].isdigit() and line[i + 1].isdigit()
+        return ch not in _BOUNDARY
+
+    left, right = start, end
+    while left > 0 and part_of_word(left - 1):
+        left -= 1
+    while right < len(line) and part_of_word(right):
+        right += 1
+    while right > end and line[right - 1] in ".:":
+        right -= 1
+    return left, right
+
+
+def _table_headers(lines: list[str]) -> dict[int, list[str]]:
+    """For each markdown table row, the header cells of its table."""
+    headers: dict[int, list[str]] = {}
+    current: list[str] | None = None
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith("|"):
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if current is None:
+                current = cells
+            headers[i] = current
+        else:
+            current = None
+    return headers
+
+
+def extract_claims(report: str, prompt: str = "") -> list[Claim]:
+    """Every number in ``report`` with its words; non-claims carry ``excluded`` (the reason)."""
+    lines = report.splitlines()
+    headers = _table_headers(lines)
+    quoted = _prompt_quotes(prompt)
+    claims: list[Claim] = []
+    in_fence = False
+    for index, line in enumerate(lines):
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        spans = [(m.start(), m.end(), kind) for kind, pattern in _SPANS for m in pattern.finditer(line)]
+        seen: set[tuple[int, int]] = set()
+        for match in _NUMBER.finditer(line):
+            claim = _claim(line, index, match, spans, headers.get(index))
+            if claim is None:
+                continue
+            word = _word_around(line, *match.span())
+            if claim.excluded == "identifier or file name" and word in seen:
+                continue  # one identifier, one entry
+            seen.add(word)
+            if in_fence:
+                claim.excluded = "code block"
+            elif claim.excluded is None and _quote_key(line, match.start(), match.end()) in quoted:
+                claim.excluded = "quoted from the prompt"
+            claims.append(claim)
+    return claims
+
+
+def _claim(
+    line: str, index: int, match: re.Match[str], spans: list[tuple[int, int, str]], header: list[str] | None
+) -> Claim | None:
+    start, end = match.span()
+    if start > 0 and (line[start - 1].isdigit() or line[start - 1] == "."):
+        return None  # the tail of a longer token already handled
+    left, right = _word_around(line, start, end)
+    word = line[left:right]
+    lead = word[: start - left]
+    raw_tail = word[end - left :]
+    tail = raw_tail.lstrip("-")
+    compound = raw_tail.startswith("-") and tail.isalpha()  # "2-lane", "8-bit"
+    excluded = next((kind for s, e, kind in spans if s <= start < e), None)
+    if excluded is None and any(ch.isalpha() for ch in lead.lstrip("€$£+-−")):  # noqa: RUF001
+        excluded = "identifier or file name"
+    if (
+        excluded is None
+        and tail
+        and not compound
+        and not _UNIT.match(tail)
+        and any(c.isalpha() for c in tail)
+    ):
+        excluded = "identifier or file name"
+    whole, frac, exp = match.group(1), match.group(2) or "", match.group(3)
+    value = float(whole.replace(",", "") + frac)
+    resolution = 10.0 ** -(len(frac) - 1 if frac else 0)
+    if exp:
+        value *= 10.0 ** int(exp)
+        resolution *= 10.0 ** int(exp)
+    unit = tail if tail and _UNIT.match(tail) else None
+    written = line[start:end] + (raw_tail if unit or compound else "")
+    after = line[right:].split()
+    if unit is None and after and (scale_word := after[0].strip(".,;:)*|").lower()) in _SCALE_WORDS:
+        value, resolution = value * _SCALE_WORDS[scale_word], resolution * _SCALE_WORDS[scale_word]
+        written += f" {after.pop(0)}"
+    nxt = after[0].strip(".,;:)*|") if after else ""
+    if unit is None:
+        unit = nxt if nxt and _UNIT.match(nxt) and nxt not in ("x", "K", "M", "G", "k", "B") else None
+        written += f" {unit}" if unit else ""
+    if unit is None and (ranged := _RANGE_UNIT.match(line[end:])) and _unit_scale(ranged.group(1)):
+        unit = ranged.group(1)  # "0.03-0.05 µW": the first bound carries the second's unit
+    if unit in ("k", "K", "M", "G"):
+        scale = {"k": 1e3, "K": 1e3, "M": 1e6, "G": 1e9}[unit]
+        value, resolution, unit = value * scale, resolution * scale, None
+    if (
+        unit not in ("%", "x", "\u00d7")
+        and _unit_scale(unit) is None
+        and (rate := _RATE.match(" ".join(after)))
+    ):
+        phrase = rate.group(0)
+        if unit and phrase.startswith(unit):  # "100 vectors per second": the count word is written
+            phrase = phrase[len(unit) :].lstrip()
+        written += f" {phrase}"
+        unit = {"s": "/s", "min": "/min", "h": "/h", "day": "/day"}[rate.lastgroup or "s"]
+    if lead.endswith(("-", "−")) and not lead.rstrip("-−"):  # noqa: RUF001
+        value = -value
+    sentence = re.split(r"(?<=[.!?;])\s+", line[end:], maxsplit=1)[0]
+    sentence = re.split(r"[.!?;]\s+", line[:start])[-1] + line[start:end] + sentence
+    shortfall, met = bool(_SHORTFALL.search(sentence)), bool(_MARGIN_MET.search(sentence))
+    direction = -1 if shortfall and not met else 1 if met and not shortfall else 0
+    snippet = _snippet(line, start, end)
+    before = [w for w in line[:left].split() if re.search(r"[A-Za-z]{2}", w)][-CONTEXT_WORDS:]
+    after_words = [w for w in after if re.search(r"[A-Za-z]{2}", w)][:CONTEXT_WORDS]
+    terms = _terms(" ".join([*before, tail if compound else "", *after_words]))
+    if header is not None:
+        column = line[:start].count("|") - 1
+        if 0 <= column < len(header):
+            terms |= _terms(header[column])
+    noun_word = None
+    if unit == "%":
+        noun_word = "%"
+    elif unit is not None:
+        noun_word = unit
+    elif compound:
+        noun_word = tail
+    else:
+        previous = line[:left].split()[-1:] if line[:left].strip() else []
+        candidates = [nxt, previous[0].strip("(*_,:") if previous else ""]
+        noun_word = next((w for w in candidates if _noun_kind(w)), None)
+    noun = "percent" if noun_word == "%" else _noun_kind(noun_word)
+    return Claim(
+        line=index + 1,
+        snippet=snippet,
+        text=word.strip("*_") if excluded else written,
+        value=value,
+        resolution=resolution / 2,
+        unit=unit if unit != "%" else None,
+        percent=unit == "%",
+        terms=terms,
+        excluded=excluded,
+        noun=noun,
+        noun_word=noun_word if noun else None,
+        direction=direction,
+    )
+
+
+def _snippet(line: str, start: int, end: int, width: int = 50) -> str:
+    left = max(0, start - width)
+    right = min(len(line), end + width)
+    text = " ".join(line[left:right].split())
+    return ("..." if left else "") + text + ("..." if right < len(line) else "")
+
+
+def _quote_key(text: str, start: int, end: int) -> tuple[str, str]:
+    nxt = text[end:].split()
+    return (text[start:end].replace(",", ""), nxt[0].strip(".,;:)").lower() if nxt else "")
+
+
+def _prompt_quotes(prompt: str) -> set[tuple[str, str]]:
+    """(number as written, next word) pairs of the prompt: the same pair in the report is a quote."""
+    return {_quote_key(prompt, m.start(), m.end()) for m in _NUMBER.finditer(prompt)}
+
+
+def _walk_numbers(data: Any, path: str = "") -> Iterator[tuple[str, float]]:
+    """Numeric leaves with a key path; bare number lists (weights, vectors, bit ids) are data, skipped."""
+    if isinstance(data, dict):
+        for key, value in data.items():
+            child = f"{path}.{key}" if path else str(key)
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, int | float) and math.isfinite(value):
+                yield child, float(value)
+            elif isinstance(value, dict | list):
+                yield from _walk_numbers(value, child)
+    elif isinstance(data, list):
+        for i, value in enumerate(data):
+            if isinstance(value, dict):
+                yield from _walk_numbers(value, f"{path}[{i}]")
+
+
+def lab_files(run: Path) -> list[Path]:
+    """Files written by lab tools: JSON and text under ``chips/``, and JSON shaped like a lab answer.
+
+    A lab tool prints one JSON object with ``status`` and a ``design_id`` or ``cost``; an agent
+    that saved such an answer to a file kept the lab's numbers verbatim.
+    """
+    space = _workspace(run)
+    out: list[Path] = []
+    for path in sorted(space.rglob("*")):
+        parts = path.relative_to(space).parts
+        if any(part.startswith(".") for part in parts) or not path.is_file() or path.name in NOT_MEASUREMENTS:
+            continue
+        under_chips = parts[0] == "chips"
+        if path.suffix in (".md", ".txt") and under_chips:
+            out.append(path)
+        elif path.suffix == ".json":
+            data = _load_json(path) if under_chips else None
+            if under_chips and data is not None:
+                out.append(path)
+            elif not under_chips and path.stat().st_size <= MAX_SOURCE_BYTES:
+                data = _load_json(path)
+                if isinstance(data, dict) and "status" in data and ("design_id" in data or "cost" in data):
+                    out.append(path)
+    return out
+
+
+def _leaf(key: str) -> str:
+    """The key's last meaningful segment: the last one with a non-generic word (indices dropped)."""
+    segments = [s for s in re.sub(r"\[[^\]]*\]", "", key).split(".") if s]
+    for segment in reversed(segments):
+        if _terms(segment) - GENERIC_WORDS:
+            return segment
+    return segments[-1] if segments else key
+
+
+def _source(
+    label: str, key: str, value: float, unit: str | None, *, from_event: bool, check_structure: bool = True
+) -> Source:
+    """A source with its key words, the kinds they name, and its percent and structural flags."""
+    leaf = _leaf(key)
+    terms = _terms(leaf)
+    scaled = _unit_scale(unit)
+    kinds = {kind for kind, words in _SOURCE_NOUNS.items() if terms & words}
+    if scaled is not None:  # a physical unit outranks words such as "clock" in clock_period_ns
+        kinds = {k for k in kinds if not k.startswith("unit:")} | {f"unit:{scaled[0]}"}
+    elif not kinds and (unit_kind := _noun_kind(unit)):
+        kinds = {unit_kind}
+    if unit is None and "seconds" in kinds:  # wall, elapsed, duration, ...: a time in seconds
+        unit, kinds = "s", {*kinds, "unit:s"}
+    percent = unit == "%" or bool(terms & _PERCENT_WORDS)
+    ratio = not percent and scaled is None and bool(terms & _RATIO_WORDS) and 0 <= value <= 1
+    if percent or ratio:
+        kinds.add("percent")
+    structural = check_structure and (
+        bool(terms & _STRUCTURAL_WORDS) or leaf.lower() in _LOOP_SIZE_KEYS or bool(re.search(r"_s$", leaf))
+    )
+    return Source(label, key, value, unit, terms, from_event, kinds, percent, ratio, structural)
+
+
+def model_files(run: Path) -> list[Path]:
+    """JSON files in the run's workspace that store weight arrays (model files), outside lab answers."""
+    space = _workspace(run)
+    out = []
+    for path in sorted(space.rglob("*.json"), key=lambda p: (p.relative_to(space).parts[0] == "chips", p)):
+        parts = path.relative_to(space).parts
+        if any(part.startswith(".") for part in parts) or path.name == "net.json":
+            continue
+        data = _load_json(path)
+        if isinstance(data, dict) and "status" not in data and any(_tensors(data)):
+            out.append(path)
+    return out
+
+
+def _model_sources(run: Path) -> list[Source]:
+    """Parameter counts of each model file: the stored weight values, and a differing declared count.
+
+    The stored count is machine-countable (the length of every weight and bias array). A declared
+    ``meta.params`` that equals it is named in the same source; one that differs (weight sharing,
+    unrolled weights) is a separate source, not reproduced from the data.
+    """
+    sources = []
+    for path in model_files(run):
+        data = _load_json(path)
+        tensors = list(_tensors(data))
+        stored = sum(len(values) for _, values in tensors)
+        meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+        declared = meta.get("params") if isinstance(meta.get("params"), int) else None
+        name = f" (model {data['name']})" if isinstance(data.get("name"), str) else ""
+        rel = _rel(run, path)
+        agrees = "; meta.params declares the same" if declared == stored else ""
+        label = f"{rel}{name}: {stored} stored weight values in {len(tensors)} arrays{agrees}"
+        source = _source(label, "stored_parameters", stored, None, from_event=False, check_structure=False)
+        sources.append(source)
+        if declared is not None and declared != stored:
+            label = (
+                f"{rel}{name}: meta.params declares {declared}, but the arrays store {stored} values "
+                "(the declared count is not reproduced from the data)"
+            )
+            source = _source(label, "declared_parameters", declared, None, from_event=False)
+            source.reproduced = False
+            sources.append(source)
+    return sources
+
+
+def collect_sources(run: Path, events: list[dict[str, Any]]) -> list[Source]:
+    """Every machine-produced number: metric events, model parameter counts, then lab file numbers."""
+    sources = []
+    for event in events:
+        value = event.get("value")
+        if event.get("type") != "metric" or isinstance(value, bool) or not isinstance(value, int | float):
+            continue
+        key, unit = str(event.get("key")), event.get("unit") or _key_unit(str(event.get("key")))
+        origin = str(event["source"]) if event.get("source") else None
+        where = "".join(f", {k} {event[k]}" for k in ("chip", "source") if event.get(k))
+        label = f"metric {key} = {value} (events.jsonl seq {event.get('seq')}{where})"
+        source = _source(label, key, float(value), unit, from_event=True, check_structure=False)
+        source.origin = origin
+        sources.append(source)
+    sources += _model_sources(run)
+    for path in lab_files(run):
+        rel = _rel(run, path)
+        if path.suffix == ".json":
+            for key, value in _walk_numbers(_load_json(path)):
+                unit = _key_unit(key.rsplit(".", 1)[-1])
+                sources.append(_source(f"{rel}: {key} = {value:g}", key, value, unit, from_event=False))
+            continue
+        for claim in extract_claims(path.read_text(encoding="utf-8", errors="replace")):
+            if claim.excluded is None:
+                label = f"{rel} line {claim.line}: {claim.snippet}"
+                source = Source(label, claim.snippet, claim.value, claim.unit, claim.terms, False)
+                source.kinds = {claim.noun} if claim.noun else set()
+                source.percent = claim.percent
+                sources.append(source)
+    return sources
+
+
+def _match(claim: Claim, source: Source) -> str | None:
+    """``None`` if ``source`` does not round to ``claim`` at the digits shown; else ``""`` when
+    nothing was found between value and claim, or why the match stays unclear.
+
+    A percent claim matches only a percentage (as written) or a 0-to-1 ratio (times 100). When
+    both carry a physical unit (a rate in words is in hertz), the values must agree after both
+    are converted to the base unit; when only one does, the match is unclear. A negative
+    source matches a negative claim or a sentence of shortfall ("misses by"), never one of a
+    margin met ("to spare"); a sentence with neither leaves the match unclear.
+    """
+    magnitude = abs(source.value)
+    if claim.percent:
+        if not (source.percent or source.ratio):
+            return None
+        magnitude *= 1 if source.percent else 100
+    have, want = _unit_scale(source.unit), _unit_scale(claim.unit)
+    gap = ""
+    if have and want:
+        if have[0] != want[0]:
+            return None
+        magnitude *= have[1] / want[1]
+    elif have or want:
+        side, unit = ("source", source.unit) if have else ("number", claim.unit)
+        gap = f"the {side} has a unit ({unit}), the other none"
+    if abs(magnitude - abs(claim.value)) > claim.resolution * (1 + 1e-9) + 1e-12:
+        return None
+    if source.value > 0 and claim.value < 0:
+        return None
+    if source.value < 0 and claim.value >= 0:
+        if claim.direction > 0:
+            return None
+        if claim.direction == 0:
+            gap = gap or "the source is negative and the sentence states no shortfall"
+    if claim.noun == "bit" and claim.terms & _WEIGHT_WORDS and not _terms(source.key) & _WEIGHT_WORDS:
+        gap = gap or "the number is a weight width; the source is another width"
+    return gap
+
+
+def _shared_words(claim: Claim, source: Source) -> set[str]:
+    """Whole non-generic words shared by the claim's context and the source key's last segment."""
+    return (claim.terms & source.terms) - GENERIC_WORDS
+
+
+def _is_small_int(claim: Claim) -> bool:
+    return claim.resolution >= 0.5 and claim.value.is_integer() and abs(claim.value) <= SMALL_INT_MAX
+
+
+def event_level_keys(run: Path) -> frozenset[str]:
+    """Metric keys of the spec's event-level targets: a target whose metric or unit names events.
+
+    For such a target the lab's ``score-events`` figure (a ``metric`` event with that ``source``)
+    ranks first among equally worded sources; for any other target the ranking is unchanged.
+    """
+    spec = _load_json(_workspace(run) / "spec.json")
+    targets = spec.get("targets") if isinstance(spec, dict) else None
+    keys: set[str] = set()
+    for target in targets if isinstance(targets, list) else []:
+        if not isinstance(target, dict) or not isinstance(target.get("metric"), str):
+            continue
+        metric, unit = target["metric"], str(target.get("unit") or "")
+        if "event" in metric.lower() or "event" in unit.lower():
+            keys |= {metric, metric if metric.startswith("event_") else f"event_{metric}"}
+    return frozenset(keys)
+
+
+def classify_claim(
+    claim: Claim, sources: list[Source], prefer: frozenset[str] = frozenset()
+) -> tuple[str, list[Source], str | None]:
+    """``(class, sources in rank order, reason)`` for one report number.
+
+    A source is found when the value and unit match and the noun or unit next to the number
+    agrees with the source's kind, or (with no such noun) the number's words share a whole
+    non-generic word with the source key. A value-only match is unclear. A structural field (line count,
+    byte size, tool duration, seed, ...) is a source only when the claim's words name it.
+    ``prefer``: keys whose lab-tool figure (``origin``) ranks before other equally worded
+    sources (:func:`event_level_keys`); the class never depends on it.
+    """
+    gaps = {id(s): gap for s in sources if (gap := _match(claim, s)) is not None}
+    hits = [s for s in sources if id(s) in gaps]
+    named = [s for s in hits if not s.structural or claim.noun in s.kinds or _shared_words(claim, s)]
+
+    def settle(agree: list[Source], declared_reason: str) -> tuple[str, list[Source], str | None] | None:
+        if full := [s for s in agree if s.reproduced and not gaps[id(s)]]:
+            return SOURCE_FOUND, rank(full), None
+        if agree:
+            first = rank(agree)[0]
+            return VALUE_UNCLEAR, rank(agree), gaps[id(first)] or declared_reason
+        return None
+
+    def rank(pool: list[Source]) -> list[Source]:
+        return sorted(
+            pool,
+            key=lambda s: (
+                -len(_shared_words(claim, s)),
+                not (s.origin is not None and s.key in prefer),
+                not s.from_event,
+                abs(abs(s.value) - abs(claim.value)),
+            ),
+        )
+
+    if claim.noun is not None and claim.noun != "percent":
+        agree = [s for s in named if claim.noun in s.kinds]
+        if settled := settle(agree, "the only agreeing source is a declared figure"):
+            return settled
+        reason = f"no source with this value is a {claim.noun_word}"
+        if hits:
+            reason += f"; the value appears only as a different quantity ({rank(hits)[0].label})"
+        return NO_SOURCE, [], reason
+    keyed = [s for s in named if _shared_words(claim, s)]
+    if settled := settle(keyed, "the only source sharing a word is a declared figure"):
+        return settled
+    if named and _is_small_int(claim):
+        return NO_SOURCE, [], "small integer, and no source with this value shares a word"
+    if named:
+        return VALUE_UNCLEAR, rank(named), "the value matches but no word ties the number to the source"
+    return NO_SOURCE, [], None
+
+
+def check_numbers(run: Path, events: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Measurement A over the run's final report: every number in one of three classes, or excluded."""
+    events = read_events(run) if events is None else events
+    report = find_report(run, events)
+    result: dict[str, Any] = {
+        "report": _rel(run, report) if report else None,
+        "classes": dict(CLASS_NAMES),
+        "limits": LIMITS,
+        NO_SOURCE: 0,
+        VALUE_UNCLEAR: 0,
+        SOURCE_FOUND: 0,
+        EXCLUDED: 0,
+        "numbers": [],
+    }
+    if report is None:
+        result["note"] = "no final report (workspace/report.md) in the run folder"
+        return result
+    sources = collect_sources(run, events)
+    prefer = event_level_keys(run)
+    result["sources"] = {
+        "metric_events": sum(s.from_event for s in sources),
+        "model_parameter_counts": sum(s.key.endswith("_parameters") for s in sources),
+        "lab_file_numbers": sum(not s.from_event and not s.key.endswith("_parameters") for s in sources),
+    }
+    for claim in extract_claims(report.read_text(encoding="utf-8"), find_prompt(run, events)):
+        entry: dict[str, Any] = {"line": claim.line, "snippet": claim.snippet, "text": claim.text}
+        entry["value"] = claim.value
+        if claim.excluded:
+            kind, ranked, reason = EXCLUDED, [], claim.excluded
+        else:
+            kind, ranked, reason = classify_claim(claim, sources, prefer)
+        entry["class"] = kind
+        entry["status"] = CLASS_NAMES[kind]
+        if reason:
+            entry["reason"] = reason
+        if ranked:
+            entry["source"] = ranked[0].label
+            entry["other_matches"] = len(ranked) - 1
+        result[kind] += 1
+        result["numbers"].append(entry)
+    return result
+
+
+# ---------------------------------------------------------------- B. weight bytes
+
+_WEIGHT_KEY = re.compile(r"^(?:W|b|w|weights?|bias(?:es)?|kernel)\d*$")
+_FLOP = re.compile(r"dff|dlatch|^\$_?sr|__df|__dl|__edf|__sdf", re.I)
+_MEMORY = re.compile(r"^\$mem|sram|\bram|rom\b|_ram|_rom|macro", re.I)
+
+
+def _chips_root(run: Path) -> Path | None:
+    return next((p for p in (_workspace(run) / "chips", run / "chips") if p.is_dir()), None)
+
+
+def laid_out_chips(run: Path, events: list[dict[str, Any]]) -> list[Path]:
+    """Chip folders the lab laid out (``artifact`` events of kind ``chip``), in event order."""
+    root = _chips_root(run)
+    names: list[str] = []
+    for event in events:
+        parts = Path(str(event.get("path") or "")).parts
+        if event.get("type") == "artifact" and event.get("kind") == "chip" and "chips" in parts[:-2]:
+            name = parts[parts.index("chips") + 1]
+            if name not in names:
+                names.append(name)
+    return [root / n for n in names if root is not None and (root / n).is_dir()]
+
+
+def chosen_chip(events: list[dict[str, Any]]) -> str | None:
+    """The design id of the run's last ``chosen`` event, or ``None`` when it has none."""
+    ids = [str(e["chip"]) for e in events if e.get("type") == "chosen" and e.get("chip")]
+    return ids[-1] if ids else None
+
+
+def select_chip(run: Path, events: list[dict[str, Any]]) -> tuple[Path | None, str, bool]:
+    """The chip the run selected, why, and whether it was inferred.
+
+    The chip of the run's last ``chosen`` event. Only when there is none (or its folder is
+    missing) is the chip inferred: the one the report names most often (laid-out chips
+    first); else the first laid-out chip whose model carries weights; else the first chip
+    with weights.
+    """
+    root = _chips_root(run)
+    if root is None:
+        return None, "no chips/ folder", False
+    chips = [p for p in sorted(root.iterdir()) if p.is_dir()]
+    if not chips:
+        return None, "chips/ is empty", False
+    chosen = chosen_chip(events)
+    if chosen is not None and (root / chosen).is_dir():
+        return root / chosen, "the run's chosen chip (its last chosen event)", False
+    if chosen is None:
+        prefix = "inferred, the run has no chosen event: "
+    else:
+        prefix = f"inferred, the chosen chip {chosen} has no folder under chips/: "
+    chip, why = _infer_chip(run, events, chips)
+    return chip, prefix + why, True
+
+
+def _infer_chip(run: Path, events: list[dict[str, Any]], chips: list[Path]) -> tuple[Path, str]:
+    """The chip a run without a usable ``chosen`` event most likely selected, and why."""
+    laid_out = laid_out_chips(run, events)
+    report = find_report(run, events)
+    text = report.read_text(encoding="utf-8") if report else ""
+    pool = laid_out or chips
+    counts = {c: len(re.findall(rf"(?<![\w-]){re.escape(c.name)}(?![\w-])", text)) for c in pool}
+    best = max(pool, key=lambda c: counts[c])
+    if counts[best] and list(counts.values()).count(counts[best]) == 1:
+        basis = "laid-out chips" if laid_out else "chip folders"
+        return best, f"the report names this chip most often ({counts[best]} times) among the {basis}"
+    weighted = [c for c in pool if (m := _model_file(c)) is not None and any(_tensors(_load_json(m)))]
+    if weighted and laid_out:
+        return weighted[0], "the run named no chip; first laid-out design with weights"
+    if weighted:
+        return weighted[
+            0
+        ], "the run named no chip and laid none out; first chip folder (by name) with weights"
+    return pool[0], "the run named no chip and no model carries weights; first chip folder"
+
+
+def _min_signed_bits(values: list[int]) -> int:
+    low, high = min(values), max(values)
+    if low >= 0:
+        return max(1, high.bit_length() + 1)
+    return max((-low - 1).bit_length(), high.bit_length()) + 1
+
+
+def _flat(values: Any) -> Iterator[Any]:
+    if isinstance(values, list):
+        for item in values:
+            yield from _flat(item)
+    else:
+        yield values
+
+
+def _tensors(data: Any, path: str = "") -> Iterator[tuple[str, list[float]]]:
+    if isinstance(data, dict):
+        for key, value in data.items():
+            child = f"{path}.{key}" if path else str(key)
+            if _WEIGHT_KEY.match(str(key)) and isinstance(value, list):
+                flat = list(_flat(value))
+                if flat and all(isinstance(v, int | float) and not isinstance(v, bool) for v in flat):
+                    yield child, [float(v) for v in flat]
+                    continue
+            yield from _tensors(value, child)
+    elif isinstance(data, list):
+        for i, item in enumerate(data):
+            label = item.get("id") if isinstance(item, dict) and isinstance(item.get("id"), str) else str(i)
+            yield from _tensors(item, f"{path}[{label}]")
+
+
+def _width(values: list[float]) -> tuple[int, int, str]:
+    """``(stored bits, packed minimal bits, kind)`` of one array, by one rule for every design.
+
+    Stored: the smallest machine integer type (int8/16/32/64) holding every value, or float32 for
+    decimal values. Packed: the fewest bits per value (1 for binary, 2 for ternary, else the
+    smallest signed width).
+    """
+    if any(not v.is_integer() for v in values):
+        return 32, 32, "decimal values, float32"
+    ints = sorted({int(v) for v in values})
+    if set(ints) <= {-1, 1} or set(ints) <= {0, 1}:
+        minimal, kind = 1, "binary"
+    elif set(ints) <= {-1, 0, 1}:
+        minimal, kind = 2, "ternary"
+    else:
+        minimal, kind = _min_signed_bits(ints), "integers"
+    stored = next(b for b in (8, 16, 32, 64) if b >= minimal)
+    return stored, minimal, f"{kind}, int{stored} (smallest machine type), {minimal} bits packed"
+
+
+def _model_file(chip: Path) -> Path | None:
+    if (chip / "ir.json").is_file():
+        return chip / "ir.json"
+    return next((p for p in sorted(chip.glob("*.json")) if any(_tensors(_load_json(p)))), None)
+
+
+def _netlist_cells(chip: Path) -> tuple[Counter[str], dict[str, int], str | None]:
+    """Cell type counts and word-level memory bits of the chip's netlist (``net.json``, else ``gates.v``)."""
+    counts: Counter[str] = Counter()
+    memory_bits: dict[str, int] = {}
+    net = chip / "net.json"
+    if net.is_file():
+        try:
+            data = json.loads(net.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = None
+        if isinstance(data, dict):
+            for module in (data.get("modules") or {}).values():
+                for name, cell in (module.get("cells") or {}).items():
+                    kind = str(cell.get("type"))
+                    counts[kind] += 1
+                    params = cell.get("parameters") or {}
+                    if kind.startswith("$mem") and "WIDTH" in params and "SIZE" in params:
+                        memory_bits[name] = _param(params["WIDTH"]) * _param(params["SIZE"])
+            return counts, memory_bits, "net.json"
+    verilog = chip / "gates.v"
+    if verilog.is_file():
+        keywords = {"module", "input", "output", "wire", "assign", "reg", "endmodule", "inout"}
+        for line in verilog.read_text(encoding="utf-8", errors="replace").splitlines():
+            match = re.match(r"\s*\\?(\$?[A-Za-z_][\w$]*)\s+\\?\S+\s*\(", line)
+            if match and match.group(1) not in keywords:
+                counts[match.group(1)] += 1
+        return counts, memory_bits, "gates.v"
+    return counts, memory_bits, None
+
+
+def _param(raw: Any) -> int:
+    if isinstance(raw, int):
+        return raw
+    text = str(raw)
+    return int(text, 2) if set(text) <= {"0", "1"} else int(text)
+
+
+def _lab_cross_checks(run: Path, chip: Path) -> list[str]:
+    """What the lab's own answers for this chip say about flip-flops, memories and cell classes."""
+    notes = []
+    for path in lab_files(run):
+        if path.suffix != ".json" or path.parent == chip:
+            continue
+        data = _load_json(path)
+        if not isinstance(data, dict) or data.get("design_id") != chip.name:
+            continue
+        metrics = data.get("metrics") if isinstance(data.get("metrics"), dict) else {}
+        if "ff" in metrics:
+            notes.append(f"{_rel(run, path)}: metrics.ff = {metrics['ff']} (FPGA flip-flops)")
+        classes = sorted(k.split("class:", 1)[1] for k in metrics if "__class:" in k)
+        if classes:
+            flops = [c for c in classes if re.search(r"sequential|flop|macro|memory", c)]
+            notes.append(
+                f"{_rel(run, path)}: layout cell classes {', '.join(classes)}"
+                + (f"; storage classes {', '.join(flops)}" if flops else "; no sequential or macro class")
+            )
+    return notes
+
+
+def weight_bytes(run: Path, events: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Measurement B for the chip the run selected, plus one line per other laid-out chip."""
+    events = read_events(run) if events is None else events
+    chip, why, inferred = select_chip(run, events)
+    if chip is None:
+        return {"chip": None, "note": why}
+    out: dict[str, Any] = {
+        "chip": chip.name,
+        "chip_selected_by": why,
+        "chip_inferred": inferred,
+        **chip_weight_figures(run, chip),
+    }
+    others = []
+    for other in laid_out_chips(run, events):
+        if other != chip:
+            figures = chip_weight_figures(run, other)
+            others.append(
+                {
+                    "chip": other.name,
+                    "software_bytes_per_decision": figures["software"].get("bytes_per_decision"),
+                    "parameters": figures["software"].get("parameters"),
+                    "declared_params": figures["software"].get("declared_params"),
+                    "memory_cells": figures["chip_netlist"].get("memory_cells"),
+                    "flip_flops": figures["chip_netlist"].get("flip_flops"),
+                    "cells": figures["chip_netlist"].get("cells"),
+                }
+            )
+    out["other_laid_out_chips"] = others
+    return out
+
+
+def chip_weight_figures(run: Path, chip: Path) -> dict[str, Any]:
+    """``software`` (model weight bytes) and ``chip_netlist`` (memory cells) for one chip folder."""
+    out: dict[str, Any] = {}
+    model = _model_file(chip)
+    if model is not None:
+        data = _load_json(model)
+        tensors = []
+        for name, values in _tensors(data):
+            stored, minimal, kind = _width(values)
+            tensors.append(
+                {"field": name, "count": len(values), "bits": stored, "min_bits": minimal, "kind": kind}
+            )
+        count = sum(t["count"] for t in tensors)
+        stored_bits = sum(t["count"] * t["bits"] for t in tensors)
+        min_bits = sum(t["count"] * t["min_bits"] for t in tensors)
+        meta = data.get("meta") if isinstance(data, dict) else None
+        out["software"] = {
+            "model_file": _rel(run, model),
+            "parameters": count,
+            "declared_params": meta.get("params") if isinstance(meta, dict) else None,
+            "bytes_per_decision": math.ceil(stored_bits / 8),
+            "bytes_at_minimal_widths": math.ceil(min_bits / 8),
+            "tensors": tensors,
+        }
+        by_width: Counter[int] = Counter()
+        for tensor in tensors:
+            by_width[tensor["bits"]] += tensor["count"]
+        widths = " and ".join(f"{n} at {bits} bits" for bits, n in sorted(by_width.items()))
+        fields = ", ".join(t["field"] for t in tensors)
+        sentence = (
+            f"A software implementation reads {out['software']['bytes_per_decision']} bytes of trained "
+            f"weights per decision: {count} stored values ({widths or 'none'}; each array in the "
+            f"smallest machine integer type holding it) in the arrays {fields or 'none'} of "
+            f"{_rel(run, model)}; packed at the fewest bits each array needs it would be "
+            f"{out['software']['bytes_at_minimal_widths']} bytes."
+        )
+        declared_params = out["software"]["declared_params"]
+        if isinstance(declared_params, int) and declared_params != count:
+            sentence += (
+                f" The file declares {declared_params} parameters but its arrays store {count} values "
+                "(weight sharing or unrolled weights): the bytes above count the stored values, and "
+                "software that shares the weights would read fewer."
+            )
+        out["software"]["sentence"] = sentence
+    else:
+        out["software"] = {"note": f"no model file with weights in {_rel(run, chip)}"}
+    counts, mem_bits, source = _netlist_cells(chip)
+    memories = {k: v for k, v in counts.items() if _MEMORY.search(k)}
+    flops = {k: v for k, v in counts.items() if _FLOP.search(k) and k not in memories}
+    hardware: dict[str, Any] = {
+        "netlist": _rel(run, chip / source) if source else None,
+        "cells": sum(counts.values()),
+        "memory_cells": sum(memories.values()),
+        "memory_cell_types": memories,
+        "memory_bits": sum(mem_bits.values()) if mem_bits else (0 if not memories else None),
+        "flip_flops": sum(flops.values()),
+        "flip_flop_types": flops,
+        "cell_types": dict(sorted(counts.items())),
+        "lab_cross_checks": _lab_cross_checks(run, chip),
+    }
+    if source is None:
+        hardware["sentence"] = f"No netlist (net.json or gates.v) in {_rel(run, chip)}; no chip figure."
+    elif not memories:
+        hardware["weight_bytes_fetched_per_decision"] = 0
+        hardware["sentence"] = (
+            f"The compiled chip {chip.name} has 0 memory cells and {hardware['flip_flops']} flip-flops "
+            f"among {hardware['cells']} cells in {hardware['netlist']}, so it fetches 0 weight bytes per "
+            "decision: the weights are constants wired into the logic."
+        )
+    else:
+        bits = hardware["memory_bits"]
+        hardware["weight_bytes_fetched_per_decision"] = None
+        hardware["sentence"] = (
+            f"The compiled chip {chip.name} has {hardware['memory_cells']} memory cells "
+            f"({', '.join(sorted(memories))}) holding {bits if bits is not None else 'an unknown number of'} "
+            f"bits in {hardware['netlist']}; its weights may be read from memory, so 0 is not claimed."
+        )
+    out["chip_netlist"] = hardware
+    return out
+
+
+# ---------------------------------------------------------------- C. stage timings
+
+
+def stage_timings(events: list[dict[str, Any]]) -> dict[str, Any]:
+    """Measurement C: wall time per stage, shares, the largest stage's bound, items/s and tool calls."""
+    stamped = [(e, _ts(e.get("ts"))) for e in events]
+    stamped = [(e, t) for e, t in stamped if t is not None]
+    if not stamped:
+        return {"note": "no timestamped events"}
+    start = next((t for e, t in stamped if e["type"] == "run.started"), stamped[0][1])
+    finished = next((t for e, t in stamped if e["type"] == "run.finished"), None)
+    end = finished or stamped[-1][1]
+    total = max((end - start).total_seconds(), 0.0)
+    intervals: dict[str, list[dict[str, Any]]] = {}
+    open_: dict[str, datetime] = {}
+    for event, t in stamped:
+        if event["type"] != "stage":
+            continue
+        name, state = str(event.get("name") or event.get("stage")), event.get("state")
+        if state == "started":
+            open_[name] = t
+        elif state in ("done", "skipped"):
+            begin = open_.pop(name, t)
+            intervals.setdefault(name, []).append({"start": begin, "end": t, "state": state})
+    for name, begin in open_.items():
+        intervals.setdefault(name, []).append({"start": begin, "end": end, "state": "open (no done event)"})
+    stages = []
+    for name, spans in intervals.items():
+        seconds = sum((s["end"] - s["start"]).total_seconds() for s in spans)
+        share = seconds / total if total else None
+        stages.append(
+            {
+                "stage": name,
+                "seconds": round(seconds, 3),
+                "share": round(share, 4) if share is not None else None,
+                "state": spans[-1]["state"],
+                "items": _stage_items(stamped, spans),
+                "bound_if_this_stage_free": round(1 / (1 - share), 2)
+                if share is not None and share < 1
+                else None,
+            }
+        )
+    stages.sort(key=lambda s: min(sp["start"] for sp in intervals[s["stage"]]))
+    covered = _union_seconds([(s["start"], s["end"]) for spans in intervals.values() for s in spans])
+    result: dict[str, Any] = {
+        "run_finished": finished is not None,
+        "total_seconds": round(total, 3),
+        "outside_stages_seconds": round(max(total - covered, 0.0), 3),
+        "stages": stages,
+        "tool_calls": _tool_calls(stamped),
+        "scope": "wall time of one run on one machine, from the event timestamps",
+    }
+    timed = [s for s in stages if s["share"]]
+    if timed:
+        top = max(timed, key=lambda s: s["share"])
+        share = top["share"]
+        others_free = 1 / share
+        this_free = 1 / (1 - share) if share < 1 else None
+        this_text = f"at most {this_free:.2f}x faster" if this_free else "no bound (it is the whole run)"
+        result["largest"] = {
+            "stage": top["stage"],
+            "share": share,
+            "bound_if_others_free": round(others_free, 2),
+            "bound_if_this_free": round(this_free, 2) if this_free else None,
+            "sentence": (
+                f"{top['stage']} took {share:.0%} of the run's wall time. If every other stage cost "
+                f"nothing, the run would be at most {others_free:.2f}x faster; if this stage cost "
+                f"nothing, {this_text}."
+            ),
+        }
+    return result
+
+
+def _union_seconds(spans: list[tuple[datetime, datetime]]) -> float:
+    total, last_end = 0.0, None
+    for begin, finish in sorted(spans):
+        if last_end is not None and begin < last_end:
+            begin = last_end
+        if finish > begin:
+            total += (finish - begin).total_seconds()
+        last_end = finish if last_end is None or finish > last_end else last_end
+    return total
+
+
+def _stage_items(
+    stamped: list[tuple[dict[str, Any], datetime]], spans: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Counts of what the events show the stage processed.
+
+    No per-second rate: a stage's wall time includes the agent's own thinking, so dividing a
+    count by it is not tool throughput.
+    """
+    inside = [e for e, t in stamped if any(s["start"] <= t <= s["end"] for s in spans)]
+    chips = {
+        Path(str(e.get("path"))).parts[2]
+        for e in inside
+        if e["type"] == "artifact"
+        and Path(str(e.get("path") or "")).parts[1:2] == ("chips",)
+        and len(Path(str(e.get("path"))).parts) > 3
+    }
+    metrics = Counter(str(e.get("key")) for e in inside if e["type"] == "metric")
+    vectors = _vectors_checked(stamped, spans)
+    items: list[tuple[str, float]] = []
+    if chips:
+        items.append(("chip folders written", len(chips)))
+    for key, label in (("gates", "designs synthesised"), ("verification_level", "verification results")):
+        if metrics.get(key):
+            items.append((label, metrics[key]))
+    if vectors:
+        items.append(("vectors checked", vectors))
+    return [{"item": label, "count": count} for label, count in items]
+
+
+def _vectors_checked(stamped: list[tuple[dict[str, Any], datetime]], spans: list[dict[str, Any]]) -> float:
+    """Vectors checked inside the stage's spans.
+
+    A ``vectors_checked`` metric with a ``chip`` counts one check of that chip, so those add up.
+    One without a chip is the lab's running total for the folder that sent it (the
+    orchestrator's, or one subagent's): the stage's share of it is how far it rose inside the
+    spans, counted per agent.
+    """
+    total: float = 0
+    running: dict[str, float] = {}
+    for event, at in stamped:
+        value = event.get("value")
+        if event["type"] != "metric" or event.get("key") != "vectors_checked":
+            continue
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            continue
+        inside = any(s["start"] <= at <= s["end"] for s in spans)
+        if event.get("chip"):
+            total += value if inside else 0
+            continue
+        agent = str(event.get("agent") or "")
+        before = running.get(agent, 0)
+        running[agent] = max(before, value)
+        if inside:
+            total += running[agent] - before
+    return total
+
+
+def _tool_calls(stamped: list[tuple[dict[str, Any], datetime]]) -> dict[str, Any]:
+    started: dict[str, tuple[datetime, str]] = {}
+    calls: list[dict[str, Any]] = []
+    for event, t in stamped:
+        if event["type"] != "tool" or not event.get("call_id"):
+            continue
+        if event.get("state") == "started":
+            started[event["call_id"]] = (t, str(event.get("summary") or event.get("name") or ""))
+        elif event["call_id"] in started:
+            begin, summary = started.pop(event["call_id"])
+            calls.append(
+                {"summary": summary, "start": begin, "end": t, "seconds": (t - begin).total_seconds()}
+            )
+    if not calls and not started:
+        return {"count": 0}
+    calls.sort(key=lambda c: c["start"])
+    overlaps, latest_end = 0, None
+    for call in calls:
+        if latest_end is not None and call["start"] < latest_end:
+            overlaps += 1
+        latest_end = call["end"] if latest_end is None or call["end"] > latest_end else latest_end
+    longest = max(calls, key=lambda c: c["seconds"]) if calls else None
+    return {
+        "count": len(calls),
+        "unfinished": len(started),
+        "total_seconds": round(sum(c["seconds"] for c in calls), 3),
+        "longest": {"summary": longest["summary"], "seconds": round(longest["seconds"], 3)}
+        if longest
+        else None,
+        "overlapping_calls": overlaps,
+        "note": (
+            "some tool calls overlapped in time"
+            if overlaps
+            else "no two finished tool calls overlapped in time"
+        ),
+    }
+
+
+# ---------------------------------------------------------------- entry point
+
+
+def build_evidence(run: Path, *, write: bool = True, finishing: bool = False) -> dict[str, Any]:
+    """All three measurements for ``run``; with ``write``, also ``evidence.json`` and ``evidence.md``.
+
+    ``finishing``: the backend computes it as the run ends, just before ``run.finished`` is written.
+    """
+    run = Path(run)
+    events = read_events(run)
+    finished = any(e["type"] == "run.finished" for e in events)
+    evidence = {
+        "run_id": next((str(e["run_id"]) for e in events if e.get("run_id")), run.name),
+        "run_finished": finished,
+        "run_state": "finished"
+        if finished
+        else "finishing (measured just before run.finished)"
+        if finishing
+        else "NOT finished (no run.finished event)",
+        "numbers": check_numbers(run, events),
+        "weights": weight_bytes(run, events),
+        "stages": stage_timings(events),
+    }
+    if write:
+        (run / EVIDENCE_JSON).write_text(json.dumps(evidence, indent=2, ensure_ascii=False), encoding="utf-8")
+        (run / EVIDENCE_MD).write_text(render_markdown(evidence), encoding="utf-8")
+    return evidence
+
+
+def evidence_summary(evidence: dict[str, Any]) -> dict[str, Any]:
+    """The three short summaries carried by the ``evidence`` event."""
+    numbers, weights, stages = evidence["numbers"], evidence["weights"], evidence["stages"]
+    software = weights.get("software") or {}
+    chip = weights.get("chip_netlist") or {}
+    return {
+        "numbers": {k: numbers.get(k) for k in (NO_SOURCE, VALUE_UNCLEAR, SOURCE_FOUND, EXCLUDED)},
+        "weights": {
+            "chip": weights.get("chip"),
+            "software_bytes_per_decision": software.get("bytes_per_decision"),
+            "chip_memory_cells": chip.get("memory_cells"),
+            "chip_flip_flops": chip.get("flip_flops"),
+        },
+        "stages": {
+            "total_seconds": stages.get("total_seconds"),
+            "largest": (stages.get("largest") or {}).get("stage"),
+            "largest_share": (stages.get("largest") or {}).get("share"),
+            "bound_if_others_free": (stages.get("largest") or {}).get("bound_if_others_free"),
+            "bound_if_this_free": (stages.get("largest") or {}).get("bound_if_this_free"),
+        },
+    }
+
+
+def emit_evidence(run: Path, append: Callable[..., Any]) -> None:
+    """Compute the evidence once and ``append("evidence", ...)``; any failure is logged, never raised."""
+    try:
+        evidence = build_evidence(run, finishing=True)
+        append("evidence", **evidence_summary(evidence))
+    except Exception:  # evidence must never fail a run
+        logger.exception("run {}: evidence not computed", Path(run).name)
+
+
+def number_summary(numbers: dict[str, Any]) -> str:
+    """The one-line count of each class of report number (never summed), the findings first."""
+    line = "; ".join(
+        f"{CLASS_NAMES[k]}: {numbers.get(k, 0)}" for k in (NO_SOURCE, VALUE_UNCLEAR, SOURCE_FOUND, EXCLUDED)
+    )
+    return line[0].upper() + line[1:] + "."
+
+
+def render_markdown(evidence: dict[str, Any]) -> str:
+    """``evidence.md``: the three measurements in plain words."""
+    numbers, weights, stages = evidence["numbers"], evidence["weights"], evidence["stages"]
+    out = [
+        f"# Run evidence: {evidence['run_id']}",
+        "",
+        f"Run state when measured: {evidence['run_state']}.",
+        "",
+    ]
+    out += ["## A. Number check", ""]
+    if numbers.get("report") is None:
+        out += [numbers.get("note", "no report"), ""]
+    else:
+        out += [
+            f"Report: `{numbers['report']}`. {number_summary(numbers)}",
+            "The classes are separate counts and are never added together.",
+            "",
+            LIMITS,
+            "",
+        ]
+        for kind in (NO_SOURCE, VALUE_UNCLEAR, SOURCE_FOUND, EXCLUDED):
+            entries = [e for e in numbers["numbers"] if e["class"] == kind]
+            out += [f"### {CLASS_NAMES[kind][0].upper()}{CLASS_NAMES[kind][1:]}: {len(entries)}", ""]
+            for entry in entries:
+                where = f": {entry['source']}" if entry.get("source") else ""
+                extra = f" (+{entry['other_matches']} more)" if entry.get("other_matches") else ""
+                why = f" ({entry['reason']})" if entry.get("reason") else ""
+                out.append(f"- line {entry['line']}: `{entry['text']}`{where}{extra}{why}")
+                out.append(f"  - {entry['snippet']}")
+            out.append("")
+    out += ["## B. Weight bytes per decision", ""]
+    if weights.get("chip") is None:
+        out += [weights.get("note", "no chip"), ""]
+    else:
+        software, chip = weights.get("software") or {}, weights.get("chip_netlist") or {}
+        out += [
+            f"These figures are for chip `{weights['chip']}`. Why this chip: {weights['chip_selected_by']}.",
+            "",
+        ]
+        out += [f"- Software: {software.get('sentence') or software.get('note')}"]
+        out += [f"- Chip: {chip.get('sentence')}"]
+        out += [f"- Lab cross-check: {note}" for note in chip.get("lab_cross_checks") or []]
+        for other in weights.get("other_laid_out_chips") or []:
+            declared = other["declared_params"]
+            declared_text = f", {declared} declared" if declared is not None else ", none declared"
+            out.append(
+                f"- Other laid-out chip `{other['chip']}`: software {other['software_bytes_per_decision']} "
+                f"bytes ({other['parameters']} stored values{declared_text}); "
+                f"chip {other['memory_cells']} memory cells, {other['flip_flops']} flip-flops, "
+                f"{other['cells']} cells"
+            )
+        out += ["", "No energy or speed claim follows from these two figures.", ""]
+    out += ["## C. Stage timings", ""]
+    if "stages" not in stages:
+        out += [stages.get("note", "no stage events"), ""]
+    else:
+        out += [
+            f"Total {stages['total_seconds']:.1f} s ({stages['scope']}); "
+            f"{stages['outside_stages_seconds']:.1f} s fell outside any stage.",
+            "",
+        ]
+        for stage in stages["stages"]:
+            share = f"{stage['share']:.1%}" if stage["share"] is not None else "n/a"
+            out.append(f"- {stage['stage']}: {stage['seconds']:.1f} s, {share}, {stage['state']}")
+            for item in stage["items"]:
+                out.append(f"  - {item['item']}: {item['count']:g}")
+        if stages.get("largest"):
+            out += ["", stages["largest"]["sentence"]]
+        tools = stages["tool_calls"]
+        if tools.get("count"):
+            longest = tools["longest"]
+            out += [
+                "",
+                f"Tool calls: {tools['count']} finished ({tools['unfinished']} unfinished), "
+                f"{tools['total_seconds']:.1f} s in total, longest {longest['seconds']:.1f} s "
+                f"({longest['summary']}); {tools['note']}.",
+            ]
+        out.append("")
+    return "\n".join(out)
+
+
+__all__ = [
+    "CLASS_NAMES",
+    "EVIDENCE_JSON",
+    "EVIDENCE_MD",
+    "LIMITS",
+    "build_evidence",
+    "check_numbers",
+    "chosen_chip",
+    "classify_claim",
+    "emit_evidence",
+    "evidence_summary",
+    "extract_claims",
+    "find_report",
+    "read_events",
+    "render_markdown",
+    "select_chip",
+    "stage_timings",
+    "weight_bytes",
+]

@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
+from pathlib import Path
 from typing import Any, ClassVar
 
 from loguru import logger
@@ -32,6 +33,7 @@ from chipin_backend.agents.output import (
     written_files,
 )
 from chipin_backend.agents.types import AgentEvent, AgentResult, AgentSpec, EventSink
+from chipin_backend.chiplab import SKILL_DIRS
 from chipin_backend.config import AgentsConfig, OpenRouterAgentConfig
 from chipin_backend.llm.providers import DEFAULT_PROVIDER, Provider, resolve_provider
 
@@ -53,6 +55,47 @@ RESUME_NUDGE = (
     "task from where you left off, reusing work already on disk. If a command takes "
     "very long, split it into shorter steps."
 )
+#: The status emitted when a user message reached the conversation (``user_message_delivered``).
+DELIVERED_STATUS = "Your message reached the agent"
+#: Finished conversations kept in memory for a follow-up, newest last.
+PARKED_MAX = 4
+#: Sent first when a follow-up cannot continue the conversation (it is gone from memory).
+LOST_CONVERSATION_NOTE = (
+    "This continues an earlier run in this working folder, but its conversation is no longer "
+    "in memory: read brief.md, report.md and the other files here to see what was done."
+)
+
+
+class _Route:
+    """Where a conversation's SDK callback sends events; a follow-up points it at its own run."""
+
+    def __init__(self) -> None:
+        self.target: Any = None
+
+    def __call__(self, event: Any) -> None:
+        if self.target is not None:
+            self.target(event)
+
+
+#: conversation id -> (conversation, route): finished conversations a follow-up may continue.
+_PARKED: dict[str, tuple[Any, _Route]] = {}
+#: conversation id -> its accumulated cost when parked, so a follow-up reports only its own.
+_PARKED_USD: dict[str, tuple[float, int, int]] = {}
+
+
+def parked_usd(conversation: Any) -> tuple[float, int, int]:
+    """What a parked conversation had already run up: dollars, input and output tokens."""
+    return _PARKED_USD.pop(str(conversation.id), (0.0, 0, 0))
+
+
+def close_parked_conversations() -> None:
+    """Close every conversation kept for a follow-up (server shutdown)."""
+    while _PARKED:
+        _, (conversation, _) = _PARKED.popitem()
+        try:
+            conversation.close()
+        except Exception:  # closing is best effort at shutdown
+            logger.exception("openrouter: a parked conversation did not close")
 
 
 def normalize_model(model: str, provider: str = DEFAULT_PROVIDER) -> str:
@@ -91,6 +134,26 @@ def mcp_servers_for(raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
             continue
         usable[name] = dict(server)
     return usable
+
+
+def workspace_skills(workdir: Path) -> list[Any]:
+    """The AgentSkills-format skills (``SKILL.md`` folders) in ``workdir/.agents/skills``.
+
+    The backend installs the chip-lab skill there (``chiplab.install_skill``).
+    They go into the agent's ``AgentContext``: the SDK lists each skill's name
+    and description in the system prompt's ``<available_skills>`` and attaches
+    its ``invoke_skill`` tool, which returns the skill's body when the agent
+    calls it. Only this folder is read: the SDK's own project loading would
+    also pick up instruction files (``AGENTS.md`` and the like) from parent
+    folders up to the git root.
+    """
+    from openhands.sdk import load_skills_from_dir
+
+    folder = workdir / SKILL_DIRS["openrouter"]
+    if not folder.is_dir():
+        return []
+    _, _, agent_skills = load_skills_from_dir(folder, root=workdir.resolve())
+    return list(agent_skills.values())
 
 
 def _texts(content: Any) -> str:
@@ -169,6 +232,9 @@ class OpenRouterAgentBackend(AgentBackend):
         super().__init__(config)
         self._mailbox = InjectMailbox()
         self._conversation: Any = None
+        self._deliver_lock = asyncio.Lock()
+        self._deliveries: set[asyncio.Task[int]] = set()
+        self._emit: Any = None
 
     @property
     def openrouter(self) -> OpenRouterAgentConfig:
@@ -221,20 +287,31 @@ class OpenRouterAgentBackend(AgentBackend):
                 final["text"] = action.message or final["text"]
 
         emit("agent_start", {"backend": self.name, "provider": provider.name, "model": model})
-        agent = self._build_agent(spec, model, key, provider)
-        conversation = Conversation(
-            agent=agent,
-            workspace=str(workdir),
-            persistence_dir=None,  # never write the SDK state (it carries the key)
-            callbacks=[on_event],
-            max_iteration_per_run=MAX_ITERATIONS,
-            visualizer=None,
-        )
+        parked = _PARKED.pop(spec.resume_session, None) if spec.resume_session else None
+        before = (0.0, 0, 0)  # what a continued conversation had already run up
+        if parked is not None:
+            conversation, route = parked
+            before = parked_usd(conversation)
+        else:
+            route = _Route()
+            agent = self._build_agent(spec, model, key, provider)
+            conversation = Conversation(
+                agent=agent,
+                workspace=str(workdir),
+                persistence_dir=None,  # never write the SDK state (it carries the key)
+                callbacks=[route],
+                max_iteration_per_run=MAX_ITERATIONS,
+                visualizer=None,
+            )
+        route.target = on_event
         self._conversation = conversation
+        self._emit = emit
         self._mailbox.open()
 
         output_file = str(workdir / STRUCT_OUT_FILENAME)
         prompts = list(spec.prompts)
+        if spec.resume_session and parked is None and prompts:
+            prompts[0] = f"{LOST_CONVERSATION_NOTE}\n\n{prompts[0]}"
         if spec.output_schema is not None:
             (workdir / STRUCT_OUT_FILENAME).unlink(missing_ok=True)
             if prompts:
@@ -265,24 +342,20 @@ class OpenRouterAgentBackend(AgentBackend):
                 await self._turn(conversation, fix, spec, activity, deadline, emit)
         except (_AgentFailedError, TimeoutError) as err:
             error = str(err)
+        except asyncio.CancelledError:
+            # Cancelled from outside (the runner's wall clock, a stop): the
+            # money is spent all the same, so report it before going.
+            _emit_cost(conversation, emit, before=before)
+            raise
         finally:
             self._mailbox.close()
 
-        metrics = conversation.conversation_stats.get_combined_metrics()
-        tokens = metrics.accumulated_token_usage
-        usd = float(metrics.accumulated_cost or 0.0)
+        usd, totals = _emit_cost(conversation, emit, error=error, before=before)
+        route.target = None
+        if error is None:
+            self._park(conversation, route, totals)
         await self.close()
         duration = time.monotonic() - started
-        if error:
-            emit("error", {"message": error})
-        emit(
-            "cost",
-            {
-                "usd": usd,
-                "input_tokens": int(tokens.prompt_tokens) if tokens else 0,
-                "output_tokens": int(tokens.completion_tokens) if tokens else 0,
-            },
-        )
         emit("agent_end", {"failed": error is not None, "duration_s": duration})
         return AgentResult(
             agent=spec.name,
@@ -291,15 +364,57 @@ class OpenRouterAgentBackend(AgentBackend):
             failed=error is not None,
             error=error,
             session_id=str(conversation.id),
-            cost_usd=usd,
+            cost_usd=float(usd),
             duration_s=duration,
             files=written_files(workdir),
         )
 
     async def inject(self, message: str) -> None:
-        """Queue ``message``; it is sent once the current ``run()`` ends."""
-        if not message.strip() or not self._mailbox.try_put(message):
-            logger.warning("openrouter: inject ignored, no run in progress")
+        """Add ``message`` to the running conversation without stopping it.
+
+        ``Conversation.send_message`` may be called while ``run()`` works: it
+        waits for the conversation's state lock, appends the user message, and
+        the agent's next step reads it (a message after the agent finished
+        sets the conversation back to idle, and ``run()`` goes on). Messages
+        go in the order they came; a ``status`` event with
+        ``user_message_delivered`` marks each. ``RuntimeError`` when no run is
+        in progress.
+        """
+        if not message.strip():
+            raise ValueError("an empty message")
+        if not self._mailbox.try_put(message):
+            raise RuntimeError("no openrouter run is in progress")
+        task = asyncio.get_running_loop().create_task(self._deliver_waiting())
+        self._deliveries.add(task)
+        task.add_done_callback(self._deliveries.discard)
+
+    async def _deliver_waiting(self) -> int:
+        """Send every waiting message into the conversation, oldest first; how many went."""
+        async with self._deliver_lock:
+            conversation, sent = self._conversation, 0
+            for message in self._mailbox.drain():
+                if conversation is None:
+                    logger.warning("openrouter: a message arrived after the conversation closed")
+                    break
+                await asyncio.to_thread(conversation.send_message, message)
+                sent += 1
+                if self._emit is not None:
+                    self._emit("status", {"message": DELIVERED_STATUS, "user_message_delivered": True})
+            return sent
+
+    def _park(self, conversation: Any, route: _Route, totals: tuple[float, int, int]) -> None:
+        """Keep a finished conversation for a follow-up; the oldest beyond :data:`PARKED_MAX` closes."""
+        _PARKED[str(conversation.id)] = (conversation, route)
+        _PARKED_USD[str(conversation.id)] = totals
+        self._conversation = None
+        while len(_PARKED) > PARKED_MAX:
+            oldest = next(iter(_PARKED))
+            old, _ = _PARKED.pop(oldest)
+            _PARKED_USD.pop(oldest, None)
+            try:
+                old.close()
+            except Exception:
+                logger.exception("openrouter: a parked conversation did not close")
 
     async def close(self) -> None:
         """Close the conversation (its terminal sessions). Idempotent."""
@@ -339,7 +454,7 @@ class OpenRouterAgentBackend(AgentBackend):
 
     def _build_agent(self, spec: AgentSpec, model: str, key: str, provider: Provider) -> Any:
         """The OpenHands ``Agent``: LLM (with backup model), tools, prompt, MCP servers."""
-        from openhands.sdk import Agent
+        from openhands.sdk import Agent, AgentContext
         from openhands.sdk.llm.fallback_strategy import FallbackStrategy
         from openhands.sdk.tool import Tool
         from openhands.tools import FileEditorTool, TaskTrackerTool, TerminalTool
@@ -360,8 +475,15 @@ class OpenRouterAgentBackend(AgentBackend):
         terminal_params = {"env": build_agent_env(spec.env), "terminal_type": "subprocess"}
         tools = [Tool(name=classes[n].name, params=terminal_params if n == "terminal" else {}) for n in names]
         kwargs: dict[str, Any] = {"llm": llm, "tools": tools}
+        # One context for both: the instructions are appended to OpenHands' own
+        # system message (which keeps its tool rules) and the skills are listed in it.
+        context: dict[str, Any] = {}
         if spec.system_prompt:
-            kwargs["system_prompt"] = spec.system_prompt
+            context["system_message_suffix"] = spec.system_prompt
+        if spec.workdir is not None and (skills := workspace_skills(spec.workdir)):
+            context["skills"] = skills
+        if context:
+            kwargs["agent_context"] = AgentContext(**context)
         if servers := mcp_servers_for(spec.mcp_servers):
             kwargs["mcp_config"] = servers
         return Agent(**kwargs)
@@ -375,17 +497,19 @@ class OpenRouterAgentBackend(AgentBackend):
         deadline: float | None,
         emit: Any,
     ) -> None:
-        """Send ``prompt`` and run until the agent finishes; then any injected messages.
+        """Send ``prompt`` and run until the agent finishes, and on while user messages arrive.
 
         A run with no event for :data:`IDLE_TIMEOUT_S` is paused and resumed
         with a nudge, up to ``spec.retries`` times.
         """
         from openhands.sdk.conversation.state import ConversationExecutionStatus
 
-        pending = [prompt]
+        pending: list[str | None] = [prompt]
         resumes = 0
         while pending:
-            await asyncio.to_thread(conversation.send_message, pending.pop(0))
+            if pending[0] is not None:
+                await asyncio.to_thread(conversation.send_message, pending[0])
+            pending.pop(0)
             try:
                 await _run_until_idle(conversation, activity, deadline)
             except TimeoutError as err:
@@ -398,7 +522,11 @@ class OpenRouterAgentBackend(AgentBackend):
             status = conversation.state.execution_status
             if status in (ConversationExecutionStatus.ERROR, ConversationExecutionStatus.STUCK):
                 raise _AgentFailedError(f"conversation ended in state {status.value}")
-            pending += self._mailbox.drain()
+            # A message sent as the agent finished left the conversation idle: run it
+            # (``None``: run on without sending anything new).
+            sent = await self._deliver_waiting()
+            if sent or conversation.state.execution_status == ConversationExecutionStatus.IDLE:
+                pending.append(None)
 
 
 class _AgentFailedError(Exception):
@@ -407,6 +535,32 @@ class _AgentFailedError(Exception):
 
 class _DeadlineError(TimeoutError):
     """The agent's whole time budget is spent."""
+
+
+def _emit_cost(
+    conversation: Any,
+    emit: Any,
+    *,
+    error: str | None = None,
+    before: tuple[float, int, int] = (0.0, 0, 0),
+) -> tuple[float, tuple[float, int, int]]:
+    """Emit the ``error`` (if any) and this run's ``cost``: the conversation's totals
+    less ``before`` (what a continued conversation had already run up).
+
+    Returns this run's USD and the conversation's totals (dollars, input, output tokens).
+    """
+    metrics = conversation.conversation_stats.get_combined_metrics()
+    tokens = metrics.accumulated_token_usage
+    totals = (
+        float(metrics.accumulated_cost or 0.0),
+        int(tokens.prompt_tokens) if tokens else 0,
+        int(tokens.completion_tokens) if tokens else 0,
+    )
+    usd, tokens_in, tokens_out = (max(a - b, 0) for a, b in zip(totals, before, strict=True))
+    if error:
+        emit("error", {"message": error})
+    emit("cost", {"usd": float(usd), "input_tokens": int(tokens_in), "output_tokens": int(tokens_out)})
+    return float(usd), totals
 
 
 async def _run_until_idle(conversation: Any, activity: _Activity, deadline: float | None) -> None:
@@ -433,4 +587,12 @@ async def _run_until_idle(conversation: Any, activity: _Activity, deadline: floa
             continue
 
 
-__all__ = ["OpenRouterAgentBackend", "mcp_servers_for", "normalize_model", "translate_event"]
+__all__ = [
+    "DELIVERED_STATUS",
+    "OpenRouterAgentBackend",
+    "close_parked_conversations",
+    "mcp_servers_for",
+    "normalize_model",
+    "translate_event",
+    "workspace_skills",
+]

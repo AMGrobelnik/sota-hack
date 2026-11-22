@@ -25,6 +25,7 @@ import subprocess
 import threading
 import time
 from collections import deque
+from pathlib import Path
 from typing import Any, ClassVar
 
 from loguru import logger
@@ -39,6 +40,7 @@ from chipin_backend.agents._claude.cost import (
 from chipin_backend.agents._claude.repl import (
     ReplSession,
     RunDeadlineError,
+    StartFailedError,
     TurnResult,
     transcript_path,
 )
@@ -52,6 +54,7 @@ from chipin_backend.agents.output import (
     written_files,
 )
 from chipin_backend.agents.types import AgentEvent, AgentResult, AgentSpec, EventSink
+from chipin_backend.chiplab import CLAUDE_PLUGIN_DIR, CLAUDE_PLUGIN_MANIFEST
 from chipin_backend.config import AgentsConfig, ClaudeCliConfig
 
 #: API-error statuses worth another turn (auth blips, rate limits, overload).
@@ -60,12 +63,18 @@ RETRYABLE_API_STATUSES = frozenset({401, 429, 500, 502, 503, 529})
 MAX_API_RETRIES = 5
 #: Back-off between API-error retries, by attempt.
 API_RETRY_BACKOFF_S = (5.0, 15.0, 30.0, 60.0, 120.0)
+#: Tries at bringing the CLI up before the run fails (a start can fail on a passing glitch).
+START_ATTEMPTS = 3
+#: Wait before the next start try, times the number of tries so far.
+START_RETRY_BACKOFF_S = 2.0
 
 #: Sent after a stall restart that resumed the session with the prompt already in it.
 STALL_NUDGE = (
     "continue where you left off. The previous session stalled and was restarted; "
     "reuse any partial work already written to disk. Do NOT start over."
 )
+#: The status a backend emits when a user message reached the model (``user_message_delivered``).
+DELIVERED_STATUS = "Your message reached the agent"
 #: Sent after an API error ended a turn early.
 API_ERROR_NUDGE = "continue where you left off (the last request failed with a temporary API error)."
 
@@ -120,14 +129,18 @@ class ClaudeCliBackend(AgentBackend):
             await self.close()
 
     async def inject(self, message: str) -> None:
-        """Queue ``message`` as the next user turn of the running session.
+        """Pass ``message`` to the running session without stopping it.
 
-        The running turn yields once its own prompt is journaled; the session is
-        then resumed and the message typed at a clean prompt. Ignored (with a
-        warning) when no run is in progress.
+        It is typed into the CLI while the turn runs; the CLI queues it and
+        hands it to the model when the running tool calls finish (see
+        :mod:`chipin_backend.agents._claude.steer`). A ``status`` event with
+        ``user_message_delivered`` marks when it got there. ``RuntimeError``
+        when no run is in progress (the message would be lost).
         """
-        if not message.strip() or not self._mailbox.try_put(message):
-            logger.warning("claude_cli: inject ignored, no run in progress")
+        if not message.strip():
+            raise ValueError("an empty message")
+        if not self._mailbox.try_put(message):
+            raise RuntimeError("no claude_cli run is in progress")
 
     async def close(self) -> None:
         """Exit the REPL and kill its process tree. Idempotent."""
@@ -199,9 +212,16 @@ class ClaudeCliBackend(AgentBackend):
             stall_s=float(self.cli.stall_timeout_s),
             turn_cap_s=float(self.cli.turn_timeout_s),
             on_record=on_record,
-            break_when=self._mailbox.pending,
             deadline=started + spec.timeout_s if spec.timeout_s else None,
+            inbox=self._mailbox.drain,
+            on_message_delivered=lambda _text: emit(
+                "status", {"message": DELIVERED_STATUS, "user_message_delivered": True}
+            ),
         )
+        prior: CostReport | None = None
+        if spec.resume_session:
+            session.continue_session(spec.resume_session)
+            prior = _session_totals(session.transcript)
         self._session = session
         emit("agent_start", {"backend": self.name, "model": model, "cli_version": version})
 
@@ -213,9 +233,10 @@ class ClaudeCliBackend(AgentBackend):
                 prompts[-1] += struct_out_instruction(spec.output_schema, output_file)
 
         driver = _TurnDriver(session, spec, emit, self._mailbox)
-        final_text, error, structured = "", None, None
+        final_text, error, structured, started_cli = "", None, None, False
         try:
-            session.start(resume=False)
+            _start_with_retries(session, resume=bool(spec.resume_session), emit=emit)
+            started_cli = True
             for prompt in prompts:
                 final_text = driver.send(prompt) or final_text
             for attempt in range(1, spec.output_retries + 2):
@@ -243,6 +264,8 @@ class ClaudeCliBackend(AgentBackend):
         session.read_remaining()
         self._session = None
         cost = exit_cost[-1] if exit_cost else dialog if dialog.read else None
+        if cost is not None and prior is not None and session.session_id == spec.resume_session:
+            cost = _less(cost, prior)  # a resumed session's totals include the earlier runs
         usd = cost.usd if cost is not None else 0.0
         tokens = (
             (cost.input_tokens, cost.output_tokens) if cost else (usage.input_tokens, usage.output_tokens)
@@ -269,11 +292,60 @@ class ClaudeCliBackend(AgentBackend):
             cost_usd=usd,
             duration_s=duration,
             files=written_files(workdir),
+            started=started_cli,
         )
 
 
 class _AgentFailedError(Exception):
     """The agent cannot go on (stall restarts or API retries used up)."""
+
+
+def _start_with_retries(session: ReplSession, *, resume: bool, emit: Any) -> None:
+    """Bring the CLI up, trying again after a failed start up to :data:`START_ATTEMPTS` times.
+
+    Each try answers the same startup dialogs (:class:`~chipin_backend.agents._claude.screen.
+    DialogPilot`); the last failure is raised as :class:`_AgentFailedError`.
+    """
+    for attempt in range(1, START_ATTEMPTS + 1):
+        try:
+            session.start(resume=resume)
+            return
+        except StartFailedError as err:
+            if attempt == START_ATTEMPTS:
+                raise _AgentFailedError(f"{err} (tried {START_ATTEMPTS} times)") from err
+            wait_s = START_RETRY_BACKOFF_S * attempt
+            logger.warning("claude_cli: start {} of {} failed: {}", attempt, START_ATTEMPTS, err)
+            retry = f"The agent did not start; trying again ({attempt + 1}/{START_ATTEMPTS})"
+            emit("status", {"message": retry})
+            time.sleep(wait_s)
+
+
+def _session_totals(transcript: Path) -> CostReport | None:
+    """The last ``cost-state`` totals in a session's transcript (what earlier runs of it cost)."""
+    if not transcript.is_file():
+        return None
+    totals = None
+    for line in transcript.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        totals = (
+            cost_from_state(record)
+            if isinstance(record, dict) and record.get("type") == "cost-state"
+            else totals
+        )
+    return totals
+
+
+def _less(total: CostReport, before: CostReport) -> CostReport:
+    """This run's share of a resumed session's ``total``."""
+    return CostReport(
+        usd=max(total.usd - before.usd, 0.0),
+        read=total.read,
+        input_tokens=max(total.input_tokens - before.input_tokens, 0),
+        output_tokens=max(total.output_tokens - before.output_tokens, 0),
+    )
 
 
 class _TurnDriver:
@@ -296,38 +368,45 @@ class _TurnDriver:
     def send(self, prompt: str) -> str:
         """Run ``prompt`` (and any message injected meanwhile) to the end of its turn.
 
-        Returns the last non-empty assistant text. A stall restarts the CLI
-        (``--resume`` when the transcript exists) up to ``spec.retries`` times;
-        a retryable API error gets a continue nudge up to
+        Returns the last non-empty assistant text. Messages injected while the
+        turn runs are typed into it by the session; one that arrives between
+        turns is sent as the next prompt. A stall restarts the CLI
+        (``--resume`` when the transcript exists) up to ``spec.retries`` times,
+        and messages typed but not yet delivered are sent again after it; a
+        retryable API error gets a continue nudge up to
         :data:`MAX_API_RETRIES` times in a row.
         """
         self._history.append(prompt)
-        pending: deque[str] = deque([prompt])
+        pending: deque[tuple[str, bool]] = deque([(prompt, False)])
         final_text = ""
         api_retries = 0
         while pending:
-            text = pending.popleft()
+            text, from_user = pending.popleft()
             try:
-                result = self._session.turn(text, system_prompt=self._spec.system_prompt)
+                result = self._session.turn(
+                    text,
+                    system_prompt=self._spec.system_prompt,
+                    on_journaled=self._delivered if from_user else None,
+                )
             except TimeoutError as err:
-                pending.appendleft(self._recover(text, err))
+                left = self._session.typed.take()  # typed, never delivered: the CLI is gone
+                follow = self._recover(text, err)
+                pending.extendleft((m, True) for m in reversed(left))
+                pending.appendleft((follow, from_user and follow == text))
                 continue
             final_text = result.final_text or final_text
-            if result.interrupted:
-                self._emit("status", {"message": "new message received; resuming the session"})
-                self._session.kill()
-                self._session.start(resume=True)
-                pending.extendleft(reversed(self._mailbox.drain()))
-                continue
             if result.api_error_status is not None:
                 api_retries += 1
                 self._api_retry(result, api_retries)
-                pending.appendleft(API_ERROR_NUDGE)
+                pending.appendleft((API_ERROR_NUDGE, False))
                 continue
             api_retries = 0
             if not pending:
-                pending.extend(self._mailbox.drain())
+                pending.extend((m, True) for m in self._mailbox.drain())
         return final_text
+
+    def _delivered(self) -> None:
+        self._emit("status", {"message": DELIVERED_STATUS, "user_message_delivered": True})
 
     def _recover(self, prompt: str, err: TimeoutError) -> str:
         """Restart after a stall; the prompt to send next."""
@@ -363,13 +442,28 @@ class _TurnDriver:
         time.sleep(wait_s)
 
 
+def plugin_dirs(spec: AgentSpec) -> list[Path]:
+    """The session-only plugins for ``spec``: the run's chip-lab plugin when it is installed.
+
+    ``chiplab.install_skill`` writes the skill as a plugin folder
+    (:data:`~chipin_backend.chiplab.CLAUDE_PLUGIN_DIR`) in the working folder
+    when the lab is on; ``--plugin-dir`` loads its skills without any setting
+    source, so no CLAUDE.md from outside the run folder comes with it.
+    """
+    if spec.workdir is None:
+        return []
+    root = spec.workdir / CLAUDE_PLUGIN_DIR
+    return [root.resolve()] if (root / CLAUDE_PLUGIN_MANIFEST).is_file() else []
+
+
 def build_argv(spec: AgentSpec, cli: ClaudeCliConfig, *, session_id: str, resume: bool) -> list[str]:
     """The ``claude`` command line for ``spec``.
 
     Flags: ``--session-id`` or
     ``--resume``, ``--model``, ``--effort``, ``--permission-mode``,
     ``--dangerously-skip-permissions``, ``--setting-sources``, ``--settings``
-    (JSON), ``--allowed-tools``, ``--disallowed-tools``, ``--mcp-config``.
+    (JSON), ``--plugin-dir`` (:func:`plugin_dirs`), ``--allowed-tools``,
+    ``--disallowed-tools``, ``--mcp-config``.
     The system prompt is not a flag: it is typed with the first prompt, so a
     resumed session keeps it without sending it twice.
     """
@@ -392,6 +486,8 @@ def build_argv(spec: AgentSpec, cli: ClaudeCliConfig, *, session_id: str, resume
         argv.append("--dangerously-skip-permissions")
     argv += ["--settings", json.dumps(settings)]
     argv += ["--setting-sources", ",".join(cli.setting_sources)]
+    for plugin in plugin_dirs(spec):
+        argv += ["--plugin-dir", str(plugin)]
     argv += ["--effort", spec.effort or cli.effort]
     if spec.allowed_tools is not None:
         argv += ["--allowed-tools", ",".join(spec.allowed_tools)]
@@ -470,4 +566,4 @@ def translate_record(record: dict[str, object], agent: str) -> list[AgentEvent]:
     return events
 
 
-__all__ = ["ClaudeCliBackend", "build_argv", "transcript_path", "translate_record"]
+__all__ = ["ClaudeCliBackend", "build_argv", "plugin_dirs", "transcript_path", "translate_record"]

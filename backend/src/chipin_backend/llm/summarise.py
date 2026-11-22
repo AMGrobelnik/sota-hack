@@ -40,6 +40,7 @@ from chipin_backend.llm.keys import (
     is_key_exhausted,
     openrouter_api_key,
 )
+from chipin_backend.scrub import scrub_text
 
 if TYPE_CHECKING:
     from chipin_backend.agents.types import AgentEvent, AgentResult
@@ -151,6 +152,8 @@ async def summarise(
     chain = (settings.background_providers if background else []) or settings.providers
     effort = settings.label_reasoning_effort if label else settings.reasoning_effort
     budget_chars = (settings.max_context_tokens - _PROMPT_OVERHEAD_TOKENS) * _CHARS_PER_TOKEN
+    # Nothing private leaves the machine: home paths, user and host names, e-mails, key shapes.
+    system, prompt = scrub_text(system), scrub_text(prompt)
     payload_base: dict[str, Any] = {
         "model": settings.model,
         "messages": [
