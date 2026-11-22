@@ -201,11 +201,45 @@ CLASS_NAMES = {
 }
 _PREFIX = {"p": 1e-12, "n": 1e-9, "u": 1e-6, "µ": 1e-6, "m": 1e-3, "": 1.0, "k": 1e3, "M": 1e6, "G": 1e9}
 _BASES = ("Hz", "W", "J", "s", "m2", "m²", "m", "V")
+#: Spelled-out units (``microwatts``, ``nanosecond``, ...) and their symbols; bare "seconds" stays a noun.
+_UNIT_WORDS = {
+    f"{word_prefix}{word}{plural}": f"{symbol_prefix}{symbol}"
+    for word_prefix, symbol_prefix in (
+        ("pico", "p"),
+        ("nano", "n"),
+        ("micro", "u"),
+        ("milli", "m"),
+        ("", ""),
+        ("kilo", "k"),
+        ("mega", "M"),
+        ("giga", "G"),
+    )
+    for word, symbol in (("watt", "W"), ("joule", "J"), ("second", "s"), ("hertz", "Hz"), ("volt", "V"))
+    for plural in (("",) if word == "hertz" else ("", "s"))
+    if word_prefix or word != "second"
+}
+#: A rate written in words (``per hour``, ``decision/s``): the unit's factor in hertz.
+_RATE_UNITS = {"/s": 1.0, "/min": 1 / 60, "/h": 1 / 3600, "/day": 1 / 86400}
+_RATE = re.compile(
+    r"^(?:[A-Za-z][\w-]*\s*)?(?:per\s+|/\s*)"
+    r"(?:(?P<s>seconds?|secs?|s)|(?P<min>minutes?|mins?)|(?P<h>hours?|hrs?|h)|(?P<day>days?))\b",
+    re.I,
+)
+#: Words that scale the number before them (``2.6 thousand gates``).
+_SCALE_WORDS = {"thousand": 1e3, "million": 1e6, "billion": 1e9}
+#: Words of a shortfall (a negative margin) and of a margin met, in the claim's sentence.
+_SHORTFALL = re.compile(r"\b(?:miss(?:es|ed|ing)?|short|negative|violat\w*|late)\b", re.I)
+_MARGIN_MET = re.compile(r"\b(?:spare|meets?|met|positive|headroom|ahead|early)\b", re.I)
+#: Words that make a width claim one about weights (a port width is a different meaning).
+_WEIGHT_WORDS = frozenset({"weight", "parameter", "param", "coefficient", "kernel"})
 _COUNT_UNITS = (
     "gates|GE|LUTs?|LUT4|LUT6|tiles?|bits?|bytes?|B|KB|kB|MB|vectors?|cells?|params?|designs?|"
     "transistors?|patients?|levels?|EUR"
 )
-_UNIT = re.compile(rf"^(?:%|x|\u00d7|[kMGK]|(?:[pnuµmkMG]?(?:Hz|W|J|s|m2|m²|m|V))|{_COUNT_UNITS})$")
+_UNIT = re.compile(
+    rf"^(?:%|x|\u00d7|[kMGK]|(?:[pnuµ\u03bcmkMG]?(?:Hz|W|J|s|m2|m²|m|V))|{_COUNT_UNITS}"
+    rf"|(?i:{'|'.join(sorted(_UNIT_WORDS, key=len, reverse=True))}))$"
+)
 _RANGE_UNIT = re.compile(r"^\s*[-–]\s*\d[\d.,]*\s*([^\s.,;:)*|]+)")  # noqa: RUF001
 _NUMBER = re.compile(r"(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?(?:[eE]([-+]?\d+))?")
 _BOUNDARY = set(" \t()[]{};|*\"'`=:<>≈~!?,–—→")  # noqa: RUF001 (dashes and arrows separate numbers)
@@ -256,9 +290,16 @@ def _noun_kind(word: str | None) -> str | None:
 
 
 def _unit_scale(unit: str | None) -> tuple[str, float] | None:
-    """``(base, factor)`` for a physical unit with an SI prefix, e.g. ``nW`` -> ``("W", 1e-9)``."""
+    """``(base, factor)`` for a physical unit with an SI prefix, e.g. ``nW`` -> ``("W", 1e-9)``.
+
+    Spelled-out units and both micro signs count (``microwatts``, ``μW`` -> ``µW``); a rate
+    in words is in hertz (``/min`` -> ``("Hz", 1/60)``).
+    """
     if not unit:
         return None
+    if unit in _RATE_UNITS:
+        return "Hz", _RATE_UNITS[unit]
+    unit = _UNIT_WORDS.get(unit.lower(), unit).replace("μ", "µ")
     unit = unit.replace("um", "µm") if unit.startswith("um") else unit
     for base in _BASES:
         if unit.endswith(base) and unit[: -len(base)] in _PREFIX:
@@ -268,14 +309,15 @@ def _unit_scale(unit: str | None) -> tuple[str, float] | None:
     return None
 
 
-_KEY_UNIT = re.compile(r"_(um2|mm2|ns|ps|us|ms|pj|nj|uw|nw|mw|mhz|khz|hz|eur)$")
+_KEY_UNIT = re.compile(r"(?<=_)(um2|mm2|ns|ps|us|ms|pj|nj|uw|nw|mw|mhz|khz|hz|eur)(?=_|$)")
 
 
 def _key_unit(key: str) -> str | None:
-    match = _KEY_UNIT.search(key.lower())
-    if match is None:
+    """The unit a key names as a word of its own (``power_uw_at_rate`` -> ``uW``); the last one wins."""
+    found = _KEY_UNIT.findall(key.lower())
+    if not found:
         return None
-    raw = match.group(1)
+    raw = found[-1]
     fixed = {
         "pj": "pJ",
         "nj": "nJ",
@@ -305,6 +347,8 @@ class Claim:
     #: The kind the unit or noun right next to the number names (``gate``, ``unit:s``, ...).
     noun: str | None = None
     noun_word: str | None = None
+    #: The sentence's direction: -1 a shortfall ("misses by"), 1 a margin met ("to spare"), 0 neither.
+    direction: int = 0
 
 
 @dataclass
@@ -424,6 +468,9 @@ def _claim(
     unit = tail if tail and _UNIT.match(tail) else None
     written = line[start:end] + (raw_tail if unit or compound else "")
     after = line[right:].split()
+    if unit is None and after and (scale_word := after[0].strip(".,;:)*|").lower()) in _SCALE_WORDS:
+        value, resolution = value * _SCALE_WORDS[scale_word], resolution * _SCALE_WORDS[scale_word]
+        written += f" {after.pop(0)}"
     nxt = after[0].strip(".,;:)*|") if after else ""
     if unit is None:
         unit = nxt if nxt and _UNIT.match(nxt) and nxt not in ("x", "K", "M", "G", "k", "B") else None
@@ -433,8 +480,22 @@ def _claim(
     if unit in ("k", "K", "M", "G"):
         scale = {"k": 1e3, "K": 1e3, "M": 1e6, "G": 1e9}[unit]
         value, resolution, unit = value * scale, resolution * scale, None
+    if (
+        unit not in ("%", "x", "\u00d7")
+        and _unit_scale(unit) is None
+        and (rate := _RATE.match(" ".join(after)))
+    ):
+        phrase = rate.group(0)
+        if unit and phrase.startswith(unit):  # "100 vectors per second": the count word is written
+            phrase = phrase[len(unit) :].lstrip()
+        written += f" {phrase}"
+        unit = {"s": "/s", "min": "/min", "h": "/h", "day": "/day"}[rate.lastgroup or "s"]
     if lead.endswith(("-", "−")) and not lead.rstrip("-−"):  # noqa: RUF001
         value = -value
+    sentence = re.split(r"(?<=[.!?;])\s+", line[end:], maxsplit=1)[0]
+    sentence = re.split(r"[.!?;]\s+", line[:start])[-1] + line[start:end] + sentence
+    shortfall, met = bool(_SHORTFALL.search(sentence)), bool(_MARGIN_MET.search(sentence))
+    direction = -1 if shortfall and not met else 1 if met and not shortfall else 0
     snippet = _snippet(line, start, end)
     before = [w for w in line[:left].split() if re.search(r"[A-Za-z]{2}", w)][-CONTEXT_WORDS:]
     after_words = [w for w in after if re.search(r"[A-Za-z]{2}", w)][:CONTEXT_WORDS]
@@ -467,6 +528,7 @@ def _claim(
         excluded=excluded,
         noun=noun,
         noun_word=noun_word if noun else None,
+        direction=direction,
     )
 
 
@@ -634,26 +696,42 @@ def collect_sources(run: Path, events: list[dict[str, Any]]) -> list[Source]:
     return sources
 
 
-def _matches(claim: Claim, source: Source) -> bool:
-    """Whether ``source`` rounds to ``claim`` at the digits shown (sign not compared).
+def _match(claim: Claim, source: Source) -> str | None:
+    """``None`` if ``source`` does not round to ``claim`` at the digits shown; else ``""`` when
+    nothing stands between value and meaning, or why the meaning is not confirmed.
 
-    A percent claim matches only a percentage (as written) or a 0-to-1 ratio (times 100).
+    A percent claim matches only a percentage (as written) or a 0-to-1 ratio (times 100). When
+    both carry a physical unit (a rate in words is in hertz), the values must agree after both
+    are converted to the base unit; when only one does, the meaning is not confirmed. A negative
+    source matches a negative claim or a sentence of shortfall ("misses by"), never one of a
+    margin met ("to spare"); a sentence with neither leaves the meaning not confirmed.
     """
-    wanted = abs(claim.value)
+    magnitude = abs(source.value)
     if claim.percent:
-        if source.percent:
-            candidates = [abs(source.value)]
-        elif source.ratio:
-            candidates = [abs(source.value) * 100]
-        else:
-            return False
-    else:
-        candidates = [abs(source.value)]
-        have, want = _unit_scale(source.unit), _unit_scale(claim.unit)
-        if have and want and have[0] == want[0]:
-            candidates.append(abs(source.value) * have[1] / want[1])
-    tolerance = claim.resolution * (1 + 1e-9) + 1e-12
-    return any(abs(c - wanted) <= tolerance for c in candidates)
+        if not (source.percent or source.ratio):
+            return None
+        magnitude *= 1 if source.percent else 100
+    have, want = _unit_scale(source.unit), _unit_scale(claim.unit)
+    gap = ""
+    if have and want:
+        if have[0] != want[0]:
+            return None
+        magnitude *= have[1] / want[1]
+    elif have or want:
+        side, unit = ("source", source.unit) if have else ("number", claim.unit)
+        gap = f"the {side} has a unit ({unit}), the other none"
+    if abs(magnitude - abs(claim.value)) > claim.resolution * (1 + 1e-9) + 1e-12:
+        return None
+    if source.value > 0 and claim.value < 0:
+        return None
+    if source.value < 0 and claim.value >= 0:
+        if claim.direction > 0:
+            return None
+        if claim.direction == 0:
+            gap = gap or "the source is negative and the sentence states no shortfall"
+    if claim.noun == "bit" and claim.terms & _WEIGHT_WORDS and not _terms(source.key) & _WEIGHT_WORDS:
+        gap = gap or "the number is a weight width; the source is another width"
+    return gap
 
 
 def _shared_words(claim: Claim, source: Source) -> set[str]:
@@ -673,8 +751,17 @@ def classify_claim(claim: Claim, sources: list[Source]) -> tuple[str, list[Sourc
     word with the source key. A value-only match is never traced. A structural field (line count,
     byte size, tool duration, seed, ...) is a source only when the claim's words name it.
     """
-    hits = [s for s in sources if _matches(claim, s)]
+    gaps = {id(s): gap for s in sources if (gap := _match(claim, s)) is not None}
+    hits = [s for s in sources if id(s) in gaps]
     named = [s for s in hits if not s.structural or claim.noun in s.kinds or _shared_words(claim, s)]
+
+    def settle(agree: list[Source], declared_reason: str) -> tuple[str, list[Source], str | None] | None:
+        if full := [s for s in agree if s.confirmed and not gaps[id(s)]]:
+            return TRACED, rank(full), None
+        if agree:
+            first = rank(agree)[0]
+            return VALUE_ONLY, rank(agree), gaps[id(first)] or declared_reason
+        return None
 
     def rank(pool: list[Source]) -> list[Source]:
         return sorted(
@@ -688,19 +775,15 @@ def classify_claim(claim: Claim, sources: list[Source]) -> tuple[str, list[Sourc
 
     if claim.noun is not None and claim.noun != "percent":
         agree = [s for s in named if claim.noun in s.kinds]
-        if confirmed := [s for s in agree if s.confirmed]:
-            return TRACED, rank(confirmed), None
-        if agree:
-            return VALUE_ONLY, rank(agree), "the only agreeing source is a declared figure"
+        if settled := settle(agree, "the only agreeing source is a declared figure"):
+            return settled
         reason = f"no source with this value is a {claim.noun_word}"
         if hits:
             reason += f"; the value appears only as a different quantity ({rank(hits)[0].label})"
         return UNTRACED, [], reason
     keyed = [s for s in named if _shared_words(claim, s)]
-    if confirmed := [s for s in keyed if s.confirmed]:
-        return TRACED, rank(confirmed), None
-    if keyed:
-        return VALUE_ONLY, rank(keyed), "the only source sharing a word is a declared figure"
+    if settled := settle(keyed, "the only source sharing a word is a declared figure"):
+        return settled
     if named and _is_small_int(claim):
         return UNTRACED, [], "small integer, and no source with this value shares a word"
     if named:

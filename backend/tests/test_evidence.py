@@ -230,6 +230,100 @@ def test_the_classes_are_separate_everywhere(tmp_path: Path) -> None:
     assert "### Value found, meaning not confirmed: 1" in md and "never added together" in md
 
 
+def _classes(
+    root: Path, events: list[dict[str, Any]], report: str, files: dict[str, Any] | None = None
+) -> dict[str, str]:
+    return {e["text"]: e["class"] for e in trace_numbers(_run(root, events, report, files))["numbers"]}
+
+
+def test_a_unit_scale_must_agree_after_conversion(tmp_path: Path) -> None:
+    files = {"workspace/lab/d.tp.json": _lab("d", clock_period_ns=20, timing_slack_ns=-1.353682)}
+    events = [_metric(1, 0, "power_uw_at_rate", 0.04986, "uW")]
+    report = (
+        "It misses the 20 ms clock; the clock period is 20 us, or 20 ns.\n"
+        "It draws 0.05 mW, 0.05 W, 49.9 nW or 0.05 µW.\n"
+        "All three miss the clock by under 1.4 ps, 1.4 s or 1.4 ns.\n"
+    )
+    found = _classes(tmp_path, events, report, files)
+    assert {k: v for k, v in found.items() if v == "traced"} == dict.fromkeys(
+        ["20 ns", "49.9 nW", "0.05 µW", "1.4 ns"], "traced"
+    )
+    assert {found[k] for k in ("20 ms", "20 us", "0.05 mW", "0.05 W", "1.4 ps", "1.4 s")} == {"untraced"}
+
+
+def test_a_unit_on_one_side_only_leaves_the_meaning_unconfirmed(tmp_path: Path) -> None:
+    files = {"workspace/lab/d.tp.json": _lab("d", power=0.04986)}
+    found = _classes(tmp_path / "a", [], "The chip draws 0.05 µW in power.\n", files)
+    assert found == {"0.05 µW": "value_found_meaning_not_confirmed"}
+    found = _classes(tmp_path / "b", [_metric(1, 0, "leakage_uw", 0.049)], "Leakage power is 0.049.\n")
+    assert found == {"0.049": "value_found_meaning_not_confirmed"}
+
+
+def test_a_rate_must_agree_in_hertz(tmp_path: Path) -> None:
+    files = {"workspace/lab/d.tp.json": _lab("d", decision_rate_hz=1)}
+    report = "It makes 1 decision per second.\nIt makes 1 decision per minute.\nOr 1 decision per hour.\n"
+    found = _classes(tmp_path / "a", [], report, files)
+    assert found == {
+        "1 decision per second": "traced",
+        "1 decision per minute": "untraced",
+        "1 decision per hour": "untraced",
+    }
+    found = _classes(tmp_path / "b", [], "At 1 decision/s, or 1 Hz.\n", files)
+    assert found == {"1 decision/s": "traced", "1 Hz": "traced"}
+
+
+def test_a_negative_source_needs_a_shortfall(tmp_path: Path) -> None:
+    files = {"workspace/lab/d.tp.json": _lab("d", timing_slack_ns=-1.353682)}
+    report = (
+        "The worst timing slack is -1.35 ns.\n"
+        "All three miss the clock by under 1.4 ns.\n"
+        "The negative slack is 1.35 ns.\n"
+        "Design A meets the clock with 1.4 ns to spare.\n"
+        "It has a positive slack of 1.35 ns.\n"
+        "The worst path is 1.35 ns from the clock edge.\n"
+    )
+    numbers = trace_numbers(_run(tmp_path, [], report, files))["numbers"]
+    assert [e["class"] for e in numbers] == [
+        "traced",
+        "traced",
+        "traced",
+        "untraced",
+        "untraced",
+        "value_found_meaning_not_confirmed",
+    ]
+    assert "no shortfall" in numbers[-1]["reason"]
+    positive = {"workspace/lab/d.tp.json": _lab("d", clock_period_ns=20)}
+    assert _classes(tmp_path / "b", [], "The clock period is -20 ns.\n", positive) == {"20 ns": "untraced"}
+
+
+def test_a_weight_width_traces_only_to_a_weight_width(tmp_path: Path) -> None:
+    port = {"workspace/lab/B.compile.json": _lab("B", ports={"inputs": [{"name": "x", "bits": 5}]})}
+    report = "Weights are stored at 5 bits.\nThe input port is 5 bits.\n"
+    numbers = trace_numbers(_run(tmp_path / "a", [], report, port))["numbers"]
+    assert [e["class"] for e in numbers] == ["value_found_meaning_not_confirmed", "traced"]
+    assert "weight width" in numbers[0]["reason"]
+    weights = {"workspace/lab/B.compile.json": _lab("B", weight_bits=5)}
+    found = _classes(tmp_path / "b", [], "Weights are stored at 5 bits.\n", weights)
+    assert found == {"5 bits": "traced"}
+
+
+def test_unit_spellings_and_scale_words(tmp_path: Path) -> None:
+    events = [
+        _metric(1, 0, "power_uw_at_rate", 0.026858, "uW"),
+        _metric(2, 0, "gates", 2607, "gates"),
+        _metric(3, 0, "delay_ns", 3.5),
+        _metric(4, 0, "energy_pj", 456.1),
+    ]
+    report = (
+        "It draws 0.0269 microwatts (0.0269 microwatt, 0.0269 uW, 0.0269 µW or 0.0269 μW).\n"
+        "The delay is 3.5 nanoseconds and a decision costs 456 picojoules.\n"
+        "Design B has 2.6 thousand gates, or 2.6k gates.\n"
+    )
+    found = _classes(tmp_path, events, report)
+    assert set(found) >= {"0.0269 microwatts", "0.0269 μW", "3.5 nanoseconds", "2.6 thousand gates"}
+    assert set(found.values()) == {"traced"}
+
+
 def _sweep_fixture(root: Path) -> tuple[Path, str]:
     """A run whose sources hold every integer 11..199 under many unrelated keys."""
     rows = [

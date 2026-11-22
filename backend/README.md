@@ -319,7 +319,18 @@ logged and never fails the run.
   names, ids, code blocks, numbers quoted from the prompt). Sources are
   `metric` events, the stored weight count of each model file, and the
   numeric fields of files the chip lab wrote. The value must round to the
-  digits shown (unit prefixes allowed). The meaning agrees when the unit
+  digits shown. When both the number and the source carry a unit, they
+  must agree after both are converted to the base unit (20 ms is not
+  20 ns; a rate in words is in hertz, so 1 per minute is not 1 Hz);
+  when only one carries a unit, the meaning is not confirmed. Spelled-out
+  units (microwatts, nanoseconds, picojoules), both micro signs, and
+  "k" or "thousand" after a number are read as scales. A negative
+  source (a timing slack) traces only to a negative number or a sentence
+  of shortfall ("misses by", "short by", "negative slack", "late");
+  a sentence of a margin met ("to spare", "positive slack") does not
+  trace, and one with neither is not confirmed. A width in bits about
+  weights traces only to a weight width, not a port width. The meaning
+  agrees when the unit
   or noun next to the number matches the source through a small synonym
   table (gates/cells, ns/slack/period, uW/power, um2/area, levels/depth,
   parameters/params, ...), or, with no such noun, when the number's words
