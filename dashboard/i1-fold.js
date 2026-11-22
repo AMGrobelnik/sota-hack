@@ -387,7 +387,10 @@
     var lvl = mm.verification_level != null ? mm.verification_level : vf.level; seen.verification_level = 1;
     var proved = num(mm.formal_proved) != null ? !!mm.formal_proved : typeof vf.proved === "boolean" ? vf.proved : null; seen.formal_proved = 1;
     if (lvl != null) lab.push(["Verification level", "level " + esc(lvl)]);
-    if (proved != null) lab.push(["Formal proof", proved ? "proved equal to the model" : "not proved"]);
+    // the lab's prove-equivalence proves the gate netlist against the RTL (abc cec); the match to the model
+    // rests on the simulated vectors, so it is named as such only when vectors ran with no mismatch
+    var simOK = CHECKS.some(function (c, i) { var n = num(mm[c[1]]), x = num(mm[c[2]]); if (i === 0) { if (n == null) n = num(vf.vectors); if (x == null) x = num(vf.mismatches); } return n > 0 && x === 0; });
+    if (proved != null) lab.push(["Formal proof", proved ? "netlist proved equal to the RTL" + (simOK ? "; model match by simulation" : "") : "not proved"]);
     // a lab tool's own figures (a metric with a source, e.g. score-events), each its own labelled row;
     // for the chosen chip also the ones the lab sent without a chip
     var SORD = ["event_sensitivity", "worst_patient_sensitivity", "fa_per_hour", "auc"], sord = function (k) { var i = SORD.indexOf(k); return i < 0 ? 99 : i; };
@@ -422,7 +425,7 @@
       '<section class="stage cf-sec" data-sec="agent"><h3 class="cf-h3">Reported by the agent</h3>' + (ag.length ? '<div class="cf-kv">' + ag.map(function (r) {
         var tg = r.k ? T.filter(function (x) { return x.metric === r.k; })[0] : null, txt = r.k ? fmtV(r.k, r.v, m.spec) : r.v;
         return row([r.label, esc(txt) + (tg ? '<span class="cf-tg">target ' + esc(fmtT(tg, m.spec)) + "</span>" + pf(meets(tg, r.v)) : "")]);
-      }).join("") + '</div><p class="cf-sub">Computed by the agent on ' + (mark ? "synthetic " : "") + "patient data, not measured by the lab.</p>" : '<p class="cf-sub">The agent reported no accuracy figures for this chip.</p>') + "</section>";
+      }).join("") + '</div><p class="cf-sub">Computed by the agent on ' + (/mk sim/.test(mark) ? "synthetic " : mark ? "public " : "") + "patient data, not measured by the lab.</p>" : '<p class="cf-sub">The agent reported no accuracy figures for this chip.</p>') + "</section>";
   }
 
   // Subagent batches: one line per stage that opens to its entries. open: { stage: true }

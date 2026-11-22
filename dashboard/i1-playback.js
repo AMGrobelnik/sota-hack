@@ -121,6 +121,10 @@
     ".pb-run .d{font-size:12px;color:var(--i600);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}",
     ".pb-run .m{grid-column:1/-1;font-size:12px;color:var(--i600);display:flex;gap:6px 12px;flex-wrap:wrap;align-items:center}",
     ".pb-run .m b{font-weight:600;color:var(--i800);font-family:var(--mono);font-size:11px}",
+    ".pb-run .c,.pb-run .x{grid-column:1/-1;font-size:12px;line-height:1.45;color:var(--i600)}.pb-run .x{color:var(--i800)}",
+    ".rv-data{font-size:12.5px;color:var(--i600);margin:8px 0 0;line-height:1.5;max-width:860px}",
+    ".rv-note{font-size:13px;color:var(--i800);margin:10px 0 0;line-height:1.5;max-width:860px;padding:8px 12px;border-left:3px solid var(--missed,#b45309);background:var(--i100)}#rvTab>.rv-note{margin:0 0 16px}",
+    ".rv-miss{display:block;margin-top:3px;color:var(--i800)}.rv-miss .pf{margin-left:4px}",
     "@media(max-width:640px){.pb-run{grid-template-columns:1fr}.pb-run .t{white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow-wrap:anywhere}.pb-run .d{text-align:left}}",
     ".pb-note{font-size:12.5px;color:var(--i600);padding:8px 12px 14px;line-height:1.5}",
     ".pb-src{font-size:11.5px;color:var(--i500);padding:10px 12px 4px}",
@@ -543,7 +547,10 @@
     if (c.designs) bits.push("<span>" + fmtN(c.designs) + " designs</span>");
     if (c.subagents) bits.push("<span>" + fmtN(c.subagents) + " subagents</span>");
     if (c.events) bits.push("<span>" + fmtN(c.events) + " events</span>");
-    return '<button class="pb-run" data-open="' + esc(r.id) + '" data-src="' + r.src + '"><span class="t">' + esc(r.title || r.id) + '</span><span class="d">' + esc(dateTxt(r.started_at)) + " · " + esc(durTxt(r.duration_s)) + '</span><span class="m">' + bits.join("") + "</span></button>";
+    // a run on a public dataset names it with its licence; a line's note is a caveat added after the run
+    return '<button class="pb-run" data-open="' + esc(r.id) + '" data-src="' + r.src + '"><span class="t">' + esc(r.title || r.id) + '</span><span class="d">' + esc(dateTxt(r.started_at)) + " · " + esc(durTxt(r.duration_s)) + '</span><span class="m">' + bits.join("") + "</span>" +
+      (r.data && r.data.name ? '<span class="c">Data: ' + esc(r.data.name) + (r.data.licence ? ", " + esc(r.data.licence) : "") + "</span>" : "") +
+      (r.note ? '<span class="x">' + esc(r.note) + "</span>" : "") + "</button>";
   }
   function paintPicker() {
     var el = $("#pbList"); if (!el) return;
@@ -667,6 +674,7 @@
       rec.ready = fetch(siteBase() + "index.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : { runs: [] }; }).then(function (j) {
         var line = (j.runs || []).find(function (r) { return r.id === id; });
         if (!line) throw new Error("This recorded run is not on the site.");
+        rec.line = line;
         return fetch(siteBase() + line.file, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("The run's file could not be read."); return r.json(); });
       }).then(function (doc) {
         rec.facts = doc.run || {}; rec.summary = doc.summary || ""; rec.bullets = doc.bullets || ""; rec.files = doc.files || [];
@@ -750,7 +758,7 @@
   }
 
   function overviewHTML() {
-    return '<div class="rv"><header class="ovh"><div class="tx"><p class="k0" id="rvK0"></p><h1 id="rvH1"></h1><p class="k1 lv-held" id="rvHeld" hidden></p><p class="rv-brief" id="rvBrief"></p></div></header>' +
+    return '<div class="rv"><header class="ovh"><div class="tx"><p class="k0" id="rvK0"></p><h1 id="rvH1"></h1><p class="k1 lv-held" id="rvHeld" hidden></p><p class="rv-brief" id="rvBrief"></p><p class="rv-data" id="rvData" hidden></p><p class="rv-note" id="rvNote" role="note" hidden></p></div></header>' +
       '<div class="status" id="rvStatus" role="status"></div>' +
       '<ol class="rv-st" id="rvStages" aria-label="Stages"></ol>' +
       '<div class="tiles" id="rvTiles"></div>' +
@@ -862,8 +870,9 @@
     var el = $("#rvTab"); if (!el) return;
     var sel = V.sel && M.f.designs[V.sel] ? V.sel : null;
     once("tab", [V.view, M.n, sel || "", V.rec.final ? 1 : 0].join("|"), function () {
-      el.innerHTML = V.view === "chip" ? F.chipHTML({ f: M.f, spec: M.spec, T: M.T, id: M.st.chosen || (M.pts.length ? M.pts[M.pts.length - 1].id : null), chosenId: M.st.chosen, running: !M.ended })
-        : F.patientsHTML({ f: M.f, spec: M.spec, T: M.T, chosenId: M.st.chosen, selId: sel, final: V.rec.final, running: !M.ended });
+      var note = V.rec.line && V.rec.line.note ? '<p class="rv-note" role="note">' + esc(V.rec.line.note) + "</p>" : "";
+      el.innerHTML = note + (V.view === "chip" ? F.chipHTML({ f: M.f, spec: M.spec, T: M.T, id: M.st.chosen || (M.pts.length ? M.pts[M.pts.length - 1].id : null), chosenId: M.st.chosen, running: !M.ended })
+        : F.patientsHTML({ f: M.f, spec: M.spec, T: M.T, chosenId: M.st.chosen, selId: sel, final: V.rec.final, running: !M.ended }));
     });
   }
   function paintOverview(M) {
@@ -881,6 +890,10 @@
       $("#rvH1").innerHTML = h1;
       var ht = heldText(M), he = $("#rvHeld"); he.textContent = ht; he.hidden = !ht;
       $("#rvBrief").textContent = clip(f.prompt || f.title || "", 420);
+      // the site's index line: the dataset credit and a note added after the run
+      var ln = rec.line || {}, dt = ln.data && ln.data.name ? ln.data : null, de = $("#rvData"), ne = $("#rvNote");
+      de.hidden = !dt; de.innerHTML = dt ? "Data: " + (dt.url ? '<a href="' + esc(dt.url) + '" target="_blank" rel="noopener">' + esc(dt.name) + "</a>" : esc(dt.name)) + (dt.licence ? ", " + esc(dt.licence) : "") + (dt.credit ? ". " + esc(dt.credit) : "") : "";
+      ne.hidden = !ln.note; ne.textContent = ln.note || "";
     });
     once("status", st.status + "|" + M.n, function () { var s = $("#rvStatus"); s.textContent = st.status ? st.status : ""; s.className = "status" + (st.finished ? " done" : ""); s.dataset.n = String(M.n); });
     once("stages", JSON.stringify(st.stages), function () {
@@ -894,12 +907,14 @@
     });
     var co = F.cost(M.f), costTxt = co && num(co.usd) != null ? "$" + co.usd.toFixed(2) : "–";
     var live = !!rec.running;
-    once("tiles", [M.pts.length, st.chosen, M.chosen && sizeOf(M.chosen), st.messages, st.toolN, st.artifacts.length, costTxt, live].join("|"), function () {
+    once("tiles", [M.pts.length, st.chosen, M.chosen && sizeOf(M.chosen), st.messages, st.toolN, st.artifacts.length, costTxt, live, heldText(M)].join("|"), function () {
       var ch = M.chosen, yk = pickY(M), mark = F.dataMark(M.spec, M.pts.map(function (p) { return p.d || {}; }));
       var basis = ch && ch.basis ? " on " + (ch.basis === "test" ? "the test set" : ch.basis) : "";
+      // a held-out target the chosen chip misses is named on its tile, with the Fail the other views use
+      var hm = heldMiss(M), missTxt = hm ? hm.miss.map(function (t) { return '<span class="rv-miss">' + esc(F.metaOf(t.metric).n) + " held-out " + esc(F.fmtV(t.metric, hm.h.pooled[t.metric], M.spec)) + ", target " + esc(F.fmtT(t, M.spec)) + ' <span class="pf no">Fail</span></span>'; }).join("") : "";
       var tiles = [
         ["designs", "Designs so far", M.pts.length ? fmtN(M.pts.length) : "–", M.pts.filter(function (p) { return p.gates != null; }).length + " compiled to gates"],
-        ["chosen", "Chosen chip", ch ? '<span class="rv-chip" title="' + esc(ch.id) + '">' + esc(ch.id) + "</span>" : "–", ch ? (sizeOf(ch) != null ? (ch.gates == null ? "about " : "") + fmtN(sizeOf(ch)) + " gates" + (ch.gates == null ? ", estimated" : "") : "size not reported") + (yk && ch.m[yk] != null ? ", " + label(yk).toLowerCase() + " " + fmtM(yk, ch.m[yk], M.pts) + basis : "") : "not chosen yet"],
+        ["chosen", "Chosen chip", ch ? '<span class="rv-chip" title="' + esc(ch.id) + '">' + esc(ch.id) + "</span>" : "–", ch ? (sizeOf(ch) != null ? (ch.gates == null ? "about " : "") + fmtN(sizeOf(ch)) + " gates" + (ch.gates == null ? ", estimated" : "") : "size not reported") + (yk && ch.m[yk] != null ? ", " + label(yk).toLowerCase() + " " + fmtM(yk, ch.m[yk], M.pts) + basis : "") + missTxt : "not chosen yet"],
         ["tools", "Tool calls", fmtN(st.toolN), fmtN(st.messages) + " messages, " + fmtN(st.artifacts.length) + " files"],
         ["cost", "Agent cost", costTxt, co ? fmtN((co.tokens_in || 0) + (co.tokens_out || 0)) + " tokens" : "reported at the end"]
       ];
@@ -920,11 +935,16 @@
     });
   }
   // the held-out misses of the chosen chip, worded as the live view words them
-  function heldText(M) {
-    var c = M.chosen; if (!c || !c.d || c.d.basis === "test") return "";
-    var h = F.heldOut(M.f, c.id, V.rec.final); if (!h) return "";
+  // (a chosen record scored on the test set counts too: its own figures are the held-out ones)
+  function heldMiss(M) {
+    var c = M.chosen; if (!c || !c.d) return null;
+    var h = F.heldOut(M.f, c.id, V.rec.final); if (!h) return null;
     var miss = M.T.filter(function (t) { return h.pooled[t.metric] != null && F.meets(t, h.pooled[t.metric]) === false; });
-    if (!miss.length) return "";
+    return miss.length ? { h: h, miss: miss } : null;
+  }
+  function heldText(M) {
+    var hm = heldMiss(M); if (!hm) return "";
+    var h = hm.h, miss = hm.miss;
     var names = miss.map(function (t) { return F.metaOf(t.metric).n.toLowerCase(); }), and = function (a) { return a.length < 2 ? a[0] : a.slice(0, -1).join(", ") + " and " + a[a.length - 1]; };
     return "On the held-out patients it misses your " + and(names) + " target" + (miss.length === 1 ? "" : "s") + ": " + and(miss.map(function (t) { return F.fmtV(t.metric, h.pooled[t.metric], M.spec) + " against " + F.fmtT(t, M.spec); })) + ".";
   }
