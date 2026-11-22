@@ -7,7 +7,9 @@ first message, and `spec.json` in your working folder. It is the user's decision
   silent, choose a value and say you chose it; where a target cannot be met or measured, say so and keep it.
 - Every target is a bar the chosen design is judged against. `report.md` has a table: each target, the chosen
   design's value on the test set, pass or fail.
-- The primary metric and the false-alarm unit are the user's: use them in `report.md` and status lines.
+- The primary metric and the false-alarm unit are the user's: use them in `report.md` and status lines. A night
+  is 12 hours and a day 24 hours, as the block says; a false-alarm target in that unit is the hourly rate times
+  those hours.
 - Channels: a number in the spec is a fixed budget (every candidate uses at most that many). "Find the best
   budget" means compare budgets: propose candidates at two or more channel counts and choose on the trade-off.
 - Data: follow the "Data" line of the block. Synthetic data is labelled "synthetic data" in every result,
@@ -33,9 +35,10 @@ with the reason: fix the record and send it again. Fields:
 - `verified`: `{"vectors": 512, "mismatches": 0, "level": "<the lab's level>", "proved": true}` from the lab's
   verify tools, else `null`; `data`: `synthetic` or `public:<dataset>`; `note`: one short sentence.
 
-Send a design's record when it is first scored, again when it is compiled (with the lab's measured `gates`), and
-again when it is verified (with `verified`); a later record for the same `id` replaces the earlier one, so send
-the whole record every time. Then mark the chosen design with `./progress chosen <id>` (the same id).
+Send a design's record when it is first scored, again as soon as the lab has compiled it (with the lab's measured
+`gates` and its `design_id`, before you verify anything), and again when it is verified (with `verified`); the user
+watches the chart fill in as you go, so do not hold the records back to the end. A later record for the same `id`
+replaces the earlier one, so send the whole record every time. Then mark the chosen design with `./progress chosen <id>` (the same id).
 
 Example:
 `./progress design '{"id": "lr-2ch", "label": "logistic, 2 features", "budget": {"channels": 2, "name": "2 electrodes"}, "gates": null, "gates_est": 900, "depth": null, "metrics": {"sensitivity": 0.9, "specificity": 0.95, "fa_per_hour": 0.2}, "basis": "test", "counts": {"events_caught": 9, "events_total": 10, "negatives_correct": 380, "negatives_total": 400, "hours": 10, "patients": 2}, "per_patient": [{"id": "p1", "caught": 5, "total": 5, "false_alarms": 1, "hours": 5}, {"id": "p2", "caught": 4, "total": 5, "false_alarms": 1, "hours": 5}], "verified": null, "data": "synthetic", "note": "synthetic data"}'`

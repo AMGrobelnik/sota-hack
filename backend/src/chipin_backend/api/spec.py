@@ -34,6 +34,8 @@ SPEC_INSTRUCTIONS_PATH = Path(__file__).with_name("spec.md")
 TASK_TYPES = ("monitoring", "screening", "grading")
 PLACES = ("ward", "home", "patient")
 FA_UNITS = ("hour", "night", "day")
+# hours in one false-alarm unit, as the dashboard counts them: a night is 12 hours, a day 24
+FA_UNIT_HOURS = {"hour": 1, "night": 12, "day": 24}
 OPS = ("at_least", "at_most")
 DATA_MODES = ("public", "own", "simulate")
 FIELDS = (
@@ -231,7 +233,9 @@ def render_block(spec: dict[str, Any], data_used: dict[str, Any]) -> str:
         unit = f" {t['unit']}" if t["unit"] else ""
         lines.append(f"  - {t['metric']} {words[t['op']]} {_value(t['value'])}{unit}")
     lines.append(f"- Primary metric (the user's chart plots it): {spec['primary']}")
-    lines.append(f"- False alarms are counted per {spec['fa_unit']}")
+    hours = FA_UNIT_HOURS[spec["fa_unit"]]
+    per = "hour" if hours == 1 else f"{spec['fa_unit']} ({hours} hours; per hour times {hours})"
+    lines.append(f"- False alarms are counted per {per}")
     c = spec["constraints"]
     if c["find_best"]:
         lines.append("- Channels: find the best budget (compare designs at two or more channel counts)")

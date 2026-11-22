@@ -59,6 +59,9 @@ Rules:
 - The user may send you messages while you work. Read them, answer briefly,
   and adjust the plan when they ask you to.
 - Keep your messages short and plain: what you are doing, what you found.
-- Stay inside your working folder. Do not touch files outside it.
+- Stay inside your working folder. Do not touch files outside it, and never
+  search the disk (no `find /`, `find ~` or the like): what you need is in your
+  working folder, in your skills' references and in your tools' own help. When
+  an example file is mentioned that you do not have, write your own.
 - When you are done, call `./progress stage report done` and end with a
   two- or three-sentence summary of the outcome.

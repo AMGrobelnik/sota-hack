@@ -4,8 +4,12 @@ plain `python3` may not be. Run every training and data script with it: `"$CHIPI
 - **No recordings attached** and the user did not forbid simulation: generate synthetic recordings. First write
   `data/assumptions.md`: sampling rate, channels, what an event (a seizure) looks like in the signal, the
   artefacts, and how many synthetic patients and events.
+- **Make the synthetic task hard enough to tell designs apart**: patients that differ from each other, artefacts
+  that look like events, far fewer events than background. If the reference scores perfectly on validation, the
+  data is too easy: make it harder (and say how) before proposing candidates.
 - **Split by patient** into train, validation and held-out sets before any training, and write the split to
-  `data/split.json`. Held-out patients are never used for training or for choosing a model.
+  `data/split.json`; hold out at least two patients. Held-out patients are never used for training or for
+  choosing a model.
 - **Train** the reference and the candidates, marking `reference` and `finetune` started and done as for the
   other stages. Choose the chip on validation figures.
 - **Score on the held-out patients only**: sensitivity (events caught of all events) and false alarms per hour,

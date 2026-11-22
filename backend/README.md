@@ -176,16 +176,54 @@ python -m chipin_backend serve           # the Claude agent, port 8797
   the API share one loopback origin and a page opened through the link
   needs no other setup; open a dashboard as
   `http://127.0.0.1:8797/dashboard/variants/g1.html#token=<token>`.
-- A page on `https://chipin.space` reaches this server with
-  `?api=http://127.0.0.1:8797` plus the token. Chrome asks first with a
-  Private Network Access preflight; the server answers it with
-  `Access-Control-Allow-Private-Network: true`.
+- A page on `https://chipin.space` may call this server with
+  `?api=http://127.0.0.1:8797` plus the token: the server answers Chrome's
+  Private Network Access preflight with
+  `Access-Control-Allow-Private-Network: true`, but the browsers still
+  stand in the way (see the demo below).
 - `--agent claude` (the default) runs the `claude_cli` backend on the
   Mac's own Claude login; `--agent stub` runs a scripted agent with no model
   calls. Every run goes through `orchestrate.run_agent`, so it gets a
   `runs/<run_id>/` folder, a full `run.json` and the OpenRouter summary.
 - `--stub-step <seconds>` slows the stub's steps (default 0.4 s, about
   10 s a run) so a demo can be followed, messaged and stopped.
+
+### Demo: a real run from the dashboard
+
+The demo path is the same-origin one: the backend serves the site, so the
+dashboard and the API share one loopback address. From `backend/`:
+
+```bash
+uv sync --extra dev
+# optional, the chip lab and training (paths, not secrets; see "Chip lab")
+export CHIPIN_CHIPLAB_BIN=<lab>/.venv/bin CHIPLAB_CONFIG=<lab config.json>
+export CHIPLAB_USER_DIR=<lab tool folder> CHIPIN_TRAIN_PYTHON=<lab>/.venv/bin/python
+.venv/bin/chipin-backend serve --site <site checkout> --env-file <keys file>
+```
+
+1. It prints `http://127.0.0.1:8797/#token=<token>` (`--port` changes
+   the port). Open the dashboard on that origin with the same fragment:
+   `http://127.0.0.1:8797/dashboard/variants/i1.html#token=<token>`.
+   The page keeps the token in this browser, removes it from the address
+   bar, and the sidebar reads "Connected to local backend". With the token
+   lost, paste the printed link under Configure, Backend, Token, then Test.
+2. Type a brief and press Chip in. Walk the five steps (device, who and
+   where, targets, constraints, data: Simulate means synthetic data), pick
+   Lite on the "Your spec" card and press Run.
+3. The run opens at `#/live/<run id>/overview`: stages, the agent's log,
+   designs on the chart as their records arrive (hollow while the size is
+   the agent's estimate, solid once the lab measured it), tiles and pass or
+   fail against the spec's targets, the funnel, files and the report, cost
+   and elapsed time. "Where it fails", "Chip", "Chat" and "Sources" are the
+   other views. A reload resumes the run from its first event.
+
+The published page (`https://chipin.space/dashboard/...?api=http://127.0.0.1:<port>`)
+is not the demo path. Chrome refuses its calls to a loopback address
+("Permission was denied for this request to access the loopback address
+space") until the user allows local network access for the site; Safari
+blocks them as mixed content (an https page asking for http). The server
+side is ready for it (CORS, the Private Network Access header), the
+browsers are not.
 
 | Route or event                 | What it is                   |
 | ------------------------------ | ---------------------------- |
@@ -291,7 +329,8 @@ optional `spec` object:
 - Required: `device`, `signal`, `detect`, `targets` (1 to 12), `primary`
   and `data.mode`. `task_types` takes `monitoring`, `screening`,
   `grading`; `place` takes `ward`, `home`, `patient`; `fa_unit` takes
-  `hour`, `night`, `day` (default `hour`); `op` takes `at_least` or
+  `hour`, `night` (12 hours), `day` (24 hours), default `hour`, and the
+  agent's block states the hours; `op` takes `at_least` or
   `at_most`; `data.mode` takes `public`, `own` or `simulate`. An unknown
   field or a bad value is a 400 whose `error` names the field, for example
   `spec.fa_unit must be one of hour, night, day`; no run is started.

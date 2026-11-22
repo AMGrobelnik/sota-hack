@@ -109,7 +109,7 @@ def test_a_full_spec_is_accepted_and_normalised() -> None:
         "  - fa_per_hour at most 0.5 /h",
     ):
         assert line in run_spec.block
-    assert "per night" in run_spec.block and "SYNTHETIC" in run_spec.block
+    assert "per night (12 hours" in run_spec.block and "SYNTHETIC" in run_spec.block
     minimal = {k: SPEC[k] for k in ("device", "signal", "detect", "targets", "primary")} | {
         "data": {"mode": "simulate"}
     }
