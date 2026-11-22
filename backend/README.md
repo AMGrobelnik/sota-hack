@@ -186,6 +186,7 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 | `GET /api/runs/{id}/events`    | the stream, `from=<seq>`     |
 | `POST /api/runs/{id}/messages` | `text` to the agent          |
 | `POST /api/runs/{id}/stop`     | stop the run                 |
+| `GET /api/runs/{id}/evidence`  | run evidence, once finished  |
 | `run.started`                  | prompt, agent, runner        |
 | `stage`                        | `name`, `state`, `reason`    |
 | `status`                       | one "ChipIn is ..." line     |
@@ -195,6 +196,7 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 | `artifact`                     | a file, such as the report   |
 | `cost`                         | agent cost and tokens        |
 | `error`                        | what went wrong              |
+| `evidence`                     | the three evidence summaries |
 | `run.finished`                 | status, summary, `bullets`   |
 
 Stages, in order: `spec`, `reference`, `propose`, `finetune`, `compile`,
@@ -273,6 +275,50 @@ section 2 of the guide), each with its unit. Chip files land under
 `workspace/chips/<design_id>/`. The helper and the tailer refuse a metric
 that is not a finite number; the lab treats a refused line as non-fatal.
 
+## Run evidence
+
+Three measurements computed only from a finished run's own folder, with
+no network and no model calls (`evidence.py`):
+
+```bash
+chipin-backend evidence <run id or run folder> [--json]
+```
+
+The command prints the markdown (or JSON) and writes `evidence.json` and
+`evidence.md` into the run folder. `GET /api/runs/{id}/evidence` returns
+the same dict for a finished run (409 while it runs). At the end of every
+dashboard run the backend computes it once and emits one `evidence` event
+with the three summaries, just before `run.finished`; a failure there is
+logged and never fails the run.
+
+- **Number tracing.** Every number in `workspace/report.md` is traced to a
+  machine source in the same folder: a `metric` event, or a numeric field
+  of a file the chip lab wrote (JSON under `chips/` or a saved lab answer,
+  and the lab's text reports under `chips/`). Matching allows thousands
+  separators, percent against fraction, rounding to the digits shown and
+  unit prefixes. Dates, times, numbering, versions, file names, ids, code
+  blocks and numbers quoted from the prompt are excluded. A small integer
+  (10 or less) counts only when its words share a term with the source key.
+  It does not claim an untraced number is wrong, only that no machine
+  source holds it. It does not prove a traced number is used correctly:
+  a value can match by coincidence, which the output flags when the words
+  share nothing with the key. Metric events can also come from the agent's
+  own `./progress metric` calls, and lab answers echo the agent's inputs.
+- **Weight bytes per decision.** For the chip the run selected (the one
+  the report names most; otherwise the first laid-out chip whose model has
+  weights): the bytes of weights software must read for one decision
+  (parameter count times stored width, from `chips/<id>/ir.json`), and the
+  memory cells and flip-flops in the chip's netlist (`net.json`, else
+  `gates.v`). No memory cells means 0 weight bytes fetched: the weights
+  are constants in the logic. A memory is reported with its bits, never 0.
+  It claims nothing about energy or speed.
+- **Stage timings.** Wall time per stage from the `stage` events, each
+  stage's share of the run, the largest share and its bound (the run
+  cannot speed up more than 1 / that share by shrinking the other stages),
+  items per second where the events count items, and per-tool-call wall
+  times. It is the wall time of one run on one machine; it calls nothing
+  parallel or serial beyond reporting whether tool calls overlapped.
+
 ## Layout
 
 ```text
@@ -285,7 +331,8 @@ backend/
     log.py                   loguru: stderr plus logs/backend.log
     runs.py                  run folders: run.json, events.jsonl, workspace/
     orchestrate.py           run_agent(spec, config): one run end to end
-    cli.py                   chipin-backend run / ask / serve / config
+    cli.py                   chipin-backend run / ask / serve / evidence
+    evidence.py              run evidence: number tracing, weights, timings
     chiplab.py               the optional chip lab: agent PATH and settings
     api/                     the local API server for the dashboards
     llm/                     OpenRouter client, key, retry, presets, summaries

@@ -1,4 +1,4 @@
-"""Command line: ``chipin-backend run``, ``ask``, ``serve`` and ``config``.
+"""Command line: ``chipin-backend run``, ``ask``, ``serve``, ``evidence`` and ``config``.
 
 Examples::
 
@@ -8,6 +8,7 @@ Examples::
     chipin-backend run --preset pro --prompt-file examples/seizure_eeg_prompt.md
     chipin-backend ask --model cheap "Name one low-power EEG seizure feature"
     chipin-backend serve --agent stub
+    chipin-backend evidence 20261122-001507-0ef5bb --json
 
 ``python -m chipin_backend`` is the same command.
 """
@@ -31,10 +32,12 @@ from chipin_backend.api.cli import add_serve_parser, run_serve
 from chipin_backend.api.config import Preset, load_api_config
 from chipin_backend.api.manager import ApiAgent, RequestError, RunManager
 from chipin_backend.config import BackendConfig, ComputeTier, RunMode, load_config
+from chipin_backend.evidence import build_evidence, render_markdown
 from chipin_backend.llm import MissingKeyError, OpenRouterClient, expand_preset
 from chipin_backend.llm.providers import ProviderError, resolve_provider
 from chipin_backend.log import setup_logging
 from chipin_backend.orchestrate import LLM_CALLS_ENV, run_agent
+from chipin_backend.runs import is_safe_run_id
 
 
 def _common() -> argparse.ArgumentParser:
@@ -87,6 +90,13 @@ def _parser() -> argparse.ArgumentParser:
     ask.add_argument("--model", default=None, help="preset name or model id of the provider")
     ask.add_argument("--provider", default=None, help="model provider from the config (default openrouter)")
     ask.add_argument("--max-tokens", type=int, default=4096)
+    evidence = sub.add_parser(
+        "evidence",
+        parents=[common],
+        help="trace the report's numbers, weight bytes per decision and stage timings of a run",
+    )
+    evidence.add_argument("run", help="a run id under the runs folder, or a run folder")
+    evidence.add_argument("--json", action="store_true", help="print JSON instead of markdown")
     add_serve_parser(sub, common)
     return parser
 
@@ -119,6 +129,8 @@ def _main(argv: list[str] | None) -> int:
         return 0
     if args.command == "serve":
         return run_serve(args, config)
+    if args.command == "evidence":
+        return _evidence(config, args.run, as_json=args.json)
     if args.command == "ask":
         return asyncio.run(
             _ask(config, args.question, model=args.model, max_tokens=args.max_tokens, provider=args.provider)
@@ -153,6 +165,22 @@ def _main(argv: list[str] | None) -> int:
         return 2
     print(json.dumps({"run_dir": str(run.path), **result.to_dict()}, indent=2))
     return 1 if result.failed else 0
+
+
+def _evidence(config: BackendConfig, run: str, *, as_json: bool) -> int:
+    """``evidence``: compute it, write ``evidence.json`` and ``evidence.md`` into the run, print one."""
+    folder = Path(run).expanduser()
+    if not folder.is_dir():
+        if not is_safe_run_id(run):
+            logger.error("no run folder {}", run)
+            return 2
+        folder = config.resolved_runs_dir() / run
+    if not folder.is_dir():
+        logger.error("no run folder {} (nor {} under {})", run, run, config.resolved_runs_dir())
+        return 2
+    evidence = build_evidence(folder)
+    print(json.dumps(evidence, indent=2, ensure_ascii=False) if as_json else render_markdown(evidence))
+    return 0
 
 
 #: ``run --backend`` -> the dashboard's agent name.
