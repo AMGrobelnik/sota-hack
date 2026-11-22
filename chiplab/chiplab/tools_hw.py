@@ -127,27 +127,50 @@ def compose_chip(heads: dict, fusion: list | None = None, shared_inputs: bool = 
     return {**res, "io_spec": io_spec(ir)}
 
 
+_STREAM_OPTS = {
+    "postproc": "dict — optional on-chip post-processing of the per-frame decision: {output?, lane?, threshold? "
+                "(frame bit = value >= threshold), smooth?: {mode: majority|kofn|average, n, k?, threshold?}, "
+                "min_duration? (frames the condition must last), hold? (frames the alarm stays on)}; alarm on bit 0",
+    "channel_serial": "dict — optional {channels: C, reduce: max|sum, threshold: T, output?, lane?}: each frame is "
+                      "ONE channel's input to ONE per-channel model; decision = reduce(score over C frames) >= T, "
+                      "valid every C frames; outputs decision then acc (one model copy instead of C)",
+}
+
+
 @tool("Wrap a design for streaming hardware: inputs arrive one 15-bit word per strobe (ui_in[7]); outputs on "
       "uo_out[6:0] with valid on uo_out[7]. tt=true gives the Tiny Tapeout top (tt_um_chipin_<id>), else a generic "
-      "top for FPGA boards.", {"design_id": "str", "tt": "bool (true)"}, lane="cpu", cacheable=True)
-def compile_stream(design_id: str, tt: bool = True) -> dict:
+      "top for FPGA boards. Optional postproc (smoothing, k-of-N, duration timer, alarm hold) and channel_serial "
+      "(max or sum over C channels with one model copy) blocks; area=true also reports flip-flops and gates "
+      "(and, with channel_serial, the parallel version with C copies of the core).",
+      {"design_id": "str", "tt": "bool (true)", **_STREAM_OPTS,
+       "area": "bool — synthesise and report flip-flops and gates (false)"}, lane="cpu", cacheable=True)
+def compile_stream(design_id: str, tt: bool = True, postproc: dict | None = None, channel_serial: dict | None = None,
+                   area: bool = False) -> dict:
     from chiplab.emit.stream import emit_stream
     d = _design_dir(design_id)
     ir = json.loads((d / "ir.json").read_text()); info = json.loads((d / "port.json").read_text())
     core_text = (d / "design.v").read_text() if info.get("optimizer") else None   # keep the optimised core
-    text, sinfo = emit_stream(ir, info, tt=tt, core_text=core_text)
+    text, sinfo = emit_stream(ir, info, tt=tt, core_text=core_text, postproc=postproc, channel_serial=channel_serial)
     fn = "stream_tt.v" if tt else "stream.v"
     (d / fn).write_text(text)
     (d / (fn[:-2] + ".json")).write_text(json.dumps(sinfo, default=str))
-    return {"design_id": design_id, "top": sinfo.get("top"), "verilog": str(d / fn), "files": [str(d / fn)],
-            **{k: sinfo.get(k) for k in ("transfers_per_frame", "counter_bits", "truncated", "uo_map")}}
+    out = {"design_id": design_id, "top": sinfo.get("top"), "verilog": str(d / fn), "files": [str(d / fn)],
+           **{k: sinfo.get(k) for k in ("transfers_per_frame", "counter_bits", "truncated", "uo_map")}}
+    if postproc or channel_serial:
+        out.update({k: sinfo.get(k) for k in ("postproc", "channel_serial", "frames_per_decision", "output_fields")})
+    if area:
+        from chiplab.emit.postproc import area_compare
+        out["area"] = area_compare(ir, channel_serial, d / "stream_area", postproc=postproc)
+    return out
 
 
 @tool("Verification level 3: cocotb + Icarus simulation of the streaming wrapper (frames streamed in, outputs "
       "compared with the integer model or with the scientist's expected outputs) plus a Verilator lint.",
       {"design_id": "str", "n": "int — random frames if no vectors (1000)", "vectors": "dict — port -> [[lane ints]] (optional)",
-       "expected": "dict — output -> [[lane ints]] (optional)", "tt": "bool (true)"}, lane="cpu", cacheable=True)
-def rtl_simulate(design_id: str, n: int = 1000, vectors: dict | None = None, expected: dict | None = None, tt: bool = True) -> dict:
+       "expected": "dict — output -> [[lane ints]] (optional)", "tt": "bool (true)", **_STREAM_OPTS},
+      lane="cpu", cacheable=True)
+def rtl_simulate(design_id: str, n: int = 1000, vectors: dict | None = None, expected: dict | None = None, tt: bool = True,
+                 postproc: dict | None = None, channel_serial: dict | None = None) -> dict:
     import numpy as np
     from chiplab.verify.rtlsim import rtl_simulate as _rs
     d = _design_dir(design_id)
@@ -156,7 +179,10 @@ def rtl_simulate(design_id: str, n: int = 1000, vectors: dict | None = None, exp
     E = {k: np.asarray(v, dtype=np.int64) for k, v in expected.items()} if expected else None
     pinfo = json.loads((d / "port.json").read_text())
     core_text = (d / "design.v").read_text() if pinfo.get("optimizer") else None   # simulate the design's own core
-    r = _rs(ir, d / ("rtlsim_tt" if tt else "rtlsim"), X=X, n=n, tt=tt, expected=E, core_text=core_text)
+    ext = {"postproc": postproc, "channel_serial": channel_serial} if (postproc or channel_serial) else {}
+    if ext and E is not None:
+        raise ValueError("expected is not used with postproc/channel_serial (the sequence model gives the answers)")
+    r = _rs(ir, d / ("rtlsim_tt" if tt else "rtlsim"), X=X, n=n, tt=tt, expected=E, core_text=core_text, **ext)
     (d / "rtlsim.json").write_text(json.dumps(r, default=str))
     return {"design_id": design_id, **{k: v for k, v in r.items() if k != "first_mismatches"},
             "first_mismatches": r.get("first_mismatches", [])[:5]}
@@ -608,21 +634,29 @@ def tt_package(design_id: str, harden: bool = False, tiles: str = "auto", pdk: s
       "for clocked designs. Compositional by default: the combinational core is a black box here (prove it with "
       "prove_equivalence), so the proof covers only the clocked wrapper and takes seconds at any model size "
       "(spike: 3 s). whole=true proves the flattened design instead (small chips only, a few hundred gates).",
-      {"design_id": "str", "timeout": "int seconds (600)", "whole": "bool — prove the whole flattened design (false)"},
-      lane="cpu", cacheable=True)
-def prove_sequential(design_id: str, timeout: int = 600, whole: bool = False) -> dict:
+      {"design_id": "str", "timeout": "int seconds (600)", "whole": "bool — prove the whole flattened design (false)",
+       **_STREAM_OPTS}, lane="cpu", cacheable=True)
+def prove_sequential(design_id: str, timeout: int = 600, whole: bool = False, postproc: dict | None = None,
+                     channel_serial: dict | None = None) -> dict:
     from chiplab.tools import TOOLS
     from chiplab.verify.eqy import prove_sequential as _ps
     d = _design_dir(design_id)
-    s = TOOLS["compile_stream"]["fn"].__wrapped__(design_id=design_id, tt=True)
+    ext = {"postproc": postproc, "channel_serial": channel_serial} if (postproc or channel_serial) else {}
+    s = TOOLS["compile_stream"]["fn"].__wrapped__(design_id=design_id, tt=True, **ext)
     pinfo = json.loads((d / "port.json").read_text())
     core = pinfo["top"]
     stub = d / "core_stub.v"   # ports only: the black box's declaration for the gate side
     ports = [f"input wire [{p['lanes'] * p['bits'] - 1}:0] {p['name']}" for p in pinfo["inputs"]] + \
             [f"output wire [{o['lanes'] * o['bits'] - 1}:0] {o['name']}" for o in pinfo["outputs"]]
     stub.write_text(f"(* blackbox *)\nmodule {core} ({', '.join(ports)});\nendmodule\n")
+    nm = {}
+    if ext:   # the blocks' combinational wires are not cut points (registers and core outputs stay matched)
+        from chiplab.emit.postproc import Extension
+        nm = {"nomatch": Extension(pinfo, postproc, channel_serial).wires()}
     r = _ps([d / "stream_tt.v"], s["top"], d / ("eqy_whole" if whole else "eqy"), timeout=timeout,
-            blackbox=None if whole else [core], blackbox_sources=None if whole else [stub])
+            blackbox=None if whole else [core], blackbox_sources=None if whole else [stub], **nm)
+    if ext:
+        r = {**r, **{k: s.get(k) for k in ("postproc", "channel_serial", "frames_per_decision")}}
     (d / "eqy.json").write_text(json.dumps(r, default=str))
     return {"design_id": design_id, **r}
 
