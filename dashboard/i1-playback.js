@@ -657,15 +657,28 @@
         return rec;
       }).catch(function (e) { rec.err = e.message || "The run could not be read."; return rec; });
     } else {
-      rec.ready = Promise.all([api("/api/runs/" + encodeURIComponent(id) + "/history"), api("/api/history").catch(function () { return { runs: [] }; })]).then(function (r) {
+      // a reload or a shared link opens the run before the live backend has answered its first check: wait for it
+      rec.ready = connReady().then(function () { return Promise.all([api("/api/runs/" + encodeURIComponent(id) + "/history"), api("/api/history").catch(function () { return { runs: [] }; })]); }).then(function (r) {
         var page = r[0], facts = (r[1].runs || []).find(function (x) { return x.id === id; }) || { id: id };
         rec.facts = facts; rec.running = !page.finished && (page.state === "running" || facts.state === "running");
         prepare(rec, page.events || []);
         if (rec.running) follow(rec);
         return rec;
-      }).catch(function (e) { rec.err = conn() ? "The backend did not return this run (" + e.message + ")." : "This run is on a ChipIn backend that is not connected."; return rec; });
+      }).catch(function (e) { rec.err = conn() ? "The backend did not return this run (" + e.message + ")." : "This run is on a ChipIn backend that is not connected."; delete RUNS[key]; return rec; }); // not kept: the next visit asks again
     }
     return rec.ready;
+  }
+  // resolves once a backend connection is usable, or when the page's connection check has settled without one
+  function connReady() {
+    return new Promise(function (done) {
+      var t0 = Date.now();
+      (function wait() {
+        var L = window.ChipInLive, c = L && L.i1 && L.i1.connection ? L.i1.connection() : null;
+        var waited = Date.now() - t0, st = c ? c.state : "off";
+        if (conn() || st === "bad" || waited > 20000 || (st === "off" && waited > 3000)) done();
+        else setTimeout(wait, 150);
+      })();
+    });
   }
   function follow(rec) {
     clearTimeout(rec.poll);
