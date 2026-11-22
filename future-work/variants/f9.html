@@ -1,0 +1,950 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ChipIn</title>
+<meta name="theme-color" content="#0f1a2a">
+<link rel="icon" type="image/svg+xml" href="../../assets/brand/favicon.svg">
+<style>
+:root {
+  --night: #0f1a2a;
+  --deep: #16263c;
+  --paper: #eef1f2;
+  --ink: #132033;
+  --signal: #5be49b;
+  --amber: #ffb86b;
+  --dusk: #c9a3c4;
+  --mute: #9aabc0;
+  --rule: rgba(214, 228, 242, .15);
+  --f: "Avenir Next", "Avenir", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --side: clamp(20px, 5.4vw, 84px);
+}
+* { box-sizing: border-box; }
+html { background: var(--night); -webkit-text-size-adjust: 100%; }
+body { margin: 0; color: #e8eef5; font: 400 17px/1.5 var(--f); -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; border-radius: 6px; }
+
+/* top bar (as on the landing page) */
+.top { position: fixed; top: 0; left: 0; right: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px clamp(16px, 3vw, 34px); pointer-events: none; transition: background .3s, color .3s; }
+.top > * { pointer-events: auto; }
+.top.solid { background: rgba(13, 23, 38, .82); backdrop-filter: blur(10px); }
+.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 650; font-size: 18px; letter-spacing: -.01em; text-decoration: none; color: #fff; }
+.nav { display: flex; align-items: center; gap: clamp(14px, 2vw, 26px); }
+.nav .lnk { font-size: 15px; font-weight: 600; text-decoration: none; color: #dbe5ef; white-space: nowrap; }
+.nav .lnk:hover { color: #fff; text-decoration: underline; text-underline-offset: 4px; }
+.nav .lnk[aria-current=page] { color: #fff; text-decoration: underline; text-decoration-color: #5be49b; text-underline-offset: 6px; text-decoration-thickness: 2px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; background: var(--signal); color: #062418; font-weight: 650; border-radius: 10px; padding: 12px 22px; text-decoration: none; letter-spacing: -.005em; transition: background .15s, transform .15s; white-space: nowrap; }
+.btn:hover { background: #86f2b9; }
+.btn:active { transform: translateY(1px); }
+.btn-s { padding: 9px 16px; font-size: 15px; }
+.brand .lk { height: 28px; width: auto; display: block; flex: none; }
+.brand .lk-l { display: none; }
+
+/* title block */
+.wrap { max-width: 1180px; margin: 0 auto; }
+.intro { padding: calc(clamp(72px, 11vh, 120px) + 36px) var(--side) 0; }
+.intro h1 { font-size: clamp(48px, 6.6vw, 100px); line-height: .95; letter-spacing: -.04em; font-weight: 650; margin: 0 0 20px; color: #fff; text-wrap: balance; max-width: 12ch; }
+.intro .lede { font-size: clamp(18px, 1.45vw, 21px); line-height: 1.4; color: #d6deea; max-width: 34ch; margin: 0 0 16px; }
+.meas { display: inline-flex; align-self: flex-start; font-size: 12px; font-weight: 650; color: var(--amber); border: 1px solid rgba(255, 184, 107, .5); border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+
+/* the three sections */
+.fw { min-height: 100svh; display: flex; align-items: center; padding: clamp(72px, 11vh, 120px) var(--side) clamp(36px, 6vh, 64px); }
+.fw .wrap { width: 100%; display: grid; grid-template-columns: minmax(0, .74fr) minmax(0, 1.3fr); gap: clamp(28px, 4.4vw, 72px); align-items: center; }
+.fw + .fw .wrap { border-top: 1px solid var(--rule); padding-top: clamp(28px, 4vh, 44px); }
+.st-n { display: flex; align-items: center; gap: 12px; margin: 0 0 18px; font-size: clamp(16px, 1.3vw, 19px); font-weight: 650; letter-spacing: -.015em; line-height: 1.15; color: #c4d1df; }
+.st-n b { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--signal); color: var(--signal); font-size: 13px; font-weight: 700; letter-spacing: 0; }
+.fw h2 { font-size: clamp(36px, 4.2vw, 62px); font-weight: 650; letter-spacing: -.035em; line-height: 1.02; margin: 0 0 20px; color: #fff; max-width: 15ch; text-wrap: balance; }
+.say { font-size: clamp(18px, 1.45vw, 21px); line-height: 1.4; color: #d6deea; max-width: 30ch; margin: 0 0 18px; text-wrap: pretty; }
+
+/* the framed visual */
+.vis { position: relative; display: flex; flex-direction: column; height: min(78svh, 700px); min-height: 540px; border: 1px solid var(--rule); border-radius: 20px; background: #0b1626; overflow: hidden; }
+.vhead { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 16px 18px 0; min-height: 58px; }
+.ro { font-size: 14px; color: #c4d1df; line-height: 1.4; min-width: 0; }
+.ro b { color: #fff; font-weight: 650; font-size: 15.5px; margin-right: 8px; }
+.ro .meas { margin-left: 6px; vertical-align: 1px; }
+.vhead > .meas { flex: none; }
+.stage { position: relative; flex: 1; min-height: 0; }
+.stage svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: hidden; }
+.ctrl { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 4px 18px 12px; }
+.glabel { font-size: 13px; color: #8fa2b8; font-weight: 600; }
+.seg { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; border: 1px solid var(--rule); border-radius: 12px; background: #0f1d31; }
+.seg button { all: unset; box-sizing: border-box; cursor: pointer; min-height: 40px; padding: 0 14px; border-radius: 9px; font: 600 14.5px/40px var(--f); color: #c4d1df; transition: background .15s, color .15s; white-space: nowrap; }
+.seg button[aria-pressed=true] { background: var(--signal); color: #062418; }
+.seg button:hover:not([aria-pressed=true]) { color: #fff; background: rgba(214, 228, 242, .08); }
+.seg button:focus-visible, .add:focus-visible, .stop:focus-visible, .spec:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+.add { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 16px; border-radius: 10px; border: 1px solid rgba(91, 228, 155, .6); background: rgba(14, 54, 38, .6); color: #dfffee; font: 650 14.5px/1 var(--f); transition: background .15s; white-space: nowrap; }
+.add:hover { background: rgba(14, 54, 38, .95); }
+.add[aria-disabled=true] { opacity: .45; cursor: default; }
+.meters { display: flex; gap: 18px; padding: 0 18px 10px; }
+.m { flex: 1; min-width: 0; font-size: 12.5px; color: #8fa2b8; font-weight: 600; }
+.m i { display: block; height: 6px; border-radius: 999px; background: rgba(214, 228, 242, .12); margin-top: 6px; overflow: hidden; }
+.m i b { display: block; height: 100%; width: 0; border-radius: 999px; background: #4b6482; transition: width .5s, background .3s; }
+.m.on { color: #e9fff2; }
+.m.on i b { background: var(--signal); }
+.cap { font-size: 12.5px; color: #8fa2b8; padding: 0 18px 14px; margin: 0; }
+
+/* spectrum slider (section 3) */
+.spec { position: relative; margin: 4px 18px 4px; padding: 14px 0 0; touch-action: none; cursor: pointer; border-radius: 8px; }
+.spec .track { position: relative; height: 4px; margin: 0 10px; border-radius: 999px; background: rgba(214, 228, 242, .14); }
+.spec .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--signal); }
+.spec .thumb { position: absolute; top: 50%; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 5px rgba(91, 228, 155, .18); }
+.spec .tick { position: absolute; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #0b1626; border: 1.5px solid rgba(214, 228, 242, .45); }
+.spec .tick.on { border-color: var(--signal); background: #1b4a36; }
+.stops { position: relative; height: 46px; margin: 4px 28px 0; }
+.stop { all: unset; box-sizing: border-box; position: absolute; top: 0; min-height: 40px; padding: 6px 4px; max-width: 120px; font: 600 13px/1.2 var(--f); color: #8fa2b8; cursor: pointer; transform: translateX(-50%); text-align: center; border-radius: 6px; white-space: nowrap; }
+.stop:first-child { transform: none; text-align: left; padding-left: 0; }
+.stop:last-child { transform: translateX(-100%); text-align: right; padding-right: 0; }
+.stop.on { color: #fff; }
+.stop.far { color: #ffd2a1; }
+.stop .sh { display: none; }
+
+/* svg pieces */
+.orb { fill: none; stroke: rgba(214, 228, 242, .16); stroke-width: 1.2; transition: stroke .4s; }
+.orb.on { stroke: rgba(91, 228, 155, .5); }
+.pl { cursor: pointer; outline: none; }
+.pl .body { fill: #13233a; stroke: rgba(214, 228, 242, .32); stroke-width: 1.3; transition: fill .3s, stroke .3s; }
+.pl .glow { fill: none; stroke: rgba(91, 228, 155, .2); stroke-width: 8; opacity: 0; transition: opacity .3s; }
+.pl.on .body { fill: #1b4a36; stroke: var(--signal); }
+.pl.on .glow, .pl:focus-visible .glow { opacity: 1; }
+.pl:hover .body { stroke: #dfffee; }
+.pl .tile { fill: none; stroke: #9fb3c8; stroke-width: 1.3; }
+.pl.on .tile { stroke: #dfffee; }
+.pl text { fill: #dbe5ef; font: 650 15px var(--f); }
+.pl.on text { fill: #fff; }
+.chipbody { fill: #101f33; stroke: var(--signal); stroke-width: 1.5; }
+.pads { fill: none; stroke: rgba(214, 228, 242, .42); stroke-width: 5; stroke-dasharray: 2.5 7; }
+.tether { stroke: var(--signal); stroke-width: 1.5; stroke-linecap: round; }
+.ghost { fill: none; stroke: rgba(223, 255, 238, .7); stroke-width: 1.3; stroke-dasharray: 5 5; }
+.bound { fill: #0e1c2f; stroke: rgba(214, 228, 242, .3); stroke-width: 1.5; transition: stroke .3s; }
+.bound.hit { stroke: var(--amber); }
+.btag rect { fill: #0b1626; stroke: rgba(214, 228, 242, .3); stroke-width: 1.2; transition: stroke .3s; }
+.btag text { fill: #dbe5ef; font: 650 13px var(--f); transition: fill .3s; }
+.btag.hit rect { stroke: var(--amber); }
+.btag.hit text { fill: var(--amber); }
+.sat { cursor: grab; outline: none; touch-action: none; }
+.sat:active { cursor: grabbing; }
+.sat rect { fill: #13233a; stroke: rgba(214, 228, 242, .32); stroke-width: 1.2; transition: stroke .2s; }
+.sat path { fill: none; stroke: var(--signal); stroke-width: 1.5; stroke-linejoin: round; }
+.sat text { fill: #dbe5ef; font: 600 12px var(--f); opacity: 0; transition: opacity .2s; }
+.sat.on rect, .sat:focus-visible rect { stroke: var(--signal); }
+.sat.on text, .sat:focus-visible text { opacity: 1; }
+.link { stroke: rgba(214, 228, 242, .14); stroke-width: 1; stroke-dasharray: 2 5; }
+.fitbg { fill: none; stroke: rgba(214, 228, 242, .12); stroke-width: 6; }
+.fit { fill: none; stroke: var(--signal); stroke-width: 6; stroke-linecap: round; }
+.slab { fill: #c4d1df; font: 600 12.5px var(--f); }
+.mlab { fill: #fff; font: 650 12.5px var(--f); }
+.mlab2 { fill: #c4d1df; font: 500 11.5px var(--f); }
+.lane { fill: none; stroke: var(--signal); stroke-linejoin: round; stroke-linecap: round; }
+.node { fill: #13233a; stroke: var(--signal); stroke-width: 1.5; }
+.nlab { fill: #c4d1df; font: 600 13px var(--f); }
+.farring { fill: none; stroke: rgba(255, 184, 107, .65); stroke-width: 1.5; stroke-dasharray: 6 5; }
+
+footer { max-width: 1180px; margin: 24px auto 0; padding: 22px 0 40px; border-top: 1px solid var(--rule); font-size: 13px; color: #607086; }
+.foot { padding: 0 var(--side); }
+
+@media (max-width: 900px) {
+  .fw { align-items: flex-start; }
+  .fw .wrap { grid-template-columns: 1fr; gap: 26px; }
+  .vis { height: auto; min-height: 0; }
+  .stage { flex: none; height: clamp(330px, 92vw, 520px); }
+  .say { max-width: 36ch; }
+}
+@media (max-width: 700px) {
+  .top { padding: 12px 14px; }
+  .nav { gap: 12px; }
+  .nav .lnk { font-size: 14px; }
+  .meters { gap: 12px; }
+  .seg button { padding: 0 11px; font-size: 14px; }
+  .stop { font-size: 12px; }
+  .stop .lg { display: none; }
+  .stop .sh { display: inline; }
+  .stop:last-child { white-space: normal; width: 64px; }
+  .nlab { font-size: 11.5px; }
+}
+@media (max-width: 520px) {
+  .brand .lk { height: 24px; }
+  .nav .lnk-about { display: none; }
+  .btn-s { padding: 9px 13px; font-size: 14px; }
+  .vhead { padding: 14px 14px 0; }
+  .ctrl, .meters, .cap { padding-left: 14px; padding-right: 14px; }
+  .spec { margin-left: 14px; margin-right: 14px; }
+  .stops { margin-left: 24px; margin-right: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .top, .btn, .orb, .pl .body, .pl .glow, .m i b, .seg button, .bound, .btag rect, .btag text, .sat rect, .sat text { transition: none; }
+}
+</style>
+</head>
+<body>
+<header class="top solid" id="topbar">
+  <a class="brand" href="../../variants/z3.html" aria-label="Home"><img class="lk lk-l" src="../../assets/brand/chipin-lockup.svg" alt="ChipIn" height="28"><img class="lk lk-d" src="../../assets/brand/chipin-lockup-light.svg" alt="ChipIn" height="28"></a>
+  <nav class="nav" aria-label="Main">
+    <a class="lnk lnk-about" href="../../variants/z3.html#about" data-c="nav.about"></a>
+    <a class="lnk" href="../../how-it-works.html" data-c="nav.how"></a>
+    <a class="lnk" href="#" aria-current="page" data-c="nav.future"></a>
+    <a class="btn btn-s" href="../../dashboard/" data-c="nav.try"></a>
+  </nav>
+</header>
+
+<main id="main">
+  <section class="intro" aria-labelledby="t-h1">
+    <div class="wrap">
+      <h1 id="t-h1" data-c="title.h1"></h1>
+      <p class="lede" data-c="title.lede"></p>
+      <span class="meas" data-c="title.pill"></span>
+    </div>
+  </section>
+  <section class="fw" id="fab" data-key="fab"></section>
+  <section class="fw" id="recordings" data-key="recordings"></section>
+  <section class="fw" id="sensors" data-key="sensors"></section>
+</main>
+
+<div class="foot"><footer data-c="footer"></footer></div>
+
+<script>
+/* =====================================================================================================
+   Every visible word of this page lives in window.COPY. Each of the three sections is one COPY key plus
+   one draw function (drawFab, drawRecordings, drawSensors), so a section can be swapped by editing both.
+   Numbers: tile sizes and default clocks come from the chip lab's notes (origin/ant/chip-lab,
+   chiplab/README.md and chiplab/chiplab/hw/cost.py). Every bar and fill is illustrative.
+   ===================================================================================================== */
+window.COPY = {
+  doc: 'Future work · ChipIn',
+  nav: { about: 'About', how: 'How it works', future: 'Future work', try: 'Try now' },
+  title: {
+    h1: 'What comes next',
+    lede: 'Three things we plan to build after the hackathon. None of them is built yet.',
+    pill: 'Planned'
+  },
+  fab: {
+    step: '01',
+    name: 'Fab presets',
+    h2: 'Name the fab. The design bends to it.',
+    say: 'You will name the fab; ChipIn will load its constraints and costs, then tune the design for cost, size or speed of production.',
+    planned: 'Planned',
+    illus: 'Illustrative',
+    aria: 'Three chip processes orbit one chip. The chosen process pulls the chip into its tile shape and clock.',
+    presets: [
+      { name: 'sky130', tile: [161, 111.52], tileTxt: '161 × 111.52\u00a0µm tile', clockNs: 50, clockTxt: '50\u00a0ns default clock', a0: 2.2, w: 0.07 },
+      { name: 'GF180', tile: [346.64, 160.72], tileTxt: '346.64 × 160.72\u00a0µm tile', clockNs: 100, clockTxt: '100\u00a0ns default clock', a0: 5.4, w: 0.05 },
+      { name: 'IHP SG13G2', tile: [202.08, 154.98], tileTxt: '202.08 × 154.98\u00a0µm tile', clockNs: 50, clockTxt: '50\u00a0ns default clock', a0: 0.9, w: 0.038 }
+    ],
+    pickHint: 'Tap a process',
+    goalLabel: 'Optimise for',
+    goals: [
+      { name: 'Cost', scale: 0.86 },
+      { name: 'Size', scale: 0.7 },
+      { name: 'Speed of production', scale: 1 }
+    ],
+    meters: ['Cost', 'Size', 'Turnaround'],
+    // illustrative only: how well each goal is met, per process (cost, size, turnaround), before the goal boost
+    meterBase: [[0.66, 0.58, 0.72], [0.74, 0.42, 0.56], [0.48, 0.76, 0.44]],
+    src: 'Tile sizes and default clocks as the lab’s process notes give them. Bars show how well each goal is met and are illustrative.'
+  },
+  recordings: {
+    step: '02',
+    name: 'Your own recordings',
+    h2: 'Your recordings never leave your machine.',
+    say: 'A device maker will bring their own sensor recordings, and the chip’s model will be fine-tuned to their patients and sensor, on their machine.',
+    planned: 'Planned',
+    illus: 'Illustrative',
+    aria: 'Recordings orbit a model inside a ring marked your machine; each one tunes the model and none can leave the ring.',
+    head: 'Model fit to your patients',
+    machine: 'Your machine',
+    stays: 'Stays on your machine',
+    model: 'Model',
+    tuned: 'tuned here',
+    fit: 'fit',
+    add: 'Add a recording',
+    types: ['Heart trace', 'Breathing', 'Oxygen', 'Movement', 'Heart trace', 'Temperature', 'Oxygen', 'Breathing'],
+    waves: ['ecg', 'resp', 'spo2', 'move', 'ecg', 'temp', 'spo2', 'resp'],
+    hint: 'Drag a recording toward the edge: it stays inside. The fit ring is illustrative.'
+  },
+  sensors: {
+    step: '03',
+    name: 'Every sensor, one chip',
+    h2: 'More sensors, one chip, one model.',
+    say: 'Models will read every sensor at once, and new sensors will join in parallel. A whole hospital on one chip is the far end.',
+    planned: 'Planned',
+    illus: 'Illustrative',
+    aria: 'Sensor streams converge in parallel into one chip; a slider moves from one sensor to a whole hospital.',
+    chip: 'One chip',
+    chipSub: 'one model',
+    add: 'Add a sensor',
+    slider: 'How many sensors share one chip',
+    far: 'Far end, far-fetched today',
+    types: [
+      { name: 'Heart trace', short: 'Heart', wave: 'ecg' },
+      { name: 'Oxygen', short: 'Oxygen', wave: 'spo2' },
+      { name: 'Breathing', short: 'Breath', wave: 'resp' },
+      { name: 'Temperature', short: 'Temp', wave: 'temp' },
+      { name: 'Brain waves', short: 'Brain', wave: 'eeg' },
+      { name: 'Radar', short: 'Radar', wave: 'radar' },
+      { name: 'Blood pressure', short: 'Pressure', wave: 'bp' },
+      { name: 'Movement', short: 'Motion', wave: 'move' },
+      { name: 'Sound', short: 'Sound', wave: 'sound' }
+    ],
+    // illustrative sensor counts for each stop on the spectrum
+    stops: [
+      { n: 1, label: 'One sensor', short: 'One sensor', cap: 'One sensor, one model, one chip: where the spectrum starts.' },
+      { n: 4, label: 'A few sensors', short: 'A few', cap: 'Heart, oxygen, breathing and temperature, read together by one model.' },
+      { n: 12, label: 'A ward', short: 'A ward', cap: 'Every bed on a ward, all streams in parallel into one local model.' },
+      { n: 40, label: 'A whole hospital', short: 'Whole hospital', cap: 'Every medical sensor a hospital needs, on one chip with one local model.' }
+    ]
+  },
+  footer: 'Built at the SoTA Scientific Parallelism Hackathon, London, November 2026.'
+};
+
+(function () {
+  'use strict';
+  var C = window.COPY;
+  var NS = 'http://www.w3.org/2000/svg';
+  var RM = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var TAU = Math.PI * 2;
+
+  function S(tag, attrs, parent) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function H(tag, cls, parent, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function set(e, attrs) { for (var k in attrs) e.setAttribute(k, attrs[k]); }
+  function lerp(a, b, k) { return a + (b - a) * k; }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function ease(dt, rate) { return RM ? 1 : 1 - Math.exp(-dt * rate); }
+  function pill(parent, text) { return H('span', 'meas', parent, text); }
+  function f1(v) { return Math.round(v * 10) / 10; }
+
+  /* sensor-like waveforms, phase x in cycles, output roughly -1..1 */
+  function g(x, m, w) { var d = (x - m) / w; return Math.exp(-d * d); }
+  var WAVES = {
+    ecg: function (x) { var f = x - Math.floor(x); return 0.15 * g(f, 0.15, 0.03) - 0.2 * g(f, 0.27, 0.018) + 1.0 * g(f, 0.31, 0.02) - 0.32 * g(f, 0.35, 0.018) + 0.3 * g(f, 0.56, 0.06); },
+    eeg: function (x) { return 0.45 * Math.sin(TAU * x * 1.7) + 0.3 * Math.sin(TAU * x * 4.3 + 1) + 0.2 * Math.sin(TAU * x * 7.1 + 2); },
+    spo2: function (x) { var f = x - Math.floor(x); return 1.3 * g(f, 0.28, 0.12) + 0.45 * g(f, 0.6, 0.1) - 0.6; },
+    resp: function (x) { return Math.sin(TAU * x); },
+    temp: function (x) { return 0.12 * Math.sin(TAU * x); },
+    radar: function (x) { return Math.sin(TAU * x * 3) * (0.35 + 0.65 * Math.abs(Math.sin(TAU * x * 0.35))); },
+    bp: function (x) { var f = x - Math.floor(x); var v = f < 0.14 ? f / 0.14 : Math.exp(-(f - 0.14) * 3.4) + 0.18 * g(f, 0.42, 0.04); return 1.5 * v - 0.75; },
+    move: function (x) { var e = Math.max(0, Math.sin(TAU * x * 0.4)); return Math.sin(TAU * x * 2.2) * e * e * e; },
+    sound: function (x) { return (Math.sin(TAU * x * 9) + 0.6 * Math.sin(TAU * x * 13.7)) * 0.5 * (0.45 + 0.55 * Math.sin(TAU * x * 0.7)); }
+  };
+  var RATE = { ecg: [1.1, 1.6], eeg: [0.7, 1.6], spo2: [1.1, 1.8], resp: [0.25, 1], temp: [0.1, 0.6], radar: [0.8, 1.8], bp: [1.1, 1.7], move: [0.5, 1.5], sound: [0.9, 1.6] };
+  function wavePath(type, w, h, phase) {
+    var d = '', n = 36;
+    for (var i = 0; i <= n; i++) {
+      var x = i / n;
+      var y = -WAVES[type](phase + x * RATE[type][1]) * h / 2;
+      d += (i ? 'L' : 'M') + f1(x * w - w / 2) + ' ' + f1(y);
+    }
+    return d;
+  }
+
+  /* one shared animation loop; a visual runs only while its section is on screen */
+  var visuals = [], raf = 0, last = 0;
+  function register(root, v) {
+    v.on = false;
+    visuals.push(v);
+    new IntersectionObserver(function (es) {
+      for (var i = 0; i < es.length; i++) v.on = es[i].isIntersecting;
+      if (v.on && v.enter) v.enter();
+      kick();
+    }, { threshold: 0.12 }).observe(root);
+  }
+  function frame(now) {
+    raf = 0;
+    var t = now / 1000, dt = last ? Math.min(0.05, t - last) : 0.016, any = false;
+    last = t;
+    for (var i = 0; i < visuals.length; i++) if (visuals[i].on) { visuals[i].tick(RM ? 3.2 : t, dt); any = true; }
+    if (any && !RM) raf = requestAnimationFrame(frame); else last = 0;
+  }
+  function kick() { if (!raf) raf = requestAnimationFrame(frame); }
+  function sized(stage, cb) {
+    new ResizeObserver(function () {
+      var r = stage.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) { cb(r.width, r.height); kick(); }
+    }).observe(stage);
+  }
+  function frameParts(root, c) {
+    var head = H('div', 'vhead', root);
+    var ro = H('div', 'ro', head);
+    ro.setAttribute('aria-live', 'polite');
+    pill(head, c.illus);
+    var stage = H('div', 'stage', root);
+    var svg = S('svg', { role: 'img', 'aria-label': c.aria }, stage);
+    return { head: head, ro: ro, stage: stage, svg: svg };
+  }
+
+  /* ---------------------------------------------------------------------------------------------
+     01 Fab presets: three process planets orbit the chip; the chosen one pulls the chip into its
+     tile shape and clock; the goal shrinks or grows it and moves the illustrative bars.
+     --------------------------------------------------------------------------------------------- */
+  function drawFab(root, c) {
+    var P = frameParts(root, c);
+    var roName = H('b', null, P.ro), roFacts = H('span', null, P.ro);
+    var svg = P.svg;
+    var defs = S('defs', {}, svg);
+    var pat = S('pattern', { id: 'fw9-gates', patternUnits: 'userSpaceOnUse', width: 8, height: 8 }, defs);
+    var patR = S('rect', { fill: '#5be49b', 'fill-opacity': 0.82, rx: 1 }, pat);
+    var gOrb = S('g', {}, svg), gTeth = S('g', {}, svg), gChip = S('g', {}, svg), gPl = S('g', {}, svg);
+    var orbs = c.presets.map(function () { return S('ellipse', { class: 'orb' }, gOrb); });
+    var tether = S('line', { class: 'tether' }, gTeth);
+    var tdots = [0, 1, 2].map(function () { return S('circle', { r: 2.6, fill: '#e9fff2' }, gTeth); });
+    var ghost = S('rect', { class: 'ghost', rx: 6, opacity: 0 }, gChip);
+    var pads = S('rect', { class: 'pads', rx: 9 }, gChip);
+    var chip = S('rect', { class: 'chipbody', rx: 6 }, gChip);
+    var gates = S('rect', { fill: 'url(#fw9-gates)', rx: 2 }, gChip);
+    var clk = S('circle', { r: 4, fill: '#e9fff2', stroke: '#5be49b', 'stroke-width': 2 }, gChip);
+
+    var sel = 1, goal = 0, hover = -1, touched = false, cycle = 0;
+    var W = 0, Hh = 0, cx = 0, cy = 0, rx = [], ry = [], A = 1, B = 1, small = false;
+    var cw = 0, ch = 0, pos = [];
+
+    var planets = c.presets.map(function (p, i) {
+      var gp = S('g', { class: 'pl', tabindex: 0, role: 'button', 'aria-label': p.name + ', ' + p.tileTxt + ', ' + p.clockTxt }, gPl);
+      S('circle', { r: 30, fill: 'transparent' }, gp);
+      S('circle', { class: 'glow', r: 25 }, gp);
+      S('circle', { class: 'body', r: 20 }, gp);
+      var a = p.tile[0] / p.tile[1], tw = 22, th = tw / a;
+      S('rect', { class: 'tile', x: -tw / 2, y: -th / 2, width: tw, height: th, rx: 1.5 }, gp);
+      var tx = S('text', { 'text-anchor': 'middle', y: 40 }, gp);
+      tx.textContent = p.name;
+      gp.addEventListener('pointerenter', function () { hover = i; kick(); });
+      gp.addEventListener('pointerleave', function () { hover = -1; kick(); });
+      gp.addEventListener('focus', function () { hover = i; kick(); });
+      gp.addEventListener('blur', function () { hover = -1; kick(); });
+      gp.addEventListener('click', function () { pick(i); });
+      gp.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(i); } });
+      return gp;
+    });
+
+    var ctrl = H('div', 'ctrl', root);
+    H('span', 'glabel', ctrl, c.goalLabel);
+    var seg = H('div', 'seg', ctrl);
+    seg.setAttribute('role', 'group');
+    seg.setAttribute('aria-label', c.goalLabel);
+    var goalBtns = c.goals.map(function (gl, i) {
+      var b = H('button', null, seg, gl.name);
+      b.type = 'button';
+      b.addEventListener('click', function () { touched = true; goal = i; update(); });
+      return b;
+    });
+    var mWrap = H('div', 'meters', root);
+    var meters = c.meters.map(function (m) {
+      var d = H('div', 'm', mWrap, m);
+      var bar = H('i', null, d);
+      return { d: d, b: H('b', null, bar) };
+    });
+    H('p', 'cap', root, c.src);
+
+    function pick(i) { touched = true; sel = i; update(); }
+    function update() {
+      var p = c.presets[sel];
+      roName.textContent = p.name;
+      roFacts.textContent = p.tileTxt + ' · ' + p.clockTxt;
+      planets.forEach(function (gp, i) { gp.classList.toggle('on', i === sel); gp.setAttribute('aria-pressed', String(i === sel)); });
+      orbs.forEach(function (o, i) { o.classList.toggle('on', i === sel); });
+      goalBtns.forEach(function (b, i) { b.setAttribute('aria-pressed', String(i === goal)); });
+      var base = c.meterBase[sel];
+      meters.forEach(function (m, i) {
+        var v = clamp(base[i] + (i === goal ? 0.24 : -0.1), 0.08, 0.97);
+        m.b.style.width = Math.round(v * 100) + '%';
+        m.d.classList.toggle('on', i === goal);
+      });
+      kick();
+    }
+    function half(a, sc) {
+      var hw = 1 / Math.sqrt(1 / (A * A) + 1 / (a * a * B * B));
+      return [hw * sc, hw * sc / a];
+    }
+    sized(P.stage, function (w, h) {
+      W = w; Hh = h; small = w < 520;
+      svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+      cx = w / 2; cy = h / 2 - 18;
+      var rxMax = w / 2 - (small ? 46 : 64), ryMax = h / 2 - 50;
+      var ratio = clamp(ryMax / rxMax, 0.56, small ? 0.95 : 0.8), maxR = Math.min(rxMax, ryMax / ratio);
+      [0.62, 0.81, 1].forEach(function (f, i) {
+        rx[i] = maxR * f; ry[i] = maxR * f * ratio;
+        set(orbs[i], { cx: cx, cy: cy, rx: rx[i], ry: ry[i] });
+      });
+      A = rx[0] * 0.8; B = ry[0] * 0.8;
+      if (!cw) { var s = half(c.presets[sel].tile[0] / c.presets[sel].tile[1], c.goals[goal].scale); cw = s[0]; ch = s[1]; }
+    });
+
+    register(root, {
+      tick: function (t, dt) {
+        if (!W) return;
+        if (!touched && !RM) { cycle += dt; if (cycle > 4.8) { cycle = 0; sel = (sel + 1) % 3; update(); } }
+        var p = c.presets[sel], a = p.tile[0] / p.tile[1];
+        var tgt = half(a, c.goals[goal].scale), k = ease(dt, 5);
+        cw = lerp(cw, tgt[0], k); ch = lerp(ch, tgt[1], k);
+        var x0 = cx - cw, y0 = cy - ch;
+        set(chip, { x: f1(x0), y: f1(y0), width: f1(2 * cw), height: f1(2 * ch) });
+        set(pads, { x: f1(x0 - 7), y: f1(y0 - 7), width: f1(2 * cw + 14), height: f1(2 * ch + 14) });
+        var gi = small ? 5 : 8;
+        var gw = Math.max(1, 2 * cw - 2 * gi), gh = Math.max(1, 2 * ch - 2 * gi);
+        var cell = Math.sqrt(gw * gh / 150);
+        set(gates, { x: f1(x0 + gi), y: f1(y0 + gi), width: f1(gw), height: f1(gh) });
+        set(pat, { x: f1(x0 + gi), y: f1(y0 + gi), width: cell.toFixed(2), height: cell.toFixed(2) });
+        set(patR, { x: (cell * 0.12).toFixed(2), y: (cell * 0.12).toFixed(2), width: (cell * 0.76).toFixed(2), height: (cell * 0.76).toFixed(2) });
+        // the clock: a dot runs once round the chip per tick, so the 100 ns process runs at half pace
+        var per = 4 * (cw + ch) + 0.001, u = RM ? 0 : ((t / (p.clockNs / 25)) % 1) * per, px, py;
+        var W2 = 2 * cw + 14, H2 = 2 * ch + 14, ox = x0 - 7, oy = y0 - 7, L = u / per * (2 * W2 + 2 * H2);
+        if (L < W2) { px = ox + L; py = oy; } else if (L < W2 + H2) { px = ox + W2; py = oy + L - W2; }
+        else if (L < 2 * W2 + H2) { px = ox + W2 - (L - W2 - H2); py = oy + H2; } else { px = ox; py = oy + H2 - (L - 2 * W2 - H2); }
+        set(clk, { cx: f1(px), cy: f1(py) });
+        // planets
+        var ps = small ? 0.78 : 1;
+        planets.forEach(function (gp, i) {
+          var pr = c.presets[i], th = pr.a0 + (RM ? 0 : t * pr.w);
+          var x = cx + rx[i] * Math.cos(th), y = cy + ry[i] * Math.sin(th), s = ps * (0.84 + 0.16 * Math.sin(th));
+          pos[i] = [x, y, s];
+          gp.setAttribute('transform', 'translate(' + f1(x) + ',' + f1(y) + ') scale(' + s.toFixed(3) + ')');
+        });
+        // tether from the chosen planet to the chip edge, with rules travelling in
+        var q = pos[sel], dx = q[0] - cx, dy = q[1] - cy, dl = Math.hypot(dx, dy) || 1;
+        var te = Math.min((cw + 9) / Math.max(Math.abs(dx), 0.001), (ch + 9) / Math.max(Math.abs(dy), 0.001));
+        var ex = cx + dx * te, ey = cy + dy * te, sx = q[0] - dx / dl * 22 * q[2], sy = q[1] - dy / dl * 22 * q[2];
+        set(tether, { x1: f1(sx), y1: f1(sy), x2: f1(ex), y2: f1(ey) });
+        tdots.forEach(function (d, j) {
+          var v = RM ? (j + 1) / 4 : (t * 0.45 + j / 3) % 1;
+          set(d, { cx: f1(lerp(sx, ex, v)), cy: f1(lerp(sy, ey, v)), opacity: (Math.sin(v * Math.PI)).toFixed(2) });
+        });
+        // hover preview: the shape another process would pull the chip into
+        if (hover >= 0 && hover !== sel) {
+          var hp = c.presets[hover], hs = half(hp.tile[0] / hp.tile[1], c.goals[goal].scale);
+          set(ghost, { x: f1(cx - hs[0]), y: f1(cy - hs[1]), width: f1(2 * hs[0]), height: f1(2 * hs[1]), opacity: 1 });
+        } else ghost.setAttribute('opacity', 0);
+      }
+    });
+    update();
+  }
+
+  /* ---------------------------------------------------------------------------------------------
+     02 Your own recordings: recordings orbit the model inside a ring marked as the maker's machine;
+     each pulse tunes the model; a recording dragged to the edge is held inside and springs back.
+     --------------------------------------------------------------------------------------------- */
+  function drawRecordings(root, c) {
+    var P = frameParts(root, c);
+    var svg = P.svg;
+    H('b', null, P.ro, c.head);
+    var bound = S('circle', { class: 'bound' }, svg);
+    var hitArc = S('path', { fill: 'none', stroke: '#ffb86b', 'stroke-width': 3, 'stroke-linecap': 'round', opacity: 0 }, svg);
+    var gLinks = S('g', {}, svg);
+    var fitbg = S('circle', { class: 'fitbg' }, svg);
+    var fit = S('path', { class: 'fit' }, svg);
+    var gChip = S('g', {}, svg);
+    var gPulse = S('g', {}, svg);
+    var gSat = S('g', {}, svg);
+    var btag = S('g', { class: 'btag' }, svg);
+    var btRect = S('rect', { rx: 13, height: 26 }, btag);
+    var btIcon = S('path', { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.4, 'stroke-linejoin': 'round' }, btag);
+    var btText = S('text', { 'text-anchor': 'start' }, btag);
+    btText.textContent = c.machine;
+
+    var sats = [], pulses = [], squares = [];
+    var W = 0, Hh = 0, cx = 0, cy = 0, RB = 0, ro = 0, rf = 0, cs = 0, cardW = 66, cardH = 32, small = false;
+    var fitV = 0.06, fitShown = 0.06, flash = 0, hitT = 0, hitA = 0, spin = 0, drag = null;
+
+    var add = H('button', 'add', null, '+ ' + c.add);
+    add.type = 'button';
+    var ctrl = H('div', 'ctrl', root);
+    ctrl.appendChild(add);
+    H('p', 'cap', root, c.hint);
+
+    function target() { return 0.94 * (1 - Math.exp(-sats.length / 2.6)); }
+    function makeSat(i) {
+      var gs = S('g', { class: 'sat', tabindex: 0, role: 'button', 'aria-label': c.types[i] + ': ' + c.stays }, gSat);
+      var r = S('rect', { rx: 7 }, gs);
+      var pth = S('path', {}, gs);
+      var tx = S('text', { 'text-anchor': 'middle' }, gs);
+      tx.textContent = c.types[i];
+      var link = S('line', { class: 'link' }, gLinks);
+      var s = { g: gs, r: r, p: pth, tx: tx, link: link, wave: c.waves[i], a: 0, ta: 0, ret: 0, fx: 0, fy: 0, x: 0, y: 0, timer: 0.4 + i * 0.83, hov: false };
+      gs.addEventListener('pointerenter', function () { s.hov = true; gs.classList.add('on'); kick(); });
+      gs.addEventListener('pointerleave', function () { s.hov = false; if (drag !== s) gs.classList.remove('on'); kick(); });
+      gs.addEventListener('pointerdown', function (e) {
+        e.preventDefault();
+        drag = s; s.ret = 1; s.fx = s.x; s.fy = s.y;
+        gs.setPointerCapture(e.pointerId);
+        gs.classList.add('on');
+        kick();
+      });
+      gs.addEventListener('pointermove', function (e) {
+        if (drag !== s) return;
+        var r0 = svg.getBoundingClientRect();
+        moveTo(s, e.clientX - r0.left, e.clientY - r0.top);
+        kick();
+      });
+      function end() { if (drag === s) { drag = null; if (!s.hov) gs.classList.remove('on'); kick(); } }
+      gs.addEventListener('pointerup', end);
+      gs.addEventListener('pointercancel', end);
+      gs.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          var ang = Math.atan2(s.y - cy, s.x - cx);
+          s.ret = 1;
+          moveTo(s, cx + Math.cos(ang) * RB * 1.3, cy + Math.sin(ang) * RB * 1.3);
+          kick();
+        }
+      });
+      sats.push(s);
+      layoutCard(s);
+      return s;
+    }
+    function moveTo(s, x, y) {
+      var dx = x - cx, dy = y - cy, d = Math.hypot(dx, dy) || 1;
+      var lim = RB - Math.hypot(cardW, cardH) / 2 - 4;
+      if (d > lim) {
+        if (d > RB - 6) { hitT = 1; hitA = Math.atan2(dy, dx); }
+        dx *= lim / d; dy *= lim / d;
+      }
+      s.fx = cx + dx; s.fy = cy + dy;
+    }
+    function layoutCard(s) {
+      set(s.r, { x: -cardW / 2, y: -cardH / 2, width: cardW, height: cardH });
+      s.tx.setAttribute('y', -cardH / 2 - 7);
+    }
+    function respace() {
+      var n = sats.length;
+      sats.forEach(function (s, i) { s.ta = -Math.PI / 2 + i * TAU / n; });
+    }
+    function addSat() {
+      if (sats.length >= c.types.length) return;
+      var s = makeSat(sats.length);
+      respace();
+      s.a = s.ta - 0.4;
+      if (RM) { fitV = target(); fitShown = fitV; }
+      add.setAttribute('aria-disabled', String(sats.length >= c.types.length));
+      kick();
+    }
+    add.addEventListener('click', addSat);
+
+    function buildChip() {
+      while (gChip.firstChild) gChip.removeChild(gChip.firstChild);
+      squares = [];
+      var x0 = cx - cs / 2, y0 = cy - cs / 2;
+      S('rect', { class: 'pads', x: x0 - 6, y: y0 - 6, width: cs + 12, height: cs + 12, rx: 9 }, gChip);
+      S('rect', { class: 'chipbody', x: x0, y: y0, width: cs, height: cs, rx: 8 }, gChip);
+      var t1 = S('text', { class: 'mlab', x: cx, y: y0 + (small ? 15 : 19), 'text-anchor': 'middle' }, gChip);
+      t1.textContent = c.model;
+      var gx = x0 + cs * 0.14, gy = y0 + cs * 0.27, gw = cs * 0.72, n = 6, rows = 5, cell = gw / n, pitch = cs * 0.48 / rows;
+      var seed = 7;
+      for (var j = 0; j < n * rows; j++) {
+        seed = (seed * 9301 + 49297) % 233280;
+        var r = S('rect', { x: f1(gx + (j % n) * cell + cell * 0.12), y: f1(gy + Math.floor(j / n) * pitch), width: f1(cell * 0.76), height: f1(pitch * 0.72), rx: 1.2 }, gChip);
+        squares.push({ r: r, h: seed / 233280 });
+      }
+      var t2 = S('text', { class: 'mlab2', x: cx, y: y0 + cs - (small ? 6 : 9), 'text-anchor': 'middle' }, gChip);
+      t2.textContent = c.tuned;
+    }
+
+    sized(P.stage, function (w, h) {
+      W = w; Hh = h; small = w < 520;
+      svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+      cx = w / 2; cy = h / 2 + 6;
+      RB = Math.min(w, h - 12) / 2 - 16;
+      cs = RB * 0.42; rf = cs * 0.71 + 12; ro = RB * 0.71;
+      cardW = small ? 54 : 70; cardH = small ? 26 : 34;
+      set(bound, { cx: cx, cy: cy, r: RB });
+      set(fitbg, { cx: cx, cy: cy, r: rf });
+      var tw = 0;
+      try { tw = btText.getComputedTextLength(); } catch (e) { tw = 96; }
+      var bw = tw + 40;
+      set(btRect, { x: cx - bw / 2, y: cy - RB - 13, width: bw });
+      set(btText, { x: cx - bw / 2 + 29, y: cy - RB + 4.5 });
+      var ix = cx - bw / 2 + 12, iy = cy - RB - 6;
+      btIcon.setAttribute('d', 'M' + ix + ' ' + (iy + 6) + 'l6 -5l6 5v7h-12z');
+      btag.style.color = '#dbe5ef';
+      sats.forEach(layoutCard);
+      buildChip();
+    });
+
+    register(root, {
+      tick: function (t, dt) {
+        if (!W) return;
+        var k = ease(dt, 4);
+        spin += RM ? 0 : dt * 0.12;
+        // satellites
+        var anyHover = false;
+        sats.forEach(function (s) {
+          s.a += (s.ta - s.a) * k;
+          var oa = s.a + spin, ox = cx + ro * Math.cos(oa), oy = cy + ro * Math.sin(oa);
+          if (drag !== s) s.ret = RM ? 0 : s.ret * (1 - ease(dt, 3.2));
+          s.x = lerp(ox, s.fx, s.ret); s.y = lerp(oy, s.fy, s.ret);
+          if (s.hov) anyHover = true;
+          s.g.setAttribute('transform', 'translate(' + f1(s.x) + ',' + f1(s.y) + ')');
+          s.p.setAttribute('d', wavePath(s.wave, cardW - 14, cardH - 12, RM ? 0.2 : t * RATE[s.wave][0]));
+          var dx = s.x - cx, dy = s.y - cy, dl = Math.hypot(dx, dy) || 1;
+          set(s.link, { x1: f1(cx + dx / dl * (rf + 6)), y1: f1(cy + dy / dl * (rf + 6)), x2: f1(s.x - dx / dl * cardH * 0.6), y2: f1(s.y - dy / dl * cardH * 0.6) });
+          // each recording sends a pulse inward now and then; on arrival the model tunes a little
+          if (!RM) {
+            s.timer -= dt;
+            if (s.timer <= 0) { s.timer = 2.6 + Math.random() * 0.6; pulses.push({ s: s, u: 0, el: S('circle', { r: 3.2, fill: '#e9fff2' }, gPulse) }); }
+          }
+        });
+        for (var i = pulses.length - 1; i >= 0; i--) {
+          var pu = pulses[i];
+          pu.u += dt / 1.1;
+          var dx = pu.s.x - cx, dy = pu.s.y - cy, dl = Math.hypot(dx, dy) || 1;
+          var sx = pu.s.x - dx / dl * cardH * 0.6, sy = pu.s.y - dy / dl * cardH * 0.6, ex = cx + dx / dl * cs * 0.6, ey = cy + dy / dl * cs * 0.6;
+          set(pu.el, { cx: f1(lerp(sx, ex, pu.u)), cy: f1(lerp(sy, ey, pu.u)), opacity: Math.sin(Math.min(1, pu.u) * Math.PI).toFixed(2) });
+          if (pu.u >= 1) {
+            gPulse.removeChild(pu.el); pulses.splice(i, 1);
+            fitV += (target() - fitV) * 0.2; flash = 1;
+          }
+        }
+        if (RM) fitV = target();
+        fitShown = lerp(fitShown, fitV, ease(dt, 3));
+        flash *= 1 - ease(dt, 4);
+        // fit ring, from the top, clockwise
+        var a1 = -Math.PI / 2, a2 = a1 + TAU * Math.min(0.999, fitShown);
+        var large = (a2 - a1) > Math.PI ? 1 : 0;
+        fit.setAttribute('d', 'M' + f1(cx + rf * Math.cos(a1)) + ' ' + f1(cy + rf * Math.sin(a1)) + 'A' + f1(rf) + ' ' + f1(rf) + ' 0 ' + large + ' 1 ' + f1(cx + rf * Math.cos(a2)) + ' ' + f1(cy + rf * Math.sin(a2)));
+        fit.setAttribute('stroke-width', (6 + flash * 3).toFixed(2));
+        squares.forEach(function (q) {
+          var v = clamp((fitShown - q.h * 0.9) * 5, 0, 1);
+          var r = Math.round(lerp(43, 91, v)), gg = Math.round(lerp(61, 228, v)), b = Math.round(lerp(85, 155, v));
+          q.r.setAttribute('fill', 'rgb(' + r + ',' + gg + ',' + b + ')');
+        });
+        // the edge holds: an amber flash where a recording tried to leave
+        hitT *= 1 - ease(dt, RM ? 0.6 : 1.6);
+        if (RM && hitT < 0.05) hitT = 0;
+        var on = hitT > 0.08;
+        bound.classList.toggle('hit', on);
+        btag.classList.toggle('hit', on);
+        btText.textContent = on ? c.stays : c.machine;
+        btag.style.color = on ? '#ffb86b' : '#dbe5ef';
+        if (on) {
+          var tw = 0;
+          try { tw = btText.getComputedTextLength(); } catch (e) { tw = 140; }
+          var bw = tw + 40;
+          set(btRect, { x: cx - bw / 2, width: bw }); set(btText, { x: cx - bw / 2 + 29 });
+          var ix = cx - bw / 2 + 12, iy = cy - RB - 6;
+          btIcon.setAttribute('d', 'M' + ix + ' ' + (iy + 6) + 'l6 -5l6 5v7h-12z');
+        } else if (btText.dataset.w !== 'm') {
+          var tw2 = 0;
+          try { tw2 = btText.getComputedTextLength(); } catch (e) { tw2 = 96; }
+          var bw2 = tw2 + 40;
+          set(btRect, { x: cx - bw2 / 2, width: bw2 }); set(btText, { x: cx - bw2 / 2 + 29 });
+          var ix2 = cx - bw2 / 2 + 12, iy2 = cy - RB - 6;
+          btIcon.setAttribute('d', 'M' + ix2 + ' ' + (iy2 + 6) + 'l6 -5l6 5v7h-12z');
+        }
+        btText.dataset.w = on ? 's' : 'm';
+        var h0 = hitA - 0.32, h1 = hitA + 0.32;
+        hitArc.setAttribute('d', 'M' + f1(cx + RB * Math.cos(h0)) + ' ' + f1(cy + RB * Math.sin(h0)) + 'A' + f1(RB) + ' ' + f1(RB) + ' 0 0 1 ' + f1(cx + RB * Math.cos(h1)) + ' ' + f1(cy + RB * Math.sin(h1)));
+        hitArc.setAttribute('opacity', hitT.toFixed(2));
+        if (RM && hitT > 0) kick();
+      }
+    });
+    for (var i = 0; i < (RM ? 5 : 3); i++) addSat();
+    sats.forEach(function (s) { s.a = s.ta; });
+    if (RM) { fitV = target(); fitShown = fitV; }
+  }
+
+  /* ---------------------------------------------------------------------------------------------
+     03 Every sensor, one chip: sensor streams converge in parallel into one chip; a slider walks the
+     spectrum from one sensor to a whole hospital; adding a sensor lights a new lane.
+     --------------------------------------------------------------------------------------------- */
+  function drawSensors(root, c) {
+    var P = frameParts(root, c);
+    var svg = P.svg;
+    var roName = H('b', null, P.ro), roCap = H('span', null, P.ro), roFar = pill(P.ro, c.far);
+    var gLanes = S('g', {}, svg);
+    var far = S('circle', { class: 'farring', opacity: 0 }, svg);
+    var gNodes = S('g', {}, svg);
+    var halo = S('circle', { fill: 'none', stroke: '#5be49b', 'stroke-width': 1.5 }, svg);
+    var gChip = S('g', {}, svg);
+    var lanes = [];
+    var MAX = c.stops[c.stops.length - 1].n;
+    var n = RM ? c.stops[2].n : 1, touched = false, autoT = 0;
+    var W = 0, Hh = 0, cx = 0, cy = 0, RN = 0, hc = 0, small = false;
+
+    // slider along the spectrum
+    var spec = H('div', 'spec', root);
+    set(spec, { role: 'slider', tabindex: 0, 'aria-label': c.slider, 'aria-valuemin': 1, 'aria-valuemax': MAX });
+    var track = H('div', 'track', spec), fillEl = H('i', 'fill', track);
+    var ticks = c.stops.map(function (s, i) { var tk = H('span', 'tick', track); tk.style.left = (i / (c.stops.length - 1) * 100) + '%'; return tk; });
+    var thumb = H('b', 'thumb', track);
+    var stopsEl = H('div', 'stops', root);
+    var stopBtns = c.stops.map(function (s, i) {
+      var b = H('button', 'stop' + (i === c.stops.length - 1 ? ' far' : ''), stopsEl);
+      H('span', 'lg', b, s.label);
+      H('span', 'sh', b, s.short);
+      b.type = 'button';
+      b.style.left = (i / (c.stops.length - 1) * 100) + '%';
+      b.addEventListener('click', function () { touched = true; setN(s.n); });
+      return b;
+    });
+    var ctrl = H('div', 'ctrl', root);
+    var add = H('button', 'add', ctrl, '+ ' + c.add);
+    add.type = 'button';
+    add.addEventListener('click', function () { touched = true; setN(n + 1); });
+
+    function pOf(v) {
+      var st = c.stops;
+      for (var i = 0; i < st.length - 1; i++) if (v <= st[i + 1].n) return i + (v - st[i].n) / (st[i + 1].n - st[i].n);
+      return st.length - 1;
+    }
+    function nOf(p) {
+      var st = c.stops, i = clamp(Math.floor(p), 0, st.length - 2);
+      return Math.round(lerp(st[i].n, st[i + 1].n, clamp(p - i, 0, 1)));
+    }
+    function stopIdx() { var j = 0; c.stops.forEach(function (s, i) { if (n >= s.n) j = i; }); return j; }
+    function setN(v) {
+      v = clamp(Math.round(v), 1, MAX);
+      if (v > n) for (var i = n; i < v; i++) lane(i).flash = 1;
+      n = v;
+      var p = pOf(n) / (c.stops.length - 1) * 100, j = stopIdx(), last = j === c.stops.length - 1;
+      fillEl.style.width = p + '%';
+      thumb.style.left = p + '%';
+      ticks.forEach(function (tk, i) { tk.classList.toggle('on', n >= c.stops[i].n); });
+      stopBtns.forEach(function (b, i) { b.classList.toggle('on', i === j); b.setAttribute('aria-pressed', String(i === j)); });
+      roName.textContent = c.stops[j].label;
+      roCap.textContent = c.stops[j].cap;
+      roFar.style.display = last ? '' : 'none';
+      set(spec, { 'aria-valuenow': n, 'aria-valuetext': c.stops[j].label + ', ' + n });
+      add.setAttribute('aria-disabled', String(n >= MAX));
+      kick();
+    }
+    function fromX(clientX) {
+      var r = track.getBoundingClientRect();
+      var p = clamp((clientX - r.left) / r.width, 0, 1) * (c.stops.length - 1);
+      touched = true;
+      setN(nOf(p));
+    }
+    var dragging = false;
+    spec.addEventListener('pointerdown', function (e) { dragging = true; spec.setPointerCapture(e.pointerId); fromX(e.clientX); });
+    spec.addEventListener('pointermove', function (e) { if (dragging) fromX(e.clientX); });
+    spec.addEventListener('pointerup', function () { dragging = false; });
+    spec.addEventListener('pointercancel', function () { dragging = false; });
+    spec.addEventListener('keydown', function (e) {
+      var j = stopIdx(), st = c.stops;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { e.preventDefault(); touched = true; setN(n < st[j].n ? st[j].n : st[Math.min(j + 1, st.length - 1)].n); }
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { e.preventDefault(); touched = true; setN(n > st[j].n ? st[j].n : st[Math.max(j - 1, 0)].n); }
+      else if (e.key === 'Home') { e.preventDefault(); touched = true; setN(1); }
+      else if (e.key === 'End') { e.preventDefault(); touched = true; setN(MAX); }
+    });
+
+    function lane(i) {
+      while (lanes.length <= i) {
+        var j = lanes.length, ty = c.types[j % c.types.length];
+        var L = {
+          type: ty, a: Math.PI + j * TAU / Math.max(n, j + 1), alpha: 0, flash: 0, w: 0,
+          path: S('path', { class: 'lane', opacity: 0 }, gLanes),
+          node: S('circle', { class: 'node', opacity: 0 }, gNodes),
+          lab: S('text', { class: 'nlab', opacity: 0 }, gNodes)
+        };
+        L.lab.textContent = ty.name;
+        lanes.push(L);
+      }
+      return lanes[i];
+    }
+    function buildChip() {
+      while (gChip.firstChild) gChip.removeChild(gChip.firstChild);
+      S('rect', { class: 'pads', x: cx - hc - 6, y: cy - hc - 6, width: 2 * hc + 12, height: 2 * hc + 12, rx: 10 }, gChip);
+      S('rect', { class: 'chipbody', x: cx - hc, y: cy - hc, width: 2 * hc, height: 2 * hc, rx: 8, style: 'fill:#16352b' }, gChip);
+      var t1 = S('text', { class: 'mlab', x: cx, y: cy - 2, 'text-anchor': 'middle' }, gChip);
+      t1.textContent = c.chip;
+      var t2 = S('text', { class: 'mlab2', x: cx, y: cy + 14, 'text-anchor': 'middle' }, gChip);
+      t2.textContent = c.chipSub;
+    }
+    sized(P.stage, function (w, h) {
+      W = w; Hh = h; small = w < 520;
+      svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+      cx = w / 2; cy = h / 2;
+      RN = Math.max(60, Math.min(w / 2 - (small ? 50 : 96), h / 2 - 34));
+      hc = clamp(RN * 0.24, 36, 50);
+      set(far, { cx: cx, cy: cy, r: RN + 16 });
+      lanes.forEach(function (L) { L.lw = 0; L.lab.textContent = small ? L.type.short : L.type.name; });
+      buildChip();
+    });
+    for (var i = 0; i < MAX; i++) lane(i);
+    lanes.forEach(function (L) { L.lab.textContent = L.type.name; });
+
+    register(root, {
+      enter: function () { if (!touched) autoT = 0; },
+      tick: function (t, dt) {
+        if (!W) return;
+        // first view: sensors join one by one up to a few
+        if (!touched && !RM && n < c.stops[1].n) { autoT += dt; if (autoT > 1.1) { autoT = 0; setN(n + 1); } }
+        var k = ease(dt, 4), showLabels = n <= c.types.length;
+        var lw = n > 20 ? 1 : n > 9 ? 1.25 : 1.6;
+        var re = hc * 1.3;
+        for (var i = 0; i < lanes.length; i++) {
+          var L = lanes[i], act = i < n;
+          L.alpha = lerp(L.alpha, act ? 1 : 0, k);
+          if (!act && L.alpha < 0.01) {
+            if (L.vis) { L.path.setAttribute('opacity', 0); L.node.setAttribute('opacity', 0); L.lab.setAttribute('opacity', 0); L.vis = false; }
+            continue;
+          }
+          L.vis = true;
+          var ta = Math.PI + i * TAU / n, da = ((ta - L.a + Math.PI * 3) % TAU) - Math.PI;
+          L.a += da * k;
+          L.flash *= 1 - ease(dt, 1.4);
+          var ca = Math.cos(L.a), sa = Math.sin(L.a);
+          var spacing = RN * TAU / Math.max(n, 2);
+          var amp = clamp(spacing * 0.26, 2.2, small ? 9 : 13);
+          var wv = L.type.wave, rt = RATE[wv], d = '', m = n <= 12 ? 90 : 40;
+          for (var s = 0; s <= m; s++) {
+            var u = s / m, r = lerp(RN - 9, re, u);
+            var off = amp * WAVES[wv](t * rt[0] + (1 - u) * rt[1] * 1.4) * Math.min(1, (1 - u) * 2.4) * (r / RN);
+            var x = cx + r * ca - sa * off, y = cy + r * sa + ca * off;
+            d += (s ? 'L' : 'M') + f1(x) + ' ' + f1(y);
+          }
+          set(L.path, { d: d, opacity: (L.alpha * (n > 20 ? 0.75 : 0.95)).toFixed(2), 'stroke-width': (lw + L.flash * 2).toFixed(2) });
+          var nr = n > 9 ? 3.6 : small ? 5.5 : 7;
+          set(L.node, { cx: f1(cx + RN * ca), cy: f1(cy + RN * sa), r: (nr + L.flash * 4).toFixed(2), opacity: L.alpha.toFixed(2) });
+          // labels sit outside the ring and are kept inside the frame
+          var la = L.alpha * (showLabels ? 1 : 0), lx = cx + (RN + 14) * ca, ly = cy + (RN + 14) * sa + 4.5;
+          if (la > 0.01) {
+            if (!L.lw) { try { L.lw = L.lab.getComputedTextLength(); } catch (e) { L.lw = 80; } }
+            var left = ca > 0.35 ? lx : ca < -0.35 ? lx - L.lw : lx - L.lw / 2;
+            if (sa < -0.8) ly -= 6; else if (sa > 0.8) ly += 8;
+            left = clamp(left, 4, W - 4 - L.lw);
+            set(L.lab, { x: f1(left), y: f1(ly), opacity: la.toFixed(2) });
+          } else L.lab.setAttribute('opacity', 0);
+        }
+        // one inference over every stream at once: the halo pulses
+        var ph = RM ? 0.35 : (t / 1.4) % 1;
+        set(halo, { cx: cx, cy: cy, r: f1(hc * 1.45 + ph * 18), opacity: (0.7 * (1 - ph)).toFixed(2) });
+        var farOn = n > c.stops[2].n ? clamp((n - c.stops[2].n) / 8, 0, 1) : 0;
+        far.setAttribute('opacity', farOn.toFixed(2));
+      }
+    });
+    setN(n);
+  }
+
+  /* page assembly: text column from COPY, then each section's visual */
+  function get(path) { return path.split('.').reduce(function (o, k) { return o && o[k]; }, C); }
+  document.title = C.doc;
+  Array.prototype.forEach.call(document.querySelectorAll('[data-c]'), function (e) { e.textContent = get(e.getAttribute('data-c')); });
+  var draw = { fab: drawFab, recordings: drawRecordings, sensors: drawSensors };
+  Array.prototype.forEach.call(document.querySelectorAll('.fw'), function (sec) {
+    var key = sec.getAttribute('data-key'), c = C[key];
+    var wrap = H('div', 'wrap', sec);
+    var txt = H('div', 'txt', wrap);
+    var st = H('p', 'st-n', txt);
+    H('b', null, st, c.step);
+    H('span', null, st, c.name);
+    var h2 = H('h2', null, txt, c.h2);
+    h2.id = key + '-h';
+    sec.setAttribute('aria-labelledby', h2.id);
+    H('p', 'say', txt, c.say);
+    pill(txt, c.planned);
+    var vis = H('div', 'vis', wrap);
+    draw[key](vis, c);
+  });
+})();
+</script>
+<script src="../variant-nav.js"></script>
+</body>
+</html>

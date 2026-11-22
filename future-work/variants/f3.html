@@ -1,0 +1,1133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ChipIn</title>
+<meta name="theme-color" content="#0f1a2a">
+<link rel="icon" type="image/svg+xml" href="../../assets/brand/favicon.svg">
+<script>
+/* =====================================================================================================
+   EVERY VISIBLE WORD OF THIS PAGE lives in window.COPY below; the HTML holds no prose.
+   Each of the three sections is one COPY key plus one draw function (drawFab, drawRecordings, drawSensors).
+   To swap a section, edit its COPY key and its function; the SECTIONS list at the end of the script ties them.
+   Everything on this page is planned work, not built.
+   ===================================================================================================== */
+window.COPY = {
+  title: {
+    doc: 'ChipIn: Future work',
+    h: 'What comes next',
+    lede: 'Three things we plan to add to ChipIn. None of them is built yet.',
+    pill: 'Planned'
+  },
+  nav: { home: 'Home', about: 'About', how: 'How it works', future: 'Future work', tryNow: 'Try now' },
+  fab: {
+    n: '01', k: 'Fab presets',
+    h: 'Name the fab. The chip fits it.',
+    p: 'You would name where the chip gets made; ChipIn would load that process’s rules and costs, then tune the design for cost, size or turnaround.',
+    pills: ['Planned'],
+    pickLabel: 'Process presets',
+    hint: 'Tap a card to load its rules and deal the chip.',
+    face: 'Process preset',
+    rows: { cell: 'Cells', tile: 'Shared tile', clock: 'Default clock' },
+    src: 'Lab settings today',
+    fabs: [
+      { id: 'sky', name: 'sky130', cells: 'sky130 cells', tile: ['161 ×', '111.52 µm'], grid: 'up to 8 × 2 tiles', clock: '50 ns',
+        tw: 161, th: 111.52, gx: 12.88, gy: 2.72, cols: 8, rows: 2, clk: 50 },
+      { id: 'gf', name: 'GF180', cells: 'gf180mcu cells', tile: ['346.64 ×', '160.72 µm'], grid: 'up to 4 × 8 tiles', clock: '100 ns',
+        tw: 346.64, th: 160.72, gx: 17.92, gy: 3.92, cols: 4, rows: 8, clk: 100 },
+      { id: 'ihp', name: 'IHP SG13G2', cells: 'SG13G2 cells', tile: ['202.08 ×', '154.98 µm'], grid: 'up to 8 × 4 tiles', clock: '50 ns',
+        tw: 202.08, th: 154.98, gx: 15.36, gy: 3.78, cols: 8, rows: 4, clk: 50 }
+    ],
+    dealt: 'Your design on {fab} tiles',
+    scale: 'All three tile grids drawn to the same scale. Lit tiles and bars are examples.',
+    illus: 'Illustrative',
+    goalsLabel: 'Tune for',
+    goals: [{ id: 'cost', t: 'Cost' }, { id: 'size', t: 'Size' }, { id: 'speed', t: 'Turnaround' }],
+    bars: ['Cost', 'Area', 'Turnaround'],
+    chipAria: 'A grid of shared tiles for the chosen process, drawn to scale, with the tiles your design would use lit green.'
+  },
+  recordings: {
+    n: '02', k: 'Your own recordings',
+    h: 'Your recordings tune your chip.',
+    p: 'A device maker would bring their own sensor recordings, and the model would be fine-tuned to their patients and their sensor, on their own machine.',
+    pills: ['Planned'],
+    aria: 'A deck of sensor recording cards. Each card dealt into the box marked on your machine tunes the model, and the model reading moves closer to the maker’s own signal. Nothing crosses the box edge.',
+    deck: 'Your recordings',
+    card: 'Your sensor',
+    kinds: [
+      { k: 'heart', t: 'Heart trace' }, { k: 'oxygen', t: 'Oxygen' }, { k: 'breath', t: 'Breathing' },
+      { k: 'brain', t: 'Brain waves' }, { k: 'bp', t: 'Blood pressure' }, { k: 'heart', t: 'Heart trace' }
+    ],
+    machine: 'On your machine',
+    stays: 'Recordings would stay here',
+    model: 'Model', chip: 'Chip',
+    legendSignal: 'Your sensor', legendModel: 'Model reading',
+    fit: 'Fit to your patients',
+    states: ['General model', 'Fine-tuning', 'Tuned to your patients'],
+    illus: 'Illustrative',
+    add: 'Deal in a recording', reset: 'Shuffle back',
+    hint: 'Or drag a card into the box.'
+  },
+  sensors: {
+    n: '03', k: 'Every sensor, one chip',
+    h: 'Every sensor, one chip.',
+    p: 'Next, models would read every sensor at once, with more added in parallel; the far end would be one chip for a whole hospital.',
+    pills: ['Planned'],
+    aria: 'Sensor cards on the left feed lanes into one chip. A spectrum below moves from one sensor to a few, to a ward, to a whole hospital on one chip, the far end. Each added sensor lights a new lane.',
+    list: [
+      { k: 'heart', t: 'Heart trace' }, { k: 'brain', t: 'Brain waves' }, { k: 'oxygen', t: 'Oxygen' }, { k: 'breath', t: 'Breathing' },
+      { k: 'temp', t: 'Temperature' }, { k: 'radar', t: 'Radar' }, { k: 'bp', t: 'Blood pressure' }, { k: 'motion', t: 'Motion' }
+    ],
+    more: 'Add a sensor',
+    colHead: ['Sensors on one patient', 'Sensors on one patient', 'Sensors across a ward', 'Sensors across a hospital'],
+    chip: 'One chip', chipSub: 'one local model',
+    out: ['Every input,', 'read at once'],
+    specLabel: 'How far along the spectrum',
+    stops: ['One sensor', 'A few sensors', 'A ward', 'A whole hospital'],
+    farTag: 'Far end',
+    notes: [
+      'One sensor on one chip.',
+      'A few sensors on one patient, read together by one model.',
+      'Every bed on a ward, in parallel, on one chip.',
+      'The far end, far-fetched today: a direction we can keep moving along, not a promise.'
+    ]
+  },
+  footer: 'Built at the SoTA Scientific Parallelism Hackathon, London, November 2026.'
+};
+(function () {
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) document.documentElement.classList.add('motion');
+  document.title = window.COPY.title.doc;
+})();
+</script>
+<style>
+:root {
+  --night: #0f1a2a;
+  --deep: #16263c;
+  --paper: #eef1f2;
+  --ink: #132033;
+  --signal: #5be49b;
+  --amber: #ffb86b;
+  --dusk: #c9a3c4;
+  --mute: #9aabc0;
+  --rule: rgba(214, 228, 242, .15);
+  --side: clamp(20px, 5.4vw, 84px);
+  --f: "Avenir Next", "Avenir", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+* { box-sizing: border-box; }
+html { background: var(--night); -webkit-text-size-adjust: 100%; scroll-snap-type: y proximity; }
+body { margin: 0; color: #e8eef5; font: 400 17px/1.5 var(--f); -webkit-font-smoothing: antialiased; overflow-x: clip; }
+a { color: inherit; }
+button { font-family: var(--f); }
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; border-radius: 6px; }
+
+/* top bar (as the landing page) */
+.top { position: fixed; top: 0; left: 0; right: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px clamp(16px, 3vw, 34px); pointer-events: none; transition: background .3s, color .3s; }
+.top > * { pointer-events: auto; }
+.top.solid { background: rgba(13, 23, 38, .82); backdrop-filter: blur(10px); }
+.top.lt { background: rgba(238, 241, 242, .86); backdrop-filter: blur(10px); color: var(--ink); }
+.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 650; font-size: 18px; letter-spacing: -.01em; text-decoration: none; color: #fff; }
+.top.lt .brand { color: var(--ink); }
+.nav { display: flex; align-items: center; gap: clamp(14px, 2vw, 26px); }
+.nav .lnk { font-size: 15px; font-weight: 600; text-decoration: none; color: #dbe5ef; white-space: nowrap; }
+.nav .lnk:hover { color: #fff; text-decoration: underline; text-underline-offset: 4px; }
+.top.lt .nav .lnk { color: var(--ink); }
+.nav .lnk[aria-current=page] { color: #fff; text-decoration: underline; text-decoration-color: #5be49b; text-underline-offset: 6px; text-decoration-thickness: 2px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; background: var(--signal); color: #062418; font-weight: 650; border-radius: 10px; padding: 12px 22px; text-decoration: none; letter-spacing: -.005em; transition: background .15s, transform .15s; white-space: nowrap; }
+.btn:hover { background: #86f2b9; }
+.btn:active { transform: translateY(1px); }
+.btn-s { padding: 9px 16px; font-size: 15px; }
+.brand .lk { height: 28px; width: auto; display: block; flex: none; }
+.brand .lk-l { display: none; }
+.top.lt .brand .lk-l { display: block; }
+.top.lt .brand .lk-d { display: none; }
+button.btn { border: 0; cursor: pointer; min-height: 40px; }
+
+/* labels */
+.meas { display: inline-flex; align-self: flex-start; font-size: 12px; font-weight: 650; color: var(--amber); border: 1px solid rgba(255, 184, 107, .5); border-radius: 999px; padding: 2px 9px; margin-bottom: 10px; white-space: nowrap; }
+
+/* title block */
+.wrap { max-width: 1180px; margin: 0 auto; }
+.intro { padding: clamp(116px, 17vh, 168px) var(--side) 0; }
+.intro h1 { font-size: clamp(48px, 6.6vw, 100px); line-height: .95; letter-spacing: -.04em; font-weight: 650; margin: 0 0 22px; color: #fff; text-wrap: balance; text-shadow: 0 2px 40px rgba(8, 12, 30, .45); }
+.intro .lede { font-size: clamp(18px, 1.45vw, 21px); line-height: 1.4; color: #d6deea; max-width: 34ch; margin: 0 0 16px; }
+
+/* the three sections */
+.sec { min-height: 100svh; display: flex; align-items: center; padding: clamp(84px, 12vh, 116px) var(--side) clamp(36px, 6vh, 60px); scroll-snap-align: start; }
+.sec + .sec { border-top: 1px solid var(--rule); }
+.sec > .wrap { width: 100%; display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr); gap: clamp(32px, 4.6vw, 72px); align-items: center; }
+.st-n { display: flex; align-items: center; gap: 12px; margin: 0 0 18px; font-size: clamp(15px, 1.2vw, 17px); font-weight: 650; letter-spacing: -.01em; line-height: 1.15; color: #dbe5ef; }
+.st-n b { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--signal); color: var(--signal); font-size: 13px; font-weight: 700; letter-spacing: 0; }
+.txt h2 { font-size: clamp(36px, 4.2vw, 62px); font-weight: 650; letter-spacing: -.035em; line-height: 1.02; margin: 0 0 20px; color: #fff; max-width: 15ch; text-wrap: balance; }
+.txt .sp { margin: 0; font-size: clamp(17px, 1.3vw, 19px); line-height: 1.45; color: #c4d1df; max-width: 32ch; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.pills .meas { margin: 0; }
+.vis { position: relative; min-width: 0; }
+.vis svg { display: block; overflow: visible; }
+.vis text { font-family: var(--f); }
+
+/* 1: fab presets, flip cards */
+.fabv { display: flex; flex-direction: column; gap: 14px; }
+.fcards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(10px, 1.6vw, 20px); perspective: 1400px; }
+.fcard { all: unset; box-sizing: border-box; position: relative; display: block; height: clamp(206px, 29svh, 256px); cursor: pointer; border-radius: 14px; transition: transform .25s; }
+.fcard:hover { transform: translateY(-4px); }
+.fcard:focus-visible { outline: 2px solid var(--signal); outline-offset: 4px; }
+.fin { position: absolute; inset: 0; display: block; transform-style: preserve-3d; transition: transform .65s cubic-bezier(.3, .7, .2, 1); }
+.fcard.on .fin { transform: rotateY(180deg); }
+.face { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(214, 228, 242, .28); background: #13233a; box-shadow: 0 18px 40px -18px rgba(0, 0, 0, .8); -webkit-backface-visibility: hidden; backface-visibility: hidden; }
+.front { align-items: center; justify-content: center; gap: 3px; text-align: center; background: radial-gradient(120% 90% at 50% 0%, #1b3050 0%, #13233a 62%); }
+.fcard:hover .front { border-color: rgba(214, 228, 242, .5); }
+.wafer { width: 54%; max-width: 124px; height: auto; margin-bottom: 10px; }
+.wf-o { fill: #0b1626; stroke: rgba(214, 228, 242, .4); stroke-width: 1.3; }
+.wf-d { fill: none; stroke: rgba(214, 228, 242, .3); stroke-width: .8; }
+.wf-l { fill: #1b4a36; stroke: var(--signal); stroke-width: .8; }
+.fname { font-size: clamp(17px, 1.6vw, 22px); font-weight: 650; letter-spacing: -.02em; color: #fff; line-height: 1.1; }
+.fsub { font-size: 12.5px; font-weight: 600; color: #8fa2b8; }
+.back { transform: rotateY(180deg); gap: 9px; border-color: rgba(91, 228, 155, .65); background: linear-gradient(180deg, #17402f 0%, #13233a 46%); }
+.back .fsub { color: #dfffee; font-size: 13.5px; font-weight: 650; }
+.rw { display: flex; align-items: flex-start; gap: 10px; }
+.rg { flex: none; width: 28px; height: 20px; margin-top: 2px; }
+.rg .g1 { fill: none; stroke: var(--signal); stroke-width: 1.3; }
+.rg .g0 { fill: #1b4a36; stroke: var(--signal); stroke-width: 1; }
+.rt { display: flex; flex-direction: column; min-width: 0; }
+.rl { font-size: 12px; font-weight: 650; color: var(--amber); line-height: 1.25; }
+.rv { font-size: 14px; font-weight: 600; color: #fff; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.rv .v1::before { content: " "; }
+.rv .v2 { display: block; font-size: 12.5px; font-weight: 500; color: #c4d1df; }
+.fsrc { margin-top: auto; font-size: 11.5px; color: #90a2b7; }
+.fhint { margin: -2px 0 0; font-size: 12.5px; color: #8fa2b8; }
+.ftable { border: 1px solid var(--rule); border-radius: 20px; background: #0b1626; padding: 16px 18px 14px; }
+.fhead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ftitle { font-size: 15.5px; font-weight: 650; color: #fff; letter-spacing: -.01em; }
+.fhead .meas { margin: 0; }
+.fbody { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 20px; align-items: center; margin-top: 6px; }
+.fchip { position: relative; height: clamp(180px, 29svh, 276px); }
+.fchip svg { position: absolute; left: 0; top: 0; }
+.fscale { margin: 6px 0 0; font-size: 12.5px; color: #8fa2b8; }
+.flab { display: block; margin-bottom: 8px; font-size: 12.5px; font-weight: 600; color: #8fa2b8; }
+.seg { display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: #13233a; border: 1px solid rgba(214, 228, 242, .16); }
+.seg button { all: unset; box-sizing: border-box; flex: 1; display: grid; place-items: center; min-height: 40px; padding: 0 4px; border-radius: 9px; font: 650 13.5px var(--f); color: #c4d1df; text-align: center; cursor: pointer; transition: background .2s, color .2s; }
+.seg button:hover { color: #fff; }
+.seg button[aria-pressed=true] { background: var(--signal); color: #062418; }
+.seg button:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+.fbars { display: grid; gap: 10px; margin-top: 16px; }
+.fb { display: grid; grid-template-columns: 84px 1fr; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; color: #c4d1df; }
+.fb .tr { height: 8px; border-radius: 999px; background: rgba(214, 228, 242, .1); overflow: hidden; }
+.fb i { display: block; height: 100%; border-radius: 999px; background: #4a6280; transition: width .55s cubic-bezier(.3, .7, .2, 1), background .3s; }
+.fb i.on { background: var(--signal); }
+.fghost { position: absolute; left: 0; top: 0; z-index: 5; opacity: 0; pointer-events: none; border-radius: 14px; border: 1px solid var(--signal); background: repeating-linear-gradient(45deg, #17402f 0 6px, #13233a 6px 12px); box-shadow: 0 18px 40px -18px rgba(0, 0, 0, .8); }
+.tl { fill: #13233a; stroke: rgba(214, 228, 242, .28); stroke-width: 1.1; }
+.tl.on { fill: #1b4a36; stroke: var(--signal); stroke-width: 1.3; }
+.gt { fill: var(--signal); opacity: .9; }
+.frm { fill: none; stroke: rgba(214, 228, 242, .2); stroke-width: 1.2; stroke-dasharray: 4 5; }
+.dot { fill: #e9fff2; }
+.anim .tl.on, .anim .gt { animation: tin .5s both cubic-bezier(.3, .7, .2, 1); animation-delay: var(--d, 0s); transform-box: fill-box; transform-origin: center; }
+@keyframes tin { from { opacity: 0; transform: scale(.5); } }
+
+/* 2: your own recordings */
+.rbox { position: relative; height: clamp(440px, 62svh, 600px); }
+.rbox svg { position: absolute; left: 0; top: 0; }
+.rctl { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; }
+.gbtn { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: 10px; border: 1px solid rgba(214, 228, 242, .28); font: 650 15px var(--f); color: #dbe5ef; cursor: pointer; }
+.gbtn:hover { border-color: rgba(214, 228, 242, .55); color: #fff; }
+.gbtn:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; }
+.btn[aria-disabled=true] { opacity: .45; cursor: default; }
+.hint { font-size: 12.5px; color: #8fa2b8; }
+.rcard { cursor: grab; touch-action: none; transform-box: fill-box; transform-origin: 50% 50%; transition: transform .8s cubic-bezier(.25, .8, .25, 1); }
+.rcard.drag { transition: none; cursor: grabbing; }
+.rcard.in { cursor: default; }
+.rc-t, .rc-u, .rc-w { transition: opacity .3s; }
+.rcard.buried .rc-t, .rcard.buried .rc-u, .rcard.buried .rc-w { opacity: 0; }
+.rc-b { fill: #13233a; stroke: rgba(214, 228, 242, .32); stroke-width: 1.2; }
+.rcard.in .rc-b { stroke: rgba(91, 228, 155, .75); fill: #15302a; }
+.rc-w { fill: none; stroke: #e8eef5; stroke-width: 1.4; stroke-linejoin: round; stroke-linecap: round; }
+.rcard.in .rc-w { stroke: var(--signal); }
+.rc-t { fill: #fff; font-size: 13px; font-weight: 650; }
+.rc-u { fill: #8fa2b8; font-size: 11.5px; font-weight: 600; }
+.mp { fill: #0b1626; stroke: rgba(91, 228, 155, .55); stroke-width: 1.3; }
+.ml { fill: #dfffee; font-size: 13.5px; font-weight: 650; }
+.lock { fill: none; stroke: var(--signal); stroke-width: 1.4; }
+.slot { fill: none; stroke: rgba(214, 228, 242, .26); stroke-width: 1.2; stroke-dasharray: 5 5; }
+.wire { fill: none; stroke: rgba(214, 228, 242, .34); stroke-width: 1.5; transition: stroke .4s; }
+.wire.on { stroke: var(--signal); }
+.nnl { stroke: rgba(214, 228, 242, .22); stroke-width: 1; }
+.nnc { fill: var(--signal); stroke: rgba(214, 228, 242, .45); stroke-width: 1; }
+.chipo { fill: #13233a; stroke: rgba(214, 228, 242, .45); stroke-width: 1.4; }
+.chipc { fill: var(--signal); }
+.pin { stroke: rgba(214, 228, 242, .45); stroke-width: 1.5; }
+.cap { fill: #c4d1df; font-size: 12.5px; font-weight: 600; }
+.capd { fill: #8fa2b8; font-size: 12.5px; font-weight: 600; }
+.blk { fill: none; stroke: rgba(255, 184, 107, .8); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.blkx { stroke: var(--amber); stroke-width: 2; stroke-linecap: round; }
+.bl { fill: var(--amber); font-size: 13px; font-weight: 600; }
+.fp { fill: #0b1626; stroke: rgba(214, 228, 242, .2); stroke-width: 1.2; }
+.tr-s { fill: none; stroke: #e8eef5; stroke-width: 1.5; stroke-linejoin: round; opacity: .85; }
+.tr-m { fill: none; stroke: var(--signal); stroke-width: 2.2; stroke-linejoin: round; }
+.sw-s { stroke: #e8eef5; stroke-width: 2; }
+.sw-m { stroke: var(--signal); stroke-width: 2.6; }
+.mt { fill: rgba(214, 228, 242, .1); }
+.mf { fill: var(--signal); }
+.st { fill: #fff; font-size: 13.5px; font-weight: 650; }
+.pl rect { fill: none; stroke: rgba(255, 184, 107, .5); }
+.pl text { fill: var(--amber); font-size: 12px; font-weight: 650; }
+.trav { fill: #e9fff2; }
+
+/* 3: every sensor, one chip */
+.sbox { position: relative; height: clamp(400px, 55svh, 520px); }
+.sbox svg { position: absolute; left: 0; top: 0; }
+.sc { cursor: pointer; outline: none; }
+.sc:focus-visible .cb, .sc:focus-visible .cbk { stroke: var(--signal); stroke-width: 2.2; }
+.fl { transform-box: fill-box; transform-origin: 50% 50%; }
+.cb { fill: #13233a; stroke: rgba(91, 228, 155, .7); stroke-width: 1.2; }
+.cbk { fill: #0b1626; stroke: rgba(214, 228, 242, .22); stroke-width: 1.2; }
+.sc:hover .cbk { stroke: rgba(214, 228, 242, .5); }
+.hatch { stroke: rgba(214, 228, 242, .07); stroke-width: 1; }
+.stk { fill: #0f1d31; stroke: rgba(91, 228, 155, .35); stroke-width: 1; }
+.ct { fill: #fff; font-size: 13.5px; font-weight: 650; }
+.ctd { fill: #8fa2b8; font-size: 13.5px; font-weight: 600; }
+.cw { fill: none; stroke: var(--signal); stroke-width: 1.4; stroke-linejoin: round; }
+.plus { stroke: #8fa2b8; stroke-width: 1.6; stroke-linecap: round; }
+.gc rect { fill: none; stroke: rgba(214, 228, 242, .3); stroke-width: 1.2; stroke-dasharray: 5 4; }
+.gc:hover rect, .gc:focus-visible rect { stroke: var(--signal); }
+.ln { fill: none; stroke: var(--signal); stroke-width: 1.3; opacity: .75; }
+.ln.off { stroke: rgba(214, 228, 242, .14); stroke-dasharray: 3 6; opacity: 1; }
+.ln.new { stroke-dasharray: 1; animation: draw .9s both cubic-bezier(.3, .7, .2, 1); }
+@keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.core { fill: #1b4a36; stroke: var(--signal); stroke-width: 1.2; }
+.chT { fill: #fff; font-size: 15px; font-weight: 650; text-anchor: middle; }
+.chS { fill: #c4d1df; font-size: 12.5px; font-weight: 500; text-anchor: middle; }
+.out { stroke: var(--signal); stroke-width: 2; }
+.colh { fill: #8fa2b8; font-size: 12.5px; font-weight: 600; }
+.sdot { fill: #e9fff2; }
+.spec { position: relative; margin-top: 14px; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.srail { position: absolute; left: 12.5%; right: 12.5%; top: 13px; height: 2px; background: rgba(214, 228, 242, .16); }
+.sfill { position: absolute; left: 0; top: 0; height: 2px; background: var(--signal); transition: width .45s cubic-bezier(.3, .7, .2, 1); }
+.sfar { position: absolute; left: 66.667%; right: 0; top: 0; border-top: 2px dashed rgba(255, 184, 107, .7); }
+.sthumb { position: absolute; top: 1px; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 5px rgba(91, 228, 155, .2); transition: left .45s cubic-bezier(.3, .7, .2, 1); cursor: grab; }
+.sstops { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.sstops button { all: unset; box-sizing: border-box; position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 44px; padding: 32px 2px 2px; text-align: center; cursor: pointer; font: 600 14px/1.25 var(--f); color: #c4d1df; }
+.sstops button::before { content: ""; position: absolute; top: 7px; left: 50%; width: 10px; height: 10px; margin-left: -6px; border-radius: 50%; border: 1.5px solid rgba(214, 228, 242, .45); background: var(--night); }
+.sstops button.past::before { border-color: var(--signal); }
+.sstops button.far::before { border-color: rgba(255, 184, 107, .8); }
+.sstops button[aria-checked=true] { color: #fff; font-weight: 650; }
+.sstops button.far { color: #f3cfa6; }
+.sstops button.far[aria-checked=true] { color: var(--amber); }
+.sstops button:hover { color: #fff; }
+.sstops button:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 8px; }
+.sstops .meas { margin: 0; align-self: center; font-size: 11.5px; padding: 1px 8px; }
+.snote { margin: 10px 0 0; min-height: 2.9em; font-size: 14.5px; line-height: 1.42; color: #c4d1df; text-align: center; }
+.snote.far { color: var(--amber); }
+
+/* footer */
+.foot { padding: 0 var(--side) 40px; }
+.foot .wrap { border-top: 1px solid var(--rule); padding-top: 22px; font-size: 13px; color: #607086; }
+
+@media (max-width: 900px) {
+  .sec > .wrap { grid-template-columns: 1fr; gap: 28px; }
+  .sec { align-items: flex-start; }
+  .fbody { grid-template-columns: 1fr; gap: 12px; }
+}
+@media (max-width: 700px) {
+  .top { padding: 12px 14px; }
+  .nav { gap: 12px; }
+  .nav .lnk { font-size: 14px; }
+  .sec { padding-top: 92px; }
+  .fcard { height: 214px; }
+  .face { padding: 11px 10px; }
+  .back { gap: 7px; }
+  .vis .rg, .rw-cell { display: none; }
+  .rv { font-size: 13px; }
+  .rv .v0, .rv .v1 { display: block; }
+  .rv .v1::before { content: none; }
+  .rv .v2 { font-size: 11.5px; }
+  .back .fsub { font-size: 12.5px; }
+  .fsrc { font-size: 11px; line-height: 1.25; }
+  .ftable { padding: 14px 14px 12px; }
+  .fchip { height: 176px; }
+  .rbox { height: 600px; }
+  .sbox { height: 470px; }
+  .sstops button { font-size: 13px; }
+}
+@media (max-width: 560px) { .nav .lnk.ab { display: none; } }
+@media (max-width: 420px) { .nav .lnk.hw { display: none; } }
+@media (max-width: 520px) { .brand .lk { height: 24px; } }
+@media (prefers-reduced-motion: reduce) {
+  .top, .btn, .fcard, .fin, .fb i, .seg button, .rcard, .wire, .sfill, .sthumb { transition: none; }
+  .anim .tl.on, .anim .gt, .ln.new { animation: none; }
+}
+</style>
+</head>
+<body>
+<header class="top solid" id="topbar">
+  <a class="brand" href="../../variants/z3.html" data-aria="nav.home"><img class="lk lk-l" src="../../assets/brand/chipin-lockup.svg" alt="ChipIn" height="28"><img class="lk lk-d" src="../../assets/brand/chipin-lockup-light.svg" alt="ChipIn" height="28"></a>
+  <nav class="nav" aria-label="Main">
+    <a class="lnk ab" href="../../variants/z3.html#about" data-c="nav.about"></a>
+    <a class="lnk hw" href="../../how-it-works.html" data-c="nav.how"></a>
+    <a class="lnk" href="#" aria-current="page" data-c="nav.future"></a>
+    <a class="btn btn-s" href="../../dashboard/" data-c="nav.tryNow"></a>
+  </nav>
+</header>
+
+<main>
+  <section class="intro">
+    <div class="wrap">
+      <h1 data-c="title.h"></h1>
+      <p class="lede" data-c="title.lede"></p>
+      <span class="meas" data-c="title.pill"></span>
+    </div>
+  </section>
+  <section class="sec" id="fab" data-key="fab"><div class="wrap"><div class="txt"></div><div class="vis"></div></div></section>
+  <section class="sec" id="recordings" data-key="recordings"><div class="wrap"><div class="txt"></div><div class="vis"></div></div></section>
+  <section class="sec" id="sensors" data-key="sensors"><div class="wrap"><div class="txt"></div><div class="vis"></div></div></section>
+</main>
+
+<footer class="foot"><div class="wrap" data-c="footer"></div></footer>
+
+<script>
+(function () {
+  'use strict';
+  var C = window.COPY;
+  var RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var NS = 'http://www.w3.org/2000/svg';
+
+  /* ---------- helpers ---------- */
+  function attrs(e, a) { if (a) for (var k in a) if (a[k] != null) e.setAttribute(k, a[k]); return e; }
+  function h(tag, a, parent, text) { var e = attrs(document.createElement(tag), a); if (text != null) e.textContent = text; if (parent) parent.appendChild(e); return e; }
+  function s(tag, a, parent, text) { var e = attrs(document.createElementNS(NS, tag), a); if (text != null) e.textContent = text; if (parent) parent.appendChild(e); return e; }
+  function clear(e) { while (e.firstChild) e.removeChild(e.firstChild); }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function f1(v) { return Math.round(v * 10) / 10; }
+  function get(path) { return path.split('.').reduce(function (o, k) { return o && o[k]; }, C); }
+  function watch(node, onIn, onOut) {
+    new IntersectionObserver(function (es) { es.forEach(function (e) { if (e.isIntersecting) onIn(); else onOut(); }); }, { threshold: 0.12 }).observe(node);
+  }
+  function loop(fn) {
+    var id = 0, on = false, last = 0;
+    function tick(t) { if (!on) return; var dt = last ? Math.min(64, t - last) : 16; last = t; fn(t, dt); id = requestAnimationFrame(tick); }
+    return {
+      start: function () { if (on || RM) return; on = true; last = 0; id = requestAnimationFrame(tick); },
+      stop: function () { on = false; cancelAnimationFrame(id); }
+    };
+  }
+  function sized(node, fn) {
+    var w = 0, hh = 0;
+    new ResizeObserver(function () {
+      var nw = node.clientWidth, nh = node.clientHeight;
+      if (nw && nh && (nw !== w || nh !== hh)) { w = nw; hh = nh; fn(nw, nh); }
+    }).observe(node);
+  }
+  function fitSvg(svg, W, H) { attrs(svg, { viewBox: '0 0 ' + W + ' ' + H, width: W, height: H }); }
+
+  /* sensor signals, t in beats; value roughly in -1..1 */
+  function sig(kind, t) {
+    var f = t - Math.floor(t), P2 = Math.PI * 2, g = function (c, w) { return Math.exp(-Math.pow((f - c) / w, 2)); };
+    switch (kind) {
+      case 'heart': return 0.14 * g(0.18, 0.04) - 0.16 * g(0.36, 0.012) + g(0.4, 0.014) - 0.3 * g(0.44, 0.014) + 0.28 * g(0.66, 0.06) - 0.1;
+      case 'oxygen': return 0.95 * g(0.26, 0.1) + 0.35 * g(0.56, 0.07) - 0.45;
+      case 'breath': return 0.8 * Math.sin(P2 * t * 0.5);
+      case 'brain': return 0.42 * Math.sin(P2 * t * 3.1) + 0.3 * Math.sin(P2 * t * 7.3 + 1) + 0.2 * Math.sin(P2 * t * 13.7 + 2);
+      case 'temp': return 0.55 * Math.sin(P2 * t * 0.35) + 0.06 * Math.sin(P2 * t * 3.3);
+      case 'radar': return Math.sin(P2 * f * f * 7) * (0.85 - 0.45 * f);
+      case 'bp': return (f < 0.14 ? f / 0.14 * 0.9 : 0.9 * Math.exp(-(f - 0.14) * 3.4) + 0.18 * g(0.42, 0.04)) - 0.4;
+      case 'motion': return 0.5 * Math.tanh(4 * Math.sin(P2 * t * 1.1)) + 0.14 * Math.sin(P2 * t * 9);
+    }
+    return 0;
+  }
+  var CYC = { heart: 2, oxygen: 2, breath: 1.4, brain: 0.9, temp: 1.2, radar: 1, bp: 2, motion: 1.4 };
+  function wavePath(kind, x, y, w, amp, phase, cycles) {
+    var n = Math.max(24, Math.round(w / 1.6)), d = '';
+    for (var i = 0; i <= n; i++) {
+      var u = i / n, v = sig(kind, phase + u * (cycles || CYC[kind]));
+      d += (i ? 'L' : 'M') + f1(x + u * w) + ' ' + f1(y - v * amp);
+    }
+    return d;
+  }
+  function pill(parent, x, y, text) {
+    var g = s('g', { class: 'pl' }, parent);
+    var t = s('text', { x: x + 9, y: y + 13.5 }, g, text);
+    var w = 60;
+    try { w = t.getComputedTextLength() + 18; } catch (e) { /* not laid out yet */ }
+    s('rect', { x: x + .5, y: y + .5, width: w, height: 19, rx: 9.5 }, g);
+    return w;
+  }
+  function chipGlyph(parent, cx, cy, size, coreCls) {
+    var g = s('g', {}, parent), r = size / 2, n = 4, step = size / (n + 1), pl = Math.max(4, size * 0.13);
+    var d = '';
+    for (var i = 1; i <= n; i++) {
+      var o = -r + i * step;
+      d += 'M' + f1(cx + o) + ' ' + f1(cy - r) + 'v' + (-pl) + 'M' + f1(cx + o) + ' ' + f1(cy + r) + 'v' + pl;
+      d += 'M' + f1(cx - r) + ' ' + f1(cy + o) + 'h' + (-pl) + 'M' + f1(cx + r) + ' ' + f1(cy + o) + 'h' + pl;
+    }
+    s('path', { d: d, class: 'pin' }, g);
+    s('rect', { x: cx - r, y: cy - r, width: size, height: size, rx: Math.max(4, size * 0.12), class: 'chipo' }, g);
+    var core = s('rect', { x: cx - r * 0.5, y: cy - r * 0.5, width: r, height: r, rx: Math.max(2, size * 0.06), class: coreCls || 'chipc' }, g);
+    return core;
+  }
+
+  /* ---------- shared section text ---------- */
+  function renderText(txt, c) {
+    var n = h('p', { class: 'st-n' }, txt);
+    h('b', {}, n, c.n);
+    h('span', {}, n, c.k);
+    h('h2', {}, txt, c.h);
+    h('p', { class: 'sp' }, txt, c.p);
+    var pl = h('div', { class: 'pills' }, txt);
+    (c.pills || []).forEach(function (p) { h('span', { class: 'meas' }, pl, p); });
+  }
+
+  /* =====================================================================================
+     1. FAB PRESETS: three process cards flip to their rule decks and deal the chip
+     ===================================================================================== */
+  function drawFab(root, c) {
+    root.classList.add('fabv');
+    /* example values only, shown under an Illustrative pill */
+    var BAR = {
+      sky: { cost: [0.3, 0.52, 0.72], size: [0.46, 0.3, 0.78], speed: [0.62, 0.72, 0.38] },
+      gf: { cost: [0.26, 0.66, 0.8], size: [0.42, 0.46, 0.86], speed: [0.56, 0.8, 0.48] },
+      ihp: { cost: [0.58, 0.44, 0.9], size: [0.7, 0.26, 0.94], speed: [0.8, 0.56, 0.62] }
+    };
+    var LIT = { sky: { cost: 3, size: 2, speed: 4 }, gf: { cost: 2, size: 1, speed: 3 }, ihp: { cost: 2, size: 1, speed: 3 } };
+    var DENS = { cost: 0.72, size: 0.96, speed: 0.46 };
+    var MAXW = 0, MAXH = 0;
+    c.fabs.forEach(function (f) { MAXW = Math.max(MAXW, f.cols * f.tw + (f.cols - 1) * f.gx); MAXH = Math.max(MAXH, f.rows * f.th + (f.rows - 1) * f.gy); });
+    var cur = -1, goal = 0, auto = !RM, timer = 0, frame = null, dot = null, dealT = 0;
+
+    var deck = h('div', { class: 'fcards', role: 'group', 'aria-label': c.pickLabel }, root);
+    var cards = c.fabs.map(function (f, i) {
+      var b = h('button', { class: 'fcard', type: 'button', 'aria-pressed': 'false' }, deck);
+      var inner = h('span', { class: 'fin' }, b);
+      var fr = h('span', { class: 'face front' }, inner);
+      wafer(s('svg', { class: 'wafer', viewBox: '0 0 120 120', 'aria-hidden': 'true' }, fr), f, i);
+      h('span', { class: 'fname' }, fr, f.name);
+      h('span', { class: 'fsub' }, fr, c.face);
+      var bk = h('span', { class: 'face back' }, inner);
+      h('span', { class: 'fsub' }, bk, f.name);
+      rule(bk, 'cell', c.rows.cell, [f.cells], f);
+      rule(bk, 'tile', c.rows.tile, [f.tile[0], f.tile[1], f.grid], f);
+      rule(bk, 'clock', c.rows.clock, [f.clock], f);
+      h('span', { class: 'fsrc' }, bk, c.src);
+      b.setAttribute('aria-label', f.name + '. ' + c.rows.cell + ': ' + f.cells + '. ' + c.rows.tile + ': ' + f.tile.join(' ') + ', ' + f.grid + '. ' + c.rows.clock + ': ' + f.clock + '. ' + c.src + '.');
+      b.addEventListener('click', function () { user(); pick(i); });
+      return b;
+    });
+    h('p', { class: 'fhint' }, root, c.hint);
+
+    var table = h('div', { class: 'ftable' }, root);
+    var head = h('div', { class: 'fhead' }, table);
+    var title = h('span', { class: 'ftitle', 'aria-live': 'polite' }, head);
+    h('span', { class: 'meas' }, head, c.illus);
+    var body = h('div', { class: 'fbody' }, table);
+    var left = h('div', {}, body);
+    var chipBox = h('div', { class: 'fchip' }, left);
+    var svg = s('svg', { role: 'img', 'aria-label': c.chipAria }, chipBox);
+    h('p', { class: 'fscale' }, left, c.scale);
+    var side = h('div', {}, body);
+    h('span', { class: 'flab' }, side, c.goalsLabel);
+    var seg = h('div', { class: 'seg', role: 'group', 'aria-label': c.goalsLabel }, side);
+    var gbtn = c.goals.map(function (g, i) {
+      var b = h('button', { type: 'button', 'aria-pressed': 'false' }, seg, g.t);
+      b.addEventListener('click', function () { user(); goal = i; render(true); });
+      return b;
+    });
+    var bars = h('div', { class: 'fbars' }, side);
+    var fills = c.bars.map(function (t) {
+      var r = h('div', { class: 'fb' }, bars);
+      h('span', {}, r, t);
+      return h('i', {}, h('span', { class: 'tr' }, r));
+    });
+    var ghost = h('div', { class: 'fghost', 'aria-hidden': 'true' }, root);
+
+    function wafer(g, f, seed) {
+      s('circle', { cx: 60, cy: 60, r: 55, class: 'wf-o' }, g);
+      var a = Math.sqrt(f.tw / f.th), dw = 13 * a, dh = 13 / a, d = '', lit = '', k = 0;
+      var x0 = 60 - dw / 2 - Math.ceil(50 / dw) * dw, y0 = 60 - dh / 2 - Math.ceil(50 / dh) * dh;
+      for (var y = y0; y < 112; y += dh) for (var x = x0; x < 112; x += dw) {
+        var ok = [[x, y], [x + dw, y], [x, y + dh], [x + dw, y + dh]].every(function (p) { return Math.hypot(p[0] - 60, p[1] - 60) < 50; });
+        if (!ok) continue;
+        var r = 'M' + f1(x + 0.8) + ' ' + f1(y + 0.8) + 'h' + f1(dw - 1.6) + 'v' + f1(dh - 1.6) + 'h' + f1(1.6 - dw) + 'z';
+        k++;
+        if ((k * 7 + seed * 3) % 11 === 0) lit += r; else d += r;
+      }
+      s('path', { d: d, class: 'wf-d' }, g);
+      s('path', { d: lit, class: 'wf-l' }, g);
+    }
+    function rule(p, kind, label, vals, f) {
+      var r = h('span', { class: 'rw rw-' + kind }, p);
+      var g = s('svg', { class: 'rg', viewBox: '0 0 28 20', 'aria-hidden': 'true' }, r);
+      if (kind === 'cell') {
+        var d = '';
+        for (var j = 0; j < 3; j++) for (var q = 0; q < 2; q++) d += 'M' + (2 + j * 8.5) + ' ' + (3 + q * 7.5) + 'h7v6h-7z';
+        s('path', { d: d, class: 'g0' }, g);
+      } else if (kind === 'tile') {
+        var a = f.tw / f.th, w = Math.min(26, 16 * a), hh = w / a;
+        s('rect', { x: 14 - w / 2, y: 10 - hh / 2, width: w, height: hh, rx: 1.5, class: 'g0' }, g);
+      } else {
+        var half = f.clk === 50 ? 3.25 : 6.5, x = 1, dd = 'M1 15', up = false;
+        while (x < 27) { dd += 'V' + (up ? 15 : 5); up = !up; x = Math.min(27, x + half); dd += 'H' + x; }
+        s('path', { d: dd, class: 'g1' }, g);
+      }
+      var t = h('span', { class: 'rt' }, r);
+      h('span', { class: 'rl' }, t, label);
+      var v = h('span', { class: 'rv' }, t);
+      vals.forEach(function (x, j) { h('span', { class: 'v' + j }, v, x); });
+    }
+
+    function render(anim) {
+      if (cur < 0) return;
+      var f = c.fabs[cur], gid = c.goals[goal].id, v = BAR[f.id][gid];
+      title.textContent = c.dealt.replace('{fab}', f.name);
+      gbtn.forEach(function (b, i) { b.setAttribute('aria-pressed', i === goal ? 'true' : 'false'); });
+      fills.forEach(function (e, i) { e.style.width = Math.round(v[i] * 100) + '%'; e.classList.toggle('on', i === goal); });
+      grid(anim);
+    }
+    function grid(anim) {
+      var W = chipBox.clientWidth, H = chipBox.clientHeight;
+      if (!W || !H || cur < 0) return;
+      fitSvg(svg, W, H);
+      clear(svg);
+      svg.classList.toggle('anim', !!anim && !RM);
+      var f = c.fabs[cur], gid = c.goals[goal].id, pad = 12;
+      var sc = Math.min((W - 2 * pad) / MAXW, (H - 2 * pad) / MAXH);
+      var tw = f.tw * sc, th = f.th * sc, gx = Math.max(3, f.gx * sc), gy = Math.max(3, f.gy * sc);
+      var GW = f.cols * tw + (f.cols - 1) * gx, GH = f.rows * th + (f.rows - 1) * gy;
+      var ox = (W - GW) / 2, oy = (H - GH) / 2;
+      frame = { x: ox - 7, y: oy - 7, w: GW + 14, h: GH + 14 };
+      s('rect', { x: frame.x, y: frame.y, width: frame.w, height: frame.h, rx: 8, class: 'frm' }, svg);
+      var k = LIT[f.id][gid], bc = Math.min(f.cols, Math.ceil(Math.sqrt(k))), n = 0;
+      var q = clamp(Math.min(tw, th) / 8, 1.6, 4), step = q * 1.55, dens = DENS[gid];
+      for (var r = 0; r < f.rows; r++) for (var cc = 0; cc < f.cols; cc++) {
+        var x = ox + cc * (tw + gx), y = oy + r * (th + gy);
+        var on = cc < bc && r * bc + cc < k;
+        var rect = s('rect', { x: f1(x), y: f1(y), width: f1(tw), height: f1(th), rx: 2, class: 'tl' + (on ? ' on' : '') }, svg);
+        if (!on) continue;
+        rect.style.setProperty('--d', (n * 0.12) + 's');
+        var d = '', nx = Math.floor((tw - 4) / step), ny = Math.floor((th - 4) / step), total = nx * ny, keep = Math.round(total * dens);
+        var mx = x + (tw - nx * step + (step - q)) / 2, my = y + (th - ny * step + (step - q)) / 2;
+        for (var i = 0; i < keep; i++) {
+          var gx2 = mx + (i % nx) * step, gy2 = my + Math.floor(i / nx) * step;
+          d += 'M' + f1(gx2) + ' ' + f1(gy2) + 'h' + f1(q) + 'v' + f1(q) + 'h' + f1(-q) + 'z';
+        }
+        var p = s('path', { d: d, class: 'gt' }, svg);
+        p.style.setProperty('--d', (n * 0.12 + 0.18) + 's');
+        n++;
+      }
+      dot = RM ? null : s('circle', { r: 3, class: 'dot', cx: frame.x, cy: frame.y }, svg);
+    }
+    function pick(i) {
+      var prev = cur;
+      cur = i;
+      cards.forEach(function (b, j) { b.classList.toggle('on', j === i); b.setAttribute('aria-pressed', j === i ? 'true' : 'false'); });
+      clearTimeout(dealT);
+      if (!RM && prev !== i && prev >= 0 && ghost.animate) {
+        var rr = root.getBoundingClientRect(), a = cards[i].getBoundingClientRect(), z = chipBox.getBoundingClientRect();
+        ghost.style.width = a.width + 'px';
+        ghost.style.height = a.height + 'px';
+        var x0 = a.left - rr.left, y0 = a.top - rr.top;
+        var x1 = z.left - rr.left + z.width / 2 - a.width / 2, y1 = z.top - rr.top + z.height / 2 - a.height / 2;
+        ghost.animate([
+          { transform: 'translate(' + x0 + 'px,' + y0 + 'px)', opacity: 0 },
+          { transform: 'translate(' + x0 + 'px,' + (y0 + 10) + 'px) rotate(-2deg)', opacity: 1, offset: 0.15 },
+          { transform: 'translate(' + x1 + 'px,' + y1 + 'px) rotate(7deg) scale(.5)', opacity: 1, offset: 0.85 },
+          { transform: 'translate(' + x1 + 'px,' + y1 + 'px) rotate(9deg) scale(.36)', opacity: 0 }
+        ], { duration: 800, delay: 280, easing: 'cubic-bezier(.3,.7,.2,1)', fill: 'none' });
+        svg.style.transition = 'opacity .3s';
+        svg.style.opacity = '0.15';
+        dealT = setTimeout(function () { svg.style.opacity = '1'; render(true); }, 960);
+      } else render(prev !== i);
+    }
+    function user() { auto = false; clearInterval(timer); timer = 0; }
+    function startAuto() { if (!auto || timer) return; timer = setInterval(function () { pick((cur + 1) % c.fabs.length); }, 4600); }
+    function stopAuto() { clearInterval(timer); timer = 0; }
+    var lp = loop(function (t) {
+      if (!dot || !frame) return;
+      var per = 2 * (frame.w + frame.h), p = (t * 0.06) % per, x, y;
+      if (p < frame.w) { x = frame.x + p; y = frame.y; }
+      else if (p < frame.w + frame.h) { x = frame.x + frame.w; y = frame.y + p - frame.w; }
+      else if (p < 2 * frame.w + frame.h) { x = frame.x + frame.w - (p - frame.w - frame.h); y = frame.y + frame.h; }
+      else { x = frame.x; y = frame.y + frame.h - (p - 2 * frame.w - frame.h); }
+      dot.setAttribute('cx', f1(x)); dot.setAttribute('cy', f1(y));
+    });
+    sized(chipBox, function () { grid(false); });
+    pick(1);
+    watch(root, function () { startAuto(); lp.start(); }, function () { stopAuto(); lp.stop(); });
+  }
+
+  /* =====================================================================================
+     2. YOUR OWN RECORDINGS: a deck of recording cards dealt into a box marked on your machine
+     ===================================================================================== */
+  function drawRecordings(root, c) {
+    root.classList.add('recv');
+    var box = h('div', { class: 'rbox' }, root);
+    var svg = s('svg', { role: 'img', 'aria-label': c.aria }, box);
+    var ctl = h('div', { class: 'rctl' }, root);
+    var addB = h('button', { class: 'btn btn-s', type: 'button' }, ctl, c.add);
+    var resB = h('button', { class: 'gbtn', type: 'button' }, ctl, c.reset);
+    h('span', { class: 'hint' }, ctl, c.hint);
+    var N = c.kinds.length, inM = [], kShow = 0, auto = !RM, timer = 0, L = null, drag = null, phase = 0;
+    var gBg = s('g', {}, svg), gFit = s('g', {}, svg), gCards = s('g', {}, svg);
+    var R = {};
+    var cards = c.kinds.map(function (kd, i) {
+      var g = s('g', { class: 'rcard' }, gCards);
+      var o = { g: g, k: kd.k, i: i, r: s('rect', { rx: 10, class: 'rc-b' }, g), w: s('path', { class: 'rc-w' }, g),
+        u: s('text', { class: 'rc-u' }, g, c.card), t: s('text', { class: 'rc-t' }, g, kd.t) };
+      g.addEventListener('pointerdown', down);
+      return o;
+    });
+
+    function deckIdx(i) { var d = 0; for (var j = 0; j < i; j++) if (inM.indexOf(j) < 0) d++; return d; }
+    function topDeck() { for (var i = N - 1; i >= 0; i--) if (inM.indexOf(i) < 0) return i; return -1; }
+    function pos(i) {
+      var j = inM.indexOf(i);
+      if (j >= 0) return { x: L.S.x - L.cw / 2 + j * 2.5, y: L.S.y - L.ch / 2 - j * 4.5, r: [-2, 1.5, -1, 2, -1.5, 1][j % 6], k: L.k };
+      var d = deckIdx(i);
+      return { x: L.D.x + d * 3, y: L.D.y - d * 3.5, r: [-8, 5, -3, 7, -5, 2][i % 6], k: 1 };
+    }
+    function place(i) {
+      var p = pos(i);
+      cards[i].g.style.transform = 'translate(' + f1(p.x) + 'px,' + f1(p.y) + 'px) rotate(' + p.r + 'deg) scale(' + p.k + ')';
+      cards[i].g.classList.toggle('in', inM.indexOf(i) >= 0);
+      cards[i].g.classList.toggle('buried', inM.indexOf(i) < 0 && i !== topDeck());
+    }
+    function placeAll() { cards.forEach(function (o) { place(o.i); }); }
+
+    function layout(W, H) {
+      fitSvg(svg, W, H);
+      var P = W < 560;
+      var cw = P ? clamp(W * 0.4, 124, 150) : clamp(W * 0.23, 136, 176), ch = Math.round(cw * 0.62);
+      var M, D, F, k;
+      if (!P) {
+        F = { x: 1, y: Math.round(H * 0.64), w: W - 2, h: Math.round(H * 0.36) - 2 };
+        M = { x: Math.round(W * 0.36), y: 52, w: W - Math.round(W * 0.36) - 1, h: F.y - 52 - 22 };
+        D = { x: 18, y: M.y + M.h / 2 - ch / 2 + 16 };
+        k = 0.82;
+      } else {
+        D = { x: 18, y: 44 };
+        M = { x: 1, y: D.y + ch + 62, w: W - 2, h: 190 };
+        F = { x: 1, y: M.y + M.h + 18, w: W - 2, h: H - (M.y + M.h + 18) - 2 };
+        k = 0.56;
+      }
+      var S = { x: M.x + 22 + cw * k / 2, y: M.y + M.h / 2 + 14 };
+      L = { W: W, H: H, P: P, cw: cw, ch: ch, M: M, D: D, F: F, S: S, k: k };
+      var mx = M.x + M.w * (P ? 0.6 : 0.6), cx = M.x + M.w * (P ? 0.87 : 0.87), cs = P ? 36 : clamp(M.w * 0.12, 36, 60), mr = P ? 30 : clamp(M.w * 0.12, 32, 58);
+      L.mod = { x: mx, y: S.y, r: mr };
+      L.chp = { x: cx, y: S.y, s: cs };
+
+      clear(gBg);
+      R.deck = s('text', { x: D.x, y: P ? 16 : D.y - 36, class: 'capd' }, gBg, c.deck);
+      s('rect', { x: M.x + .5, y: M.y + .5, width: M.w - 1, height: M.h - 1, rx: 20, class: 'mp' }, gBg);
+      var lx = M.x + 18, ly = M.y + 28;
+      s('path', { d: 'M' + lx + ' ' + (ly - 6) + 'h11v9h-11z M' + (lx + 2.5) + ' ' + (ly - 6) + 'v-3a3 3 0 0 1 6 0v3', class: 'lock' }, gBg);
+      s('text', { x: lx + 19, y: ly + 2, class: 'ml' }, gBg, c.machine);
+      s('rect', { x: S.x - cw * k / 2, y: S.y - ch * k / 2, width: cw * k, height: ch * k, rx: 8, class: 'slot' }, gBg);
+      var x1 = S.x + cw * k / 2 + 10, x2 = mx - mr - 8, x3 = mx + mr + 8, x4 = cx - cs / 2 - 12;
+      R.w1 = s('path', { d: 'M' + f1(x1) + ' ' + S.y + 'H' + f1(x2), class: 'wire' }, gBg);
+      R.w2 = s('path', { d: 'M' + f1(x3) + ' ' + S.y + 'H' + f1(x4), class: 'wire' }, gBg);
+      L.w1 = [x1, x2]; L.w2 = [x3, x4];
+      var nn = s('g', {}, gBg), cols = [3, 4, 2], pts = [];
+      cols.forEach(function (n, ci) {
+        var col = [];
+        for (var j = 0; j < n; j++) col.push([mx + (ci - 1) * mr * 0.72, S.y + (j - (n - 1) / 2) * mr * 0.5]);
+        pts.push(col);
+      });
+      for (var ci = 0; ci < 2; ci++) pts[ci].forEach(function (a) { pts[ci + 1].forEach(function (b) { s('line', { x1: f1(a[0]), y1: f1(a[1]), x2: f1(b[0]), y2: f1(b[1]), class: 'nnl' }, nn); }); });
+      R.nodes = [];
+      pts.forEach(function (col) { col.forEach(function (a) { R.nodes.push(s('circle', { cx: f1(a[0]), cy: f1(a[1]), r: Math.max(3, mr * 0.12), class: 'nnc' }, nn)); }); });
+      s('text', { x: mx, y: S.y + mr + 22, class: 'cap', 'text-anchor': 'middle' }, gBg, c.model);
+      R.core = chipGlyph(gBg, cx, S.y, cs);
+      s('text', { x: cx, y: S.y + cs / 2 + 26, class: 'cap', 'text-anchor': 'middle' }, gBg, c.chip);
+      /* the box edge nothing crosses */
+      var bx = P ? M.x + M.w - 40 : mx, by = M.y;
+      s('path', { d: 'M' + bx + ' ' + by + 'v-30', class: 'blk' }, gBg);
+      s('path', { d: 'M' + (bx - 6) + ' ' + (by - 42) + 'l12 12M' + (bx + 6) + ' ' + (by - 42) + 'l-12 12', class: 'blkx' }, gBg);
+      s('text', { x: P ? bx - 14 : bx + 16, y: by - 32, class: 'bl', 'text-anchor': P ? 'end' : 'start' }, gBg, c.stays);
+      R.t1 = s('circle', { r: 3.2, class: 'trav', opacity: 0 }, gBg);
+      R.t2 = s('circle', { r: 3.2, class: 'trav', opacity: 0 }, gBg);
+
+      clear(gFit);
+      s('rect', { x: F.x + .5, y: F.y + .5, width: F.w - 1, height: F.h - 1, rx: 14, class: 'fp' }, gFit);
+      var lgY = F.y + 24;
+      s('line', { x1: F.x + 16, y1: lgY - 4, x2: F.x + 34, y2: lgY - 4, class: 'sw-s' }, gFit);
+      var t1 = s('text', { x: F.x + 40, y: lgY, class: 'cap' }, gFit, c.legendSignal), w1 = 70;
+      try { w1 = t1.getComputedTextLength(); } catch (e) { /* not laid out */ }
+      s('line', { x1: F.x + 56 + w1, y1: lgY - 4, x2: F.x + 74 + w1, y2: lgY - 4, class: 'sw-m' }, gFit);
+      s('text', { x: F.x + 80 + w1, y: lgY, class: 'cap' }, gFit, c.legendModel);
+      var tr;
+      if (!P) {
+        tr = { x: F.x + 16, y: F.y + 38, w: F.w * 0.62 - 16, h: F.h - 50 };
+        var mxx = F.x + F.w * 0.66, mw = F.x + F.w - 18 - mxx;
+        s('text', { x: mxx, y: lgY, class: 'cap' }, gFit, c.fit);
+        L.meter = { x: mxx, y: F.y + F.h / 2 - 2, w: mw };
+        R.state = s('text', { x: mxx, y: F.y + F.h / 2 + 28, class: 'st' }, gFit, '');
+        pill(gFit, mxx, F.y + F.h - 30, c.illus);
+      } else {
+        tr = { x: F.x + 14, y: F.y + 36, w: F.w - 28, h: F.h - 104 };
+        s('text', { x: F.x + 14, y: F.y + F.h - 52, class: 'cap' }, gFit, c.fit);
+        L.meter = { x: F.x + 14, y: F.y + F.h - 42, w: F.w - 28 };
+        R.state = s('text', { x: F.x + 14, y: F.y + F.h - 14, class: 'st' }, gFit, '');
+        pill(gFit, F.x + F.w - 100, F.y + F.h - 30, c.illus);
+      }
+      L.tr = tr;
+      s('rect', { x: L.meter.x, y: L.meter.y, width: L.meter.w, height: 8, rx: 4, class: 'mt' }, gFit);
+      R.mf = s('rect', { x: L.meter.x, y: L.meter.y, width: 0, height: 8, rx: 4, class: 'mf' }, gFit);
+      R.ts = s('path', { class: 'tr-s' }, gFit);
+      R.tm = s('path', { class: 'tr-m' }, gFit);
+
+      cards.forEach(function (o) {
+        attrs(o.r, { width: cw, height: ch });
+        o.w.setAttribute('d', wavePath(o.k, 12, ch * 0.52, cw - 24, ch * 0.17, o.i * 0.37));
+        attrs(o.u, { x: 12, y: 19 });
+        attrs(o.t, { x: 12, y: ch - 11 });
+      });
+      var prev = svg.querySelectorAll('.rcard');
+      prev.forEach(function (g) { g.style.transition = 'none'; });
+      cards.forEach(function (o) { place(o.i); });
+      svg.getBoundingClientRect();
+      prev.forEach(function (g) { g.style.transition = ''; });
+      paint();
+    }
+
+    function paint() {
+      if (!L) return;
+      var e = kShow * kShow * (3 - 2 * kShow), tr = L.tr, n = Math.max(40, Math.round(tr.w / 2.2)), ds = '', dm = '';
+      for (var i = 0; i <= n; i++) {
+        var u = i / n, t = phase + u * 3.2, sv = sig('heart', t);
+        var gv = 0.55 * sig('heart', t + 0.09) + 0.2 * Math.sin(Math.PI * 2 * t * 0.7) - 0.05;
+        var x = f1(tr.x + u * tr.w);
+        ds += (i ? 'L' : 'M') + x + ' ' + f1(tr.y + tr.h * 0.62 - sv * tr.h * 0.5);
+        dm += (i ? 'L' : 'M') + x + ' ' + f1(tr.y + tr.h * 0.62 - lerp(gv, sv, e) * tr.h * 0.5);
+      }
+      R.ts.setAttribute('d', ds);
+      R.tm.setAttribute('d', dm);
+      R.mf.setAttribute('width', f1(L.meter.w * (0.18 + 0.78 * e)));
+      R.nodes.forEach(function (nd, j) { nd.style.fillOpacity = clamp(0.12 + e * 0.9 - (j % 3) * 0.08, 0.1, 1); });
+      R.core.style.fillOpacity = (0.18 + 0.82 * e).toFixed(2);
+      var st = inM.length === 0 ? 0 : inM.length >= N ? 2 : 1;
+      if (R.state.textContent !== c.states[st]) R.state.textContent = c.states[st];
+      var on = inM.length > 0;
+      R.deck.style.opacity = inM.length >= N ? '0' : '1';
+      R.w1.classList.toggle('on', on);
+      R.w2.classList.toggle('on', on);
+    }
+
+    function add(i) {
+      if (i < 0 || inM.indexOf(i) >= 0 || inM.length >= N) return;
+      inM.push(i);
+      gCards.appendChild(cards[i].g);
+      placeAll();
+      addB.setAttribute('aria-disabled', inM.length >= N ? 'true' : 'false');
+      if (RM) { kShow = inM.length / N; paint(); }
+    }
+    function reset() {
+      inM = [];
+      cards.forEach(function (o, j) {
+        gCards.appendChild(o.g);
+        o.g.style.transitionDelay = RM ? '' : ((N - 1 - j) * 70) + 'ms';
+        place(j);
+      });
+      setTimeout(function () { cards.forEach(function (o) { o.g.style.transitionDelay = ''; }); }, 1400);
+      addB.setAttribute('aria-disabled', 'false');
+      if (RM) { kShow = 0; paint(); }
+    }
+    function user() { auto = false; clearTimeout(timer); timer = 0; }
+    function autoStep() {
+      if (!auto) return;
+      if (inM.length >= N) { reset(); timer = setTimeout(autoStep, 2200); }
+      else { add(topDeck()); timer = setTimeout(autoStep, inM.length >= N ? 4200 : 2300); }
+    }
+    addB.addEventListener('click', function () { user(); if (inM.length < N) add(topDeck()); });
+    resB.addEventListener('click', function () { user(); reset(); });
+
+    function pt(e) { var r = svg.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+    function down(e) {
+      var i = topDeck();
+      if (i < 0 || inM.indexOf(cards.filter(function (o) { return o.g === e.currentTarget; })[0].i) >= 0) return;
+      user();
+      var p = pt(e), b = pos(i);
+      drag = { i: i, x0: p.x, y0: p.y, bx: b.x, by: b.y, moved: false };
+      cards[i].g.classList.add('drag');
+      gCards.appendChild(cards[i].g);
+      for (var j = i - 1; j >= 0; j--) if (inM.indexOf(j) < 0) { cards[j].g.classList.remove('buried'); break; }
+      try { svg.setPointerCapture(e.pointerId); } catch (er) { /* pointer already gone */ }
+      e.preventDefault();
+    }
+    svg.addEventListener('pointermove', function (e) {
+      if (!drag) return;
+      var p = pt(e), dx = p.x - drag.x0, dy = p.y - drag.y0;
+      if (Math.abs(dx) + Math.abs(dy) > 6) drag.moved = true;
+      cards[drag.i].g.style.transform = 'translate(' + f1(drag.bx + dx) + 'px,' + f1(drag.by + dy) + 'px) rotate(-3deg) scale(1.05)';
+    });
+    function up(e, cancel) {
+      if (!drag) return;
+      var d = drag, p = pt(e), M = L.M;
+      drag = null;
+      cards[d.i].g.classList.remove('drag');
+      var inside = p.x > M.x && p.x < M.x + M.w && p.y > M.y && p.y < M.y + M.h;
+      if (!cancel && (!d.moved || inside)) add(d.i); else place(d.i);
+    }
+    svg.addEventListener('pointerup', function (e) { up(e, false); });
+    svg.addEventListener('pointercancel', function (e) { up(e, true); });
+
+    var lp = loop(function (t, dt) {
+      phase += dt * 0.00042;
+      kShow += (inM.length / N - kShow) * Math.min(1, dt / 520);
+      paint();
+      var on = inM.length > 0;
+      [[R.t1, L.w1, 0], [R.t2, L.w2, 0.5]].forEach(function (a) {
+        var u = ((t * 0.0006) + a[2]) % 1;
+        a[0].setAttribute('opacity', on ? (Math.sin(u * Math.PI)).toFixed(2) : 0);
+        a[0].setAttribute('cx', f1(lerp(a[1][0], a[1][1], u)));
+        a[0].setAttribute('cy', L.S.y);
+      });
+    });
+    if (RM) { inM = cards.slice(1).map(function (o) { return o.i; }).reverse(); kShow = inM.length / N; }
+    sized(box, layout);
+    watch(root, function () { lp.start(); if (auto && !timer) timer = setTimeout(autoStep, 1200); }, function () { lp.stop(); clearTimeout(timer); timer = 0; });
+  }
+
+  /* =====================================================================================
+     3. EVERY SENSOR, ONE CHIP: sensor cards light lanes into one chip, along a spectrum
+     ===================================================================================== */
+  function drawSensors(root, c) {
+    root.classList.add('senv');
+    var box = h('div', { class: 'sbox' }, root);
+    var svg = s('svg', { role: 'group', 'aria-label': c.aria }, box);
+    var spec = h('div', { class: 'spec' }, root);
+    var rail = h('div', { class: 'srail', 'aria-hidden': 'true' }, spec);
+    var fill = h('span', { class: 'sfill' }, rail);
+    h('span', { class: 'sfar' }, rail);
+    var thumb = h('span', { class: 'sthumb' }, rail);
+    var stopsEl = h('div', { class: 'sstops', role: 'radiogroup', 'aria-label': c.specLabel }, spec);
+    var stopB = c.stops.map(function (t, i) {
+      var b = h('button', { type: 'button', role: 'radio', 'aria-checked': 'false', class: i === c.stops.length - 1 ? 'far' : '' }, stopsEl);
+      h('span', {}, b, t);
+      if (i === c.stops.length - 1) h('span', { class: 'meas' }, b, c.farTag);
+      b.addEventListener('click', function () { user(); setStop(i); });
+      return b;
+    });
+    var note = h('p', { class: 'snote', 'aria-live': 'polite' }, root);
+
+    var LIST = c.list, NS_ = LIST.length, MAXM = 6;
+    var ALL = LIST.map(function (x) { return x.k; });
+    var STOPS = [{ lit: ['heart'], m: 1 }, { lit: ['heart', 'oxygen', 'breath'], m: 1 }, { lit: ALL, m: 3 }, { lit: ALL, m: 6 }];
+    var stop = RM ? 2 : 0, lit = {}, mult = 1, auto = !RM, timer = 0, L = null, prevLit = {};
+    var gLanes = s('g', {}, svg), gDots = s('g', {}, svg), gChip = s('g', {}, svg), gCards = s('g', {}, svg);
+    var colh = s('text', { class: 'colh', x: 8, y: 14 }, svg, '');
+    var lanes = [], dots = [], outDot = null, core = null;
+
+    var cards = LIST.map(function (sn, i) {
+      var g = s('g', { class: 'sc', tabindex: 0, role: 'button', 'aria-pressed': 'false', 'aria-label': sn.t }, gCards);
+      var stk = s('g', {}, g);
+      var fl = s('g', { class: 'fl' }, g);
+      var front = s('g', {}, fl), back = s('g', {}, fl);
+      var o = { g: g, stk: stk, fl: fl, front: front, back: back, k: sn.k, t: sn.t, i: i, on: false };
+      g.addEventListener('click', function () { user(); toggle(i); });
+      g.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); user(); toggle(i); } });
+      return o;
+    });
+    var ghostC = s('g', { class: 'gc sc', tabindex: 0, role: 'button', 'aria-label': c.more }, gCards);
+    ghostC.addEventListener('click', function () { user(); more(); });
+    ghostC.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); user(); more(); } });
+
+    function layout(W, H) {
+      fitSvg(svg, W, H);
+      var P = W < 560, top = 26, n = NS_ + 1, gap = P ? 6 : 8;
+      var chH = Math.min(44, (H - top - 2 - gap * (n - 1)) / n);
+      var cw = P ? Math.round(W * 0.43) : clamp(W * 0.25, 160, 196);
+      var cs = P ? clamp(W * 0.25, 76, 96) : clamp(Math.min(W, H) * 0.3, 120, 168);
+      var xc = P ? W - cs / 2 - 16 : Math.round(W * 0.62), yc = top + (H - top) / 2 - (P ? 20 : 0);
+      L = { W: W, H: H, P: P, top: top, gap: gap, chH: chH, cw: cw, cs: cs, xc: xc, yc: yc, x0: 6 };
+      cards.forEach(function (o) { buildCard(o); });
+      buildGhost();
+      buildChip();
+      apply(false);
+    }
+    function cardY(i) { return L.top + i * (L.chH + L.gap); }
+    function buildCard(o) {
+      var y = cardY(o.i), w = L.cw, hh = L.chH, ww = L.P ? 30 : 46;
+      o.g.setAttribute('transform', 'translate(' + L.x0 + ' ' + f1(y) + ')');
+      clear(o.front); clear(o.back);
+      s('rect', { width: w, height: hh, rx: 9, class: 'cb' }, o.front);
+      s('path', { d: wavePath(o.k, 10, hh / 2, ww, hh * 0.24, o.i * 0.3), class: 'cw' }, o.front);
+      s('text', { x: 18 + ww, y: hh / 2 + 4.5, class: 'ct' }, o.front, o.t);
+      s('rect', { width: w, height: hh, rx: 9, class: 'cbk' }, o.back);
+      var hd = '';
+      for (var x = -hh; x < w; x += 9) hd += 'M' + Math.max(0, x) + ' ' + (x < 0 ? -x : 0) + 'L' + Math.min(w, x + hh) + ' ' + (x + hh > w ? hh - (x + hh - w) : hh);
+      s('path', { d: hd, class: 'hatch' }, o.back);
+      var px = 10 + ww / 2;
+      s('path', { d: 'M' + (px - 6) + ' ' + hh / 2 + 'h12M' + px + ' ' + (hh / 2 - 6) + 'v12', class: 'plus' }, o.back);
+      s('text', { x: 18 + ww, y: hh / 2 + 4.5, class: 'ctd' }, o.back, o.t);
+      if (L.P) { o.front.querySelector('.ct').style.fontSize = '12px'; o.back.querySelector('.ctd').style.fontSize = '12px'; }
+    }
+    function buildGhost() {
+      clear(ghostC);
+      var y = cardY(NS_), w = L.cw, hh = L.chH;
+      ghostC.setAttribute('transform', 'translate(' + L.x0 + ' ' + f1(y) + ')');
+      s('rect', { width: w, height: hh, rx: 9 }, ghostC);
+      var px = 10 + (L.P ? 15 : 23);
+      s('path', { d: 'M' + (px - 6) + ' ' + hh / 2 + 'h12M' + px + ' ' + (hh / 2 - 6) + 'v12', class: 'plus' }, ghostC);
+      var t = s('text', { x: 18 + (L.P ? 30 : 46), y: hh / 2 + 4.5, class: 'ctd' }, ghostC, c.more);
+      if (L.P) t.style.fontSize = '12px';
+    }
+    function buildChip() {
+      clear(gChip);
+      var cs = L.cs, xc = L.xc, yc = L.yc, r = cs / 2;
+      var pins = '';
+      for (var i = 1; i <= 5; i++) {
+        var o = -r + i * cs / 6;
+        pins += 'M' + f1(xc + o) + ' ' + f1(yc - r) + 'v-7M' + f1(xc + o) + ' ' + f1(yc + r) + 'v7';
+      }
+      s('path', { d: pins, class: 'pin' }, gChip);
+      s('rect', { x: xc - r, y: yc - r, width: cs, height: cs, rx: Math.max(8, cs * 0.1), class: 'chipo' }, gChip);
+      core = s('rect', { x: xc - r * 0.72, y: yc - r * 0.72, width: r * 1.44, height: r * 1.44, rx: Math.max(6, cs * 0.07), class: 'core' }, gChip);
+      if (!L.P) {
+        s('text', { x: xc, y: yc - 2, class: 'chT' }, gChip, c.chip);
+        s('text', { x: xc, y: yc + 17, class: 'chS' }, gChip, c.chipSub);
+        var ox = xc + r + 6, ex = L.W - 6;
+        s('line', { x1: ox, y1: yc, x2: ex, y2: yc, class: 'out' }, gChip);
+        s('path', { d: 'M' + (ex - 7) + ' ' + (yc - 5) + 'L' + ex + ' ' + yc + 'L' + (ex - 7) + ' ' + (yc + 5), fill: 'none', class: 'out' }, gChip);
+        s('text', { x: ox + 8, y: yc - 12, class: 'cap' }, gChip, c.out.join(' '));
+        L.out = [ox, yc, ex, yc];
+      } else {
+        var t = s('text', { x: xc, y: yc + 4, class: 'chT' }, gChip, c.chip);
+        t.style.fontSize = '12px';
+        var oy = yc + r + 10, ey = oy + 30;
+        s('line', { x1: xc, y1: oy, x2: xc, y2: ey, class: 'out' }, gChip);
+        s('text', { x: xc, y: ey + 18, class: 'chS' }, gChip, c.chipSub);
+        s('text', { x: xc, y: ey + 36, class: 'cap', 'text-anchor': 'middle' }, gChip, c.out[0]);
+        s('text', { x: xc, y: ey + 52, class: 'cap', 'text-anchor': 'middle' }, gChip, c.out[1]);
+        L.out = [xc, oy, xc, ey];
+      }
+      outDot = RM ? null : s('circle', { r: 3.2, class: 'sdot', opacity: 0 }, gChip);
+    }
+
+    function bz(a, b, cc, d, t) { var u = 1 - t; return u * u * u * a + 3 * u * u * t * b + 3 * u * t * t * cc + t * t * t * d; }
+    function buildLanes(fresh) {
+      clear(gLanes); clear(gDots);
+      lanes = []; dots = [];
+      var cs = L.cs, x1 = L.x0 + L.cw, x2 = L.xc - cs / 2 - 2, band = cs * 0.84 / NS_;
+      cards.forEach(function (o) {
+        var yi = cardY(o.i) + L.chH / 2, m = o.on ? mult : 1;
+        for (var j = 0; j < m; j++) {
+          var sp = Math.min(4.5, L.chH * 0.7 / Math.max(1, m - 1 || 1));
+          var ya = yi + (m > 1 ? (j - (m - 1) / 2) * sp : 0);
+          var yb = L.yc - cs * 0.42 + (o.i + (j + 0.5) / m) * band;
+          var dx = (x2 - x1) * 0.5;
+          var pts = [x1, ya, x1 + dx, ya, x2 - dx, yb, x2, yb];
+          var d = 'M' + f1(x1) + ' ' + f1(ya) + 'C' + f1(pts[2]) + ' ' + f1(pts[3]) + ' ' + f1(pts[4]) + ' ' + f1(pts[5]) + ' ' + f1(x2) + ' ' + f1(yb);
+          var p = s('path', { d: d, class: 'ln' + (o.on ? '' : ' off') }, gLanes);
+          if (o.on) {
+            p.setAttribute('pathLength', 1);
+            if (fresh && !RM && (!prevLit[o.k] || j >= (prevLit[o.k] || 0))) { p.classList.add('new'); p.style.animationDelay = (j * 0.06) + 's'; }
+            if (m > 2) p.style.strokeWidth = '1';
+            var dt = RM ? null : s('circle', { r: m > 2 ? 2 : 2.6, class: 'sdot' }, gDots);
+            lanes.push({ pts: pts, dot: dt, off: (o.i * 0.137 + j * 0.31) % 1, sp: 0.00024 + ((o.i + j) % 3) * 0.00003 });
+          }
+        }
+      });
+      var nl = lanes.length;
+      core.style.fillOpacity = (0.35 + 0.65 * Math.min(1, nl / 24)).toFixed(2);
+    }
+    function flip(o, on, animate) {
+      o.on = on;
+      o.g.setAttribute('aria-pressed', on ? 'true' : 'false');
+      var show = function () { o.front.style.display = on ? '' : 'none'; o.back.style.display = on ? 'none' : ''; };
+      if (animate && !RM && o.fl.animate) {
+        o.fl.animate([{ transform: 'scaleX(1)' }, { transform: 'scaleX(0)' }], { duration: 170, easing: 'ease-in', delay: o.i * 40 }).onfinish = function () {
+          show();
+          o.fl.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], { duration: 190, easing: 'ease-out' });
+        };
+      } else show();
+      var depth = on ? (mult >= 6 ? 2 : mult >= 3 ? 1 : 0) : 0;
+      clear(o.stk);
+      for (var dd = depth; dd >= 1; dd--) s('rect', { x: dd * 4, y: -dd * 3, width: L.cw, height: L.chH, rx: 9, class: 'stk' }, o.stk);
+    }
+    function apply(animate) {
+      if (!L) return;
+      prevLit = {};
+      cards.forEach(function (o) { if (o.on) prevLit[o.k] = o.lastM || 1; });
+      cards.forEach(function (o) {
+        var want = !!lit[o.k];
+        if (want !== o.on || !animate) flip(o, want, animate && want !== o.on);
+        else flip(o, want, false);
+      });
+      buildLanes(animate);
+      cards.forEach(function (o) { o.lastM = o.on ? mult : 0; });
+      colh.textContent = c.colHead[stop];
+      stopB.forEach(function (b, i) { b.setAttribute('aria-checked', i === stop ? 'true' : 'false'); b.classList.toggle('past', i < stop); b.tabIndex = i === stop ? 0 : -1; });
+      var pc = (stop / (c.stops.length - 1)) * 100;
+      fill.style.width = Math.min(pc, 66.667) + '%';
+      thumb.style.left = pc + '%';
+      note.textContent = c.notes[stop];
+      note.classList.toggle('far', stop === c.stops.length - 1);
+    }
+    function setStop(i) {
+      stop = clamp(i, 0, c.stops.length - 1);
+      lit = {};
+      STOPS[stop].lit.forEach(function (k) { lit[k] = true; });
+      mult = STOPS[stop].m;
+      apply(true);
+    }
+    function toggle(i) {
+      var k = LIST[i].k, count = Object.keys(lit).filter(function (x) { return lit[x]; }).length;
+      if (lit[k] && count <= 1) return;
+      lit[k] = !lit[k];
+      apply(true);
+    }
+    function more() {
+      for (var i = 0; i < NS_; i++) if (!lit[LIST[i].k]) { lit[LIST[i].k] = true; apply(true); return; }
+      if (stop < c.stops.length - 1) setStop(Math.max(stop + 1, 2));
+    }
+    function user() { auto = false; clearInterval(timer); timer = 0; }
+    stopsEl.addEventListener('keydown', function (e) {
+      var d = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+      if (!d) return;
+      e.preventDefault(); user();
+      setStop(stop + d);
+      stopB[stop].focus();
+    });
+    var dragging = false;
+    function nearest(e) { var r = stopsEl.getBoundingClientRect(); return clamp(Math.floor((e.clientX - r.left) / (r.width / c.stops.length)), 0, c.stops.length - 1); }
+    spec.addEventListener('pointerdown', function (e) { dragging = true; user(); var n = nearest(e); if (n !== stop) setStop(n); });
+    spec.addEventListener('pointermove', function (e) { if (!dragging) return; var n = nearest(e); if (n !== stop) setStop(n); });
+    window.addEventListener('pointerup', function () { dragging = false; });
+
+    var lp = loop(function (t) {
+      lanes.forEach(function (ln) {
+        if (!ln.dot) return;
+        var u = (t * ln.sp + ln.off) % 1, p = ln.pts;
+        ln.dot.setAttribute('cx', f1(bz(p[0], p[2], p[4], p[6], u)));
+        ln.dot.setAttribute('cy', f1(bz(p[1], p[3], p[5], p[7], u)));
+        ln.dot.setAttribute('opacity', Math.min(1, Math.sin(u * Math.PI) * 1.6).toFixed(2));
+      });
+      if (outDot && L.out) {
+        var u = (t * 0.0005) % 1, o = L.out;
+        outDot.setAttribute('cx', f1(lerp(o[0], o[2], u)));
+        outDot.setAttribute('cy', f1(lerp(o[1], o[3], u)));
+        outDot.setAttribute('opacity', Math.sin(u * Math.PI).toFixed(2));
+      }
+      if (core) core.style.strokeOpacity = (0.6 + 0.4 * Math.sin(t * 0.002)).toFixed(2);
+    });
+    setStop(stop);
+    sized(box, layout);
+    watch(root, function () {
+      lp.start();
+      if (auto && !timer) timer = setInterval(function () { setStop((stop + 1) % c.stops.length); }, 3800);
+    }, function () { lp.stop(); clearInterval(timer); timer = 0; });
+  }
+
+  /* ---------- wire the page ---------- */
+  document.querySelectorAll('[data-c]').forEach(function (e) { e.textContent = get(e.getAttribute('data-c')); });
+  document.querySelectorAll('[data-aria]').forEach(function (e) { e.setAttribute('aria-label', get(e.getAttribute('data-aria'))); });
+  var SECTIONS = { fab: drawFab, recordings: drawRecordings, sensors: drawSensors };
+  document.querySelectorAll('.sec[data-key]').forEach(function (sec) {
+    var key = sec.getAttribute('data-key'), copy = C[key];
+    sec.setAttribute('aria-label', copy.k);
+    renderText(sec.querySelector('.txt'), copy);
+    SECTIONS[key](sec.querySelector('.vis'), copy);
+  });
+})();
+</script>
+<script src="../variant-nav.js"></script>
+</body>
+</html>

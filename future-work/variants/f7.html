@@ -1,0 +1,869 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Future work - ChipIn</title>
+<meta name="description" content="Three things planned for ChipIn next.">
+<meta name="theme-color" content="#0f1a2a">
+<link rel="icon" type="image/svg+xml" href="../../assets/brand/favicon.svg">
+<script>
+/* Every visible word of this page lives here. Sections 2 and 3 can each be swapped by editing one key
+   below (recordings, sensors) and its one draw function further down (drawRecordings, drawSensors). */
+window.COPY = {
+  title: {
+    h1: 'What comes next',
+    lede: 'Three things we plan to build into ChipIn after the hackathon. None of them exists yet.',
+    pill: 'Planned'
+  },
+  fab: {
+    n: '01',
+    h2: 'Choose the fab. The chip follows.',
+    p: 'Name the fab; ChipIn will load its rules and costs and tune the design to cost, size or speed of production.',
+    pills: ['Planned'],
+    svg: 'Exploded blueprint: design rules, timing and cost layers for the chosen fab process drop onto one chip, whose die reshapes for the chosen goal.',
+    presetsLabel: 'Fab process',
+    goalsLabel: 'Optimise for',
+    presets: [
+      { name: 'sky130', rules: 'sky130 cells', clock: '50 ns clock', ns: 50, tw: 161, th: 111.5,
+        fact: 'sky130: tile about 161 × 111.5 µm, default clock 50\u00a0ns.' },
+      { name: 'GF180', rules: 'GF180 cells', clock: '100 ns clock', ns: 100, tw: 346.64, th: 160.72,
+        fact: 'GF180: tile 346.64 × 160.72 µm, default clock 100\u00a0ns.' },
+      { name: 'IHP SG13G2', rules: 'SG13G2 cells', clock: '50 ns clock', ns: 50, tw: 202.08, th: 154.98,
+        fact: 'IHP SG13G2: tile 202.08 × 154.98 µm, default clock 50\u00a0ns.' }
+    ],
+    factSource: 'Tile sizes and clocks as the lab’s process files list them, drawn to one scale.',
+    goals: [
+      { name: 'Cost', area: .5, bars: [.28, .52, .62] },
+      { name: 'Size', area: .34, bars: [.5, .26, .7] },
+      { name: 'Speed of production', area: .72, bars: [.62, .72, .28] }
+    ],
+    readout: ['Cost', 'Size', 'Time to chips'],
+    readoutPill: 'Illustrative',
+    layers: [
+      { name: 'Costs', sub: 'Illustrative', amber: true },
+      { name: 'Timing', sub: 'clock' },
+      { name: 'Design rules', sub: 'rules' }
+    ],
+    chip: { name: 'Your chip', sub: 'die tuned to the goal' }
+  },
+  recordings: {
+    n: '02',
+    h2: 'Tuned to your patients, on your machine.',
+    p: 'A device maker will bring their sensor recordings; the chip’s model will be fine-tuned to their patients and sensor without the recordings leaving their machine.',
+    pills: ['Planned'],
+    svg: 'Blueprint stack on the maker’s machine: a layer of their own recordings slides in between the model and the chip, and the model lights up as it is tuned.',
+    machine: 'Your machine',
+    model: 'Model', modelSub: 'general', modelTuned: 'tuned to your patients',
+    rec: 'Your recordings', recSub: 'stay on this machine',
+    chip: 'Chip', chipSub: 'waiting for a model', chipTuned: 'built from the tuned model',
+    btnIn: 'Slide in your recordings', btnOut: 'Take them out',
+    hint: 'or drag the layer'
+  },
+  sensors: {
+    n: '03',
+    h2: 'Every sensor, one chip.',
+    p: 'We plan models that read every sensor at once, a lane each. The far end, a whole hospital on one chip, is far-fetched today.',
+    pills: ['Planned'],
+    svg: 'Sensor layers stacked over one chip, each feeding its own lit lane in parallel into one local model; steps run from one sensor to a whole hospital.',
+    steps: [
+      { name: 'One sensor', n: 1 },
+      { name: 'A few sensors', n: 3 },
+      { name: 'A ward', n: 8 },
+      { name: 'A whole hospital', n: 24 }
+    ],
+    spectrumLabel: 'How many sensors on one chip',
+    add: 'Add a sensor',
+    full: 'Every lane lit',
+    sensors: ['Heart trace', 'Brain waves', 'Oxygen', 'Breathing', 'Temperature', 'Radar', 'Blood pressure', 'Movement'],
+    groupWard: 'A ward of sensors',
+    groupHospital: 'Every sensor a hospital needs',
+    chip: 'One chip', chipSub: 'one local model, all inputs at once',
+    farPill: 'Far end of the spectrum',
+    farNote: 'Far-fetched today: a direction we can keep moving along, not a promise.'
+  },
+  footer: 'Built at the SoTA Scientific Parallelism Hackathon, London, November 2026.'
+};
+</script>
+<style>
+:root {
+  --night: #0f1a2a;
+  --deep: #16263c;
+  --paper: #eef1f2;
+  --ink: #132033;
+  --signal: #5be49b;
+  --amber: #ffb86b;
+  --dusk: #c9a3c4;
+  --mute: #9aabc0;
+  --rule: rgba(214, 228, 242, .15);
+  --f: "Avenir Next", "Avenir", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --side: clamp(20px, 5.4vw, 84px);
+}
+* { box-sizing: border-box; }
+html { background: var(--night); -webkit-text-size-adjust: 100%; scroll-snap-type: y proximity; }
+body { margin: 0; color: #e8eef5; font: 400 17px/1.5 var(--f); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; border-radius: 6px; }
+
+/* top bar (as the landing page) */
+.top { position: fixed; top: 0; left: 0; right: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px clamp(16px, 3vw, 34px); pointer-events: none; transition: background .3s, color .3s; }
+.top > * { pointer-events: auto; }
+.top.solid { background: rgba(13, 23, 38, .82); backdrop-filter: blur(10px); }
+.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 650; font-size: 18px; letter-spacing: -.01em; text-decoration: none; color: #fff; }
+.nav { display: flex; align-items: center; gap: clamp(14px, 2vw, 26px); }
+.nav .lnk { font-size: 15px; font-weight: 600; text-decoration: none; color: #dbe5ef; white-space: nowrap; }
+.nav .lnk:hover { color: #fff; text-decoration: underline; text-underline-offset: 4px; }
+.nav .lnk[aria-current=page] { color: #fff; text-decoration: underline; text-decoration-color: #5be49b; text-underline-offset: 6px; text-decoration-thickness: 2px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; background: var(--signal); color: #062418; font-weight: 650; border-radius: 10px; padding: 12px 22px; text-decoration: none; letter-spacing: -.005em; transition: background .15s, transform .15s; border: 0; font-family: var(--f); cursor: pointer; white-space: nowrap; }
+.btn:hover { background: #86f2b9; }
+.btn:active { transform: translateY(1px); }
+.btn-s { padding: 9px 16px; font-size: 15px; }
+.btn[disabled] { background: #2a3d55; color: #8fa2b8; cursor: default; }
+.brand .lk { height: 28px; width: auto; display: block; flex: none; }
+.brand .lk-l { display: none; }
+
+/* title block */
+.intro { padding: clamp(112px, 17vh, 168px) var(--side) clamp(8px, 2vh, 24px); }
+.wrap { max-width: 1180px; margin: 0 auto; }
+.intro h1 { font-size: clamp(48px, 6.6vw, 100px); line-height: .95; letter-spacing: -.04em; font-weight: 650; margin: 0 0 20px; color: #fff; text-wrap: balance; }
+.lede { font-size: clamp(18px, 1.45vw, 21px); line-height: 1.4; color: #d6deea; max-width: 36ch; margin: 0 0 16px; }
+.meas { display: inline-flex; align-self: flex-start; font-size: 12px; font-weight: 650; color: var(--amber); border: 1px solid rgba(255, 184, 107, .5); border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* three sections */
+.fw { min-height: 100svh; display: flex; align-items: center; padding: clamp(84px, 11vh, 120px) var(--side) clamp(28px, 5vh, 56px); scroll-snap-align: start; }
+.fw + .fw { border-top: 1px solid var(--rule); }
+.fw > .wrap { width: 100%; display: grid; grid-template-columns: minmax(0, .78fr) minmax(0, 1.5fr); grid-template-areas: "t v" "c v"; column-gap: clamp(24px, 4vw, 60px); align-items: center; }
+.fw .tx { grid-area: t; align-self: end; }
+.fw .ct { grid-area: c; align-self: start; margin-top: 28px; }
+.fw .vs { grid-area: v; }
+.st-n { display: flex; align-items: center; margin: 0 0 18px; }
+.st-n b { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--signal); color: var(--signal); font-size: 13px; font-weight: 700; }
+.fw h2 { font-size: clamp(36px, 4.2vw, 62px); font-weight: 650; letter-spacing: -.035em; line-height: 1.02; margin: 0 0 18px; color: #fff; max-width: 15ch; text-wrap: balance; }
+.fw .say { font-size: clamp(17px, 1.3vw, 19px); line-height: 1.45; color: #c4d1df; max-width: 34ch; margin: 0 0 16px; }
+.vs { position: relative; height: clamp(440px, calc(100svh - 200px), 660px); }
+.vs svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.fine { font-size: 13px; color: #90a2b7; margin: 12px 0 0; max-width: 42ch; line-height: 1.45; }
+.fine b { color: #c4d1df; font-weight: 600; }
+
+/* controls */
+.cl { display: block; font-size: 12.5px; font-weight: 600; color: #8fa2b8; margin: 0 0 8px; letter-spacing: .01em; }
+.seg { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; }
+.seg button { font: 600 14.5px/1.2 var(--f); color: #dbe5ef; background: #13233a; border: 1px solid rgba(214, 228, 242, .28); border-radius: 999px; padding: 10px 16px; min-height: 40px; cursor: pointer; transition: background .2s, border-color .2s, color .2s; }
+.seg button:hover { border-color: rgba(91, 228, 155, .6); color: #fff; }
+.seg button[aria-pressed=true] { background: #1b4a36; border-color: var(--signal); color: #fff; }
+.ro { border-top: 1px solid var(--rule); padding-top: 14px; max-width: 360px; }
+.ro .hd { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.ro .hd .cl { margin: 0; }
+.ro .row { display: grid; grid-template-columns: 104px 1fr; align-items: center; gap: 12px; font-size: 13.5px; color: #c4d1df; margin: 7px 0; }
+.ro .tr { height: 6px; border-radius: 999px; background: rgba(214, 228, 242, .1); overflow: hidden; }
+.ro .tr i { display: block; height: 100%; border-radius: 999px; background: #6f839b; transition: width .5s cubic-bezier(.3, .7, .2, 1), background .3s; }
+.ro .row.win { color: #fff; font-weight: 600; }
+.ro .row.win .tr i { background: var(--signal); }
+.act { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+.act .hint { font-size: 13.5px; color: #8fa2b8; }
+.spec { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 440px; margin: 0 0 20px; }
+.spec::before, .spec .fill { content: ""; position: absolute; left: 12.5%; right: 12.5%; top: 13px; height: 2px; background: rgba(214, 228, 242, .18); border-radius: 2px; }
+.spec .fill { right: auto; width: 0; background: var(--signal); transition: width .45s cubic-bezier(.3, .7, .2, 1); }
+.spec button { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0 2px 4px; min-height: 52px; background: none; border: 0; cursor: pointer; font: 600 13px/1.2 var(--f); color: #8fa2b8; text-align: center; }
+.spec button::before { content: ""; width: 14px; height: 14px; margin-top: 7px; border-radius: 50%; border: 1.5px solid #6f839b; background: var(--night); transition: background .25s, border-color .25s, box-shadow .25s; }
+.spec button.on::before { background: var(--signal); border-color: var(--signal); }
+.spec button[aria-pressed=true] { color: #fff; }
+.spec button[aria-pressed=true]::before { box-shadow: 0 0 0 4px rgba(91, 228, 155, .18); }
+.spec button:hover { color: #fff; }
+.far { margin-top: 16px; padding-top: 12px; border-top: 1.5px dashed rgba(255, 184, 107, .55); max-width: 380px; opacity: 0; transform: translateY(6px); transition: opacity .4s, transform .4s; }
+.far.show { opacity: 1; transform: none; }
+.far p { margin: 8px 0 0; font-size: 14.5px; line-height: 1.42; color: #d6deea; }
+
+/* svg language */
+.pl .face { fill: rgba(19, 35, 58, .88); stroke: rgba(214, 228, 242, .32); stroke-width: 1.2; vector-effect: non-scaling-stroke; transition: stroke .25s, fill .4s; }
+.pl .s1 { fill: #0d1a2c; stroke: rgba(214, 228, 242, .2); stroke-width: 1; }
+.pl .s2 { fill: #0a1524; stroke: rgba(214, 228, 242, .2); stroke-width: 1; }
+.pl.hot .face { stroke: var(--signal); }
+.pl.chip .face { fill: #0b1626; stroke: rgba(214, 228, 242, .4); }
+.pl.lit .face { fill: rgba(27, 74, 54, .82); }
+.ln { fill: none; stroke: rgba(214, 228, 242, .42); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.ln.f { stroke: rgba(214, 228, 242, .14); }
+.ln.g { stroke: var(--signal); stroke-width: 1.5; }
+.ln.d { stroke: rgba(201, 163, 196, .8); }
+.guide { stroke: rgba(214, 228, 242, .22); stroke-width: 1; stroke-dasharray: 3 5; }
+.lane { stroke: rgba(91, 228, 155, .35); stroke-width: 1.3; }
+.lane.new { stroke: var(--signal); stroke-width: 2.2; }
+.lead { stroke: rgba(214, 228, 242, .4); stroke-width: 1; }
+.dot { fill: #e9fff2; }
+.lb { fill: #e8eef5; font: 600 13.5px var(--f); letter-spacing: -.005em; }
+.lb.s { fill: #8fa2b8; font-weight: 500; font-size: 12.5px; }
+.lb.a { fill: var(--amber); font-weight: 650; font-size: 12px; }
+.lb.g { fill: var(--signal); }
+.frame { fill: none; stroke: rgba(214, 228, 242, .3); stroke-width: 1.3; stroke-dasharray: 7 6; }
+.pin { fill: #6f839b; }
+.handle { cursor: grab; }
+.handle:active { cursor: grabbing; }
+.handle:focus { outline: none; }
+.handle:focus-visible .face { stroke: var(--signal); stroke-width: 2.4; }
+
+footer { max-width: 1180px; margin: 0 auto; padding: 24px 0 36px; border-top: 1px solid var(--rule); font-size: 13px; color: #607086; }
+.foot { padding: 0 var(--side); }
+
+@media (max-width: 900px) {
+  .fw > .wrap { grid-template-columns: minmax(0, 1fr); grid-template-areas: "t" "v" "c"; }
+  .fw .ct { margin-top: 18px; }
+  .vs { height: 420px; margin-top: 8px; }
+  .fw { min-height: 100svh; }
+}
+@media (max-width: 700px) {
+  .top { padding: 12px 14px; }
+  .nav { gap: 12px; }
+  .nav .lnk { font-size: 14px; }
+  .vs { height: 400px; }
+  .lb { font-size: 12px; }
+  .lb.s { font-size: 11px; }
+  .lb.a { font-size: 11px; }
+}
+@media (max-width: 520px) {
+  .brand .lk { height: 24px; }
+  .nav .lnk-about { display: none; }
+  .spec button { font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .top, .btn, .seg button, .ro .tr i, .spec .fill, .spec button::before, .far, .pl .face { transition: none; }
+}
+</style>
+</head>
+<body>
+<header class="top solid" id="topbar">
+  <a class="brand" href="../../variants/z3.html" aria-label="Home"><img class="lk lk-l" src="../../assets/brand/chipin-lockup.svg" alt="ChipIn" height="28"><img class="lk lk-d" src="../../assets/brand/chipin-lockup-light.svg" alt="ChipIn" height="28"></a>
+  <nav class="nav" aria-label="Main">
+    <a class="lnk lnk-about" href="../../variants/z3.html#about">About</a>
+    <a class="lnk" href="../../how-it-works.html">How it works</a>
+    <a class="lnk" href="#" aria-current="page">Future work</a>
+    <a class="btn btn-s" href="../../dashboard/">Try now</a>
+  </nav>
+</header>
+<main>
+  <section class="intro" id="intro"><div class="wrap"></div></section>
+  <section class="fw" id="fab"></section>
+  <section class="fw" id="recordings"></section>
+  <section class="fw" id="sensors"></section>
+</main>
+<div class="foot"><footer id="foot"></footer></div>
+<script>
+(function () {
+  'use strict';
+  var C = window.COPY;
+  var RM = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var NS = 'http://www.w3.org/2000/svg';
+  var K = Math.sqrt(3) / 2;
+  var ISO = 'matrix(' + K + ' .5 ' + (-K) + ' .5 0 0)';
+  var uid = 0;
+
+  /* ---------- small helpers ---------- */
+  function el(tag, a, p) { var e = document.createElementNS(NS, tag); if (a) for (var k in a) e.setAttribute(k, a[k]); if (p) p.appendChild(e); return e; }
+  function h(tag, cls, p, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; if (p) p.appendChild(e); return e; }
+  function r1(n) { return Math.round(n * 10) / 10; }
+  function iso(u, v) { return [K * (u - v), 0.5 * (u + v)]; }
+  function pts(a) { return a.map(function (p) { return r1(p[0]) + ',' + r1(p[1]); }).join(' '); }
+  function ease(cur, tgt, dt, rate) { return RM ? tgt : cur + (tgt - cur) * (1 - Math.exp(-rate * dt)); }
+  function gs(x, m, s) { return Math.exp(-((x - m) * (x - m)) / (2 * s * s)); }
+  function fr(x) { return x - Math.floor(x); }
+  function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+
+  /* a label of one or two lines, wrapped to a pixel width */
+  function label(parent, x, y, lines, anchor, maxW) {
+    var t = el('text', { x: x, y: y, 'text-anchor': anchor }, parent);
+    var dy = 0;
+    lines.forEach(function (ln) {
+      if (!ln || !ln.text) return;
+      var sm = window.innerWidth <= 700;
+      var fs = ln.cls === 'lb' ? (sm ? 12 : 13.5) : (sm ? 11 : 12.5);
+      var per = Math.max(6, Math.floor(maxW / (fs * 0.5)));
+      var words = ln.text.split(' '), cur = '', out = [];
+      words.forEach(function (w) { if ((cur + ' ' + w).trim().length > per && cur) { out.push(cur); cur = w; } else { cur = (cur + ' ' + w).trim(); } });
+      if (cur) out.push(cur);
+      out.forEach(function (s) {
+        var ts = el('tspan', { x: x, dy: dy === 0 && t.childNodes.length === 0 ? 0 : (ln.cls === 'lb' ? 16 : 15), 'class': ln.cls }, t);
+        ts.textContent = s; dy++;
+      });
+    });
+    return t;
+  }
+
+  /* one isometric plate: side faces in screen space, top face and its drawing in plate space */
+  function plate(parent, W, H, opts) {
+    opts = opts || {};
+    var t = opts.t == null ? 6 : opts.t;
+    var g = el('g', { 'class': 'pl' + (opts.cls ? ' ' + opts.cls : '') }, parent);
+    var R = iso(W / 2, -H / 2), B = iso(W / 2, H / 2), L = iso(-W / 2, H / 2), T = iso(-W / 2, -H / 2);
+    el('polygon', { 'class': 's1', points: pts([R, B, [B[0], B[1] + t], [R[0], R[1] + t]]) }, g);
+    el('polygon', { 'class': 's2', points: pts([B, L, [L[0], L[1] + t], [B[0], B[1] + t]]) }, g);
+    var top = el('g', { transform: ISO }, g);
+    var face = el('rect', { 'class': 'face', x: -W / 2, y: -H / 2, width: W, height: H, rx: 3 }, top);
+    var art = el('g', null, top);
+    return {
+      g: g, top: top, face: face, art: art, R: R, B: B, L: L, T: T,
+      at: function (x, y, op) { g.setAttribute('transform', 'translate(' + r1(x) + ' ' + r1(y) + ')'); if (op != null) g.style.opacity = r1(op * 100) / 100; }
+    };
+  }
+
+  function pathOf(fn, W, v0, A, t, n) {
+    var d = '', x0 = -W / 2 + W * 0.06, span = W * 0.88;
+    for (var i = 0; i <= n; i++) {
+      var x = i / n, y = fn(x, t);
+      d += (i ? 'L' : 'M') + r1(x0 + span * x) + ' ' + r1(v0 - A * y);
+    }
+    return d;
+  }
+
+  /* the eight sensor traces, in plate space */
+  var WAVES = [
+    function (x, t) { var p = fr(x * 2.2 - t * 0.9); return 0.12 * gs(p, 0.18, 0.03) - 0.2 * gs(p, 0.36, 0.012) + gs(p, 0.39, 0.012) - 0.32 * gs(p, 0.42, 0.012) + 0.28 * gs(p, 0.62, 0.05) - 0.2; },
+    function (x, t) { return 0.42 * Math.sin(2 * Math.PI * (7 * x - t * 1.3)) + 0.28 * Math.sin(2 * Math.PI * (17 * x - t * 2.1) + 1) + 0.18 * Math.sin(2 * Math.PI * (29 * x + t * 0.7)); },
+    function (x, t) { var p = fr(x * 2.2 - t * 0.9); return 0.9 * gs(p, 0.3, 0.08) + 0.35 * gs(p, 0.55, 0.07) - 0.45; },
+    function (x, t) { return 0.75 * Math.sin(2 * Math.PI * (1.2 * x - t * 0.25)); },
+    function (x, t) { return 0.3 * Math.sin(2 * Math.PI * (0.5 * x - t * 0.05)) + 0.05 * Math.sin(2 * Math.PI * (6 * x - t)); },
+    function (x, t) { var p = fr(x * 1.5 - t * 0.4); return 0.75 * Math.sin(2 * Math.PI * (p * p * 10)) * (0.3 + 0.7 * p); },
+    function (x, t) { var p = fr(x * 2.2 - t * 0.9); return 0.9 * gs(p, 0.25, 0.06) + 0.35 * gs(p, 0.48, 0.04) - 0.3 * p - 0.2; },
+    function (x, t) { return 0.7 * Math.sin(2 * Math.PI * (3 * x - t * 0.6)) * gs(fr(x * 0.8 - t * 0.2), 0.5, 0.15) + 0.1 * Math.sin(2 * Math.PI * (13 * x + t)); }
+  ];
+
+  /* text column, controls column and the visual box of one section */
+  function scaffold(root, copy) {
+    var wrap = h('div', 'wrap', root);
+    var tx = h('div', 'tx', wrap);
+    var n = h('p', 'st-n', tx); h('b', null, n, copy.n);
+    h('h2', null, tx, copy.h2);
+    h('p', 'say', tx, copy.p);
+    var pills = h('div', 'pills', tx);
+    copy.pills.forEach(function (p) { h('span', 'meas', pills, p); });
+    var vs = h('div', 'vs', wrap);
+    var ct = h('div', 'ct', wrap);
+    var svg = el('svg', { role: 'img', 'aria-label': copy.svg }, vs);
+    return { vs: vs, ct: ct, svg: svg, pills: pills };
+  }
+
+  /* drives one visual: rebuild on resize, animate only while on screen (or once per change under reduced motion) */
+  function engine(root, svg, build, step) {
+    var on = false, raf = 0, last = 0, w = 0, hh = 0, t0 = performance.now();
+    function size() {
+      var r = svg.getBoundingClientRect();
+      var nw = Math.round(r.width), nh = Math.round(r.height);
+      if (nw === w && nh === hh) return;
+      w = nw; hh = nh;
+      svg.setAttribute('viewBox', '0 0 ' + w + ' ' + hh);
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      build(w, hh);
+      step(1, RM ? 0 : (performance.now() - t0) / 1000, true);
+    }
+    function frame(ts) {
+      var dt = Math.min(0.05, last ? (ts - last) / 1000 : 0.016); last = ts;
+      step(dt, (ts - t0) / 1000, false);
+      raf = on ? requestAnimationFrame(frame) : 0;
+    }
+    new ResizeObserver(size).observe(svg);
+    new IntersectionObserver(function (es) {
+      on = es[0].isIntersecting;
+      if (on && !raf && !RM) { last = 0; raf = requestAnimationFrame(frame); }
+    }, { threshold: 0.02 }).observe(root);
+    size();
+    return { kick: function () { if (RM) step(1, 0, true); } };
+  }
+
+  /* ======================= 1. fab presets: blueprint layers dropping onto the chip ======================= */
+  function drawFab(root, copy) {
+    var S = scaffold(root, copy);
+    var preset = 0, goal = 0, timers = [];
+    var layers = copy.layers.map(function () { return { z: 0, zt: 0, op: 1, opt: 1, lift: 0, liftT: 0, slot: 0 }; });
+    var die = { w: 0, h: 0, wt: 0, ht: 0, flash: 0 };
+    var G = null;
+
+    // controls
+    h('span', 'cl', S.ct, copy.presetsLabel);
+    var segP = h('div', 'seg', S.ct); segP.setAttribute('role', 'group'); segP.setAttribute('aria-label', copy.presetsLabel);
+    var pBtns = copy.presets.map(function (p, i) {
+      var b = h('button', null, segP, p.name); b.type = 'button';
+      b.setAttribute('aria-pressed', i === preset);
+      b.addEventListener('click', function () { setPreset(i); });
+      return b;
+    });
+    h('span', 'cl', S.ct, copy.goalsLabel);
+    var segG = h('div', 'seg', S.ct); segG.setAttribute('role', 'group'); segG.setAttribute('aria-label', copy.goalsLabel);
+    var gBtns = copy.goals.map(function (g, i) {
+      var b = h('button', null, segG, g.name); b.type = 'button';
+      b.setAttribute('aria-pressed', i === goal);
+      b.addEventListener('click', function () { setGoal(i); });
+      return b;
+    });
+    var ro = h('div', 'ro', S.ct);
+    var hd = h('div', 'hd', ro); h('span', 'cl', hd, copy.goalsLabel + ': ' + copy.goals[goal].name); h('span', 'meas', hd, copy.readoutPill);
+    var hdl = hd.firstChild;
+    var rows = copy.readout.map(function (name) {
+      var r = h('div', 'row', ro); h('span', null, r, name); var tr = h('span', 'tr', r); var i = h('i', null, tr); return { r: r, i: i };
+    });
+    var fact = h('p', 'fine', S.ct);
+
+    function paintControls() {
+      pBtns.forEach(function (b, i) { b.setAttribute('aria-pressed', i === preset); });
+      gBtns.forEach(function (b, i) { b.setAttribute('aria-pressed', i === goal); });
+      var bars = copy.goals[goal].bars, best = bars.indexOf(Math.min.apply(null, bars));
+      rows.forEach(function (o, i) { o.i.style.width = Math.round(bars[i] * 100) + '%'; o.r.classList.toggle('win', i === best); });
+      hdl.textContent = copy.goalsLabel + ': ' + copy.goals[goal].name;
+      fact.textContent = '';
+      var b = h('b', null, fact, copy.presets[preset].fact); fact.appendChild(document.createTextNode(' ' + copy.factSource)); void b;
+    }
+
+    function dieTarget() {
+      if (!G) return;
+      var p = copy.presets[preset], a = copy.goals[goal].area, asp = p.tw / p.th;
+      var base = G.W * 0.86, s = Math.sqrt(a);
+      var w = base * s * Math.sqrt(asp / 1.45), hh = base * s / Math.sqrt(asp / 1.45);
+      var k = Math.min(1, base / w, base / hh);
+      die.wt = w * k; die.ht = hh * k;
+    }
+
+    function setGoal(i) { goal = i; dieTarget(); die.flash = 1; paintControls(); E.kick(); }
+
+    function setPreset(i) {
+      if (i === preset && timers.length) return;
+      timers.forEach(clearTimeout); timers = [];
+      preset = i; paintControls();
+      if (RM || !G) { fillLayers(); dieTarget(); E.kick(); return; }
+      // 1. layers rise and fade, top first
+      layers.forEach(function (L, j) { timers.push(setTimeout(function () { L.zt = L.slot + G.span * 0.5; L.opt = 0; }, (2 - j) * 70)); });
+      // 2. new layers appear above and drop flat onto the chip, bottom first
+      timers.push(setTimeout(function () {
+        fillLayers();
+        layers.forEach(function (L, j) {
+          L.z = G.top + G.span * 0.6; L.op = 0;
+          timers.push(setTimeout(function () { L.zt = 8 + j * 7; L.opt = 1; }, j * 130));
+        });
+      }, 360));
+      // 3. the die takes the fab's shape
+      timers.push(setTimeout(function () { dieTarget(); die.flash = 1; }, 1000));
+      // 4. the layers lift back into the exploded view
+      timers.push(setTimeout(function () { layers.forEach(function (L) { L.zt = L.slot; }); timers = []; }, 1650));
+    }
+
+    function fillLayers() {
+      if (!G) return;
+      var p = copy.presets[preset], W = G.W;
+      G.pl.forEach(function (P, j) {
+        while (P.art.firstChild) P.art.removeChild(P.art.firstChild);
+        var spec = copy.layers[j];
+        if (j === 0) { // costs: an illustrative cost field, different per fab
+          var n = 7, c = W / n, seed = preset * 97 + 13;
+          for (var a = 0; a < n; a++) for (var b = 0; b < n; b++) {
+            var v = fr(Math.sin((a + 1) * 12.9898 + (b + 1) * 78.233 + seed) * 43758.5453);
+            el('rect', { x: r1(-W / 2 + a * c + c * 0.18), y: r1(-W / 2 + b * c + c * 0.18), width: r1(c * 0.64), height: r1(c * 0.64), rx: 1.5, fill: '#c9a3c4', opacity: r1((0.1 + v * 0.55) * 100) / 100 }, P.art);
+          }
+        } else if (j === 1) { // timing: the default clock, drawn to scale (100 ns has half the edges of 50 ns)
+          var periods = 400 / p.ns, x0 = -W * 0.44, span = W * 0.88, A = W * 0.12, d = '';
+          for (var k = 0; k < periods; k++) {
+            var xa = x0 + span * k / periods, xb = x0 + span * (k + 0.5) / periods, xc = x0 + span * (k + 1) / periods;
+            d += (k ? 'L' : 'M') + r1(xa) + ' ' + r1(A) + 'L' + r1(xa) + ' ' + r1(-A) + 'L' + r1(xb) + ' ' + r1(-A) + 'L' + r1(xb) + ' ' + r1(A) + 'L' + r1(xc) + ' ' + r1(A);
+          }
+          for (var m = 1; m < 8; m++) el('line', { 'class': 'ln f', x1: r1(-W / 2 + W * m / 8), y1: -W / 2, x2: r1(-W / 2 + W * m / 8), y2: W / 2 }, P.art);
+          el('path', { 'class': 'ln g', d: d }, P.art);
+        } else { // design rules: the fab's tile grid, all three fabs at one scale
+          var sc = W / 1450, tw = p.tw * sc, th = p.th * sc;
+          var cols = Math.floor(W / tw), rws = Math.floor(W / th);
+          var ox = -cols * tw / 2, oy = -rws * th / 2;
+          for (var r = 0; r <= rws * 4; r++) el('line', { 'class': 'ln f', x1: r1(ox), y1: r1(oy + r * th / 4), x2: r1(ox + cols * tw), y2: r1(oy + r * th / 4) }, P.art);
+          for (var cc = 0; cc <= cols; cc++) el('line', { 'class': 'ln', x1: r1(ox + cc * tw), y1: r1(oy), x2: r1(ox + cc * tw), y2: r1(oy + rws * th) }, P.art);
+          for (var rr = 0; rr <= rws; rr++) el('line', { 'class': 'ln', x1: r1(ox), y1: r1(oy + rr * th), x2: r1(ox + cols * tw), y2: r1(oy + rr * th) }, P.art);
+          el('rect', { 'class': 'ln g', x: r1(ox), y: r1(oy), width: r1(tw), height: r1(th), fill: 'rgba(91,228,155,.18)' }, P.art);
+        }
+        var sub = spec.sub === 'clock' ? p.clock : spec.sub === 'rules' ? p.rules : spec.sub;
+        var lg = G.lab[j]; while (lg.firstChild) lg.removeChild(lg.firstChild);
+        label(lg, P.L[0] - 20, P.L[1] - 3, [{ text: spec.name, cls: 'lb' }, { text: sub, cls: spec.amber ? 'lb a' : 'lb s' }], 'end', G.lw);
+      });
+    }
+
+    function build(w, hh) {
+      var phone = w < 560;
+      var lw = phone ? 104 : 180;
+      var W = Math.min((w - lw - 30) / (2 * K), hh * 0.37);
+      var cx = lw + 10 + (w - lw - 10) / 2, cy = hh - 18 - W / 2 - 8;
+      var top = hh - W - 46, span = top;
+      G = { W: W, cx: cx, cy: cy, lw: lw, top: top, span: span, pl: [], lab: [] };
+      var id = 'fg' + (++uid);
+      var defs = el('defs', null, S.svg);
+      var pat = el('pattern', { id: id, width: 7, height: 7, patternUnits: 'userSpaceOnUse' }, defs);
+      el('rect', { x: 1, y: 1, width: 5, height: 5, rx: 1, fill: '#5be49b' }, pat);
+      // guides behind everything
+      G.guides = ['R', 'B', 'L'].map(function () { return el('line', { 'class': 'guide' }, S.svg); });
+      // chip
+      var chip = plate(S.svg, W, W, { cls: 'chip', t: 10 });
+      var np = 12;
+      for (var i = 1; i < np; i++) {
+        var q = -W / 2 + W * i / np;
+        el('rect', { 'class': 'pin', x: r1(q - 2), y: r1(-W / 2 - 7), width: 4, height: 6, rx: 1 }, chip.art);
+        el('rect', { 'class': 'pin', x: r1(q - 2), y: r1(W / 2 + 1), width: 4, height: 6, rx: 1 }, chip.art);
+        el('rect', { 'class': 'pin', x: r1(-W / 2 - 7), y: r1(q - 2), width: 6, height: 4, rx: 1 }, chip.art);
+        el('rect', { 'class': 'pin', x: r1(W / 2 + 1), y: r1(q - 2), width: 6, height: 4, rx: 1 }, chip.art);
+      }
+      chip.face.setAttribute('x', -W / 2 + 4); chip.face.setAttribute('y', -W / 2 + 4); chip.face.setAttribute('width', W - 8); chip.face.setAttribute('height', W - 8);
+      G.dieR = el('rect', { fill: 'url(#' + id + ')', stroke: '#5be49b', 'stroke-width': 1.2, 'vector-effect': 'non-scaling-stroke', rx: 2 }, chip.art);
+      G.chip = chip;
+      G.chipLab = el('g', null, chip.g);
+      label(G.chipLab, chip.L[0] - 20, chip.L[1] + 2, [{ text: copy.chip.name, cls: 'lb' }, { text: copy.chip.sub, cls: 'lb s' }], 'end', lw);
+      el('line', { 'class': 'lead', x1: r1(chip.L[0] - 4), y1: r1(chip.L[1]), x2: r1(chip.L[0] - 14), y2: r1(chip.L[1]) }, chip.g);
+      // three layers
+      var gap = (top - 20) / 3;
+      layers.forEach(function (L, j) {
+        L.slot = gap * (j + 1) + 6;
+        if (!L.z) { L.z = L.slot; L.zt = L.slot; }
+        var P = plate(S.svg, W, W, { t: 4 });
+        el('line', { 'class': 'lead', x1: r1(P.L[0] - 4), y1: r1(P.L[1]), x2: r1(P.L[0] - 14), y2: r1(P.L[1]) }, P.g);
+        G.lab[j] = el('g', null, P.g);
+        P.g.addEventListener('pointerenter', function () { L.liftT = 16; P.g.classList.add('hot'); E.kick(); });
+        P.g.addEventListener('pointerleave', function () { L.liftT = 0; P.g.classList.remove('hot'); E.kick(); });
+        G.pl.push(P);
+      });
+      G.dot = el('circle', { 'class': 'dot', r: 3.2 }, S.svg);
+      fillLayers();
+      dieTarget();
+      if (!die.w) { die.w = die.wt; die.h = die.ht; }
+    }
+
+    function step(dt, t) {
+      if (!G) return;
+      var cx = G.cx, cy = G.cy;
+      die.w = ease(die.w, die.wt, dt, 6); die.h = ease(die.h, die.ht, dt, 6);
+      die.flash = RM ? 0 : Math.max(0, die.flash - dt * 1.4);
+      G.dieR.setAttribute('x', r1(-die.w / 2)); G.dieR.setAttribute('y', r1(-die.h / 2));
+      G.dieR.setAttribute('width', r1(die.w)); G.dieR.setAttribute('height', r1(die.h));
+      G.dieR.setAttribute('opacity', r1((0.62 + die.flash * 0.38) * 100) / 100);
+      G.chip.g.classList.toggle('hot', die.flash > 0.25);
+      G.chip.at(cx, cy, 1);
+      var topZ = 0;
+      layers.forEach(function (L, j) {
+        L.z = ease(L.z, L.zt, dt, 7); L.op = ease(L.op, L.opt, dt, 8); L.lift = ease(L.lift, L.liftT, dt, 10);
+        var bob = RM ? 0 : Math.sin(t * 1.1 + j * 1.3) * 3 * (L.zt === L.slot ? 1 : 0);
+        var z = L.z + L.lift + bob;
+        G.pl[j].at(cx, cy - z, L.op);
+        G.lab[j].style.opacity = L.z > 30 ? 1 : 0;
+        if (j === 2) topZ = z;
+      });
+      var C3 = G.chip, keys = ['R', 'B', 'L'];
+      G.guides.forEach(function (g, i) {
+        var p = C3[keys[i]];
+        g.setAttribute('x1', r1(cx + p[0])); g.setAttribute('x2', r1(cx + p[0]));
+        g.setAttribute('y1', r1(cy - topZ + p[1])); g.setAttribute('y2', r1(cy + p[1]));
+      });
+      if (RM) { G.dot.style.display = 'none'; return; }
+      var ph = fr(t / 2.6), R = C3.R;
+      G.dot.setAttribute('cx', r1(cx + R[0])); G.dot.setAttribute('cy', r1(cy - topZ * (1 - ph) + R[1]));
+      G.dot.style.opacity = r1(Math.sin(ph * Math.PI) * 100) / 100;
+    }
+
+    paintControls();
+    var E = engine(root, S.svg, build, step);
+  }
+
+  /* ======================= 2. your own recordings: a personal layer slides in between ======================= */
+  function drawRecordings(root, copy) {
+    var S = scaffold(root, copy);
+    var st = { du: 0, duT: 0, tune: 0, inside: false };
+    var G = null, drag = null;
+
+    var act = h('div', 'act', S.ct);
+    var btn = h('button', 'btn btn-s', act, copy.btnIn); btn.type = 'button';
+    h('span', 'hint', act, copy.hint);
+    btn.addEventListener('click', function () { setIn(!st.inside); });
+
+    function setIn(v) {
+      st.inside = v; st.duT = v ? 0 : -G.D;
+      btn.textContent = v ? copy.btnOut : copy.btnIn;
+      btn.setAttribute('aria-pressed', v);
+      if (G) G.hand.setAttribute('aria-pressed', v);
+      E.kick();
+    }
+
+    function build(w, hh) {
+      // the layer slides out level with its slot, to the left, still inside the machine frame
+      var phone = w < 560, pad = phone ? 8 : 18;
+      var lw = phone ? 92 : 180;
+      var sk = phone ? 1.1 : 1.6;
+      var W = Math.min((w - lw - 2 * pad - 22) / (K * (2 + sk)), hh * 0.3);
+      var D = K * W * sk;
+      var cx = pad + 8 + D + K * W;
+      var gap = Math.min((hh - 2 * pad - W - 70) / 2, W * (phone ? 1.3 : 1.15));
+      var top = pad + 36, Hb = 2 * gap + W + 14;
+      var cy = top + Math.max(0, (hh - pad - top - Hb) / 2) + 2 * gap + W / 2;
+      G = { W: W, D: D, cx: cx, cy: cy, gap: gap, lw: lw, nodes: [], links: [] };
+      if (!st.inside) { st.du = -D; st.duT = -D; }
+      var right = Math.min(w - pad, cx + K * W + 18 + lw);
+      el('rect', { 'class': 'frame', x: pad, y: pad, width: r1(right - pad), height: r1(hh - 2 * pad), rx: 18 }, S.svg);
+      var mt = el('text', { 'class': 'lb s', x: pad + 16, y: pad + 24 }, S.svg); mt.textContent = copy.machine;
+      var id = 'rg' + (++uid);
+      var defs = el('defs', null, S.svg);
+      var pat = el('pattern', { id: id, width: 7, height: 7, patternUnits: 'userSpaceOnUse' }, defs);
+      el('rect', { x: 1, y: 1, width: 5, height: 5, rx: 1, fill: '#5be49b' }, pat);
+
+      // chip
+      var chip = plate(S.svg, W, W, { cls: 'chip', t: 10 });
+      G.dieR = el('rect', { x: r1(-W * 0.3), y: r1(-W * 0.3), width: r1(W * 0.6), height: r1(W * 0.6), fill: 'url(#' + id + ')', stroke: '#5be49b', 'stroke-width': 1.2, 'vector-effect': 'non-scaling-stroke', rx: 2 }, chip.art);
+      G.dieO = el('rect', { 'class': 'ln', x: r1(-W * 0.3), y: r1(-W * 0.3), width: r1(W * 0.6), height: r1(W * 0.6), rx: 2 }, chip.art);
+      G.chip = chip;
+      // lanes for the travelling dots (drawn between chip and the upper plates)
+      G.lanes = [0.25, 0.5, 0.75].map(function () { return el('line', { 'class': 'guide' }, S.svg); });
+      // recordings layer
+      var rec = plate(S.svg, W, W, { t: 4 });
+      G.traces = [0, 3, 2].map(function () { return el('path', { 'class': 'ln' }, rec.art); });
+      G.rec = rec;
+      rec.g.classList.add('handle');
+      rec.g.setAttribute('tabindex', '0'); rec.g.setAttribute('role', 'button');
+      rec.g.setAttribute('aria-label', copy.btnIn); rec.g.setAttribute('aria-pressed', st.inside);
+      G.hand = rec.g;
+      // model
+      var model = plate(S.svg, W, W, { t: 4 });
+      var n = 4, c = W / (n + 1);
+      for (var a = 0; a < n; a++) for (var b = 0; b < n; b++) {
+        if (a < n - 1) G.links.push(el('line', { 'class': 'ln f', x1: r1(-W / 2 + c * (a + 1)), y1: r1(-W / 2 + c * (b + 1)), x2: r1(-W / 2 + c * (a + 2)), y2: r1(-W / 2 + c * (((b + a) % n) + 1)) }, model.art));
+      }
+      for (var a2 = 0; a2 < n; a2++) for (var b2 = 0; b2 < n; b2++) {
+        G.nodes.push({ e: el('circle', { cx: r1(-W / 2 + c * (a2 + 1)), cy: r1(-W / 2 + c * (b2 + 1)), r: r1(W * 0.035), fill: '#6f839b' }, model.art), k: (a2 * n + b2) / (n * n) * 0.85 + 0.05 });
+      }
+      G.model = model;
+      // labels on the right of each plate
+      function lab(P, name, sub) {
+        el('line', { 'class': 'lead', x1: r1(P.R[0] + 4), y1: r1(P.R[1]), x2: r1(P.R[0] + 14), y2: r1(P.R[1]) }, P.g);
+        var g = el('g', null, P.g);
+        var o = { g: g, sub: null, set: function (s) {
+          if (s === o.sub) return; o.sub = s;
+          while (g.firstChild) g.removeChild(g.firstChild);
+          label(g, P.R[0] + 20, P.R[1] - 3, [{ text: name, cls: 'lb' }, { text: s, cls: 'lb s' }], 'start', lw - 20);
+        } };
+        o.set(sub); return o;
+      }
+      G.labs = { chip: lab(chip, copy.chip, copy.chipSub), rec: lab(rec, copy.rec, copy.recSub), model: lab(model, copy.model, copy.modelSub) };
+      G.dots = [0, 1, 2].map(function () { return el('circle', { 'class': 'dot', r: 3 }, S.svg); });
+      G.shown = { chip: 0, model: 0 };
+
+      // drag along the plate's own axis; the layer cannot leave the machine
+      rec.g.addEventListener('pointerdown', function (e) {
+        drag = { x: e.clientX, du: st.du, moved: false };
+        S.svg.setPointerCapture(e.pointerId); e.preventDefault();
+      });
+      rec.g.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIn(!st.inside); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); setIn(true); }
+        if (e.key === 'ArrowLeft') { e.preventDefault(); setIn(false); }
+      });
+    }
+    S.svg.addEventListener('pointermove', function (e) {
+      if (!drag) return;
+      var scale = S.svg.getBoundingClientRect().width / S.svg.viewBox.baseVal.width || 1;
+      var dx = (e.clientX - drag.x) / scale;
+      if (Math.abs(dx) > 3) drag.moved = true;
+      st.du = clamp(drag.du + dx, -G.D, 0); st.duT = st.du;
+    });
+    function endDrag() {
+      if (!drag) return;
+      var moved = drag.moved; drag = null;
+      if (!moved) { setIn(!st.inside); return; }
+      setIn(st.du > -G.D / 2);
+    }
+    S.svg.addEventListener('pointerup', endDrag);
+    S.svg.addEventListener('pointercancel', endDrag);
+
+    function step(dt, t) {
+      if (!G) return;
+      var W = G.W, cx = G.cx, cy = G.cy;
+      if (!drag) st.du = ease(st.du, st.duT, dt, 7);
+      var p = 1 + st.du / G.D; // 0 out, 1 in
+      var tuneT = p > 0.97 ? 1 : 0;
+      st.tune = RM ? tuneT : clamp(st.tune + (tuneT ? dt * 0.42 : -dt * 0.8), 0, 1);
+      G.chip.at(cx, cy, 1);
+      var bobR = RM ? 0 : Math.sin(t * 1.2) * 2.5, bobM = RM ? 0 : Math.sin(t * 1.2 + 1.4) * 2.5;
+      G.rec.at(cx + st.du, cy - G.gap + bobR, 1);
+      G.model.at(cx, cy - 2 * G.gap + bobM, 1);
+      G.rec.g.classList.toggle('lit', p > 0.97);
+      G.rec.g.classList.toggle('hot', !!drag);
+      // the maker's own traces scroll on their layer
+      var tt = RM ? 0.3 : t;
+      [0, 3, 2].forEach(function (wi, i) { G.traces[i].setAttribute('d', pathOf(WAVES[wi], W, -W * 0.27 + i * W * 0.27, W * 0.09, tt, 56)); G.traces[i].setAttribute('class', p > 0.97 ? 'ln g' : 'ln'); });
+      // the model lights node by node as it is tuned
+      G.nodes.forEach(function (nd) { var on = st.tune > nd.k; nd.e.setAttribute('fill', on ? '#5be49b' : '#6f839b'); });
+      G.links.forEach(function (l, i) { l.setAttribute('class', st.tune > (i / G.links.length) * 0.9 + 0.08 ? 'ln g' : 'ln f'); });
+      var done = st.tune >= 1;
+      G.model.g.classList.toggle('hot', done);
+      G.dieR.setAttribute('opacity', done ? 0.7 : 0);
+      G.chip.g.classList.toggle('hot', done);
+      G.labs.model.set(st.tune > 0.5 ? copy.modelTuned : copy.modelSub);
+      G.labs.chip.set(done ? copy.chipTuned : copy.chipSub);
+      // lanes and travelling dots: recordings up into the model while tuning, model down into the chip when done
+      [0.25, 0.5, 0.75].forEach(function (f, i) {
+        var a = iso(W * (f - 0.5), W * 0.5 - 2), ln = G.lanes[i];
+        var x = cx + a[0];
+        ln.setAttribute('x1', r1(x)); ln.setAttribute('x2', r1(x));
+        ln.setAttribute('y1', r1(cy - 2 * G.gap + a[1] + bobM)); ln.setAttribute('y2', r1(cy + a[1]));
+        ln.style.opacity = p > 0.97 ? 1 : 0;
+        var d = G.dots[i];
+        if (RM || p < 0.97) { d.style.opacity = 0; return; }
+        var ph = fr(t / 1.6 + i / 3), y;
+        if (!done) y = cy - G.gap + a[1] - ph * G.gap; else y = cy - 2 * G.gap + a[1] + ph * 2 * G.gap;
+        d.setAttribute('cx', r1(x)); d.setAttribute('cy', r1(y)); d.style.opacity = r1(Math.sin(ph * Math.PI) * 100) / 100;
+      });
+    }
+
+    var E = engine(root, S.svg, build, step);
+  }
+
+  /* ======================= 3. every sensor, one chip: layers of sensors, one lane each ======================= */
+  function drawSensors(root, copy) {
+    var S = scaffold(root, copy);
+    var MAX = copy.steps[copy.steps.length - 1].n;
+    var n = copy.steps[1].n, plates = [], G = null, newest = -1, newAt = -9;
+
+    h('span', 'cl', S.ct, copy.spectrumLabel);
+    var spec = h('div', 'spec', S.ct); spec.setAttribute('role', 'group'); spec.setAttribute('aria-label', copy.spectrumLabel);
+    var fill = h('span', 'fill', spec);
+    var sBtns = copy.steps.map(function (s) {
+      var b = h('button', null, spec, s.name); b.type = 'button';
+      b.addEventListener('click', function () { setN(s.n); });
+      return b;
+    });
+    var act = h('div', 'act', S.ct);
+    var add = h('button', 'btn btn-s', act, '+ ' + copy.add); add.type = 'button';
+    add.addEventListener('click', function () { if (n < MAX) setN(n + 1); });
+    var far = h('div', 'far', S.ct); far.setAttribute('aria-hidden', 'true');
+    h('span', 'meas', far, copy.farPill); h('p', null, far, copy.farNote);
+
+    function stepIndex() { var k = 0; copy.steps.forEach(function (s, i) { if (n >= s.n) k = i; }); return k; }
+    function paint() {
+      var k = stepIndex();
+      sBtns.forEach(function (b, i) { b.classList.toggle('on', i <= k); b.setAttribute('aria-pressed', i === k && copy.steps[i].n === n); });
+      fill.style.width = (75 * k / (copy.steps.length - 1)) + '%';
+      add.disabled = n >= MAX; add.textContent = n >= MAX ? copy.full : '+ ' + copy.add;
+      var isFar = n >= MAX; far.classList.toggle('show', isFar); far.setAttribute('aria-hidden', !isFar);
+    }
+
+    function zFor(i, count) {
+      if (count === 1) return G.z0 + G.span * 0.42;
+      var gap = Math.min(G.W * 0.55, G.span / (count - 1));
+      return G.z0 + i * gap;
+    }
+    function makePlate(i) {
+      var P = plate(G.layer, G.W, G.W, { t: n > 10 ? 2 : 3 });
+      var o = { P: P, i: i, z: zFor(i, n) + G.span * 0.5, zt: zFor(i, n), op: 0, opt: 1, dying: false, type: i % WAVES.length };
+      o.path = el('path', { 'class': 'ln' }, P.art);
+      o.lane = el('line', { 'class': 'lane' }, G.lanes);
+      o.dot = el('circle', { 'class': 'dot', r: 2.6 }, G.lanes);
+      o.lead = el('line', { 'class': 'lead', x1: r1(P.L[0] - 4), y1: r1(P.L[1]), x2: r1(P.L[0] - 14), y2: r1(P.L[1]) }, P.g);
+      o.lab = el('text', { 'class': 'lb', x: r1(P.L[0] - 20), y: r1(P.L[1] + 4.5), 'text-anchor': 'end' }, P.g);
+      o.lab.textContent = copy.sensors[o.type];
+      return o;
+    }
+    function setN(v) {
+      var old = n; n = clamp(v, 1, MAX); paint();
+      if (!G) return;
+      if (n > old) { for (var i = old; i < n; i++) plates.push(makePlate(i)); newest = n - 1; newAt = performance.now() / 1000; }
+      plates.forEach(function (o) { if (o.i >= n) { o.dying = true; o.opt = 0; o.zt = zFor(o.i, Math.max(n, 1)) + G.span * 0.3; } });
+      plates.forEach(function (o) { if (!o.dying) o.zt = zFor(o.i, n); });
+      if (RM) { plates = plates.filter(function (o) { if (o.dying) { G.layer.removeChild(o.P.g); G.lanes.removeChild(o.lane); G.lanes.removeChild(o.dot); return false; } return true; }); plates.forEach(function (o) { o.z = o.zt; o.op = 1; }); }
+      E.kick();
+    }
+
+    function build(w, hh) {
+      var phone = w < 560;
+      var lw = phone ? 104 : 170;
+      var W = Math.min((w - lw - 40) / (2 * K), hh * 0.36);
+      var cx = lw + 10 + (w - lw - 10) / 2, cy = hh - 22 - W / 2;
+      G = { W: W, cx: cx, cy: cy, lw: lw, z0: W * 0.36 + 10, span: hh - W - 30 - (W * 0.36 + 10) - 24 };
+      var id = 'sg' + (++uid);
+      var defs = el('defs', null, S.svg);
+      var pat = el('pattern', { id: id, width: 7, height: 7, patternUnits: 'userSpaceOnUse' }, defs);
+      el('rect', { x: 1, y: 1, width: 5, height: 5, rx: 1, fill: '#5be49b' }, pat);
+      var chip = plate(S.svg, W, W, { cls: 'chip', t: 10 });
+      G.dieR = el('rect', { x: r1(-W * 0.32), y: r1(-W * 0.32), width: r1(W * 0.64), height: r1(W * 0.64), fill: 'url(#' + id + ')', stroke: '#5be49b', 'stroke-width': 1.2, 'vector-effect': 'non-scaling-stroke', rx: 2 }, chip.art);
+      G.pins = el('g', null, chip.art);
+      G.chip = chip;
+      el('line', { 'class': 'lead', x1: r1(chip.L[0] - 4), y1: r1(chip.L[1]), x2: r1(chip.L[0] - 14), y2: r1(chip.L[1]) }, chip.g);
+      label(el('g', null, chip.g), chip.L[0] - 20, chip.L[1] + 2, [{ text: copy.chip, cls: 'lb' }, { text: copy.chipSub, cls: 'lb s' }], 'end', lw);
+      G.layer = el('g', null, S.svg);
+      G.lanes = el('g', null, S.svg);
+      G.brk = el('path', { 'class': 'lead', fill: 'none' }, S.svg);
+      G.brkT = el('g', null, S.svg);
+      G.brkKey = '';
+      var keep = n; plates = [];
+      for (var i = 0; i < keep; i++) { var o = makePlate(i); o.z = o.zt; o.op = 1; plates.push(o); }
+    }
+
+    function step(dt, t) {
+      if (!G) return;
+      var W = G.W, cx = G.cx, cy = G.cy;
+      G.chip.at(cx, cy, 1);
+      var many = n > copy.steps[2].n;
+      var fresh = RM ? (newest >= 0 ? 1 : 0) : clamp(1 - (performance.now() / 1000 - newAt) / 1.8, 0, 1);
+      var tt = RM ? 0.3 : t;
+      var alive = plates.filter(function (o) { return !o.dying; });
+      G.gapNow = alive.length > 1 ? alive[1].z - alive[0].z : W;
+      G.dieR.setAttribute('opacity', r1((0.35 + 0.55 * Math.min(1, alive.length / MAX * 1.6)) * 100) / 100);
+      plates.forEach(function (o) {
+        o.z = ease(o.z, o.zt, dt, 6); o.op = ease(o.op, o.opt, dt, 7);
+        var y = cy - o.z;
+        o.P.at(cx, y, o.op);
+        // each trace runs along the plate's front-left edge, in the strip the plate above leaves visible
+        var band = n === 1 ? W * 0.9 : Math.min(W * 0.6, Math.max(6, G.gapNow - 2));
+        var A = band * 0.36, v0 = W / 2 - band / 2;
+        o.path.setAttribute('d', pathOf(WAVES[o.type], W, v0, A, tt + o.i * 0.37, n > 10 ? 36 : 60));
+        var isNew = o.i === newest && fresh > 0;
+        o.path.setAttribute('class', isNew ? 'ln g' : 'ln');
+        o.P.g.classList.toggle('hot', isNew);
+        o.lab.style.display = many ? 'none' : '';
+        o.lead.style.display = many ? 'none' : '';
+        // its own lane: from the plate's front-right edge straight down to the chip's pin below
+        var count = Math.max(n, 1), f = (o.i + 0.5) / Math.max(count, o.i + 1);
+        var a = iso(W / 2, -W / 2 + W * f);
+        var x = cx + a[0];
+        o.lane.setAttribute('x1', r1(x)); o.lane.setAttribute('x2', r1(x));
+        o.lane.setAttribute('y1', r1(y + a[1])); o.lane.setAttribute('y2', r1(cy + a[1]));
+        o.lane.setAttribute('class', isNew ? 'lane new' : 'lane');
+        o.lane.style.opacity = r1(o.op * 100) / 100;
+        if (RM) { o.dot.style.opacity = 0; }
+        else {
+          var ph = fr(t / 1.9 + o.i * 0.13);
+          o.dot.setAttribute('cx', r1(x)); o.dot.setAttribute('cy', r1(y + a[1] + (cy - y) * ph));
+          o.dot.style.opacity = r1(Math.sin(ph * Math.PI) * o.op * 100) / 100;
+        }
+      });
+      // drop plates that have faded out
+      plates = plates.filter(function (o) {
+        if (o.dying && o.op < 0.03) { G.layer.removeChild(o.P.g); G.lanes.removeChild(o.lane); G.lanes.removeChild(o.dot); return false; }
+        return true;
+      });
+      // the bracket names the group once the stack is too dense for one label per sensor
+      var key = many ? (n >= MAX ? 'h' : 'w') : '';
+      if (key !== G.brkKey) {
+        G.brkKey = key;
+        while (G.brkT.firstChild) G.brkT.removeChild(G.brkT.firstChild);
+      }
+      if (many && alive.length) {
+        var L = G.chip.L, bx = cx + L[0] - 12;
+        var yb = cy - alive[0].z + L[1], yt = cy - alive[alive.length - 1].z + L[1];
+        G.brk.setAttribute('d', 'M' + r1(bx + 6) + ' ' + r1(yb) + 'H' + r1(bx) + 'V' + r1(yt) + 'H' + r1(bx + 6));
+        G.brk.style.display = '';
+        if (!G.brkT.firstChild) label(G.brkT, 0, 0, [{ text: key === 'h' ? copy.groupHospital : copy.groupWard, cls: 'lb' }], 'end', G.lw - 18);
+        G.brkT.setAttribute('transform', 'translate(' + r1(bx - 8) + ' ' + r1((yb + yt) / 2) + ')');
+      } else { G.brk.style.display = 'none'; }
+    }
+
+    paint();
+    var E = engine(root, S.svg, build, step);
+  }
+
+  /* ---------- page ---------- */
+  var intro = document.querySelector('#intro .wrap');
+  h('h1', null, intro, C.title.h1);
+  h('p', 'lede', intro, C.title.lede);
+  h('span', 'meas', intro, C.title.pill);
+  drawFab(document.getElementById('fab'), C.fab);
+  drawRecordings(document.getElementById('recordings'), C.recordings);
+  drawSensors(document.getElementById('sensors'), C.sensors);
+  document.getElementById('foot').textContent = C.footer;
+})();
+</script>
+<script src="../variant-nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Future work</title>
+<meta name="description" content="Three things planned for ChipIn next.">
+<meta name="theme-color" content="#0f1a2a">
+<link rel="icon" type="image/svg+xml" href="../../assets/brand/favicon.svg">
+<script>
+/* =====================================================================================================
+   THE WORDS OF THIS PAGE live in window.COPY only; the HTML holds no prose.
+   Each section is one COPY key plus one draw function (drawFab, drawRecordings, drawSensors), so a
+   section can be swapped by editing its key and its function. Everything here is planned, not built.
+   ===================================================================================================== */
+window.COPY = {
+  title: {
+    h1: 'What comes next',
+    lede: 'Three things we plan to build into ChipIn next.',
+    pill: 'Planned'
+  },
+  fab: {
+    step: '01',
+    h2: 'Pick a fab; the chip would fit it.',
+    say: 'You would pick a process; ChipIn would load its rules and costs, then re-pack the design for what matters most: cost, size or speed.',
+    pills: ['Planned'],
+    presetLabel: 'Process',
+    presets: [
+      { name: 'sky130', tile: '161 × 111.52 µm', clock: '50\u00a0ns' },
+      { name: 'GF180', tile: '346.64 × 160.72 µm', clock: '100\u00a0ns' },
+      { name: 'IHP SG13G2', tile: '202.08 × 154.98 µm', clock: '50\u00a0ns' }
+    ],
+    goalLabel: 'Optimise for',
+    goals: ['Lowest cost', 'Smallest', 'Soonest made'],
+    bars: ['Cost', 'Chip area', 'Time to make'],
+    illus: 'Illustrative',
+    tileWord: 'Tile',
+    clockWord: 'default clock',
+    source: 'Tile size and default clock as in the lab’s tool notes. Gates and bars are illustrative.',
+    aria: 'Gate squares re-packing into the chosen process’s tiles as the goal changes'
+  },
+  recordings: {
+    step: '02',
+    h2: 'Your recordings, your patients, your chip',
+    say: 'A device maker would bring their own sensor recordings, and the chip’s model would be fine-tuned to their patients and sensor, on their machine.',
+    pills: ['Planned'],
+    machine: 'Your machine',
+    model: 'The chip’s model',
+    states: ['General model', 'Tuning to your patients', 'Tuned to your patients'],
+    patients: ['Patient A', 'Patient B', 'Patient C', 'Patient D', 'Patient E', 'Patient F'],
+    add: 'Add a recording',
+    again: 'Start over',
+    fit: 'Fit to your patients',
+    illus: 'Illustrative',
+    hint: 'Hover or tap a recording to see what it tuned.',
+    aria: 'Sensor recordings inside the maker’s machine streaming into the chip, its gates turning green as the model is tuned'
+  },
+  sensors: {
+    step: '03',
+    h2: 'Every sensor, one chip',
+    say: 'Models would read every sensor at once, in parallel, and more can always be added. A whole hospital on one chip is the far end.',
+    pills: ['Planned'],
+    steps: ['One sensor', 'A few sensors', 'A ward', 'A whole hospital'],
+    stepsLabel: 'How far along',
+    add: 'Add a sensor',
+    again: 'Back to one',
+    types: ['Heart trace', 'Oxygen', 'Breathing', 'Brain waves', 'Temperature', 'Radar', 'Blood pressure', 'Movement', 'Sound'],
+    chip: 'One chip, one local model',
+    farPill: 'The far end',
+    far: 'Far-fetched today: a direction to keep moving in, not a promise.',
+    aria: 'Sensor streams flowing in parallel into one chip; each added sensor lights a new lane'
+  },
+  footer: 'Built at the SoTA Scientific Parallelism Hackathon, London, November 2026.'
+};
+</script>
+<style>
+:root {
+  --night: #0f1a2a;
+  --deep: #16263c;
+  --paper: #eef1f2;
+  --ink: #132033;
+  --signal: #5be49b;
+  --amber: #ffb86b;
+  --dusk: #c9a3c4;
+  --mute: #9aabc0;
+  --rule: rgba(214, 228, 242, .15);
+  --f: "Avenir Next", "Avenir", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --side: clamp(20px, 5.4vw, 84px);
+}
+* { box-sizing: border-box; }
+html { background: var(--night); -webkit-text-size-adjust: 100%; scroll-snap-type: y proximity; }
+body { margin: 0; color: #e8eef5; font: 400 17px/1.5 var(--f); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; border-radius: 6px; }
+
+/* top bar (verbatim from the landing page) */
+.top { position: fixed; top: 0; left: 0; right: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px clamp(16px, 3vw, 34px); pointer-events: none; transition: background .3s, color .3s; }
+.top > * { pointer-events: auto; }
+.top.solid { background: rgba(13, 23, 38, .82); backdrop-filter: blur(10px); }
+.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 650; font-size: 18px; letter-spacing: -.01em; text-decoration: none; color: #fff; }
+.nav { display: flex; align-items: center; gap: clamp(14px, 2vw, 26px); }
+.nav .lnk { font-size: 15px; font-weight: 600; text-decoration: none; color: #dbe5ef; white-space: nowrap; }
+.nav .lnk:hover { color: #fff; text-decoration: underline; text-underline-offset: 4px; }
+.nav .lnk[aria-current=page] { color: #fff; text-decoration: underline; text-decoration-color: #5be49b; text-underline-offset: 6px; text-decoration-thickness: 2px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; background: var(--signal); color: #062418; font-weight: 650; border-radius: 10px; padding: 12px 22px; text-decoration: none; letter-spacing: -.005em; transition: background .15s, transform .15s; border: 0; font-family: var(--f); cursor: pointer; white-space: nowrap; }
+.btn:hover { background: #86f2b9; }
+.btn:active { transform: translateY(1px); }
+.btn-s { padding: 9px 16px; font-size: 15px; }
+.brand .lk { height: 28px; width: auto; display: block; flex: none; }
+.brand .lk-l { display: none; }
+
+/* title block */
+.wrap { max-width: 1180px; margin: 0 auto; }
+.ttl { padding: calc(64px + clamp(56px, 10vh, 110px)) var(--side) clamp(8px, 2vh, 24px); background: linear-gradient(180deg, #0d1726 0%, var(--night) 100%); }
+.ttl h1 { font-size: clamp(48px, 6.6vw, 100px); line-height: .95; letter-spacing: -.04em; font-weight: 650; margin: 0 0 20px; color: #fff; text-wrap: balance; text-shadow: 0 2px 40px rgba(8, 12, 30, .45); }
+.ttl .lede { font-size: clamp(18px, 1.45vw, 21px); line-height: 1.4; color: #d6deea; max-width: 32ch; margin: 0 0 16px; }
+.meas { display: inline-flex; align-self: flex-start; font-size: 12px; font-weight: 650; color: var(--amber); border: 1px solid rgba(255, 184, 107, .5); border-radius: 999px; padding: 2px 9px; line-height: 1.5; white-space: nowrap; }
+
+/* the three sections */
+.fw { min-height: 100svh; display: flex; align-items: center; padding: clamp(72px, 11vh, 120px) var(--side) clamp(40px, 6vh, 72px); scroll-snap-align: start; }
+.fw + .fw .wrap { border-top: 1px solid var(--rule); }
+#fab { padding-top: clamp(40px, 6vh, 72px); }
+.fw .wrap { width: 100%; display: grid; grid-template-columns: minmax(0, .74fr) minmax(0, 1.7fr); gap: clamp(28px, 4vw, 64px); align-items: center; padding-top: clamp(28px, 4vh, 44px); }
+.st-n { display: flex; align-items: center; gap: 12px; margin: 0 0 20px; }
+.st-n b { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--signal); color: var(--signal); font-size: 12px; font-weight: 700; letter-spacing: 0; }
+.st-n::after { content: ""; width: 56px; height: 1px; background: linear-gradient(90deg, rgba(91, 228, 155, .55), rgba(214, 228, 242, .14)); }
+.fw h2 { font-size: clamp(36px, 4.2vw, 62px); font-weight: 650; letter-spacing: -.035em; line-height: 1.02; margin: 0 0 20px; color: #fff; max-width: 12ch; text-wrap: balance; }
+.say { font-size: clamp(18px, 1.45vw, 21px); line-height: 1.4; color: #d6deea; max-width: 30ch; margin: 0 0 18px; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* the visual panel */
+.viz { position: relative; min-width: 0; border: 1px solid var(--rule); border-radius: 20px; background: #0b1626; padding: clamp(14px, 1.6vw, 22px); display: flex; flex-direction: column; gap: 14px; }
+.vrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.cv { position: relative; height: clamp(300px, 46vh, 470px); }
+.cv canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: pan-y; }
+.seg { display: flex; flex-wrap: wrap; gap: 8px; }
+.opt { all: unset; box-sizing: border-box; cursor: pointer; min-height: 40px; display: inline-flex; align-items: center; padding: 8px 15px; border-radius: 10px; border: 1px solid rgba(214, 228, 242, .28); background: #13233a; color: #dbe5ef; font: 600 14.5px/1.2 var(--f); transition: border-color .2s, background .2s, color .2s; }
+.opt:hover { color: #fff; border-color: rgba(214, 228, 242, .5); }
+.opt[aria-pressed=true] { border-color: var(--signal); background: #1b4a36; color: #fff; }
+.opt:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; }
+.lab { font-size: 12.5px; font-weight: 600; color: #8fa2b8; }
+.fact { margin: 0; font-size: 13.5px; color: #c4d1df; font-variant-numeric: tabular-nums; }
+.fact span { color: #90a2b7; }
+.fine { margin: 0; font-size: 12.5px; color: #8fa2b8; }
+
+/* section 1 controls */
+.vfoot { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px 28px; align-items: center; }
+.goal { display: flex; flex-direction: column; gap: 4px; }
+.rng { -webkit-appearance: none; appearance: none; width: 100%; height: 40px; background: transparent; margin: 0; cursor: pointer; }
+.rng::-webkit-slider-runnable-track { height: 2px; background: linear-gradient(90deg, rgba(91, 228, 155, .7), rgba(214, 228, 242, .28)); border-radius: 2px; }
+.rng::-moz-range-track { height: 2px; background: rgba(214, 228, 242, .28); }
+.rng::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -10px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 5px rgba(91, 228, 155, .18); }
+.rng::-moz-range-thumb { width: 22px; height: 22px; border: 0; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 5px rgba(91, 228, 155, .18); }
+.rng:focus-visible { outline: none; }
+.rng:focus-visible::-webkit-slider-thumb { outline: 2px solid #fff; outline-offset: 2px; }
+.ticks { display: flex; justify-content: space-between; margin-top: -4px; }
+.tick { all: unset; cursor: pointer; min-height: 32px; padding: 4px 2px; font: 600 13.5px/1.2 var(--f); color: #8fa2b8; transition: color .2s; }
+.tick.on { color: #fff; }
+.tick:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 4px; }
+.bars { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px 12px; align-items: center; }
+.bars .lab { white-space: nowrap; }
+.trk { height: 6px; border-radius: 999px; background: #13233a; overflow: hidden; }
+.trk i { display: block; height: 100%; width: 50%; border-radius: 999px; background: var(--signal); transition: width .5s cubic-bezier(.2, .7, .2, 1); }
+
+/* section 2 controls */
+.rb { min-width: 172px; }
+.meter { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; flex: 1; min-width: 200px; max-width: 420px; }
+.meter .trk { height: 8px; }
+.meter .trk i { transition: width .6s cubic-bezier(.2, .7, .2, 1); }
+
+/* section 3 controls */
+.spec { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); flex: 1; min-width: 0; }
+.spec::before { content: ""; position: absolute; left: 12.5%; right: 12.5%; top: 19px; height: 1px; background: linear-gradient(90deg, rgba(91, 228, 155, .6), rgba(214, 228, 242, .2)); }
+.sp { all: unset; position: relative; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 2px 4px; min-height: 40px; font: 600 13.5px/1.2 var(--f); color: #8fa2b8; text-align: center; transition: color .2s; }
+.sp::before { content: ""; width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid currentColor; background: #0b1626; transition: background .2s, box-shadow .2s, border-color .2s; }
+.sp:hover { color: #fff; }
+.sp.done::before { border-color: var(--signal); background: #1b4a36; }
+.sp.on { color: #fff; }
+.sp.on::before { background: var(--signal); border-color: var(--signal); box-shadow: 0 0 0 4px rgba(91, 228, 155, .22); }
+.sp:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 6px; }
+.far { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 26px; transition: opacity .4s; }
+.far p { margin: 0; font-size: 14px; color: #c4d1df; }
+
+footer { padding: 26px var(--side) 40px; }
+footer .wrap { border-top: 1px solid var(--rule); padding-top: 22px; font-size: 13px; color: #607086; }
+
+@media (max-width: 980px) {
+  .fw .wrap { grid-template-columns: 1fr; }
+  .fw h2 { max-width: 16ch; }
+  .say { max-width: 36ch; }
+}
+@media (max-width: 700px) {
+  .top { padding: 12px 14px; }
+  .nav { gap: 12px; }
+  .nav .lnk { font-size: 14px; }
+  .vfoot { grid-template-columns: 1fr; }
+  .cv { height: 340px; }
+  #fab .cv { height: 300px; }
+  .fw { padding-top: 64px; }
+  .fw .wrap { padding-top: 24px; }
+  #fab .wrap { padding-top: 0; }
+}
+@media (max-width: 520px) {
+  .brand .lk { height: 24px; }
+  .nav .lnk.ab { display: none; }
+  .nav { gap: 11px; }
+  .top .btn-s { padding: 8px 12px; font-size: 14px; }
+  .sp { font-size: 12.5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .top, .btn, .opt, .tick, .trk i, .sp, .sp::before, .far { transition: none; }
+}
+</style>
+</head>
+<body>
+<header class="top solid" id="topbar">
+  <a class="brand" href="../../variants/z3.html" aria-label="Home"><img class="lk lk-l" src="../../assets/brand/chipin-lockup.svg" alt="ChipIn" height="28"><img class="lk lk-d" src="../../assets/brand/chipin-lockup-light.svg" alt="ChipIn" height="28"></a>
+  <nav class="nav" aria-label="Main">
+    <a class="lnk ab" href="../../variants/z3.html#about">About</a>
+    <a class="lnk" href="../../how-it-works.html">How it works</a>
+    <a class="lnk" href="#" aria-current="page">Future work</a>
+    <a class="btn btn-s" href="../../dashboard/">Try now</a>
+  </nav>
+</header>
+
+<main>
+  <div class="ttl"><div class="wrap" id="ttl"></div></div>
+  <section class="fw" id="fab" aria-labelledby="fab-h"><div class="wrap"><div class="txt"></div><div class="viz"></div></div></section>
+  <section class="fw" id="recordings" aria-labelledby="recordings-h"><div class="wrap"><div class="txt"></div><div class="viz"></div></div></section>
+  <section class="fw" id="sensors" aria-labelledby="sensors-h"><div class="wrap"><div class="txt"></div><div class="viz"></div></div></section>
+</main>
+<footer><div class="wrap" id="foot"></div></footer>
+
+<script>
+(function () {
+  'use strict';
+  var C = window.COPY;
+  var REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var F = '"Avenir Next", "Avenir", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif';
+  var GREEN = '#5be49b', GREEN2 = '#3fbf7f', IDLE = 'rgba(150,182,222,.2)', STROKE = 'rgba(214,228,242,.28)';
+
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function ease(t) { t = clamp(t, 0, 1); return 1 - Math.pow(1 - t, 3); }
+  function hash(i) { return ((i * 2654435761) >>> 0) % 997; }
+  function frac(v) { return ((v % 1) + 1) % 1; }
+  function el(tag, cls, parent, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function rrect(g, x, y, w, h, r) {
+    r = Math.max(0, Math.min(r, w / 2, h / 2));
+    g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
+  }
+  function mix(a, b, t) {
+    return 'rgb(' + Math.round(lerp(a[0], b[0], t)) + ',' + Math.round(lerp(a[1], b[1], t)) + ',' + Math.round(lerp(a[2], b[2], t)) + ')';
+  }
+  // pins along a chip outline, like the package of a real chip
+  function pins(g, x, y, w, h, step) {
+    g.beginPath();
+    for (var px = x + step; px < x + w - step / 2; px += step) { g.moveTo(px, y); g.lineTo(px, y - 6); g.moveTo(px, y + h); g.lineTo(px, y + h + 6); }
+    for (var py = y + step; py < y + h - step / 2; py += step) { g.moveTo(x, py); g.lineTo(x - 6, py); g.moveTo(x + w, py); g.lineTo(x + w + 6, py); }
+    g.stroke();
+  }
+
+  // one canvas: crisp at any pixel ratio, animates only while on screen
+  function stage(canvas, draw) {
+    var st = { w: 0, h: 0, g: canvas.getContext('2d'), on: false, raf: 0 };
+    function frame(now) {
+      st.raf = 0;
+      if (!st.w) return;
+      draw(st, (now || performance.now()) / 1000);
+      if (st.on && !REDUCED) st.raf = requestAnimationFrame(frame);
+    }
+    st.kick = function () { if (!st.raf) st.raf = requestAnimationFrame(frame); };
+    function size() {
+      var r = canvas.getBoundingClientRect(), d = Math.min(2, window.devicePixelRatio || 1);
+      st.w = r.width; st.h = r.height;
+      canvas.width = Math.round(r.width * d); canvas.height = Math.round(r.height * d);
+      st.g.setTransform(d, 0, 0, d, 0, 0);
+      st.kick();
+    }
+    new ResizeObserver(size).observe(canvas);
+    new IntersectionObserver(function (es) { st.on = es[0].isIntersecting; if (st.on) st.kick(); }, { rootMargin: '60px' }).observe(canvas);
+    return st;
+  }
+
+  function textBlock(root, copy) {
+    var t = root.querySelector('.txt'); t.textContent = '';
+    var s = el('p', 'st-n', t); el('b', '', s, copy.step);
+    el('h2', '', t, copy.h2).id = root.id + '-h';
+    el('p', 'say', t, copy.say);
+    var p = el('div', 'pills', t);
+    copy.pills.forEach(function (x) { el('span', 'meas', p, x); });
+    var v = root.querySelector('.viz'); v.textContent = '';
+    return v;
+  }
+  function canvasIn(v, aria) {
+    var w = el('div', 'cv', v), cv = el('canvas', '', w);
+    cv.setAttribute('role', 'img'); cv.setAttribute('aria-label', aria);
+    return cv;
+  }
+
+  /* ================================================================================================
+     01  FAB PRESETS: gate squares re-pack into the chosen process's tile grid as the goal changes
+     ================================================================================================ */
+  function drawFab(root, c) {
+    var v = textBlock(root, c);
+    // tile sizes in um (lab tool notes); cell grids, prices and turnaround factors are illustrative
+    var PR = [
+      { w: 161, h: 111.52, cells: [12, 8], price: 1, make: 1 },
+      { w: 346.64, h: 160.72, cells: [14, 6], price: 0.85, make: 1.1 },
+      { w: 202.08, h: 154.98, cells: [18, 14], price: 1.7, make: 1.35 }
+    ];
+    var GO = [{ g: 1, u: 0.92, time: 1 }, { g: 0.8, u: 0.98, time: 1.12 }, { g: 1, u: 0.6, time: 0.62 }];
+    var BASE = 300, f = 0, k = 0;
+
+    var top = el('div', 'vrow', v);
+    var seg = el('div', 'seg', top); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', c.presetLabel);
+    var pbtn = c.presets.map(function (p, i) {
+      var b = el('button', 'opt', seg, p.name); b.type = 'button';
+      b.addEventListener('click', function () { set(i, k); });
+      return b;
+    });
+    el('span', 'meas', top, c.illus);
+    var cv = canvasIn(v, c.aria);
+    var foot = el('div', 'vfoot', v);
+    var goal = el('div', 'goal', foot);
+    var gl = el('label', 'lab', goal, c.goalLabel); gl.htmlFor = 'fab-goal';
+    var rng = el('input', 'rng', goal); rng.type = 'range'; rng.min = 0; rng.max = 2; rng.step = 1; rng.value = 0; rng.id = 'fab-goal';
+    rng.addEventListener('input', function () { set(f, +rng.value); });
+    var ticks = el('div', 'ticks', goal);
+    var tbtn = c.goals.map(function (name, i) {
+      var b = el('button', 'tick', ticks, name); b.type = 'button'; b.tabIndex = -1;
+      b.addEventListener('click', function () { set(f, i); });
+      return b;
+    });
+    var bars = el('div', 'bars', foot);
+    var fills = c.bars.map(function (name) { el('span', 'lab', bars, name); var t = el('span', 'trk', bars); return el('i', '', t); });
+    var fact = el('p', 'fact', v);
+    el('p', 'fine', v, c.source);
+
+    function plan(fi, ki) {
+      var P = PR[fi], G = GO[ki], cap = P.cells[0] * P.cells[1], n = Math.round(BASE * G.g);
+      return { P: P, n: n, tiles: Math.ceil(n / (cap * G.u)), cap: cap, time: P.make * G.time };
+    }
+    var MAX = [0, 0, 0];
+    for (var a = 0; a < 3; a++) for (var b2 = 0; b2 < 3; b2++) {
+      var q = plan(a, b2);
+      MAX[0] = Math.max(MAX[0], q.tiles * q.P.price); MAX[1] = Math.max(MAX[1], q.tiles * q.P.w * q.P.h); MAX[2] = Math.max(MAX[2], q.time);
+    }
+
+    var gates = [], tiles = [], die = null, t0 = 0, st;
+    for (var i = 0; i < BASE; i++) gates.push({ x: 0, y: 0, s: 0, a: 0, fx: 0, fy: 0, fs: 0, fa: 0, tx: 0, ty: 0, ts: 0, ta: 0, d: 0 });
+    for (var j = 0; j < 12; j++) tiles.push({ x: 0, y: 0, w: 0, h: 0, a: 0, tx: 0, ty: 0, tw: 0, th: 0, ta: 0 });
+
+    function layout(first) {
+      var W = st.w, H = st.h, pl = plan(f, k), P = pl.P, asp = P.w / P.h, gap = Math.max(8, W * 0.014);
+      var padX = 22, padTop = 40, padBot = 22, aw = W - padX * 2, ah = H - padTop - padBot, best = null;
+      for (var cols = 1; cols <= Math.min(pl.tiles, 6); cols++) {
+        var rows = Math.ceil(pl.tiles / cols);
+        var tw = Math.min((aw - gap * (cols - 1)) / cols, ((ah - gap * (rows - 1)) / rows) * asp, W * 0.46);
+        if (!best || tw > best.tw + 0.5) best = { cols: cols, rows: rows, tw: tw };
+      }
+      var tw2 = best.tw, th = tw2 / asp, totW = best.cols * tw2 + (best.cols - 1) * gap, totH = best.rows * th + (best.rows - 1) * gap;
+      var ox = (W - totW) / 2, oy = padTop + (ah - totH) / 2;
+      var per = [], left = pl.n;
+      for (var t = 0; t < tiles.length; t++) {
+        var T = tiles[t];
+        if (t < pl.tiles) {
+          var r = Math.floor(t / best.cols), cIn = t % best.cols, inRow = Math.min(best.cols, pl.tiles - r * best.cols);
+          var rowOx = ox + (totW - (inRow * tw2 + (inRow - 1) * gap)) / 2;
+          T.tx = rowOx + cIn * (tw2 + gap); T.ty = oy + r * (th + gap); T.tw = tw2; T.th = th; T.ta = 1;
+          var share = Math.ceil(left / (pl.tiles - t)); per.push(share); left -= share;
+        } else { T.ta = 0; T.tw = tw2 * 0.6; T.th = th * 0.6; }
+        if (first) { T.x = T.tx; T.y = T.ty; T.w = T.tw; T.h = T.th; T.a = T.ta; }
+      }
+      die = { x: ox - 12, y: oy - 12, w: totW + 24, h: totH + 24 };
+      var cc = P.cells[0], cr = P.cells[1], cw = tw2 / cc, ch = th / cr, sz = Math.min(cw, ch) * 0.74, gi = 0;
+      for (var tt = 0; tt < pl.tiles; tt++) {
+        var Tt = tiles[tt];
+        for (var m = 0; m < per[tt]; m++) {
+          var cell = Math.floor((m + 0.5) * pl.cap / per[tt]), gx = cell % cc, gy = Math.floor(cell / cc), G = gates[gi++];
+          G.tx = Tt.tx + (gx + 0.5) * cw; G.ty = Tt.ty + (gy + 0.5) * ch; G.ts = sz; G.ta = 1;
+        }
+      }
+      for (; gi < gates.length; gi++) { var Gx = gates[gi]; Gx.ta = 0; Gx.ts = sz * 0.2; if (first || !Gx.a) { Gx.tx = W / 2; Gx.ty = H / 2; } }
+      gates.forEach(function (Gq, n2) {
+        if (first) { Gq.x = Gq.tx; Gq.y = Gq.ty; Gq.s = Gq.ts; Gq.a = Gq.ta; }
+        Gq.fx = Gq.x; Gq.fy = Gq.y; Gq.fs = Gq.s; Gq.fa = Gq.a;
+        Gq.d = (Gq.tx / W) * 0.45 + (hash(n2) % 100) / 100 * 0.18;
+      });
+      t0 = performance.now() / 1000;
+      fills[0].style.width = (8 + 92 * pl.tiles * P.price / MAX[0]) + '%';
+      fills[1].style.width = (8 + 92 * pl.tiles * P.w * P.h / MAX[1]) + '%';
+      fills[2].style.width = (8 + 92 * pl.time / MAX[2]) + '%';
+    }
+
+    function set(fi, ki) {
+      f = fi; k = ki; rng.value = ki;
+      pbtn.forEach(function (b, i3) { b.setAttribute('aria-pressed', i3 === f ? 'true' : 'false'); });
+      tbtn.forEach(function (b, i3) { b.classList.toggle('on', i3 === k); });
+      var p = c.presets[f];
+      fact.textContent = '';
+      fact.appendChild(document.createTextNode(p.name + ' · ' + c.tileWord + ' ' + p.tile + ' · ' + c.clockWord + ' ' + p.clock));
+      if (st && st.w) { layout(false); st.kick(); }
+    }
+
+    var lastW = 0, lastH = 0;
+    st = stage(cv, function (s, now) {
+      var g = s.g, W = s.w, H = s.h;
+      if (W !== lastW || H !== lastH) { lastW = W; lastH = H; layout(true); }
+      g.clearRect(0, 0, W, H);
+      var el2 = now - t0, sm = REDUCED ? 1 : 0.14;
+      tiles.forEach(function (T) { T.x = lerp(T.x, T.tx, sm); T.y = lerp(T.y, T.ty, sm); T.w = lerp(T.w, T.tw, sm); T.h = lerp(T.h, T.th, sm); T.a = lerp(T.a, T.ta, sm); });
+      // the die around the used tiles, with pins
+      var vis = tiles.filter(function (T) { return T.a > 0.02; });
+      if (vis.length) {
+        var x0 = Math.min.apply(null, vis.map(function (T) { return T.x; })) - 12, y0 = Math.min.apply(null, vis.map(function (T) { return T.y; })) - 12;
+        var x1 = Math.max.apply(null, vis.map(function (T) { return T.x + T.w; })) + 12, y1 = Math.max.apply(null, vis.map(function (T) { return T.y + T.h; })) + 12;
+        g.strokeStyle = STROKE; g.lineWidth = 1.2; rrect(g, x0, y0, x1 - x0, y1 - y0, 8); g.stroke();
+        g.strokeStyle = 'rgba(214,228,242,.2)'; pins(g, x0, y0, x1 - x0, y1 - y0, 14);
+        g.fillStyle = '#c4d1df'; g.font = '600 13.5px ' + F; g.textBaseline = 'alphabetic'; g.textAlign = 'left';
+        g.fillText(c.presets[f].name, x0, Math.max(16, y0 - 14));
+      }
+      tiles.forEach(function (T) {
+        if (T.a < 0.02) return;
+        g.globalAlpha = T.a; g.fillStyle = 'rgba(27,74,54,.28)'; rrect(g, T.x, T.y, T.w, T.h, 4); g.fill();
+        g.strokeStyle = 'rgba(91,228,155,.5)'; g.lineWidth = 1.2; g.stroke();
+      });
+      g.globalAlpha = 1;
+      // the gates: each moves to its new cell, staggered left to right; a lit band sweeps slowly across
+      var band = REDUCED ? -9 : frac(now / 5.5) * 1.6 - 0.3;
+      for (var n3 = 0; n3 < gates.length; n3++) {
+        var G = gates[n3], p = REDUCED ? 1 : ease((el2 - G.d) / 0.6);
+        G.x = lerp(G.fx, G.tx, p); G.y = lerp(G.fy, G.ty, p); G.s = lerp(G.fs, G.ts, p); G.a = lerp(G.fa, G.ta, p);
+        if (G.a < 0.02) continue;
+        var dx = G.x / W - band, lit = Math.exp(-dx * dx * 60);
+        g.globalAlpha = G.a * (0.72 + 0.28 * lit);
+        g.fillStyle = lit > 0.5 ? '#9ef5c5' : hash(n3) % 7 === 0 ? GREEN2 : GREEN;
+        g.fillRect(G.x - G.s / 2, G.y - G.s / 2, G.s, G.s);
+      }
+      g.globalAlpha = 1;
+    });
+    set(0, 0);
+  }
+
+  /* ================================================================================================
+     02  YOUR OWN RECORDINGS: recordings stay inside the maker's machine; gates recolour as they tune
+     ================================================================================================ */
+  function drawRecordings(root, c) {
+    var v = textBlock(root, c);
+    var NR = c.patients.length, GN = 14, gates = [], n = 0, added = [], auto = !REDUCED, lastAuto = 0, hover = -1, geo = null, st;
+    var top = el('div', 'vrow', v);
+    var btn = el('button', 'btn btn-s rb', top, c.add); btn.type = 'button';
+    var meter = el('div', 'meter', top);
+    el('span', 'lab', meter, c.fit);
+    var fill = el('i', '', el('span', 'trk', meter));
+    el('span', 'meas', top, c.illus);
+    var cv = canvasIn(v, c.aria);
+    el('p', 'fine', v, c.hint);
+
+    // the order gates tune in: a sweep from the chip's input edge, with a little grain
+    for (var i = 0; i < GN * GN; i++) gates.push({ i: i, c: i % GN, r: Math.floor(i / GN), d: 0, owner: 0, rank: 0 });
+    var order = gates.slice().sort(function (a, b) { return (a.c + (hash(a.i) % 100) / 22) - (b.c + (hash(b.i) % 100) / 22); });
+    var per = Math.ceil(order.length / NR);
+    order.forEach(function (G, k) { G.owner = Math.floor(k / per); G.rank = (k % per) / per; });
+    // each patient's heart beats a little differently, as recorded by the maker's own sensor
+    var PAT = c.patients.map(function (_, k) { return { rate: 0.75 + (hash(k + 3) % 50) / 100, amp: 0.7 + (hash(k + 11) % 30) / 100, noise: (hash(k + 5) % 3) * 0.05 }; });
+
+    function ecg(x, t, P) {
+      var ph = frac(x * 0.011 * P.rate - t * 0.55 * P.rate);
+      var y = 0.15 * Math.exp(-Math.pow((ph - 0.12) / 0.03, 2)) - 0.12 * Math.exp(-Math.pow((ph - 0.27) / 0.008, 2)) + Math.exp(-Math.pow((ph - 0.3) / 0.012, 2))
+        - 0.25 * Math.exp(-Math.pow((ph - 0.33) / 0.01, 2)) + 0.3 * Math.exp(-Math.pow((ph - 0.52) / 0.05, 2));
+      return (y + P.noise * Math.sin(x * 1.7 + t * 9)) * P.amp;
+    }
+    function update() {
+      var s = n === 0 ? 0 : n < NR ? 1 : 2;
+      fill.style.width = (14 + 84 * n / NR) + '%';
+      btn.textContent = n < NR ? c.add : c.again;
+      cv.setAttribute('aria-label', c.aria + '. ' + c.states[s] + '.');
+      if (st) st.kick();
+    }
+    function add(now) {
+      if (n >= NR) { n = 0; added = []; } else { added[n] = now; n++; }
+      update();
+    }
+    btn.addEventListener('click', function () { auto = false; add(performance.now() / 1000); });
+
+    function hit(e) {
+      if (!geo) return -1;
+      var r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+      for (var k = 0; k < n; k++) { var S = geo.slot(k); if (x >= S.x && x <= S.x + S.w && y >= S.y && y <= S.y + S.h) return k; }
+      return -1;
+    }
+    cv.addEventListener('pointermove', function (e) { var h = hit(e); if (h !== hover) { hover = h; st.kick(); } });
+    cv.addEventListener('pointerleave', function () { hover = -1; st.kick(); });
+    cv.addEventListener('pointerdown', function (e) { var h = hit(e); if (h >= 0) { auto = false; hover = h; st.kick(); } });
+
+    if (REDUCED) { n = NR; for (var q = 0; q < NR; q++) added[q] = -99; }
+
+    st = stage(cv, function (s, now) {
+      var g = s.g, W = s.w, H = s.h, phone = W < 520;
+      if (auto) {
+        if (!lastAuto) lastAuto = now;
+        if (n < NR && now - lastAuto > (n === 0 ? 1.2 : 2.3)) { add(now); lastAuto = now; }
+        else if (n >= NR && now - lastAuto > 6) { add(now); lastAuto = now; }
+      }
+      g.clearRect(0, 0, W, H);
+      // the machine boundary
+      g.strokeStyle = 'rgba(255,184,107,.6)'; g.lineWidth = 1.5; g.setLineDash([6, 5]);
+      rrect(g, 1, 1, W - 2, H - 2, 16); g.stroke(); g.setLineDash([]);
+      g.font = '600 13.5px ' + F; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillStyle = '#ffb86b';
+      g.fillText(c.machine, 18, 26);
+      // recording slots on the left
+      var sx = phone ? 14 : 22, sw = W * (phone ? 0.33 : 0.34), zy = 42, zh = H - zy - 18, gapS = phone ? 6 : 9;
+      var sh = Math.min(56, (zh - gapS * (NR - 1)) / NR), oy = zy + (zh - (sh * NR + gapS * (NR - 1))) / 2;
+      var cs = Math.min(W * (phone ? 0.4 : 0.36), H - 96), cx = W - cs - (phone ? 18 : 40), cy = (H - cs) / 2 + 10;
+      geo = { slot: function (k) { return { x: sx, y: oy + k * (sh + gapS), w: sw, h: sh }; } };
+      var inX = cx - 8, inY = cy + cs / 2;
+      for (var k = 0; k < NR; k++) {
+        var S = geo.slot(k), on = k < n, ag = on ? now - added[k] : 0, ap = REDUCED ? 1 : on ? ease(ag / 0.5) : 0, hot = hover === k;
+        // wire to the chip
+        g.strokeStyle = on ? (hot ? 'rgba(91,228,155,.8)' : 'rgba(214,228,242,.34)') : 'rgba(214,228,242,.1)'; g.lineWidth = hot ? 1.6 : 1.2;
+        var ax = S.x + S.w, ay = S.y + S.h / 2, mx = lerp(ax, inX, 0.55);
+        g.beginPath(); g.moveTo(ax, ay); g.bezierCurveTo(mx, ay, mx, inY, inX, inY); g.stroke();
+        // a lit pulse travels to the chip once, when the recording arrives
+        if (on && !REDUCED && ag > 0.3 && ag < 1.3) {
+          var u = ease((ag - 0.3) / 1), bx = Math.pow(1 - u, 3) * ax + 3 * Math.pow(1 - u, 2) * u * mx + 3 * (1 - u) * u * u * mx + u * u * u * inX;
+          var by = Math.pow(1 - u, 3) * ay + 3 * Math.pow(1 - u, 2) * u * ay + 3 * (1 - u) * u * u * inY + u * u * u * inY;
+          g.fillStyle = '#e9fff2'; g.beginPath(); g.arc(bx, by, 3.2, 0, 6.283); g.fill();
+          g.fillStyle = 'rgba(91,228,155,.25)'; g.beginPath(); g.arc(bx, by, 8, 0, 6.283); g.fill();
+        }
+        if (!on) {
+          g.strokeStyle = 'rgba(214,228,242,.16)'; g.setLineDash([4, 4]); rrect(g, S.x, S.y, S.w, S.h, 8); g.stroke(); g.setLineDash([]);
+          continue;
+        }
+        g.globalAlpha = ap;
+        g.fillStyle = hot ? '#1b4a36' : '#13233a'; rrect(g, S.x, S.y + (1 - ap) * 8, S.w, S.h, 8); g.fill();
+        g.strokeStyle = hot ? GREEN : STROKE; g.lineWidth = 1.2; g.stroke();
+        var labH = sh >= 40 ? 15 : 0;
+        if (labH) { g.font = '600 12px ' + F; g.fillStyle = hot ? '#dfffee' : '#8fa2b8'; g.fillText(c.patients[k], S.x + 10, S.y + 16); }
+        var top2 = S.y + labH + 2, mid = top2 + (S.h - labH) * 0.6, amp = (S.h - labH - 6) * 0.62;
+        g.save(); rrect(g, S.x + 2, S.y + 2, S.w - 4, S.h - 4, 7); g.clip();
+        g.strokeStyle = hot ? GREEN : ag < 1.3 && !REDUCED ? GREEN : '#c4d1df'; g.lineWidth = 1.3; g.beginPath();
+        for (var x = 0; x <= S.w - 16; x += 2) { var yv = mid - ecg(x, REDUCED ? 0 : now, PAT[k]) * amp; if (x) g.lineTo(S.x + 8 + x, yv); else g.moveTo(S.x + 8 + x, yv); }
+        g.stroke(); g.restore();
+        g.globalAlpha = 1;
+      }
+      // the chip and its gates
+      g.strokeStyle = STROKE; g.lineWidth = 1.2; g.fillStyle = '#0f1f33'; rrect(g, cx, cy, cs, cs, 10); g.fill(); g.stroke();
+      g.strokeStyle = 'rgba(214,228,242,.2)'; pins(g, cx, cy, cs, cs, Math.max(12, cs / 12));
+      var state = n === 0 ? 0 : n < NR ? 1 : 2;
+      var fs = phone ? 12 : 13.5;
+      g.font = '650 ' + fs + 'px ' + F;
+      var lx3 = Math.min(cx, W - 14 - Math.max(g.measureText(c.states[1]).width, g.measureText(c.states[2]).width));
+      g.font = '600 ' + fs + 'px ' + F; g.fillStyle = '#c4d1df'; g.textAlign = 'left';
+      g.fillText(c.model, lx3, cy - 30);
+      g.font = '650 ' + fs + 'px ' + F; g.fillStyle = state === 2 ? GREEN : state === 1 ? '#dfffee' : '#8fa2b8';
+      g.fillText(c.states[state], lx3, cy - 13);
+      var ip = 12, gc = (cs - ip * 2) / GN, gsz = gc * 0.72;
+      for (var m = 0; m < gates.length; m++) {
+        var G = gates[m], tgt = 0;
+        if (G.owner < n) tgt = REDUCED ? 1 : clamp((now - added[G.owner] - 1.2 - G.rank * 1.1) / 0.35, 0, 1);
+        G.d = REDUCED ? tgt : lerp(G.d, tgt, 0.16);
+        var lit = G.d, dim = hover >= 0 && G.owner !== hover ? 0.35 : 1;
+        g.globalAlpha = dim * (0.55 + 0.45 * lit);
+        g.fillStyle = lit < 0.02 ? IDLE : mix([46, 64, 92], hash(m) % 7 === 0 ? [63, 191, 127] : [91, 228, 155], lit);
+        g.fillRect(cx + ip + G.c * gc + (gc - gsz) / 2, cy + ip + G.r * gc + (gc - gsz) / 2, gsz, gsz);
+        if (hover === G.owner && lit > 0.5) { g.globalAlpha = 1; g.strokeStyle = '#e9fff2'; g.lineWidth = 1; g.strokeRect(cx + ip + G.c * gc + (gc - gsz) / 2 - 1, cy + ip + G.r * gc + (gc - gsz) / 2 - 1, gsz + 2, gsz + 2); }
+      }
+      g.globalAlpha = 1;
+    });
+    update();
+  }
+
+  /* ================================================================================================
+     03  EVERY SENSOR, ONE CHIP: parallel sensor lanes converge into one chip; each added sensor lights a lane
+     ================================================================================================ */
+  function drawSensors(root, c) {
+    var v = textBlock(root, c);
+    var MAXN = 48, STEPN = [1, 3, 12, 48], N = 1, target = 1, shown = 1, lastAdd = 0, addedAt = [], auto = !REDUCED, autoStep = 0, lastAuto = 0, st;
+    var GN = 18, glit = [];
+    for (var i = 0; i < GN * GN; i++) glit.push(0);
+    // gates fill from the chip's input edge, a column at a time, with a little grain
+    var gorder = glit.map(function (_, k) { return k; }).sort(function (a, b) { return ((a % GN) + (hash(a) % 100) / 30) - ((b % GN) + (hash(b) % 100) / 30); });
+    var grank = []; gorder.forEach(function (gi, r) { grank[gi] = r; });
+
+    var top = el('div', 'vrow', v);
+    var spec = el('div', 'spec', top); spec.setAttribute('role', 'group'); spec.setAttribute('aria-label', c.stepsLabel);
+    var sbtn = c.steps.map(function (name, k) {
+      var b = el('button', 'sp', spec, name); b.type = 'button';
+      b.addEventListener('click', function () { auto = false; goTo(STEPN[k]); });
+      return b;
+    });
+    var cv = canvasIn(v, c.aria);
+    var bot = el('div', 'vrow', v);
+    var far = el('div', 'far', bot); el('span', 'meas', far, c.farPill); el('p', '', far, c.far);
+    var add = el('button', 'btn btn-s', bot, c.add); add.type = 'button';
+    add.addEventListener('click', function () {
+      auto = false;
+      if (target >= MAXN) goTo(1); else goTo(target + 1);
+    });
+
+    function stepOf(n) { return n <= 1 ? 0 : n <= 5 ? 1 : n <= 20 ? 2 : 3; }
+    function goTo(n) {
+      target = n;
+      if (REDUCED || n < N) { N = n; shown = n; }
+      update(); st.kick();
+    }
+    function update() {
+      var s = stepOf(target);
+      sbtn.forEach(function (b, k) { b.classList.toggle('on', k === s); b.classList.toggle('done', k < s); b.setAttribute('aria-pressed', k === s ? 'true' : 'false'); });
+      far.style.opacity = s === 3 ? 1 : 0;
+      far.setAttribute('aria-hidden', s === 3 ? 'false' : 'true');
+      add.textContent = target >= MAXN ? c.again : c.add;
+    }
+    function wave(type, x, t) {
+      var p;
+      switch (type) {
+        case 0: p = frac(x * 0.012 - t * 0.6); return 0.15 * Math.exp(-Math.pow((p - 0.12) / 0.03, 2)) + Math.exp(-Math.pow((p - 0.3) / 0.013, 2)) - 0.3 * Math.exp(-Math.pow((p - 0.33) / 0.01, 2)) + 0.3 * Math.exp(-Math.pow((p - 0.52) / 0.05, 2)) - 0.2;
+        case 1: p = frac(x * 0.012 - t * 0.6); return 0.9 * Math.exp(-Math.pow((p - 0.25) / 0.1, 2)) + 0.3 * Math.exp(-Math.pow((p - 0.5) / 0.07, 2)) - 0.35;
+        case 2: return 0.8 * Math.sin(x * 0.03 - t * 1.1);
+        case 3: return 0.45 * Math.sin(x * 0.21 + t * 4) + 0.3 * Math.sin(x * 0.53 - t * 6) + 0.2 * Math.sin(x * 1.13 + t * 2.5);
+        case 4: return 0.2 * Math.sin(x * 0.012 - t * 0.35);
+        case 5: return Math.sin(x * 0.35 - t * 7) * Math.max(0, Math.sin(x * 0.04 - t * 1.4)) * 0.9;
+        case 6: p = frac(x * 0.012 - t * 0.6); return 0.95 * Math.exp(-Math.pow((p - 0.2) / 0.08, 2)) + 0.4 * Math.exp(-Math.pow((p - 0.45) / 0.06, 2)) - 0.4;
+        case 7: return (0.5 * Math.sin(x * 0.4 + t * 3) + 0.3 * Math.sin(x * 0.9 - t * 5)) * Math.pow(Math.max(0, Math.sin(x * 0.025 - t * 0.9)), 3);
+        default: return Math.sin(x * 0.9 + t * 11) * (0.25 + 0.55 * Math.abs(Math.sin(x * 0.05 - t)));
+      }
+    }
+
+    st = stage(cv, function (s, now) {
+      var g = s.g, W = s.w, H = s.h, phone = W < 520;
+      if (auto) {
+        if (!lastAuto) lastAuto = now;
+        var hold = autoStep === 3 ? 6 : 3.4;
+        if (now - lastAuto > hold) { autoStep = (autoStep + 1) % 4; lastAuto = now; target = STEPN[autoStep]; if (target < N) { N = target; } update(); }
+      }
+      // lanes light one at a time on the way up
+      if (N < target && now - lastAdd > (target > 12 ? 0.05 : 0.22)) { addedAt[N] = now; N++; lastAdd = now; }
+      shown = REDUCED ? N : lerp(shown, N, 0.12);
+      g.clearRect(0, 0, W, H);
+      var pad = 14, cs = Math.min(H * 0.6, W * (phone ? 0.3 : 0.3)), cx = W - cs - (phone ? 28 : Math.max(48, W * 0.07)), cy = (H - cs) / 2 - 12;
+      var cnt = Math.max(1, shown), lh = (H - pad * 2) / Math.max(cnt, 1.6), many = cnt > 10;
+      var showLab = lh >= 24;
+      // on a phone the sensor names sit above their streams, so each stream keeps its full width
+      var labAbove = phone, labW = phone ? 0 : 104, lx0 = pad + labW, lx1 = W * (phone ? 0.38 : 0.46);
+      if (labAbove && lh < 40) showLab = false;
+      for (var k = 0; k < Math.ceil(shown); k++) {
+        var a = clamp(shown - k, 0, 1);
+        if (a <= 0.01) continue;
+        var type = k % 9, ly = pad + (H - pad * 2) * (k + 0.5) / cnt, py = cy + cs * (k + 0.5) / cnt;
+        var flash = REDUCED || addedAt[k] == null ? 0 : clamp(1 - (now - addedAt[k]) / 1.4, 0, 1);
+        var amp = Math.min(labAbove ? 13 : 16, lh * (labAbove ? 0.24 : 0.32));
+        // the stream itself
+        g.globalAlpha = a;
+        g.strokeStyle = flash > 0 ? mix([196, 209, 223], [91, 228, 155], flash) : 'rgba(196,209,223,.75)'; g.lineWidth = many ? 1 : 1.4;
+        g.beginPath();
+        var step = many ? 3 : 2;
+        for (var x = lx0; x <= lx1; x += step) { var yv = ly - wave(type, x - lx0 + k * 37, REDUCED ? 0 : now) * amp; if (x === lx0) g.moveTo(x, yv); else g.lineTo(x, yv); }
+        g.stroke();
+        if (showLab) {
+          g.font = '600 ' + (phone ? 11.5 : 12.5) + 'px ' + F; g.textAlign = 'left'; g.textBaseline = labAbove ? 'alphabetic' : 'middle'; g.fillStyle = flash > 0.3 ? '#dfffee' : '#8fa2b8';
+          g.fillText(c.types[type], pad, labAbove ? ly - amp - 7 : ly);
+        }
+        // the lane into the chip
+        var mx = lerp(lx1, cx, 0.5);
+        g.strokeStyle = flash > 0 ? 'rgba(91,228,155,' + (0.3 + 0.6 * flash) + ')' : 'rgba(214,228,242,' + (many ? 0.2 : 0.32) + ')'; g.lineWidth = many ? 0.8 : 1.2;
+        g.beginPath(); g.moveTo(lx1, ly); g.bezierCurveTo(mx, ly, mx, py, cx - 7, py); g.stroke();
+        // data travelling in parallel on every lane
+        if (!REDUCED) {
+          var u = frac(now * 0.32 + frac(Math.sin(k * 12.9898 + 1.3) * 43758.5453)), bx = Math.pow(1 - u, 3) * lx1 + 3 * Math.pow(1 - u, 2) * u * mx + 3 * (1 - u) * u * u * mx + u * u * u * (cx - 7);
+          var by = Math.pow(1 - u, 3) * ly + 3 * Math.pow(1 - u, 2) * u * ly + 3 * (1 - u) * u * u * py + u * u * u * py;
+          g.fillStyle = '#e9fff2'; g.beginPath(); g.arc(bx, by, many ? 1.5 : 2.4, 0, 6.283); g.fill();
+        }
+        g.globalAlpha = 1;
+      }
+      // the one chip
+      g.strokeStyle = STROKE; g.lineWidth = 1.2; g.fillStyle = '#0f1f33'; rrect(g, cx, cy, cs, cs, 10); g.fill(); g.stroke();
+      g.strokeStyle = 'rgba(214,228,242,.2)'; pins(g, cx, cy, cs, cs, Math.max(12, cs / 12));
+      var frac2 = Math.pow(clamp(shown / MAXN, 0, 1), 0.6), litN = frac2 * glit.length, ip = 12, gc = (cs - ip * 2) / GN, gsz = gc * 0.7;
+      var band = REDUCED ? -9 : frac(now / 4.5) * 1.6 - 0.3;
+      for (var m = 0; m < glit.length; m++) {
+        var tgt = clamp(litN - grank[m], 0, 1);
+        glit[m] = REDUCED ? tgt : lerp(glit[m], tgt, 0.15);
+        var col = m % GN, row = Math.floor(m / GN), dxb = col / GN - band, sweep = Math.exp(-dxb * dxb * 40) * glit[m];
+        g.globalAlpha = 0.5 + 0.5 * glit[m];
+        g.fillStyle = glit[m] < 0.02 ? IDLE : mix([46, 64, 92], sweep > 0.5 ? [158, 245, 197] : hash(m) % 7 === 0 ? [63, 191, 127] : [91, 228, 155], Math.max(glit[m], sweep));
+        g.fillRect(cx + ip + col * gc + (gc - gsz) / 2, cy + ip + row * gc + (gc - gsz) / 2, gsz, gsz);
+      }
+      g.globalAlpha = 1;
+      // one output: the model's decisions
+      var oy = cy + cs / 2, ox1 = Math.min(W - 6, cx + cs + (phone ? 26 : 44));
+      g.strokeStyle = GREEN; g.lineWidth = 2; g.beginPath(); g.moveTo(cx + cs + 7, oy); g.lineTo(ox1, oy); g.stroke();
+      g.fillStyle = GREEN; g.beginPath(); g.moveTo(ox1, oy); g.lineTo(ox1 - 7, oy - 5); g.lineTo(ox1 - 7, oy + 5); g.closePath(); g.fill();
+      g.font = '600 ' + (phone ? 12 : 13.5) + 'px ' + F; g.fillStyle = '#c4d1df'; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+      var lx = clamp(cx + cs / 2, 0, W);
+      var words = c.chip, tw = g.measureText(words).width;
+      if (tw > cs + 50) {
+        var cut = words.indexOf(', '), l1 = words.slice(0, cut + 1), l2 = words.slice(cut + 2), w2 = Math.max(g.measureText(l1).width, g.measureText(l2).width);
+        var lx2 = Math.min(lx, W - w2 / 2 - 4);
+        g.fillText(l1, lx2, cy + cs + 28); g.fillText(l2, lx2, cy + cs + 45);
+      } else g.fillText(words, Math.min(lx, W - tw / 2 - 4), cy + cs + 30);
+    });
+    if (REDUCED) { N = target = shown = STEPN[2]; }
+    update();
+  }
+
+  /* title and footer */
+  var tt = document.getElementById('ttl');
+  el('h1', '', tt, C.title.h1); el('p', 'lede', tt, C.title.lede); el('span', 'meas', tt, C.title.pill);
+  document.getElementById('foot').textContent = C.footer;
+  drawFab(document.getElementById('fab'), C.fab);
+  drawRecordings(document.getElementById('recordings'), C.recordings);
+  drawSensors(document.getElementById('sensors'), C.sensors);
+})();
+</script>
+<script src="../variant-nav.js"></script>
+</body>
+</html>

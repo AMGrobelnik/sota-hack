@@ -1,0 +1,991 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1a2a">
+<link rel="icon" type="image/svg+xml" href="../../assets/brand/favicon.svg">
+<title>ChipIn: Future work</title>
+<script>
+/* Every visible word of this page lives here. Sections 2 and 3 can each be swapped by editing one key
+   (recordings, sensors) and one function (drawRecordings, drawSensors). Everything below is planned. */
+window.COPY = {
+  page: 'ChipIn: Future work',
+  title: {
+    h1: 'What comes next',
+    lede: 'Three things we plan to build into ChipIn next. None of them exists yet.',
+    pill: 'Planned'
+  },
+  fab: {
+    step: '01',
+    kicker: 'Fab presets',
+    h2: 'Name a fab. ChipIn will tune for it.',
+    p: 'You will name the fab. ChipIn will load its rules and costs, then tune the design for what matters most to you.',
+    pills: ['Planned'],
+    aria: 'Route map: your design runs to the fab you pick, then through the goal you pick, and arrives as a chip tuned for that fab.',
+    fabLabel: 'Fab',
+    goalLabel: 'Optimise for',
+    origin: 'Your design',
+    fabSub: 'rules + costs',
+    fabs: [
+      { name: 'sky130', clock: '50 ns' },
+      { name: 'GF180', clock: '100 ns' },
+      { name: 'IHP SG13G2', clock: '50 ns' }
+    ],
+    goals: ['Lowest cost', 'Smallest', 'Fastest to make'],
+    chipTop: 'Your chip',
+    chipFor: 'tuned for ',
+    meters: ['Cost', 'Size', 'Time to make'],
+    meterPill: 'Illustrative',
+    clockNote: 'Lab note: default timing clock on {fab} is {clock}'
+  },
+  recordings: {
+    step: '02',
+    kicker: 'Your own recordings',
+    h2: 'Your recordings will tune your chip.',
+    p: 'A device maker will bring their own sensor recordings, and the model will be fine-tuned to their patients and sensor, on their machine.',
+    pills: ['Planned'],
+    aria: 'A loop line inside the device maker’s building runs from sensor to recordings, fine-tune, check and chip. A starting model comes in; no line leaves.',
+    building: 'Your building',
+    outside: 'Outside',
+    stations: { ft: 'Fine-tune', check: ['Check', 'on your patients'], chip: 'Your chip', sensor: 'Your sensor', rec: 'Your recordings' },
+    inbound: ['Starting model', 'comes in'],
+    noOut: ['No line out', 'recordings stay here'],
+    add: 'Add a recording',
+    stack: '{n} recordings, on your machine',
+    stackOne: '1 recording, on your machine',
+    meter: 'Fit to your patients',
+    meterPill: 'Illustrative'
+  },
+  sensors: {
+    step: '03',
+    kicker: 'Every sensor, one chip',
+    h2: 'Every sensor, one chip.',
+    p: 'We plan models that use every sensor input at once, adding more in parallel; one chip for a whole hospital is the far end.',
+    pills: ['Planned'],
+    aria: 'Sensor lines converge in parallel into one chip with one local model. Steps run from one sensor to a few, a ward, and a whole hospital.',
+    specLabel: 'How far along',
+    steps: [
+      { name: 'One sensor', n: 1 },
+      { name: 'A few', n: 3 },
+      { name: 'A ward', n: 6 },
+      { name: 'A hospital', n: 12 }
+    ],
+    stepCap: ['One sensor, one chip', 'A few sensors, read together', 'A ward of monitors, one local model', 'Every sensor a hospital needs, one chip'],
+    farEnd: ['Far end of the spectrum', 'far-fetched today, not a promise'],
+    chip: 'One chip',
+    chipSub: ['one local model,', 'all inputs at once'],
+    hint: 'Tap a grey sensor to light its lane',
+    illus: 'Illustrative signals',
+    lanes: [
+      { name: 'Heart trace', sig: 'ecg' },
+      { name: 'Oxygen', sig: 'pleth' },
+      { name: 'Breathing', sig: 'breath' },
+      { name: 'Temperature', sig: 'temp' },
+      { name: 'Brain waves', sig: 'eeg' },
+      { name: 'Radar', sig: 'radar' },
+      { name: 'Blood pressure', sig: 'bp' },
+      { name: 'Movement', sig: 'move' },
+      { name: 'Heart sounds', sig: 'pcg' },
+      { name: 'Glucose', sig: 'gluc' },
+      { name: 'Muscle signals', sig: 'emg' },
+      { name: 'Ultrasound', sig: 'us' }
+    ]
+  },
+  footer: 'Built at the SoTA Scientific Parallelism Hackathon, London, November 2026.'
+};
+(function () {
+  var h = document.documentElement;
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) h.classList.add('motion');
+  document.title = window.COPY.page;
+})();
+</script>
+<style>
+:root {
+  --night: #0f1a2a;
+  --deep: #16263c;
+  --paper: #eef1f2;
+  --ink: #132033;
+  --signal: #5be49b;
+  --amber: #ffb86b;
+  --dusk: #c9a3c4;
+  --mute: #9aabc0;
+  --rule: rgba(214, 228, 242, .15);
+  --f: "Avenir Next", "Avenir", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+* { box-sizing: border-box; }
+html { background: var(--night); -webkit-text-size-adjust: 100%; }
+body { margin: 0; color: #e8eef5; font: 400 17px/1.5 var(--f); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; border-radius: 6px; }
+
+/* top bar (as z3) */
+.top { position: fixed; top: 0; left: 0; right: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px clamp(16px, 3vw, 34px); pointer-events: none; transition: background .3s, color .3s; }
+.top > * { pointer-events: auto; }
+.top.solid { background: rgba(13, 23, 38, .82); backdrop-filter: blur(10px); }
+.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 650; font-size: 18px; letter-spacing: -.01em; text-decoration: none; color: #fff; }
+.nav { display: flex; align-items: center; gap: clamp(14px, 2vw, 26px); }
+.nav .lnk { font-size: 15px; font-weight: 600; text-decoration: none; color: #dbe5ef; white-space: nowrap; }
+.nav .lnk:hover { color: #fff; text-decoration: underline; text-underline-offset: 4px; }
+.nav .lnk[aria-current=page] { color: #fff; text-decoration: underline; text-decoration-color: #5be49b; text-underline-offset: 6px; text-decoration-thickness: 2px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; background: var(--signal); color: #062418; font-weight: 650; border-radius: 10px; padding: 12px 22px; text-decoration: none; letter-spacing: -.005em; transition: background .15s, transform .15s; white-space: nowrap; }
+.btn:hover { background: #86f2b9; }
+.btn:active { transform: translateY(1px); }
+.btn-s { padding: 9px 16px; font-size: 15px; }
+.brand .lk { height: 28px; width: auto; display: block; flex: none; }
+.brand .lk-l { display: none; }
+
+/* title block */
+.wrap { max-width: 1180px; margin: 0 auto; }
+.intro { padding: clamp(118px, 17vh, 168px) clamp(20px, 5.4vw, 84px) clamp(8px, 2vh, 20px); background: linear-gradient(180deg, #0d1726 0%, var(--night) 100%); }
+.intro h1 { font-size: clamp(48px, 6.6vw, 100px); line-height: .95; letter-spacing: -.04em; font-weight: 650; margin: 0 0 22px; color: #fff; text-wrap: balance; text-shadow: 0 2px 40px rgba(8, 12, 30, .45); }
+.intro .lede { font-size: clamp(18px, 1.45vw, 21px); line-height: 1.4; color: #d6deea; max-width: 36ch; margin: 0 0 16px; }
+.meas { display: inline-flex; align-self: flex-start; font-size: 12px; font-weight: 650; color: var(--amber); border: 1px solid rgba(255, 184, 107, .5); border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+
+/* the three sections */
+.fw { position: relative; min-height: 100svh; display: flex; align-items: center; padding: clamp(80px, 10vh, 112px) clamp(20px, 5.4vw, 84px) clamp(32px, 5vh, 56px); }
+.fw > .wrap { width: 100%; display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: clamp(28px, 4vw, 60px); align-items: center; }
+.fw + .fw > .wrap { border-top: 1px solid var(--rule); padding-top: clamp(28px, 5vh, 48px); }
+.st-n { display: flex; align-items: center; gap: 12px; margin: 0 0 18px; font-size: clamp(17px, 1.4vw, 20px); font-weight: 650; letter-spacing: -.015em; line-height: 1.15; color: #fff; }
+.st-n b { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--signal); color: var(--signal); font-size: 13px; font-weight: 700; letter-spacing: 0; }
+.st-n::after { content: ""; flex: 1; min-width: 24px; height: 1px; margin-left: 6px; background: linear-gradient(90deg, rgba(91, 228, 155, .55), rgba(214, 228, 242, 0)); }
+.fw h2 { font-size: clamp(36px, 4.2vw, 62px); font-weight: 650; letter-spacing: -.035em; line-height: 1.02; margin: 0; color: #fff; max-width: 15ch; text-wrap: balance; }
+.fw .say { font-size: clamp(17px, 1.3vw, 19px); line-height: 1.42; color: #c4d1df; margin: 20px 0 0; max-width: 32ch; }
+
+/* framed visual panel */
+.viz { position: relative; display: flex; flex-direction: column; min-width: 0; border: 1px solid rgba(214, 228, 242, .2); border-radius: 20px; background: #0b1626; overflow: hidden; }
+.viz .stage { position: relative; height: clamp(380px, 54svh, 500px); touch-action: pan-y; }
+.viz svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: hidden; }
+.viz svg text { font-family: var(--f); }
+.ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; padding: 16px 18px 4px; }
+.seg { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.seg-l { font-size: 12.5px; font-weight: 650; color: #8fa2b8; margin-right: 4px; }
+.pill { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; min-height: 40px; padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(214, 228, 242, .28); font: 600 14px/1.1 var(--f); color: #dbe5ef; cursor: pointer; transition: background .2s, border-color .2s, color .2s; white-space: nowrap; }
+.pill:hover { border-color: rgba(214, 228, 242, .6); color: #fff; }
+.pill[aria-pressed=true] { background: #1b4a36; border-color: var(--signal); color: #fff; }
+.pill:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; }
+.pill.go { background: var(--signal); border-color: var(--signal); color: #062418; font-weight: 650; }
+.pill.go:hover { background: #86f2b9; }
+.vfoot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; padding: 4px 18px 16px; font-size: 12.5px; color: #8fa2b8; min-height: 44px; }
+.vfoot .note { color: #90a2b7; }
+.m { display: inline-flex; align-items: center; gap: 8px; color: #c4d1df; font-weight: 600; }
+.m i { position: relative; display: block; width: 84px; height: 6px; border-radius: 3px; background: rgba(214, 228, 242, .12); overflow: hidden; }
+.m i::after { content: ""; position: absolute; inset: 0; transform-origin: 0 50%; transform: scaleX(var(--v, .5)); background: #9aabc0; border-radius: 3px; transition: transform .5s ease; }
+.m.best i::after { background: var(--signal); }
+.cap { font-size: 15px; font-weight: 650; color: #fff; letter-spacing: -.01em; }
+
+/* svg pieces */
+.mesh { fill: none; stroke: rgba(214, 228, 242, .1); stroke-width: 4; stroke-linecap: round; }
+.feed { fill: none; stroke: rgba(214, 228, 242, .2); stroke-width: 5; stroke-linecap: round; }
+.lit { fill: none; stroke: var(--signal); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
+.glow { fill: none; stroke: rgba(91, 228, 155, .16); stroke-width: 18; stroke-linecap: round; stroke-linejoin: round; }
+.stn { cursor: pointer; outline: none; }
+.stn .ring { fill: #0f1a2a; stroke: #c4d1df; stroke-width: 3; transition: fill .3s, stroke .3s; }
+.stn .halo { fill: rgba(91, 228, 155, .18); opacity: 0; transition: opacity .3s; }
+.stn .hit { fill: transparent; }
+.stn:hover .ring { stroke: #fff; }
+.stn.on .ring { stroke: var(--signal); fill: #e9fff2; }
+.stn.on .halo { opacity: 1; }
+.stn:focus-visible .ring { stroke: var(--signal); stroke-width: 4; }
+.stn:focus-visible .halo { opacity: 1; }
+.lb { fill: #dbe5ef; font-size: 15px; font-weight: 650; letter-spacing: -.01em; paint-order: stroke; stroke: #0b1626; stroke-width: 6px; stroke-linejoin: round; }
+.lb.s { font-size: 12.5px; font-weight: 600; fill: #8fa2b8; }
+.lb.am { fill: var(--amber); font-size: 13.5px; }
+.on .lb, .lb.hi { fill: #fff; }
+.chipbody { fill: #13233a; stroke: var(--signal); stroke-width: 1.5; }
+.chipgrid { stroke: rgba(91, 228, 155, .28); stroke-width: 1; }
+.pin { stroke: rgba(214, 228, 242, .5); stroke-width: 1.5; }
+.train { fill: #e9fff2; stroke: var(--signal); stroke-width: 2.5; }
+.wall { fill: none; stroke: rgba(214, 228, 242, .42); stroke-width: 1.5; }
+.wall2 { fill: none; stroke: rgba(214, 228, 242, .16); stroke-width: 1.2; }
+.inb { fill: none; stroke: rgba(214, 228, 242, .32); stroke-width: 5; stroke-linecap: round; }
+.chev { fill: none; stroke: #dbe5ef; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.stub { fill: none; stroke: var(--amber); stroke-width: 2; stroke-dasharray: 6 5; }
+.buffer { stroke: var(--amber); stroke-width: 3; stroke-linecap: round; }
+.flow { fill: none; stroke: #e9fff2; stroke-width: 3; stroke-linecap: round; opacity: .8; }
+.card { fill: #13233a; stroke: rgba(214, 228, 242, .28); stroke-width: 1.2; }
+.card.new { stroke: var(--signal); }
+.trace { fill: none; stroke: var(--signal); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.lane { fill: none; stroke-width: 3; stroke-linecap: round; transition: stroke .4s, opacity .4s; }
+.lane.off { stroke: rgba(214, 228, 242, .14); stroke-dasharray: 2 7; }
+.lane.live { stroke: var(--signal); opacity: .75; }
+.lane.flash { stroke: #e9fff2; opacity: 1; }
+.lanelab { cursor: pointer; outline: none; }
+.lanelab .hit { fill: transparent; }
+.lanelab text { font-size: 14px; font-weight: 600; fill: #6f839b; transition: fill .3s; }
+.lanelab.live text { fill: #e8eef5; }
+.lanelab:hover text, .lanelab:focus-visible text { fill: #fff; }
+.lanelab:focus-visible .hit { stroke: var(--signal); stroke-width: 2; rx: 8px; }
+.pulse { fill: #e9fff2; }
+.wire { stroke: rgba(91, 228, 155, .35); stroke-width: 1.2; }
+.node { fill: #1b4a36; stroke: var(--signal); stroke-width: 2; }
+.nodeglow { fill: rgba(91, 228, 155, .16); }
+.far { fill: none; stroke: rgba(255, 184, 107, .7); stroke-width: 1.5; stroke-dasharray: 6 5; }
+
+/* the spectrum: a little line of four stations */
+.spec { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); flex: 1; min-width: 260px; max-width: 560px; }
+.spec .track { position: absolute; top: 20px; left: 12.5%; right: 12.5%; height: 4px; pointer-events: none; }
+.spec .track::before { content: ""; position: absolute; left: 0; width: 66.7%; top: 0; height: 4px; border-radius: 2px; background: rgba(214, 228, 242, .2); }
+.spec .track::after { content: ""; position: absolute; right: 0; width: 33.3%; top: 1px; height: 0; border-top: 2px dashed rgba(255, 184, 107, .7); }
+.spec .fill { position: absolute; left: 0; top: 0; height: 4px; border-radius: 2px; background: var(--signal); width: 0; transition: width .5s ease; z-index: 1; }
+.spec button { all: unset; box-sizing: border-box; position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 52px; padding-top: 12px; cursor: pointer; font: 600 13px/1.15 var(--f); color: #8fa2b8; text-align: center; border-radius: 8px; }
+.spec button::before { content: ""; width: 14px; height: 14px; border-radius: 50%; background: #0f1a2a; border: 3px solid #c4d1df; transition: background .3s, border-color .3s, box-shadow .3s; }
+.spec button.past::before { border-color: var(--signal); }
+.spec button[aria-pressed=true] { color: #fff; }
+.spec button[aria-pressed=true]::before { background: #e9fff2; border-color: var(--signal); box-shadow: 0 0 0 5px rgba(91, 228, 155, .2); }
+.spec button:last-of-type { color: rgba(255, 184, 107, .85); }
+.spec button:last-of-type[aria-pressed=true] { color: var(--amber); }
+.spec button:hover { color: #fff; }
+.spec button:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+
+footer.pf { padding: 0 clamp(20px, 5.4vw, 84px) 40px; }
+footer.pf .wrap { border-top: 1px solid var(--rule); padding-top: 22px; font-size: 13px; color: #607086; margin-top: 24px; }
+
+@media (max-width: 980px) {
+  .fw > .wrap { grid-template-columns: 1fr; }
+  .fw h2 { max-width: 18ch; }
+  .viz .stage { height: 470px; }
+}
+@media (max-width: 700px) {
+  .top { padding: 12px 14px; }
+  .nav { gap: 12px; }
+  .nav .lnk { font-size: 14px; }
+}
+@media (max-width: 600px) {
+  .nav .lnk.ab { display: none; }
+  .nav .btn-s { padding: 8px 12px; font-size: 14px; }
+  .fw { align-items: flex-start; }
+  .ctl { padding: 14px 14px 2px; gap: 10px; }
+  .seg { gap: 6px; }
+  .seg-l { flex-basis: 100%; }
+  .pill { padding: 8px 11px; font-size: 13.5px; }
+  .vfoot { padding: 4px 14px 14px; gap: 8px 16px; }
+  .m i { width: 56px; }
+  #fab .stage { height: 470px; }
+  #recordings .stage { height: 460px; }
+  #sensors .stage { height: 540px; }
+  .spec { min-width: 0; }
+  .spec button { font-size: 12px; }
+}
+@media (max-width: 520px) { .brand .lk { height: 24px; } }
+@media (prefers-reduced-motion: reduce) {
+  .top, .btn, .pill, .m i::after, .spec .fill, .spec button::before, .stn .ring, .stn .halo, .lane, .lanelab text { transition: none; }
+}
+</style>
+</head>
+<body>
+<header class="top solid" id="topbar">
+  <a class="brand" href="../../variants/z3.html" aria-label="Home"><img class="lk lk-l" src="../../assets/brand/chipin-lockup.svg" alt="ChipIn" height="28"><img class="lk lk-d" src="../../assets/brand/chipin-lockup-light.svg" alt="ChipIn" height="28"></a>
+  <nav class="nav" aria-label="Main">
+    <a class="lnk ab" href="../../variants/z3.html#about">About</a>
+    <a class="lnk" href="../../how-it-works.html">How it works</a>
+    <a class="lnk" href="#" aria-current="page">Future work</a>
+    <a class="btn btn-s" href="../../dashboard/">Try now</a>
+  </nav>
+</header>
+
+<main>
+  <section class="intro" id="top"><div class="wrap"><h1 id="t-h1"></h1><p class="lede" id="t-lede"></p><span class="meas" id="t-pill"></span></div></section>
+  <section class="fw" id="fab"><div class="wrap"><div class="txt"></div><div class="vis"></div></div></section>
+  <section class="fw" id="recordings"><div class="wrap"><div class="txt"></div><div class="vis"></div></div></section>
+  <section class="fw" id="sensors"><div class="wrap"><div class="txt"></div><div class="vis"></div></div></section>
+</main>
+<footer class="pf"><div class="wrap" id="foot"></div></footer>
+
+<script>
+(function () {
+  'use strict';
+  var C = window.COPY;
+  var NS = 'http://www.w3.org/2000/svg';
+  var RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function h(tag, cls, parent, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function s(tag, attrs, parent, text) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function f1(n) { return Math.round(n * 10) / 10; }
+  // a polyline with rounded corners, the way transit maps bend
+  function roundPoly(pts, r) {
+    var q = [pts[0]];
+    for (var i = 1; i < pts.length; i++) {
+      var a = q[q.length - 1], b = pts[i];
+      if (Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) > 0.5) q.push(b);
+    }
+    var d = 'M' + f1(q[0][0]) + ' ' + f1(q[0][1]);
+    for (var j = 1; j < q.length - 1; j++) {
+      var p0 = q[j - 1], p = q[j], p2 = q[j + 1];
+      var v1x = p[0] - p0[0], v1y = p[1] - p0[1], v2x = p2[0] - p[0], v2y = p2[1] - p[1];
+      var l1 = Math.hypot(v1x, v1y), l2 = Math.hypot(v2x, v2y);
+      var rr = Math.min(r, l1 / 2, l2 / 2);
+      d += ' L' + f1(p[0] - v1x / l1 * rr) + ' ' + f1(p[1] - v1y / l1 * rr) +
+        ' Q' + f1(p[0]) + ' ' + f1(p[1]) + ' ' + f1(p[0] + v2x / l2 * rr) + ' ' + f1(p[1] + v2y / l2 * rr);
+    }
+    var z = q[q.length - 1];
+    return d + ' L' + f1(z[0]) + ' ' + f1(z[1]);
+  }
+  // run a frame loop only while the section is on screen, never under reduced motion
+  function loopWhileVisible(el, step) {
+    if (RM) return;
+    var raf = 0, on = false;
+    function tick(t) { step(t / 1000); raf = requestAnimationFrame(tick); }
+    new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (e.isIntersecting && !on) { on = true; raf = requestAnimationFrame(tick); }
+        else if (!e.isIntersecting && on) { on = false; cancelAnimationFrame(raf); }
+      });
+    }, { threshold: 0.15 }).observe(el);
+  }
+  function onResize(el, fn) {
+    var lw = 0, lh = 0;
+    new ResizeObserver(function () {
+      var w = el.clientWidth, hh = el.clientHeight;
+      if (Math.abs(w - lw) > 2 || Math.abs(hh - lh) > 2) { lw = w; lh = hh; fn(); }
+    }).observe(el);
+  }
+  function asButton(g, label, fn) {
+    g.setAttribute('tabindex', '0');
+    g.setAttribute('role', 'button');
+    g.setAttribute('aria-label', label);
+    g.addEventListener('click', fn);
+    g.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); }
+    });
+  }
+  function textBlock(sec, c) {
+    var t = sec.querySelector('.txt');
+    var n = h('p', 'st-n', t);
+    h('b', null, n, c.step);
+    h('span', null, n, c.kicker);
+    h('h2', null, t, c.h2);
+    h('p', 'say', t, c.p);
+    var pl = h('div', 'pills', t);
+    c.pills.forEach(function (x) { h('span', 'meas', pl, x); });
+  }
+  function panel(sec, c) {
+    var v = h('div', 'viz', sec.querySelector('.vis'));
+    var ctl = h('div', 'ctl', v);
+    var stage = h('div', 'stage', v);
+    var foot = h('div', 'vfoot', v);
+    return { v: v, ctl: ctl, stage: stage, foot: foot };
+  }
+  function newSvg(stage, aria) {
+    stage.textContent = '';
+    var w = stage.clientWidth, hh = stage.clientHeight;
+    var svg = s('svg', { viewBox: '0 0 ' + w + ' ' + hh, role: 'group', 'aria-label': aria }, stage);
+    return { svg: svg, w: w, h: hh };
+  }
+
+  /* ---------- 01 fab presets: a route map from your design to the fab you pick ---------- */
+  function drawFab(root, c) {
+    var st = { fab: 0, goal: 1, user: false, k: -1 };
+    var P = panel(root, c);
+    function seg(label, items, key) {
+      var g = h('div', 'seg', P.ctl);
+      h('span', 'seg-l', g, label);
+      return items.map(function (name, i) {
+        var b = h('button', 'pill', g, name);
+        b.type = 'button';
+        b.addEventListener('click', function () { st.user = true; st[key] = i; update(true); });
+        return b;
+      });
+    }
+    var fabBtns = seg(c.fabLabel, c.fabs.map(function (x) { return x.name; }), 'fab');
+    var goalBtns = seg(c.goalLabel, c.goals, 'goal');
+    var meters = c.meters.map(function (name) {
+      var m = h('span', 'm', P.foot);
+      h('span', null, m, name);
+      h('i', null, m);
+      return m;
+    });
+    h('span', 'meas', P.foot, c.meterPill);
+    var note = h('span', 'note', P.foot);
+
+    // illustrative relative values only: [fab][cost, size, time]
+    var base = [[.6, .62, .55], [.55, .74, .6], [.74, .52, .68]];
+    var aspect = [.72, .5, .82];
+    var R = {};
+
+    function render() {
+      var o = newSvg(P.stage, c.aria), svg = o.svg, w = o.w, H = o.h;
+      var tall = w < 600;
+      R = { svg: svg, tall: tall, fab: [], goal: [] };
+      var pad = 24, org, fabs = [], goals = [], term;
+      if (!tall) {
+        var cy = H * 0.5, ys = [H * 0.2, H * 0.5, H * 0.8];
+        var c1 = w * 0.33, c2 = w * 0.62;
+        org = [pad + 16, cy];
+        term = [w - pad - 66, cy];
+        fabs = ys.map(function (y) { return [c1, y]; });
+        goals = ys.map(function (y) { return [c2, y]; });
+      } else {
+        var xs = [w * 0.18, w * 0.5, w * 0.82];
+        org = [w * 0.5, 30];
+        fabs = xs.map(function (x) { return [x, H * 0.27]; });
+        goals = xs.map(function (x) { return [x, H * 0.57]; });
+        term = [w * 0.62, H - 66];
+      }
+      R.org = org; R.term = term; R.fabs = fabs; R.goals = goals;
+      function leg(a, b, frac) {
+        if (!tall) {
+          var sx = (b[0] - a[0]) * frac;
+          return [a, [a[0] + sx, a[1]], [b[0] - sx, b[1]], b];
+        }
+        var sy = (b[1] - a[1]) * frac;
+        return [a, [a[0], a[1] + sy], [b[0], b[1] - sy], b];
+      }
+      R.leg = leg;
+      var gm = s('g', {}, svg);
+      fabs.forEach(function (fp) { s('path', { class: 'feed', d: roundPoly(leg(org, fp, .3), 16) }, gm); });
+      fabs.forEach(function (fp) {
+        goals.forEach(function (gp) { s('path', { class: 'mesh', d: roundPoly(leg(fp, gp, .24), 16) }, gm); });
+      });
+      goals.forEach(function (gp) { s('path', { class: 'feed', d: roundPoly(leg(gp, term, .3), 16) }, gm); });
+      R.glow = s('path', { class: 'glow' }, svg);
+      R.lit = s('path', { class: 'lit' }, svg);
+      R.train = s('circle', { class: 'train', r: 6, cx: org[0], cy: org[1], opacity: 0 }, svg);
+
+      // origin
+      var go = s('g', { class: 'stn on' }, svg);
+      s('circle', { class: 'halo', cx: org[0], cy: org[1], r: 17 }, go);
+      s('circle', { class: 'ring', cx: org[0], cy: org[1], r: 9 }, go);
+      if (!tall) s('text', { class: 'lb', x: org[0] - 6, y: org[1] - 28 }, go, c.origin);
+      else s('text', { class: 'lb', x: org[0] + 18, y: org[1] + 5 }, go, c.origin);
+
+      function station(p, name, sub, list, key, i) {
+        var g = s('g', { class: 'stn' }, svg);
+        s('circle', { class: 'hit', cx: p[0], cy: p[1], r: 24 }, g);
+        s('circle', { class: 'halo', cx: p[0], cy: p[1], r: 18 }, g);
+        s('circle', { class: 'ring', cx: p[0], cy: p[1], r: 10 }, g);
+        if (!tall) {
+          s('text', { class: 'lb', x: p[0], y: p[1] - 22, 'text-anchor': 'middle' }, g, name);
+          if (sub) s('text', { class: 'lb s', x: p[0], y: p[1] + 32, 'text-anchor': 'middle' }, g, sub);
+        } else {
+          s('text', { class: 'lb', x: p[0], y: p[1] + 34, 'text-anchor': 'middle', style: 'font-size:14px' }, g, name);
+        }
+        asButton(g, name, function () { st.user = true; st[key] = i; update(true); });
+        list.push(g);
+      }
+      fabs.forEach(function (p, i) { station(p, c.fabs[i].name, c.fabSub, R.fab, 'fab', i); });
+      goals.forEach(function (p, i) { station(p, c.goals[i], null, R.goal, 'goal', i); });
+
+      // the arriving chip
+      var cg = s('g', {}, svg);
+      cg.style.transformOrigin = '0 0';
+      cg.style.transformBox = 'view-box';
+      if (!RM) cg.style.transition = 'transform .55s cubic-bezier(.3,.7,.2,1)';
+      s('rect', { class: 'chipbody', x: -50, y: -50, width: 100, height: 100, rx: 12, 'vector-effect': 'non-scaling-stroke' }, cg);
+      [-25, 0, 25].forEach(function (v) {
+        s('line', { class: 'chipgrid', x1: v, y1: -50, x2: v, y2: 50, 'vector-effect': 'non-scaling-stroke' }, cg);
+        s('line', { class: 'chipgrid', x1: -50, y1: v, x2: 50, y2: v, 'vector-effect': 'non-scaling-stroke' }, cg);
+      });
+      [-35, -15, 5, 25].forEach(function (v) {
+        s('line', { class: 'pin', x1: v + 5, y1: -50, x2: v + 5, y2: -58, 'vector-effect': 'non-scaling-stroke' }, cg);
+        s('line', { class: 'pin', x1: v + 5, y1: 50, x2: v + 5, y2: 58, 'vector-effect': 'non-scaling-stroke' }, cg);
+      });
+      R.chip = cg;
+      if (!tall) {
+        R.chipTop = s('text', { class: 'lb hi', x: term[0], y: term[1] - 76, 'text-anchor': 'middle' }, svg, c.chipTop);
+        R.chipFor = s('text', { class: 'lb s', x: term[0], y: term[1] + 86, 'text-anchor': 'middle' }, svg, '');
+      } else {
+        R.chipTop = s('text', { class: 'lb hi', x: term[0] - 70, y: term[1] - 3, 'text-anchor': 'end' }, svg, c.chipTop);
+        R.chipFor = s('text', { class: 'lb s', x: term[0] - 70, y: term[1] + 16, 'text-anchor': 'end' }, svg, '');
+      }
+      update(false);
+    }
+
+    function update(animate) {
+      fabBtns.forEach(function (b, i) { b.setAttribute('aria-pressed', i === st.fab ? 'true' : 'false'); });
+      goalBtns.forEach(function (b, i) { b.setAttribute('aria-pressed', i === st.goal ? 'true' : 'false'); });
+      R.fab.forEach(function (g, i) { g.classList.toggle('on', i === st.fab); });
+      R.goal.forEach(function (g, i) { g.classList.toggle('on', i === st.goal); });
+      var fp = R.fabs[st.fab], gp = R.goals[st.goal];
+      var pts = R.leg(R.org, fp, .3).concat(R.leg(fp, gp, .24).slice(1), R.leg(gp, R.term, .3).slice(1));
+      var d = roundPoly(pts, 16);
+      R.lit.setAttribute('d', d);
+      R.glow.setAttribute('d', d);
+      var L = R.lit.getTotalLength();
+      R.L = L;
+      if (animate && !RM) {
+        R.lit.style.transition = 'none';
+        R.lit.style.strokeDasharray = L + ' ' + L;
+        R.lit.style.strokeDashoffset = L;
+        R.lit.getBoundingClientRect();
+        R.lit.style.transition = 'stroke-dashoffset .8s cubic-bezier(.4,.1,.2,1)';
+        R.lit.style.strokeDashoffset = 0;
+      } else {
+        R.lit.style.transition = 'none';
+        R.lit.style.strokeDasharray = 'none';
+        R.lit.style.strokeDashoffset = 0;
+      }
+      R.t0 = null;
+      var vals = base[st.fab].map(function (v, k) { return k === st.goal ? v * .4 : Math.min(1, v * 1.12); });
+      meters.forEach(function (m, k) {
+        m.querySelector('i').style.setProperty('--v', vals[k].toFixed(3));
+        m.classList.toggle('best', k === st.goal);
+      });
+      var hw = (R.tall ? 22 : 30) + vals[1] * (R.tall ? 26 : 34), hh = hw * aspect[st.fab];
+      R.chip.style.transform = 'translate(' + R.term[0] + 'px,' + R.term[1] + 'px) scale(' + (hw / 50).toFixed(3) + ',' + (hh / 50).toFixed(3) + ')';
+      R.chipFor.textContent = c.chipFor + c.fabs[st.fab].name;
+      note.textContent = c.clockNote.replace('{fab}', c.fabs[st.fab].name).replace('{clock}', c.fabs[st.fab].clock);
+    }
+
+    onResize(P.stage, render);
+    render();
+    loopWhileVisible(root, function (t) {
+      if (!st.user) {
+        var k = Math.floor(t / 4.2);
+        if (st.k !== k) {
+          if (st.k !== -1) {
+            st.goal = (st.goal + 1) % 3;
+            if (st.goal === 1) st.fab = (st.fab + 1) % 3;
+            update(true);
+          }
+          st.k = k;
+        }
+      }
+      if (R.t0 == null) R.t0 = t;
+      var dt = t - R.t0 - 0.8;
+      if (dt < 0 || !R.L) { R.train.setAttribute('opacity', 0); return; }
+      var sp = 150, cyc = R.L / sp + 1.2, u = (dt % cyc) * sp;
+      if (u > R.L) { R.train.setAttribute('opacity', 0); return; }
+      var pt = R.lit.getPointAtLength(u);
+      R.train.setAttribute('cx', f1(pt.x));
+      R.train.setAttribute('cy', f1(pt.y));
+      R.train.setAttribute('opacity', 1);
+    });
+  }
+
+  /* ---------- 02 your own recordings: a loop line that never leaves the building ---------- */
+  function drawRecordings(root, c) {
+    var st = { n: 2, user: false, lastAuto: null, tokens: [], fit: 0 };
+    var P = panel(root, c);
+    var add = h('button', 'pill go', P.ctl, c.add);
+    add.type = 'button';
+    add.addEventListener('click', function () { st.user = true; addRec(); });
+    var stackTxt = h('span', 'cap', P.ctl);
+    var mm = h('span', 'm best', P.foot);
+    h('span', null, mm, c.meter);
+    var mi = h('i', null, mm);
+    h('span', 'meas', P.foot, c.meterPill);
+    var R = {};
+
+    function fitOf(n) { return 1 - 0.78 * Math.pow(0.8, n); }
+
+    function render() {
+      var o = newSvg(P.stage, c.aria), svg = o.svg, w = o.w, H = o.h;
+      var tall = w < 600, pad = 18;
+      var B, cx, cy, a, b, r, S = {};
+      if (!tall) {
+        B = { x: pad, y: pad, w: w * 0.75 - pad, h: H - 2 * pad };
+        cx = B.x + B.w * 0.55; cy = B.y + B.h * 0.57; a = B.w * 0.29; b = B.h * 0.3; r = Math.min(b, 66);
+      } else {
+        B = { x: pad - 6, y: pad - 6, w: w - 2 * pad + 12, h: H - 2 * pad - 52 };
+        cx = B.x + B.w * 0.6; cy = B.y + B.h * 0.55; a = B.w * 0.26; b = B.h * 0.31; r = Math.min(a, 50);
+      }
+      R = { svg: svg, tall: tall };
+      // double wall, like a floor plan
+      s('rect', { class: 'wall', x: B.x, y: B.y, width: B.w, height: B.h, rx: 14 }, svg);
+      s('rect', { class: 'wall2', x: B.x + 6, y: B.y + 6, width: B.w - 12, height: B.h - 12, rx: 10 }, svg);
+      s('text', { class: 'lb s', x: B.x + 20, y: B.y + 30, style: 'fill:#c4d1df' }, svg, c.building);
+
+      // the loop path starts at the fine-tune station and runs clockwise
+      var d;
+      if (!tall) {
+        d = 'M' + (cx + a) + ' ' + cy + ' L' + (cx + a) + ' ' + (cy + b - r) + ' Q' + (cx + a) + ' ' + (cy + b) + ' ' + (cx + a - r) + ' ' + (cy + b) +
+          ' L' + (cx - a + r) + ' ' + (cy + b) + ' Q' + (cx - a) + ' ' + (cy + b) + ' ' + (cx - a) + ' ' + (cy + b - r) +
+          ' L' + (cx - a) + ' ' + (cy - b + r) + ' Q' + (cx - a) + ' ' + (cy - b) + ' ' + (cx - a + r) + ' ' + (cy - b) +
+          ' L' + (cx + a - r) + ' ' + (cy - b) + ' Q' + (cx + a) + ' ' + (cy - b) + ' ' + (cx + a) + ' ' + (cy - b + r) + ' Z';
+        S = { ft: [cx + a, cy], check: [cx, cy + b], chip: [cx - a, cy + b * 0.42], sensor: [cx - a, cy - b * 0.42], rec: [cx, cy - b] };
+      } else {
+        d = 'M' + cx + ' ' + (cy + b) + ' L' + (cx - a + r) + ' ' + (cy + b) + ' Q' + (cx - a) + ' ' + (cy + b) + ' ' + (cx - a) + ' ' + (cy + b - r) +
+          ' L' + (cx - a) + ' ' + (cy - b + r) + ' Q' + (cx - a) + ' ' + (cy - b) + ' ' + (cx - a + r) + ' ' + (cy - b) +
+          ' L' + (cx + a - r) + ' ' + (cy - b) + ' Q' + (cx + a) + ' ' + (cy - b) + ' ' + (cx + a) + ' ' + (cy - b + r) +
+          ' L' + (cx + a) + ' ' + (cy + b - r) + ' Q' + (cx + a) + ' ' + (cy + b) + ' ' + (cx + a - r) + ' ' + (cy + b) + ' Z';
+        S = { ft: [cx, cy + b], check: [cx - a, cy + b * 0.45], chip: [cx - a, cy], sensor: [cx - a, cy - b * 0.45], rec: [cx, cy - b] };
+      }
+
+      // inbound line: the starting model comes in from outside
+      var inb;
+      if (!tall) {
+        var ox = B.x + B.w;
+        inb = [[w - 6, cy], [S.ft[0], cy]];
+        s('text', { class: 'lb s', x: ox + 18, y: B.y + 30 }, svg, c.outside);
+        s('text', { class: 'lb', x: ox + 16, y: cy - 34, style: 'font-size:14px' }, svg, c.inbound[0]);
+        s('text', { class: 'lb s', x: ox + 16, y: cy - 16 }, svg, c.inbound[1]);
+      } else {
+        var oy = B.y + B.h;
+        inb = [[cx, H - 4], [cx, S.ft[1]]];
+        s('text', { class: 'lb s', x: cx + 18, y: H - 12 }, svg, c.outside);
+        s('text', { class: 'lb', x: cx - 16, y: oy + 24, 'text-anchor': 'end', style: 'font-size:14px' }, svg, c.inbound[0] + ' ' + c.inbound[1]);
+      }
+      s('path', { class: 'inb', d: 'M' + inb[0][0] + ' ' + inb[0][1] + ' L' + inb[1][0] + ' ' + inb[1][1] }, svg);
+      for (var k = 0; k < 3; k++) {
+        var cxv, cyv, ch;
+        if (!tall) { cxv = B.x + B.w + 24 + k * 16; cyv = cy; ch = 'M' + (cxv + 5) + ' ' + (cyv - 6) + ' l-6 6 l6 6'; }
+        else { cxv = cx; cyv = B.y + B.h + 12 + k * 13 - 13; ch = 'M' + (cxv - 6) + ' ' + (cyv + 5) + ' l6 -6 l6 6'; }
+        s('path', { class: 'chev', d: ch, opacity: (0.45 + k * 0.2).toFixed(2) }, svg);
+      }
+
+      // the loop
+      s('path', { class: 'glow', d: d }, svg);
+      R.loop = s('path', { class: 'lit', d: d }, svg);
+      R.flow = s('path', { class: 'flow', d: d }, svg);
+      var L = R.loop.getTotalLength();
+      R.L = L;
+      R.flow.style.strokeDasharray = '34 ' + (L - 34);
+      if (RM) R.flow.style.display = 'none';
+
+      // no line out: a stub from the recordings station ends in a buffer at the wall
+      var stubTop = B.y + 14;
+      s('path', { class: 'stub', d: 'M' + S.rec[0] + ' ' + (S.rec[1] - 12) + ' L' + S.rec[0] + ' ' + (stubTop + 6) }, svg);
+      s('line', { class: 'buffer', x1: S.rec[0] - 11, y1: stubTop + 4, x2: S.rec[0] + 11, y2: stubTop + 4 }, svg);
+      var nx = tall ? S.rec[0] - 16 : S.rec[0] + 18, nanc = tall ? 'end' : 'start';
+      s('text', { class: 'lb am', x: nx, y: stubTop + 26, 'text-anchor': nanc }, svg, c.noOut[0]);
+      s('text', { class: 'lb s', x: nx, y: stubTop + 43, 'text-anchor': nanc }, svg, c.noOut[1]);
+
+      // where along the loop each station sits
+      var lens = {};
+      var probe = [];
+      for (var i = 0; i <= 400; i++) { var pp = R.loop.getPointAtLength(L * i / 400); probe.push([pp.x, pp.y, L * i / 400]); }
+      Object.keys(S).forEach(function (key) {
+        var best = 1e9, bl = 0;
+        probe.forEach(function (q) { var dd = Math.hypot(q[0] - S[key][0], q[1] - S[key][1]); if (dd < best) { best = dd; bl = q[2]; } });
+        lens[key] = bl;
+      });
+      if (lens.ft > L * 0.5) lens.ft = 0;
+      R.lens = lens;
+
+      // stations and their labels
+      R.st = {};
+      Object.keys(S).forEach(function (key) {
+        var p = S[key], g = s('g', { class: 'stn' }, svg);
+        s('circle', { class: 'halo', cx: p[0], cy: p[1], r: 17 }, g);
+        s('circle', { class: 'ring', cx: p[0], cy: p[1], r: 9 }, g);
+        var lx, ly, anc = 'middle';
+        if (key === 'ft') { if (!tall) { lx = p[0] + 16; ly = p[1] + 30; anc = 'start'; } else { lx = p[0] - 16; ly = p[1] + 26; anc = 'end'; } }
+        else if (key === 'check' && !tall) { lx = p[0]; ly = p[1] + 32; }
+        else if (key === 'check') { lx = p[0] + 18; ly = p[1] + 5; anc = 'start'; }
+        else if (key === 'rec') { lx = tall ? p[0] + 16 : p[0] - 16; ly = p[1] - 16; anc = tall ? 'start' : 'end'; }
+        else { lx = p[0] - 18; ly = p[1] + 5; anc = 'end'; }
+        var nm = c.stations[key];
+        if (Array.isArray(nm) && !tall) nm = nm.join(' ');
+        if (Array.isArray(nm)) {
+          s('text', { class: 'lb', x: lx, y: ly - 4, 'text-anchor': anc, style: 'font-size:14px' }, g, nm[0]);
+          s('text', { class: 'lb s', x: lx, y: ly + 12, 'text-anchor': anc }, g, nm[1]);
+        } else {
+          s('text', { class: 'lb', x: lx, y: ly, 'text-anchor': anc, style: tall ? 'font-size:14px' : '' }, g, nm);
+        }
+        R.st[key] = g;
+        if (key === 'sensor') asButton(g, c.add, function () { st.user = true; addRec(); });
+      });
+      R.st.chip.classList.add('on');
+
+      // a live trace beside the sensor
+      var tx0, ty0, tw = tall ? 58 : 70;
+      tx0 = S.sensor[0] - 18 - tw; ty0 = S.sensor[1] - 34;
+      R.trace = s('path', { class: 'trace' }, svg);
+      R.traceBox = [tx0, ty0, tw];
+
+      // the stack of recordings in the middle of the loop
+      R.stack = s('g', {}, svg);
+      R.stackAt = [cx, cy + 4];
+      R.tokenLayer = s('g', {}, svg);
+      R.tokens = [];
+      drawStack(false);
+      drawTrace(0);
+    }
+
+    function cardPath(x, y, w2, seed, ch) {
+      var d = '', n = 18;
+      for (var i = 0; i <= n; i++) {
+        var u = i / n, v = Math.sin(u * 12 + seed) * 0.4 + (Math.abs(u - 0.45 - (seed % 3) * 0.1) < 0.05 ? -1 : 0);
+        d += (i ? ' L' : 'M') + f1(x + 8 + u * (w2 - 16)) + ' ' + f1(y + ch / 2 + v * ch * 0.24);
+      }
+      return d;
+    }
+    function drawStack(fresh) {
+      var g = R.stack;
+      g.textContent = '';
+      var shown = Math.min(st.n, 6), cw = R.tall ? 84 : 124, chh = R.tall ? 40 : 52;
+      for (var i = 0; i < shown; i++) {
+        var x = R.stackAt[0] - cw / 2 + (shown - 1 - i) * -5 + (shown - 1) * 2.5, y = R.stackAt[1] - chh / 2 + (shown - 1 - i) * -6 + (shown - 1) * 3 - 6;
+        var top = i === shown - 1;
+        s('rect', { class: 'card' + (top && fresh ? ' new' : ''), x: f1(x), y: f1(y), width: cw, height: chh, rx: 7 }, g);
+        if (top) s('path', { class: 'trace', d: cardPath(x, y, cw, st.n, chh) }, g);
+      }
+      var label = st.n === 1 ? c.stackOne : c.stack.replace('{n}', st.n);
+      stackTxt.textContent = label;
+      mi.style.setProperty('--v', fitOf(st.fitN == null ? st.n : st.fitN).toFixed(3));
+    }
+    function addRec() {
+      st.n += 1;
+      if (st.fitN == null) st.fitN = st.n - 1;
+      drawStack(true);
+      if (RM || !R.lens) { st.fitN = st.n; drawStack(true); return; }
+      var tk = s('circle', { class: 'train', r: 6, opacity: 0 }, R.tokenLayer);
+      R.tokens.push({ el: tk, t0: null });
+    }
+    function drawTrace(t) {
+      var b = R.traceBox, d = '', n = 36;
+      for (var i = 0; i <= n; i++) {
+        var u = i / n, ph = (t * 1.1 - u * 1.6), q = ph - Math.floor(ph);
+        var v = -Math.exp(-Math.pow((q - 0.3) / 0.025, 2)) + 0.2 * Math.exp(-Math.pow((q - 0.55) / 0.06, 2));
+        d += (i ? ' L' : 'M') + f1(b[0] + u * b[2]) + ' ' + f1(b[1] + 14 + v * 12);
+      }
+      R.trace.setAttribute('d', d);
+    }
+
+    onResize(P.stage, render);
+    render();
+    loopWhileVisible(root, function (t) {
+      R.flow.style.strokeDashoffset = f1(-((t * 70) % R.L));
+      drawTrace(t);
+      if (!st.user) {
+        if (st.lastAuto == null) st.lastAuto = t;
+        if (t - st.lastAuto > 5 && st.n < 6) { st.lastAuto = t; addRec(); }
+      }
+      var from = R.lens.rec, to = R.L + R.lens.chip;
+      R.tokens = R.tokens.filter(function (k) {
+        if (k.t0 == null) k.t0 = t;
+        var u = from + (t - k.t0) * 130;
+        if (u >= to) {
+          k.el.remove();
+          st.fitN = Math.min(st.n, (st.fitN || 0) + 1);
+          if (st.fitN >= st.n) st.fitN = null;
+          mi.style.setProperty('--v', fitOf(st.fitN == null ? st.n : st.fitN).toFixed(3));
+          R.st.chip.classList.remove('on');
+          R.st.chip.getBoundingClientRect();
+          R.st.chip.classList.add('on');
+          return false;
+        }
+        var p = R.loop.getPointAtLength(u % R.L);
+        k.el.setAttribute('cx', f1(p.x));
+        k.el.setAttribute('cy', f1(p.y));
+        k.el.setAttribute('opacity', 1);
+        return true;
+      });
+    });
+  }
+
+  /* ---------- 03 every sensor, one chip: lines converge in parallel into one station ---------- */
+  function drawSensors(root, c) {
+    var N = c.lanes.length;
+    var st = { on: [], step: 0, user: false, lastAuto: null };
+    for (var i = 0; i < N; i++) st.on.push(i < 1);
+    if (RM) { for (var j = 0; j < N; j++) st.on[j] = true; }
+    var P = panel(root, c);
+    var spec = h('div', 'spec', P.ctl);
+    spec.setAttribute('role', 'group');
+    spec.setAttribute('aria-label', c.specLabel);
+    var track = h('div', 'track', spec);
+    var fill = h('div', 'fill', track);
+    var stepBtns = c.steps.map(function (sp, i) {
+      var b = h('button', null, spec, sp.name);
+      b.type = 'button';
+      b.addEventListener('click', function () { st.user = true; setCount(sp.n); });
+      b.addEventListener('keydown', function (e) {
+        var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+        if (!d) return;
+        e.preventDefault();
+        var k = Math.max(0, Math.min(c.steps.length - 1, i + d));
+        stepBtns[k].focus();
+        st.user = true;
+        setCount(c.steps[k].n);
+      });
+      return b;
+    });
+    var cap = h('span', 'cap', P.foot);
+    h('span', 'meas', P.foot, c.illus);
+    h('span', 'note', P.foot, c.hint);
+    var R = {};
+
+    function count() { return st.on.filter(Boolean).length; }
+    function stepOf(n) { var k = 0; c.steps.forEach(function (sp, i) { if (n >= sp.n) k = i; }); return k; }
+    function setCount(n) {
+      var fresh = [];
+      for (var i = 0; i < N; i++) { var was = st.on[i]; st.on[i] = i < n; if (st.on[i] && !was) fresh.push(i); }
+      update(fresh);
+    }
+    function toggle(i) {
+      st.user = true;
+      if (st.on[i] && count() > 1) { st.on[i] = false; update([]); }
+      else if (!st.on[i]) { st.on[i] = true; update([i]); }
+    }
+
+    function sig(type, u, t) {
+      var ph, q;
+      switch (type) {
+        case 'ecg': ph = t * 1.1 - u * 1.4; q = ph - Math.floor(ph); return -Math.exp(-Math.pow((q - 0.3) / 0.025, 2)) + 0.25 * Math.exp(-Math.pow((q - 0.58) / 0.06, 2)) + 0.1 * Math.exp(-Math.pow((q - 0.15) / 0.04, 2));
+        case 'pleth': ph = (t * 1.1 - u * 1.4) * Math.PI * 2; return -0.7 * Math.sin(ph) - 0.25 * Math.sin(2 * ph);
+        case 'breath': return -0.8 * Math.sin((t * 0.3 - u * 0.6) * Math.PI * 2);
+        case 'temp': return 0.15 * Math.sin((t * 0.15 - u * 0.4) * Math.PI * 2);
+        case 'eeg': ph = t * 2 - u * 3; return 0.35 * Math.sin(ph * 7.1) + 0.3 * Math.sin(ph * 11.3 + 1) + 0.25 * Math.sin(ph * 17.9 + 2);
+        case 'radar': ph = t * 1.5 - u * 2; return 0.8 * Math.sin(ph * 25) * Math.pow(Math.sin(ph * 2), 2);
+        case 'bp': ph = t * 1.1 - u * 1.4; q = ph - Math.floor(ph); return -0.9 * Math.exp(-Math.pow((q - 0.25) / 0.08, 2)) - 0.35 * Math.exp(-Math.pow((q - 0.5) / 0.06, 2)) + 0.3;
+        case 'move': ph = t * 0.8 - u * 1.2; return 0.5 * Math.sign(Math.sin(ph * 4)) * 0.8 + 0.15 * Math.sin(ph * 20);
+        case 'pcg': ph = t * 1.1 - u * 1.4; q = ph - Math.floor(ph); return (Math.exp(-Math.pow((q - 0.2) / 0.03, 2)) + 0.7 * Math.exp(-Math.pow((q - 0.45) / 0.03, 2))) * Math.sin(q * 160);
+        case 'gluc': return 0.5 * Math.sin((t * 0.08 - u * 0.5) * Math.PI * 2);
+        case 'emg': ph = t * 2 - u * 2.5; return (0.3 + 0.7 * Math.pow(Math.sin(ph * 1.5), 4)) * (0.5 * Math.sin(ph * 41) + 0.4 * Math.sin(ph * 67 + 1));
+        case 'us': ph = t * 1.4 - u * 2; q = ph - Math.floor(ph); return Math.sin(q * 90) * Math.exp(-Math.pow((q - 0.5) / 0.12, 2));
+      }
+      return 0;
+    }
+
+    function render() {
+      var o = newSvg(P.stage, c.aria), svg = o.svg, w = o.w, H = o.h;
+      var narrow = w < 600, pad = 22;
+      var labW = narrow ? 98 : 128, trW = narrow ? 40 : 78;
+      var chipW = narrow ? 92 : 150, bg = narrow ? 17 : 11;
+      var top = narrow ? 30 : 34, gap = (H - top - 26) / (N - 1);
+      var x0 = pad + labW, xs = x0 + trW;
+      var chipX = w - pad - chipW - (narrow ? 0 : 20);
+      var cy = H * 0.52;
+      var chipH = (N - 1) * bg + 44, chipY = cy - chipH / 2;
+      R = { svg: svg, lanes: [], labs: [], traces: [], pulses: [], x0: x0, xs: xs, narrow: narrow };
+
+      // the far-end frame (only at the hospital end)
+      R.far = s('g', { opacity: 0 }, svg);
+      if (!RM) R.far.style.transition = 'opacity .5s';
+      s('rect', { class: 'far', x: chipX - 12, y: chipY - 12, width: chipW + 24, height: chipH + 24, rx: 20 }, R.far);
+      var fx = chipX + chipW / 2;
+      s('text', { class: 'lb am', x: fx, y: chipY - 76, 'text-anchor': 'middle', style: narrow ? 'font-size:12.5px' : '' }, R.far, narrow ? 'Far end' : c.farEnd[0]);
+      s('text', { class: 'lb s', x: fx, y: chipY - 59, 'text-anchor': 'middle' }, R.far, narrow ? 'far-fetched' : c.farEnd[1]);
+
+      var avail = chipX - 18 - xs;
+      for (var i = 0; i < N; i++) {
+        var y = top + i * gap, yb = cy + (i - (N - 1) / 2) * bg;
+        var dy = Math.abs(y - yb), dx = Math.min(dy, avail * 0.8);
+        var x1 = xs + (avail - dx) * 0.35;
+        var pts = [[xs, y], [x1, y], [x1 + dx, yb], [chipX, yb]];
+        var lane = s('path', { class: 'lane off', d: roundPoly(pts, 12) }, svg);
+        var tr = s('path', { class: 'trace' }, svg);
+        var lg = s('g', { class: 'lanelab' }, svg);
+        s('rect', { class: 'hit', x: 4, y: y - gap / 2 + 1, width: xs - 4, height: Math.max(gap - 2, 30), rx: 8 }, lg);
+        s('text', { x: pad, y: y + 5, style: narrow ? 'font-size:13px' : '' }, lg, c.lanes[i].name);
+        (function (k) { asButton(lg, c.lanes[k].name, function () { toggle(k); }); })(i);
+        R.lanes.push(lane); R.traces.push(tr); R.labs.push(lg);
+        R.pulses.push([s('circle', { class: 'pulse', r: 3.2, opacity: 0 }, svg), s('circle', { class: 'pulse', r: 3.2, opacity: 0 }, svg)]);
+        R.lanes[i].yb = yb;
+        R.lanes[i].y = y;
+      }
+
+      // the chip: one station, one local model
+      var cg = s('g', {}, svg);
+      for (var p = 0; p < 6; p++) {
+        var px = chipX + 16 + p * (chipW - 32) / 5;
+        s('line', { class: 'pin', x1: px, y1: chipY, x2: px, y2: chipY - 7 }, cg);
+        s('line', { class: 'pin', x1: px, y1: chipY + chipH, x2: px, y2: chipY + chipH + 7 }, cg);
+      }
+      R.chipRect = s('rect', { class: 'chipbody', x: chipX, y: chipY, width: chipW, height: chipH, rx: 14 }, cg);
+      var nx = chipX + chipW * (narrow ? 0.6 : 0.66);
+      R.glowMax = chipW * 0.42;
+      R.wires = [];
+      for (var q = 0; q < N; q++) {
+        R.wires.push(s('line', { class: 'wire', x1: chipX, y1: R.lanes[q].yb, x2: nx, y2: cy, opacity: 0 }, cg));
+      }
+      R.nodeGlow = s('circle', { class: 'nodeglow', cx: nx, cy: cy, r: 24 }, cg);
+      R.node = s('circle', { class: 'node', cx: nx, cy: cy, r: 12 }, cg);
+      R.nodeAt = [nx, cy];
+      s('text', { class: 'lb hi', x: chipX + chipW / 2, y: chipY - 22, 'text-anchor': 'middle' }, svg, c.chip);
+      s('text', { class: 'lb s', x: chipX + chipW / 2, y: chipY + chipH + 30, 'text-anchor': 'middle' }, svg, c.chipSub[0]);
+      s('text', { class: 'lb s', x: chipX + chipW / 2, y: chipY + chipH + 47, 'text-anchor': 'middle' }, svg, c.chipSub[1]);
+      R.lens = R.lanes.map(function (l) { return l.getTotalLength(); });
+      update([], true);
+      drawTraces(RM ? 0.37 : (R.lastT || 0));
+    }
+
+    function update(fresh, silent) {
+      var n = count(), k = stepOf(n);
+      st.step = k;
+      stepBtns.forEach(function (b, i) {
+        b.setAttribute('aria-pressed', i === k ? 'true' : 'false');
+        b.classList.toggle('past', i < k);
+      });
+      fill.style.width = (k / (c.steps.length - 1) * 100) + '%';
+      cap.textContent = c.stepCap[k];
+      R.far.setAttribute('opacity', k === c.steps.length - 1 ? 1 : 0);
+      for (var i = 0; i < N; i++) {
+        var on = st.on[i];
+        R.lanes[i].setAttribute('class', 'lane ' + (on ? 'live' : 'off'));
+        R.labs[i].classList.toggle('live', on);
+        R.labs[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+        R.wires[i].setAttribute('opacity', on ? 1 : 0);
+        R.traces[i].setAttribute('opacity', on ? 1 : 0.18);
+      }
+      R.node.setAttribute('r', (10 + n * 0.9).toFixed(1));
+      if (!silent && !RM) {
+        fresh.forEach(function (i) {
+          var l = R.lanes[i];
+          l.setAttribute('class', 'lane flash');
+          setTimeout(function () { if (st.on[i]) l.setAttribute('class', 'lane live'); }, 450);
+        });
+      }
+      if (RM) drawTraces(0.37);
+    }
+
+    function drawTraces(t) {
+      R.lastT = t;
+      for (var i = 0; i < N; i++) {
+        var y = R.lanes[i].y, d = '', n = R.narrow ? 22 : 34, on = st.on[i];
+        for (var k = 0; k <= n; k++) {
+          var u = k / n, v = on ? sig(c.lanes[i].sig, u, t) : 0;
+          d += (k ? ' L' : 'M') + f1(R.x0 + 4 + u * (R.xs - R.x0 - 8)) + ' ' + f1(y + v * 9);
+        }
+        R.traces[i].setAttribute('d', d);
+      }
+    }
+
+    onResize(P.stage, render);
+    render();
+    loopWhileVisible(root, function (t) {
+      drawTraces(t);
+      if (!st.user) {
+        if (st.lastAuto == null) st.lastAuto = t;
+        var n = count();
+        if (t - st.lastAuto > 1.4 && n < 6) { st.lastAuto = t; st.on[n] = true; update([n]); }
+      }
+      var lit = 0;
+      for (var i = 0; i < N; i++) {
+        var on = st.on[i], L = R.lens[i];
+        for (var j = 0; j < 2; j++) {
+          var dot = R.pulses[i][j];
+          if (!on) { dot.setAttribute('opacity', 0); continue; }
+          var u = ((t * 85 + j * L / 2 + i * 37) % L);
+          var p = R.lanes[i].getPointAtLength(u);
+          dot.setAttribute('cx', f1(p.x));
+          dot.setAttribute('cy', f1(p.y));
+          dot.setAttribute('opacity', Math.min(1, u / 30, (L - u) / 30).toFixed(2));
+          if (L - u < 40) lit++;
+        }
+      }
+      var g = Math.min(R.glowMax, 22 + count() * 1.4 + Math.sin(t * 2.2) * 3 + lit * 1.5);
+      R.nodeGlow.setAttribute('r', f1(g));
+    });
+  }
+
+  // page text
+  document.getElementById('t-h1').textContent = C.title.h1;
+  document.getElementById('t-lede').textContent = C.title.lede;
+  document.getElementById('t-pill').textContent = C.title.pill;
+  document.getElementById('foot').textContent = C.footer;
+  [['fab', drawFab], ['recordings', drawRecordings], ['sensors', drawSensors]].forEach(function (x) {
+    var sec = document.getElementById(x[0]);
+    textBlock(sec, C[x[0]]);
+    x[1](sec, C[x[0]]);
+  });
+})();
+</script>
+<script src="../variant-nav.js"></script>
+</body>
+</html>
