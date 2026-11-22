@@ -2,7 +2,7 @@
 decision at 1 MHz and 32.768 kHz, on sky130 and gf180, against the fully wired cost per weight.
 
 Every number is tagged: M = measured here (results/*.json), S = from a named source, A = assumed.
-Writes results/estimate.json and prints the markdown tables used in FINDINGS.md.
+Writes results/estimate.json and prints the markdown tables used in feasibility.md.
 """
 from __future__ import annotations
 

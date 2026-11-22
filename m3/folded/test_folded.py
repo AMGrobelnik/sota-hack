@@ -89,6 +89,20 @@ def test_power_totals_match_mapped_area(tmp_path):
 
 
 @needs_tools
+@pytest.mark.parametrize("mutate,want", [(False, "PASS"), (True, "FAIL")])
+def test_bmc_proof_of_tiny_folded_neuron(tmp_path, mutate, want):
+    import json
+    import subprocess
+    import sys
+    from pathlib import Path
+    out = tmp_path / "prove.json"
+    cmd = [sys.executable, str(Path(__file__).parent / "proto" / "prove_proto.py"), "--n", "8", "--timeout", "120",
+           "--out", str(out), "--work", str(tmp_path)] + (["--mutate"] if mutate else [])
+    subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=180)
+    assert json.loads(out.read_text())["status"] == want
+
+
+@needs_tools
 @pytest.mark.parametrize("wtype,p", [("ternary", 1), ("ternary", 4), ("uniform4", 1), ("uniform4", 4)])
 def test_folded_neuron_matches_integer_model(tmp_path, wtype, p):
     from proto.folded_proto import sim
