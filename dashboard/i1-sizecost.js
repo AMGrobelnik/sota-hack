@@ -2,11 +2,10 @@
  * i1-sizecost.js: unit cost against chip size, the first block of the "Why this size" panel.
  * Defines window.ChipInSizeCost.
  *
- * A stepped bar chart: the chosen chip, then the next larger designs from the same run, each bar the
- * estimated unit cost with the extra against the chosen chip written under it (plus so much per unit, plus so
- * many percent), and rows for the run's metric, battery life and silicon area. A phone keeps the chosen, the
- * largest run size and the sizes past the run. Two hatched bars past the run
- * (twice and five times the size where the die outgrows its pads) show where the cost starts to climb.
+ * A small line chart: estimated unit cost against gates on a log axis, flat while the pads set the die and
+ * rising past the pad-limited threshold, with this run's designs as dots and the chosen one highlighted. Under it,
+ * folded, the sizes side by side (unit cost, extra against the chosen chip, metric, battery life, logic area),
+ * plus two sizes past the run where the die outgrows its pads.
  * When the cost is flat across the run, the block says so and names the lever that does move it: the battery.
  * Every figure comes from window.ChipInModels (costModel, deviceBudget, batteryClass); nothing here is a price.
  * html(run, v, P, ctx, d, rows): P = the page helpers, ctx = panelCtx(run, v), d = the chosen design,
@@ -25,14 +24,15 @@
     ".scx-g{display:grid;grid-template-columns:120px repeat(var(--n),minmax(78px,1fr));column-gap:8px;min-width:min-content;font-variant-numeric:tabular-nums}",
     ".scx-g>div{min-width:0}",
     ".scx-rl{font-size:12px;font-weight:600;color:var(--i700);align-self:center;line-height:1.3}",
-    ".scx-plot{height:116px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;border-bottom:1px solid var(--i300);position:relative}",
-    ".scx-plot>b{font-size:14px;font-weight:700;color:var(--i800);text-align:center;margin-bottom:3px}",
-    ".scx-plot>i{display:block;width:min(64px,80%);border-radius:6px 6px 0 0;background:#8b93a7;min-height:3px;position:relative}",
-    ".scx-plot>i>s{position:absolute;left:0;right:0;top:0;background:rgb(0 0 0/.28);border-radius:6px 6px 0 0;text-decoration:none}",
-    ".scx-c.me .scx-plot>i{background:var(--blue7)}",
-    ".scx-c.me .scx-plot>b{color:var(--blue7)}",
-    ".scx-c.far .scx-plot>i{background:repeating-linear-gradient(135deg,#c9ced9 0 5px,#e4e7ee 5px 10px);box-shadow:inset 0 0 0 1px #b2b6c2}",
-    ".scx-c.far .scx-plot>b{color:var(--i700)}",
+    ".scx-ch{margin:2px 0 4px}.scx-cn{display:none}",
+    ".scx-svg{display:block;max-width:100%;height:auto;overflow:visible;font-family:inherit}",
+    ".scx-svg .ln{fill:none;stroke:#8b93a7;stroke-width:2}.scx-svg .ax{stroke:var(--i300);stroke-width:1}",
+    ".scx-svg .th{stroke:var(--i400,#9aa1b1);stroke-width:1;stroke-dasharray:3 3}",
+    ".scx-svg .z,.scx-svg .tk{font-size:10.5px;fill:var(--i600)}.scx-svg .v{font-size:11px;font-weight:600;fill:var(--i800)}",
+    ".scx-svg .dt{fill:#fff;stroke:#5c6477;stroke-width:1.5}.scx-svg .me{fill:var(--blue7);stroke:#fff;stroke-width:1.5}",
+    ".scx-svg .ml{font-size:11px;font-weight:650;fill:var(--blue7)}",
+    ".scx-svg .nl{font-size:10.5px;fill:var(--i700)}",
+    ".scx-cap{margin:2px 0 0;font-size:12px;color:var(--i600)}",
     ".scx-sz{font-size:13.5px;font-weight:650;color:var(--i900);text-align:center;padding-top:5px;line-height:1.3}",
     ".scx-sz small{display:block;font-size:11.5px;font-weight:600;color:var(--i700)}",
     ".scx-c.me .scx-sz,.scx-c.me .scx-sz small{color:var(--blue7)}",
@@ -45,7 +45,7 @@
     ".scx-d{margin:8px 0 0;font-size:13px;color:var(--i800)}.scx-d>summary{cursor:pointer;color:var(--blue7);font-weight:600;width:fit-content}.scx-m{margin:6px 0 0;line-height:1.45}",
     ".scx-ft{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:6px}",
     ".scx-ft p{margin:0;font-size:12.5px;color:var(--i700);line-height:1.45}",
-    "@media (max-width:767px){.scx-g{grid-template-columns:64px repeat(var(--np),minmax(58px,1fr));column-gap:4px}.scx-g .mid{display:none}.scx-rl{font-size:11.5px}.scx-v{font-size:14px}.scx-cell{font-size:12px}}",
+    "@media (max-width:767px){.scx-cw{display:none}.scx-cn{display:block}.scx-g{grid-template-columns:64px repeat(var(--np),minmax(58px,1fr));column-gap:4px}.scx-g .mid{display:none}.scx-rl{font-size:11.5px}.scx-v{font-size:14px}.scx-cell{font-size:12px}}",
   ].join("\n");
   function css() {
     if (document.getElementById("scx-styles")) return;
@@ -75,6 +75,49 @@
     return '<span class="scx-st ' + cls + '">' + est((abs ? abs + " (" : "") + (flat ? "+0%" : pct(a, b)) + (abs ? ")" : ""), field) + "</span>";
   }
 
+  // the cost line: unit cost from costModel at each gate count (battery class held at the chosen chip's), on a log
+  // gate axis, flat while the pads set the die and rising past padGates; the run's designs sit on it as dots
+  function chart(ctx, pts, padGates, who, W, P) {
+    var H = 142, L = 46, R = W - 14, T = 14, B = H - 34;
+    var m = {}, k; for (k in ctx.costInputs || {}) m[k] = ctx.costInputs[k];
+    m.battery_class = pts[0].model.inputs.battery_class;
+    var gMin = pts.reduce(function (a, p) { return Math.min(a, p.gates); }, Infinity), gMax = pts.reduce(function (a, p) { return Math.max(a, p.gates); }, 0);
+    var lo = Math.pow(10, Math.floor(Math.log10(Math.min(gMin, padGates / 10)))), hi = Math.pow(10, Math.ceil(Math.log10(Math.max(gMax * 2, padGates * 5))));
+    var x = function (g) { return L + (Math.log10(g) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo)) * (R - L); };
+    var line = [], n = 80, j, c;
+    for (j = 0; j <= n; j++) { var g = lo * Math.pow(hi / lo, j / n); m.gates = g; line.push([g, M().costModel(m).unit_cost]); }
+    var yMax = Math.max(line[n][1], pts.reduce(function (a, p) { return Math.max(a, p.model.unit_cost); }, 0)) * 1.08;
+    var y = function (u) { return B - u / yMax * (B - T); };
+    var s = '<svg class="scx-svg" viewBox="0 0 ' + W + " " + H + '" width="' + W + '" height="' + H + '" role="img" aria-label="Estimated unit cost against chip size: flat below ' + esc(fmtInt(padGates)) + ' gates, rising above">';
+    // threshold and the two zones
+    var xp = x(padGates);
+    s += '<line x1="' + xp.toFixed(1) + '" y1="' + T + '" x2="' + xp.toFixed(1) + '" y2="' + B + '" class="th"/>';
+    s += '<text x="' + (xp - 6).toFixed(1) + '" y="' + (B - 6) + '" text-anchor="end" class="z">pads set the size</text>';
+    s += '<text x="' + (xp + 6).toFixed(1) + '" y="' + (B - 6) + '" class="z">logic sets it</text>';
+    // axis and ticks at each decade
+    s += '<line x1="' + L + '" y1="' + B + '" x2="' + R + '" y2="' + B + '" class="ax"/>';
+    for (c = lo; c <= hi * 1.001; c *= 10) {
+      var lab = c >= 1e6 ? c / 1e6 + "M" : c >= 1e3 ? c / 1e3 + "k" : String(c);
+      s += '<line x1="' + x(c).toFixed(1) + '" y1="' + B + '" x2="' + x(c).toFixed(1) + '" y2="' + (B + 4) + '" class="ax"/><text x="' + x(c).toFixed(1) + '" y="' + (B + 15) + '" text-anchor="middle" class="tk">' + lab + "</text>";
+    }
+    s += '<text x="' + R + '" y="' + (B + 30) + '" text-anchor="end" class="tk">gates, log scale</text>';
+    // the line, its start and end values
+    s += '<polyline class="ln" points="' + line.map(function (p) { return x(p[0]).toFixed(1) + "," + y(p[1]).toFixed(1); }).join(" ") + '"/>';
+    s += '<text x="' + (L - 6) + '" y="' + (y(line[0][1]) + 4).toFixed(1) + '" text-anchor="end" class="v">' + money(line[0][1]) + "</text>";
+    s += '<text x="' + (R - 2) + '" y="' + (y(line[n][1]) - 8).toFixed(1) + '" text-anchor="end" class="v">' + money(line[n][1]) + "</text>";
+    // the designs: the chosen one last so it draws on top, labelled
+    pts.slice(1).forEach(function (p) {
+      s += '<circle cx="' + x(p.gates).toFixed(1) + '" cy="' + y(p.model.unit_cost).toFixed(1) + '" r="3.5" class="dt"><title>' + esc((p.estSize ? "about " + P.about(p.gates) : P.fmt(p.gates)) + " gates" + (p.note ? ", " + p.note.replace(/,.*$/, "") : "") + ": " + money(p.model.unit_cost) + " per unit (estimated)") + "</title></circle>";
+    });
+    // the first noted design (the best on validation, sized by estimate) gets a short label above the line
+    var nb = pts.slice(1).find(function (p) { return p.note && p.estSize && p.d && p.d.gm === null; });
+    if (nb) s += '<text x="' + x(nb.gates).toFixed(1) + '" y="' + (y(nb.model.unit_cost) - 10).toFixed(1) + '" text-anchor="middle" class="nl">' + esc("about " + P.about(nb.gates) + ", not built") + "</text>";
+    var p0 = pts[0], cx = x(p0.gates), cy = y(p0.model.unit_cost);
+    s += '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="5" class="me"><title>' + esc(P.fmt(p0.gates) + " gates, " + who + ": " + money(p0.model.unit_cost) + " per unit (estimated)") + "</title></circle>";
+    s += '<text x="' + cx.toFixed(1) + '" y="' + (cy + 18).toFixed(1) + '" text-anchor="middle" class="ml">' + esc(P.fmt(p0.gates) + " " + who) + "</text>";
+    return s + "</svg>";
+  }
+
   function html(run, v, P, ctx, d, rows) {
     if (!M() || !ctx || !ctx.caseKind || !d) return "";
     css();
@@ -85,7 +128,6 @@
     var far = [2, 5].map(function (x) { return Math.round(padGates * x / 1000) * 1000; }).filter(function (g) { return g > pts[pts.length - 1].gates * 1.5; })
       .map(function (g) { var p = point(ctx, g, d); p.far = true; return p; });
     var all = pts.concat(far), n = all.length;
-    var top = all.reduce(function (a, p) { return Math.max(a, p.model.unit_cost); }, 0) || 1;
 
     // the metric column, read as the run's chart reads it (a measured file pooled)
     var showM = !af && P.MET[key];
@@ -95,18 +137,14 @@
     // a column's classes: the chosen one, the sizes past the run, and the middle run sizes a phone leaves out
     var cc = function (i) { return (i === 0 ? " me" : "") + (all[i].far ? " far" : "") + (i > 0 && i < pts.length - 1 ? " mid" : ""); };
     var np = n - Math.max(0, pts.length - 2), who = af ? "built" : v.ev.chosen ? "chosen" : "best";
-    var g = '<div class="scx-rl">Unit cost ' + '<span class="mk est">estimated</span></div>';
-    all.forEach(function (p, i) {
-      var h = Math.max(2, p.model.unit_cost / top * 100), die = Math.min(100, p.model.die_cost / p.model.unit_cost * 100);
-      var tip = "Die " + money(p.model.die_cost) + " of " + money(p.model.unit_cost) + " per unit (estimated)";
-      g += '<div class="scx-c' + cc(i) + '"><div class="scx-plot" title="' + esc(tip) + '"><b>' + est(money(p.model.unit_cost), "cost") + '</b><i style="height:' + h.toFixed(1) + '%"><s style="height:' + die.toFixed(1) + '%"></s></i></div></div>';
-    });
-    g += '<div class="scx-rl">Chip size</div>';
+    var g = '<div class="scx-rl">Chip size</div>';
     all.forEach(function (p, i) {
       var sz = p.estSize ? "about " + P.about(p.gates) : P.fmt(p.gates);
       var tag = i === 0 ? who : p.far ? "for scale" : p.note ? p.note.replace(/,.*$/, "") : "in this run";
       g += '<div class="scx-c' + cc(i) + '"><div class="scx-sz">' + sz + "<small>" + esc(tag) + "</small></div></div>";
     });
+    g += '<div class="scx-rl">Unit cost</div>';
+    all.forEach(function (p, i) { g += '<div class="scx-cell' + cc(i) + '">' + est(money(p.model.unit_cost), "cost") + "</div>"; });
     // each step is written against the chosen chip: plus so much per unit, plus so many percent
     g += '<div class="scx-rl">Extra per unit</div>';
     all.forEach(function (p, i) { g += '<div class="scx-cell' + cc(i) + '">' + (i ? stepTxt(all[0].model.unit_cost, p.model.unit_cost, "cost", "$") : "<small>" + esc(who) + "</small>") + "</div>"; });
@@ -130,7 +168,8 @@
     var last = pts[pts.length - 1], dc = last.model.unit_cost - pts[0].model.unit_cost, sz = function (p) { return p.estSize ? "about " + P.about(p.gates) : P.fmt(p.gates); };
     var verdict;
     if (pts.length < 2) verdict = "No larger design in this run to compare.";
-    else if (Math.abs(dc) < 0.005) verdict = "<b>Unit cost stays at " + est(money(pts[0].model.unit_cost), "cost") + " from " + sz(pts[0]) + " to " + sz(last) + " gates:</b> " + (pts[0].model.pad_limited && last.model.pad_limited ? "below about " + est(fmtInt(padGates) + " gates", "area") + " the pads, not the logic, set the die size, so cost only starts to rise above that." : "the silicon is a small share of it.");
+    else if (Math.abs(dc) < 0.005 && pts[0].model.pad_limited && last.model.pad_limited) verdict = "<b>Below about " + est(fmtInt(padGates) + " gates", "area") + " the pads, not the logic, set the die size, so a bigger chip costs the same per unit.</b> Here unit cost stays at " + est(money(pts[0].model.unit_cost), "cost") + " from " + sz(pts[0]) + " to " + sz(last) + " gates.";
+    else if (Math.abs(dc) < 0.005) verdict = "<b>Unit cost stays at " + est(money(pts[0].model.unit_cost), "cost") + " from " + sz(pts[0]) + " to " + sz(last) + " gates:</b> the silicon is a small share of it.";
     else verdict = "<b>Unit cost rises from " + est(money(pts[0].model.unit_cost), "cost") + " at " + sz(pts[0]) + " gates to " + est(money(last.model.unit_cost), "cost") + " at " + sz(last) + "</b> (" + stepTxt(pts[0].model.unit_cost, last.model.unit_cost, "cost", "$") + " per unit).";
     var silicon = "The silicon is " + est(money(pts[0].model.die_cost), "cost") + " of the " + est(money(pts[0].model.unit_cost), "cost") + " per unit.";
     var climb = far.length ? "Cost climbs only once the logic outgrows the pads, above about " + est(fmtInt(padGates) + " gates", "area") + ": at " + fmtInt(far[far.length - 1].gates) + " gates, " + stepTxt(pts[0].model.unit_cost, far[far.length - 1].model.unit_cost, "cost", "$") + " per unit." : "";
@@ -141,9 +180,11 @@
 
     return '<div class="scx"><div class="scx-h"><h3>Unit cost as the chip grows</h3><span class="mk est">estimated</span></div>' +
       '<p class="scx-v">' + verdict + "</p>" +
-      '<div class="scx-w"><div class="scx-g" style="--n:' + n + ";--np:" + np + '">' + g + "</div></div>" +
+      '<div class="scx-ch"><div class="scx-cw">' + chart(ctx, pts, padGates, who, 560, P) + '</div><div class="scx-cn">' + chart(ctx, pts, padGates, who, 340, P) + "</div>" +
+      '<p class="scx-cap">Estimated unit cost from the cost model, not a quote. Dots: designs in this run.</p></div>' +
+      '<details class="scx-d"><summary>Sizes side by side</summary><div class="scx-w"><div class="scx-g" style="--n:' + n + ";--np:" + np + '">' + g + "</div></div></details>" +
       '<details class="scx-d"><summary>More on cost</summary><p class="scx-m">' + silicon + (climb ? " " + climb : "") + "</p>" + lev + "</details>" +
-      '<div class="scx-ft"><button type="button" class="ws-b" data-ws-cost>Edit cost assumptions</button><p>Dark cap: the die&rsquo;s share. Hatched: sizes past this run.</p></div></div>';
+      '<div class="scx-ft"><button type="button" class="ws-b" data-ws-cost>Edit cost assumptions</button></div></div>';
   }
   window.ChipInSizeCost = { html: html };
 })();
