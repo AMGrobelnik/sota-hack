@@ -48,11 +48,11 @@ def design_metrics(test: list[dict], min_events: int) -> dict:
 
 def frontier(rows: list[dict]) -> list[str]:
     """Pareto set: fewer gates (measured, else estimated) and higher worst-baby sensitivity (ties: pooled).
-    Designs that never raise an alarm (a constant output, 0 gates) are not frontier candidates."""
+    Designs that catch no held-out event (including constant outputs with 0 gates) are not frontier candidates."""
     pts = []
     for r in rows:
         g = r["gates"] if r["gates"] is not None else r.get("gates_est")
-        if not g or r["metrics"]["sensitivity_worst"] is None:
+        if not g or r["metrics"]["sensitivity_worst"] is None or r["counts"]["events_caught"] == 0:
             continue
         pts.append((g, -(r["metrics"]["sensitivity_worst"]), -r["metrics"]["sensitivity_pooled"], r["id"]))
     pts.sort()
@@ -143,6 +143,7 @@ def build(stage_dir: Path, out: Path, verify_path: Path | None) -> None:
     n_compiled = sum(1 for r in rows if r["gates"] is not None)
     n_ver = sum(1 for r in rows if r["verified"])
     n_zero = sum(1 for r in rows if r["gates"] == 0)
+    n_none = sum(1 for r in rows if r["role"] == "design" and r["counts"]["events_caught"] == 0)
     n_proved = sum(1 for r in rows if r["verified"] and r["verified"].get("proved_equivalent"))
     specs = [x["spec"] for x in designs if x["role"] == "design"]
     hs = sorted({sp_["hidden"] for sp_ in specs if sp_["hidden"]})
@@ -159,6 +160,15 @@ def build(stage_dir: Path, out: Path, verify_path: Path | None) -> None:
     spread_worst = [max(g["metrics"]["sensitivity_worst"] for g in v) - min(g["metrics"]["sensitivity_worst"] for g in v)
                     for v in groups.values() if len(v) > 1 and all(g["metrics"]["sensitivity_worst"] is not None for g in v)]
     test_ev = ev["test"]
+    dz = [r for r in rows if r["role"] == "design"]
+    bestp = max(dz, key=lambda r: (r["metrics"]["sensitivity_pooled"], -r["metrics"]["false_alarms_per_hour"]))
+    bestw = max(r["metrics"]["sensitivity_worst"] or 0 for r in dz)
+    headline = (f"Result in one line: the best pooled figure is {bestp['counts']['events_caught']}/"
+                f"{bestp['counts']['events_total']} held-out events ({bestp['id']}, {bestp['gates']} gates, "
+                f"{bestp['metrics']['false_alarms_per_hour']} false alarms per hour); the best worst-baby figure is "
+                f"{bestw:.2f}" + (", so every design misses every event in at least one held-out baby. These simple "
+                "amplitude features do not separate seizures well across babies; the cloud shows that, not a working "
+                "detector." if bestw == 0 else "."))
     eligible = sum(1 for n in test_ev if n >= min_ev)
     b = next(r for r in rows if r["role"] == "baseline")
     stage_note = (f"Stage {meta['stage']}: this file uses a SUBSET of the record, babies numbered 1 to {meta['babies_used']} "
@@ -180,6 +190,7 @@ def build(stage_dir: Path, out: Path, verify_path: Path | None) -> None:
         "notes": [
             stage_note,
             "Feasibility result on one hospital's recordings, not clinical evidence; no design here is a medical device.",
+            headline,
             "Label rule: a second is seizure when at least 2 of the 3 experts marked it. Consensus runs closer than "
             f"{S.MERGE_GAP_S} s are one event; events shorter than {S.MIN_EVENT_S} s are not scored (alarms over them do not count as false).",
             f"Event matching: an event is caught when the design's alarm is on at any decision between its onset and "
@@ -198,15 +209,17 @@ def build(stage_dir: Path, out: Path, verify_path: Path | None) -> None:
             "Channels: 1 = C3-C4; 2 = C3-P3, C4-P4; 4 = adds T3-O1, T4-O2; 18 = double banana. Band-pass 0.5-30 Hz, 64 Hz.",
             f"Gates are from the chip lab's synthesis (simple 2-input gates) of the classifier only; the feature front end "
             f"is not included. {n_compiled} of {len(rows)} designs compiled by the lab"
-            + (f"; {n_zero} of them trained to a constant output (never alarm), synthesise to 0 gates and are left "
-               f"off the frontier" if n_zero else "")
+            + (f"; {n_zero} of them trained to a constant output (never alarm) and synthesise to 0 gates" if n_zero else "")
+            + f"; {n_none} designs catch no held-out event at their validation threshold and are left off the frontier"
             + (f"; {n_est} carry gates_est only: {rule}." if n_est else "."),
             f"Verified: {n_ver} designs (the frontier and the baseline) were checked bit for bit by the lab's simulation "
             f"on held-out windows' integer features against the integer model; {n_proved} of them were also formally "
             f"proved equal to an independent model of the design for every input (level 2).",
             "Development: the training recipe was revised once after a first stage-1 run (baby-balanced sampling, the "
             "validation threshold rule, one added feature), judged on validation figures, but that run's held-out "
-            "figures had been printed in its log; nothing was selected on them afterwards.",
+            "figures had been printed in its log; nothing was selected on them afterwards. The false-alarm rule was "
+            "then tightened once, because under the first rule an alarm that stayed on for long stretches scored as "
+            "perfect; the run was repeated from training with the stricter rule, and no other change was made.",
             f"Baseline, scored the same way: line length of C3-C4 against a threshold set on validation babies: "
             f"worst-baby {b['metrics']['sensitivity_worst']}, pooled {b['counts']['events_caught']}/{b['counts']['events_total']}, "
             f"{b['metrics']['false_alarms_per_hour']} false alarms per hour.",
