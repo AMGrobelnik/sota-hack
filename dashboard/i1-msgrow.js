@@ -94,6 +94,13 @@
     return x;
   }
   function openOf(S, id) { var ui = S.ui; if (!ui.rows) ui.rows = {}; return ui.rows[id] != null ? ui.rows[id] : !!ui.allOpen; }
+  // a Bash call's own command as one line: its leading "cd PATH &&" (or ";") hops are dropped, the rest is the point
+  var CD_LEAD = /^\s*cd\s+(?:"[^"]*"|'[^']*'|[^\s;&|"']+)\s*(?:&&|;)\s*/;
+  function stripCd(cmd) {
+    var x = String(cmd), m;
+    while ((m = CD_LEAD.exec(x))) x = x.slice(m[0].length);
+    return x.trim() ? x : String(cmd);
+  }
   function rowHTML(M, H, n, open) {
     var S = M.S, r = n.raw, kind = r.kind, K = KIND[kind] || KIND.msg, s = n.sum, w = who(S, r), esc = H.esc;
     var tool = kind === "tool" || kind === "lab", text, cls = "", tag = "", lead = "", mark = "", pend = false;
@@ -106,7 +113,7 @@
       else tag = '<span class="cm-mr-tag" title="A short message, shown in its own words; no model summary was needed">as written</span>';
     } else {
       text = H.itemFirst(S, r);
-      if (tool) { cls = " cm-mr-rule"; text = String(r.call || text); }
+      if (tool) { cls = " cm-mr-rule"; text = String(r.call || text); if (r.name === "Bash" && kind === "tool") text = stripCd(text); }
       else if (kind === "msg" && !S.finished) pend = true;
       else if (kind === "msg") tag = '<span class="cm-mr-tag" title="No summary was written for this message; this is its own first line">first line</span>';
     }
@@ -299,5 +306,5 @@
   ].join("\n");
   document.head.appendChild(css);
 
-  window.ChipInMsgRow = { paint: paint, controls: controls, act: act, rows: rows, withRecorded: withRecorded, version: 1 };
+  window.ChipInMsgRow = { paint: paint, controls: controls, act: act, rows: rows, stripCd: stripCd, withRecorded: withRecorded, version: 1 };
 })();
