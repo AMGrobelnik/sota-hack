@@ -171,7 +171,7 @@
   function metricLine(S, e) {
     var F = window.ChipInFold;
     if (!F || !F.metricText) return String(e.key || "metric").replace(/_/g, " ") + " " + e.value + (e.unit ? " " + e.unit : "");
-    var m = F.metricText(String(e.key || "metric"), e.value, e.unit, S && S.spec);
+    var m = F.metricText(String(e.key || "metric"), e.value, e.unit, S && S.spec, e.source);
     return m.label + ": " + m.value;
   }
   function itemFirst(S, r) {

@@ -26,7 +26,10 @@
  * carries subagents_usd: that one and every later one without an agent is the whole run's total
  * so far (a follow-up's included). Never a sum of events.
  * Metric labels: metricText(key, value, unit, spec) is the one map from a metric key to the label
- * and unit a person reads; the Chip tab, the inspector and the message view all use it. */
+ * and unit a person reads; the Chip tab, the inspector and the message view all use it.
+ * Lab sources: a metric event with a source (score-events, the chip lab's event-level referee) is
+ * kept in f.src[chip or ""][key], never in the agent's figures, so neither replaces the other; the
+ * Chip tab shows it as its own row under Measured by the chip lab, labelled by metricText(..., source). */
 (function () {
   "use strict";
 
@@ -117,8 +120,25 @@
     if (v === 1 && /^(tiles|gates|levels|LUTs|vectors|transistors)$/.test(unit || "")) unit = unit.replace(/s$/, "");
     return s + (unit ? " " + unit : "");
   }
-  // one metric as a person reads it: { label, value }
-  function metricText(k, v, unit, spec) {
+  // figures a lab tool measured itself (a metric event's source), labelled apart from the agent's own
+  var SRC = {
+    "score-events": {
+      by: "event-scored by the lab",
+      keys: { event_sensitivity: ["Event sensitivity", "frac"], fa_per_hour: ["False alarms, event-scored by the lab", "fa"],
+        worst_patient_sensitivity: ["Worst-patient sensitivity, event-scored", "frac"], auc: ["Area under the ROC curve, event-scored", ""] }
+    }
+  };
+  function srcText(k, v, unit, spec, source) {
+    var s = SRC[source], def = s && s.keys[k], by = s ? s.by : "from the lab's " + source;
+    if (num(v) == null) return { label: cap(String(k).replace(/_/g, " ")) + ", " + by, value: String(v) };
+    if (def && def[1] === "frac") return { label: def[0], value: ((v > 1.5 ? v / 100 : v) * 100).toFixed(1) + "%" };
+    if (def && def[1] === "fa") return { label: def[0], value: fmtV("fa_per_hour", v, spec) };
+    var m = metricText(k, v, unit === "FA/h" ? "/h" : unit, spec);
+    return { label: def ? def[0] : m.label + ", " + by, value: m.value };
+  }
+  // one metric as a person reads it: { label, value }; source: the lab tool that measured it, if any
+  function metricText(k, v, unit, spec, source) {
+    if (typeof source === "string" && source) return srcText(k, v, unit, spec, source);
     var ki = keyInfo(k), b = ki.base, bas = ki.basis ? ", " + ki.basis : "";
     if (num(v) == null) return { label: cap(String(k).replace(/_/g, " ")), value: String(v) };
     if (MET[b]) return { label: MET[b].n + bas, value: fmtV(b, ratio(b, v), spec) };
@@ -134,13 +154,17 @@
   }
 
   // a raw metric key written into a sentence (a summary's "heldout_fa_per_hour") read as its label
+  // (false alarms read "false alarms per hour" here, as a sentence names the rate), the one-word
+  // "heldout" as held-out and "fa per hour" written with spaces as false alarms per hour
   function humanKeys(s) {
     return String(s == null ? "" : s).replace(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g, function (k) {
       var b = keyInfo(k).base;
       if (!(MET[b] || LAB[b] || OTHER[b] || CHECK_KEYS[b])) return k;
       var l = metricText(k, 0, "", null).label;
+      if (b === "fa_per_hour") l = l.replace(/^False alarms/, "False alarms per hour");
       return /^[A-Z][a-z]/.test(l) ? l.charAt(0).toLowerCase() + l.slice(1) : l;
-    });
+    }).replace(/\b(?:fa|false alarms?)[ _]per[ _]h(?:our|r)?\b/gi, function (m) { return /^F[a-z]/.test(m) ? "False alarms per hour" : "false alarms per hour"; })
+      .replace(/\b(H|h)eld_?out\b/g, "$1eld-out").replace(/\bHELDOUT\b/g, "HELD-OUT");
   }
 
   function dataMark(spec, designs) {
@@ -153,7 +177,7 @@
 
   /* ---------- the fold ---------- */
   function create() {
-    return { designs: {}, order: [], chips: {}, units: {}, run: {}, runUnits: {}, chosen: null, spec: null,
+    return { designs: {}, order: [], chips: {}, units: {}, run: {}, runUnits: {}, src: {}, chosen: null, spec: null,
       cost: { orch: null, agents: {}, total: null, totalMode: false, runTotal: null }, subs: {}, subOrder: [], merged: {}, mergedOrder: [] };
   }
   function normDesign(d) {
@@ -190,6 +214,13 @@
       case "metric": {
         if (typeof ev.key !== "string") break;
         var chip = typeof ev.chip === "string" && ev.chip ? ev.chip : null, v = ratio(ev.key, ev.value);
+        if (typeof ev.source === "string" && ev.source) {
+          // a lab tool's own figure (score-events): kept apart, so it never replaces the agent's figure of the same key
+          var sm = f.src[chip || ""] || (f.src[chip || ""] = {});
+          sm[ev.key] = { value: ev.value, unit: ev.unit || "", source: ev.source };
+          if (ev.agent && f.subs[ev.agent]) f.subs[ev.agent].latest = { key: ev.key, value: ev.value, unit: ev.unit || "", source: ev.source };
+          break;
+        }
         var vals = chip ? f.chips[chip] || (f.chips[chip] = {}) : f.run, units = chip ? f.units[chip] || (f.units[chip] = {}) : f.runUnits;
         vals[ev.key] = v; if (ev.unit) units[ev.key] = ev.unit;
         if (ev.agent && f.subs[ev.agent]) f.subs[ev.agent].latest = { key: ev.key, value: v, unit: ev.unit || "" };
@@ -356,6 +387,18 @@
     var proved = num(mm.formal_proved) != null ? !!mm.formal_proved : typeof vf.proved === "boolean" ? vf.proved : null; seen.formal_proved = 1;
     if (lvl != null) lab.push(["Verification level", "level " + esc(lvl)]);
     if (proved != null) lab.push(["Formal proof", proved ? "proved equal to the model" : "not proved"]);
+    // a lab tool's own figures (a metric with a source, e.g. score-events), each its own labelled row;
+    // for the chosen chip also the ones the lab sent without a chip
+    var SORD = ["event_sensitivity", "worst_patient_sensitivity", "fa_per_hour", "auc"], sord = function (k) { var i = SORD.indexOf(k); return i < 0 ? 99 : i; };
+    var srcRows = function (sm, tail) {
+      Object.keys(sm || {}).sort(function (a, b) { return sord(a) - sord(b) || (a < b ? -1 : 1); }).forEach(function (k) {
+        var e = sm[k], t = metricText(k, e.value, e.unit, m.spec, e.source);
+        lab.push([t.label + tail, esc(t.value)]);
+      });
+    };
+    var own = f.src[id] || {};
+    srcRows(own, "");
+    if (id === f.chosen && f.src[""]) { var loose = {}; Object.keys(f.src[""]).forEach(function (k) { if (!own[k]) loose[k] = f.src[""][k]; }); srcRows(loose, ", no chip named"); }
     // what the agent reported for this chip: one row per measure and set of patients
     var agent = {}, order = [], put = function (label, k, v, prio, b) { var key = label; if (!agent[key]) order.push(key); if (!agent[key] || agent[key].prio < prio) agent[key] = { label: label, k: k, v: v, prio: prio, b: b }; };
     Object.keys(mm).forEach(function (k) {
@@ -396,7 +439,7 @@
       var kept0 = mg ? "Kept " + (mg.kept.length ? mg.kept.join(", ") : "none") : "", line = mg ? kept0 + (mg.why ? ": " + clip(mg.why, 90) : "") : list.some(function (a) { return a.state === "running"; }) ? "running" : "waiting for the merge";
       return '<details class="cf-sb" data-batch="' + esc(s) + '"' + (open && open[s] ? " open" : "") + "><summary><b>" + esc(STAGE_N[s] || cap(s)) + '</b><span class="cf-dots" aria-label="' + esc(pl(list.length, "subagent")) + '">' + dots + '</span><span class="cf-line"><span class="cf-short">' + esc(line) + '</span><span class="cf-kept">' + esc(mg ? kept0 : line) + "</span></span></summary>" +
         '<div class="cf-sbb">' + (mg && mg.why ? '<p class="cf-why">' + esc(mg.why) + "</p>" : "") + list.map(function (a) {
-          var lt = a.latest ? metricText(a.latest.key, a.latest.value, a.latest.unit, spec) : null;
+          var lt = a.latest ? metricText(a.latest.key, a.latest.value, a.latest.unit, spec, a.latest.source) : null;
           return '<div class="cf-se"><span class="cf-sid">' + esc(a.key) + '</span><span class="cf-st">' + esc(a.strategy.replace(/^Strategy\s*[:-]?\s*/i, "") || a.key) + "</span>" + (lt ? '<span class="cf-sm">' + esc(lt.label) + ": " + esc(lt.value) + "</span>" : "") + "</div>";
         }).join("") + "</div></details>";
     }).join("") + "</section>";

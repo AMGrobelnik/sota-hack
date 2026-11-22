@@ -785,8 +785,13 @@
     var took = function (t) { try { var j = JSON.parse(t); if (j && typeof j === "object") { rec.final = F.scrubEvent(j); if (V && V.rec === rec) { V.sig = {}; kick(); } } } catch (e) { /* not JSON */ } };
     if (rec.src === "site") { var f = (rec.files || []).find(function (x) { return x.path === "workspace/final_record.json"; }); if (f && f.text) took(f.text); return; }
     var c = conn(); if (!c) return;
-    fetch(c.base + "/api/runs/" + encodeURIComponent(rec.id) + "/file?path=" + encodeURIComponent("workspace/final_record.json"), { headers: { "X-ChipIn-Token": c.token }, cache: "no-store" })
-      .then(function (r) { return r.ok ? r.text() : null; }).then(function (t) { if (t) took(t); }, function () { /* none */ });
+    // read it only when the file list names it (or the list was cut short), so a run without one costs no failed request
+    api("/api/runs/" + encodeURIComponent(rec.id) + "/files").then(function (j) {
+      var files = (j && j.files) || [], named = files.some(function (x) { return x.path === "workspace/final_record.json"; });
+      if (!named && !(j && j.truncated)) return null;
+      return fetch(c.base + "/api/runs/" + encodeURIComponent(rec.id) + "/file?path=" + encodeURIComponent("workspace/final_record.json"), { headers: { "X-ChipIn-Token": c.token }, cache: "no-store" })
+        .then(function (r) { return r.ok ? r.text() : null; });
+    }).then(function (t) { if (t) took(t); }, function () { /* none */ });
   }
   addEventListener("resize", function () { if (V) { V.sig.chart = ""; kick(); } });
 

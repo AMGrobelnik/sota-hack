@@ -183,7 +183,10 @@
   function listRuns() { return api("GET", "/api/runs").then(function (r) { return r.runs || []; }); }
   function getRun(id) { return api("GET", "/api/runs/" + encodeURIComponent(id)); }
   function listFiles(id) {
-    return api("GET", "/api/runs/" + encodeURIComponent(id) + "/files").then(function (r) { return r.files || []; });
+    return api("GET", "/api/runs/" + encodeURIComponent(id) + "/files").then(function (r) {
+      // the list, carrying the backend's total and truncated (true when it stops short of total)
+      var a = (r && r.files) || []; a.total = r && typeof r.total === "number" ? r.total : a.length; a.truncated = !!(r && r.truncated); return a;
+    });
   }
   function readFile(id, path) {
     return api("GET", "/api/runs/" + encodeURIComponent(id) + "/file?path=" + encodeURIComponent(path), undefined, "text");
@@ -272,6 +275,12 @@
       }
       case "metric": {
         var chip = typeof ev.chip === "string" && ev.chip ? ev.chip : null;
+        if (typeof ev.source === "string" && ev.source) {
+          // a lab tool's own figure (score-events) never replaces the agent's figure of the same key
+          var sk = chip || "", sm = (st.sourcedMetrics || (st.sourcedMetrics = {}))[sk] || (st.sourcedMetrics[sk] = {});
+          sm[ev.key] = { value: ev.value, unit: ev.unit || "", source: ev.source };
+          return ["onMetric", { key: ev.key, value: ev.value, unit: ev.unit, source: ev.source, chip: chip }];
+        }
         var vals = st.runMetrics, units = st.runMetricUnits;
         if (chip) {
           st.lastMetricChip = chip;

@@ -429,7 +429,7 @@
 
   /* ----- overview ----- */
   function overviewHTML() {
-    return '<div class="ov lv-ov" id="lvOv"><div id="lvBan"></div><header class="ovh" id="lvHead"></header><div class="status" id="lvStatus" role="status"></div>' +
+    return '<div class="ov lv-ov" id="lvOv"><div id="lvBan"></div><header class="ovh" id="lvHead"></header><p class="lv-costm" id="lvCostM"></p><div class="status" id="lvStatus" role="status"></div>' +
       '<div class="lv-stages" id="lvStages"></div><div class="tiles" id="lvTiles" style="position:relative"></div>' +
       '<section class="cgrid2"><div class="pan chartp"><div class="chh"><h2>Chip size against</h2><select class="ys" id="lvY" aria-label="Metric on the chart"></select><span class="grow"></span><span id="lvChMark"></span></div>' +
       '<div class="cwrap" id="lvWrap"><canvas id="lvChart" tabindex="0" role="img" aria-label="Trade-off chart"></canvas><div class="ctip" id="lvTip"></div></div><div class="legend" id="lvLegend"></div><div id="lvUnsized"></div></div>' +
@@ -786,38 +786,41 @@
     var rank = function (a) { return a.kind === "report" ? (a.path === "workspace/report.md" ? 0 : 1) : a.kind === "chip" ? 2 : 3; };
     return out.sort(function (a, b) { return rank(a) - rank(b); });
   }
-  // files the page needs by name are read by their own path, never looked up in the file list
-  // (the backend caps that list): once their stage is done or the run ended, and again if the
-  // list later names one that was missing. A missing file is quietly accepted.
+  // files the page needs by name are read only once the file list names them (the backend lists
+  // the report, final record, designs and spec first), so no request can miss on a run in
+  // progress. After the run ends the list is read once more; a file it leaves out is read by
+  // path only when that list was cut short (truncated). Each file is read once.
   var NAMED = [
-    { path: "workspace/spec.json", ready: function (M) { var s = M.st.stages.spec; return !M.running || (s && s.state === "done"); },
-      take: function (x, j) { if (!x.spec) x.spec = j; } },
+    { path: "workspace/spec.json", ready: function () { return true; }, take: function (x, j) { if (!x.spec) x.spec = j; } },
     { path: "workspace/final_record.json", ready: function (M) { return !M.running; }, take: function (x, j) { x.final = F.scrubEvent(j); } }
   ];
   function readNamed(M) {
     var x = M.x; if (C.state !== "on") return;
     var got = x.named || (x.named = {});
     NAMED.forEach(function (n) {
-      // states: none yet, busy, ok, miss (absent; tried again once the list names it), gone (missed twice)
-      var st = got[n.path], listed = !!(x.files && x.files[n.path] != null);
-      if (st ? st !== "miss" || !listed : !n.ready(M) && !listed) return;
+      var listed = !!(x.files && x.files[n.path] != null), cut = !M.running && x.filesFin === true && x.filesTrunc;
+      if (got[n.path] || !n.ready(M) || !(listed || cut)) return;
       got[n.path] = "busy";
       L.readFile(M.id, n.path).then(function (r) {
         var j = null; try { j = JSON.parse(r.text); } catch (e) { /* not JSON: nothing taken from it */ }
         got[n.path] = "ok";
         if (j && typeof j === "object") { n.take(x, j); x.v++; }
-      }).catch(function () { got[n.path] = st === "miss" ? "gone" : "miss"; });
+      }).catch(function () { got[n.path] = "gone"; });
     });
   }
   function refreshSizes(M) {
-    var x = M.x, n = M.st.artifacts.length;
+    var x = M.x, st = M.st.stages || {}, fin = !M.running && !x.filesFin;
+    // files added or a stage finished (the spec stage writes spec.json): the list may name something new
+    var n = M.st.artifacts.length + "|" + Object.keys(st).filter(function (k) { return st[k] && st[k].state === "done"; }).length;
     readNamed(M);
-    if (C.state !== "on" || x.filesN === n || Date.now() - x.filesAt < 2500) return;
-    x.filesAt = Date.now(); x.filesN = n;
+    // when files were added, and once more when the run has ended (the update loop calls this every 250 ms)
+    if (C.state !== "on" || x.filesBusy || (!fin && x.filesN === n) || Date.now() - x.filesAt < 2500) return;
+    x.filesAt = Date.now(); x.filesN = n; x.filesBusy = true;
     L.listFiles(M.id).then(function (files) {
-      x.files = {}; files.forEach(function (f) { x.files[f.path] = f.size; }); x.v++;
-      readNamed(M);
-    }).catch(function () { x.filesN = -1; });
+      x.filesBusy = false; x.files = {}; files.forEach(function (f) { x.files[f.path] = f.size; }); x.filesTrunc = !!files.truncated;
+      if (fin) x.filesFin = true;
+      x.v++; readNamed(M);
+    }).catch(function () { x.filesBusy = false; x.filesN = -1; });
   }
   // a chip lab chip report is named by its chip, so it is not mistaken for the run's report
   var fname = function (a) { var m = /\/chips\/([^/]+)\/report\.md$/.exec(a.path || ""); return m ? "Chip report, " + m[1] : a.name; };
@@ -877,6 +880,7 @@
     var lt = M.running ? "Connection to the backend was lost; the run may still be going on that computer. Retrying..." : "Connection to the backend was lost. This page shows what had arrived; files and follow-ups need the backend. Retrying...";
     if (lost.textContent !== lt) lost.textContent = lt;
     var co = F.cost(x.f), cost = co && num(co.usd) != null ? "$" + co.usd.toFixed(2) + " agent cost" + (num(co.summaries_usd) > 0 ? ", $" + co.summaries_usd.toFixed(2) + " summaries" : "") : ""; if (ch("cost", cost)) { $("#lvCost").textContent = cost; $("#lvCost").title = co ? fmt(co.tokens_in || 0) + " tokens in, " + fmt(co.tokens_out || 0) + " out" : ""; }
+    var cm = $("#lvCostM"); if (cm && cm.textContent !== cost) cm.textContent = cost; // the same figure, under the headline on phones
     var bt = M.running || M.status === "connecting" ? "Live run" : "Finished run"; if (ch("badge", bt)) { $("#lvBadge").textContent = bt; $("#lvBadge").className = "mk topbadge " + (bt === "Live run" ? "lv-live" : "no"); setDemo(bt); }
     var setT = (M.r.preset ? cap(M.r.preset) + " · " : "") + (M.r.agent && M.r.agent !== "auto" ? AGN[M.r.agent] || M.r.agent : "Auto"); if (ch("set", setT)) $("#lvSetT").textContent = setT;
     var stop = $("#lvStop"); stop.hidden = !M.running;
@@ -1160,6 +1164,7 @@
     ".mk.lv-live{color:#1e3a8a;background:#e8eefc}",
     ".spill.lv-run{display:inline-flex;align-items:center;gap:6px;background:#eef3fe;color:var(--blue7);box-shadow:inset 0 0 0 1px #d6e1fb}.spill.lv-fail{background:var(--badbg);color:#9f2a20;box-shadow:inset 0 0 0 1px #f3c9c3}",
     ".lv-cost{font-size:11.5px;color:var(--i600);white-space:nowrap;font-variant-numeric:tabular-nums}",
+    ".lv-costm{display:none;margin:2px 0 6px;font-size:12px;color:var(--i600);font-variant-numeric:tabular-nums}.lv-costm:empty{display:none!important}",
     ".lv-lost{margin:8px 16px 0;background:var(--badbg);border:1px solid #f3c9c3;border-radius:12px;padding:9px 14px;font-size:13px;color:#7a2018;line-height:1.5}.lv-lost[hidden]{display:none}",
     ".lv-stop:disabled{opacity:.5;cursor:not-allowed}",
     ".lv-stop{height:26px;padding:0 10px;margin-left:4px}.lv-stop[hidden]{display:none}",
@@ -1245,7 +1250,7 @@
     "@media (prefers-reduced-motion:no-preference){.lv-ust[data-d=sending] i{animation:lvpulse 1s ease-in-out infinite alternate}@keyframes lvpulse{to{background:var(--i300)}}}",
     ".lv-mh .lv-ust{margin-left:2px}.you.lv-y{flex-direction:column;align-items:flex-end;gap:4px}.you.lv-y .lv-ust{margin-right:6px}.lv-pend{opacity:.75}",
     "@media (max-width:1100px){.lv-fw{flex:none}}",
-    "@media (max-width:767px){.lv-stages small{display:none}.lv-stages span{font-size:10.5px;overflow:visible;text-overflow:clip;max-width:none}.lv-stages li:nth-child(even) span{margin-top:13px}.lv-pr{grid-template-columns:44px minmax(0,1fr);row-gap:2px}.lv-pv,.lv-pf{grid-column:2;font-size:11.5px}.lv-sb{grid-template-columns:1fr}.lv-sl,.lv-mg{grid-column:1;grid-row:auto}.lv-cost{display:none}.lv-in{max-width:none}.lv-cfg .crow2{flex-wrap:wrap}.lv-runnote{flex-basis:100%;margin:0 0 8px}}"
+    "@media (max-width:767px){.lv-stages small{display:none}.lv-stages span{font-size:10.5px;overflow:visible;text-overflow:clip;max-width:none}.lv-stages li:nth-child(even) span{margin-top:13px}.lv-pr{grid-template-columns:44px minmax(0,1fr);row-gap:2px}.lv-pv,.lv-pf{grid-column:2;font-size:11.5px}.lv-sb{grid-template-columns:1fr}.lv-sl,.lv-mg{grid-column:1;grid-row:auto}.lv-cost{display:none}.lv-costm{display:block}.lv-in{max-width:none}.lv-cfg .crow2{flex-wrap:wrap}.lv-runnote{flex-basis:100%;margin:0 0 8px}}"
   ].join("\n");
   document.head.appendChild(css);
 
