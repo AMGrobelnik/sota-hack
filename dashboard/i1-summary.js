@@ -1,8 +1,10 @@
 /*
  * i1-summary.js: the result page's lead for the ChipIn i1 dashboard. Defines window.ChipInSummary.
  *
- * 1. A plain summary card above the tiles: the chip, pass or fail naming the miss, the estimated unit cost,
- *    the estimated battery life and the main risk, then one sentence on the trade-off (smaller and bigger).
+ * 1. A plain summary card above the tiles, tinted green or red by its verdict: first why this size, in one
+ *    sentence with the numbers that decided it (one step smaller misses what, bigger gains what at what unit
+ *    cost) and a jump to the Why this size panel; then the chip, pass or fail naming the miss, the estimated
+ *    unit cost, the estimated battery life and the main risk.
  * 2. The chart's default view: the frontier, the bar and the chosen chip only, a Show all designs toggle for
  *    the full cloud, and short labels on the smaller and bigger frontier points.
  *
@@ -16,16 +18,25 @@
   "use strict";
   var M = function () { return window.ChipInModels; };
   var CSS = [
-    ".sm{position:relative;background:#fff;border:1px solid rgb(0 0 0/.07);border-radius:16px;box-shadow:var(--sh-hair);padding:13px 0 11px}",
+    // the card is tinted by its verdict: green when the design clears every target, red when it misses one
+    ".sm{position:relative;background:#fff;border:1px solid rgb(0 0 0/.07);border-left:4px solid var(--i300);border-radius:14px;box-shadow:var(--sh-hair);padding:12px 0 12px}",
+    ".sm.ok{background:#f3faf6;border-color:#cfe9db;border-left-color:#0f7a55}",
+    ".sm.no{background:#fdf6f4;border-color:#f2d6d0;border-left-color:#c2362b}",
+    ".sm-r{margin:0 16px 11px;padding-bottom:10px;border-bottom:1px solid rgb(0 0 0/.08);font-size:14px;color:var(--i800);line-height:1.5}",
+    ".sm-r>b{color:var(--i900);font-weight:700}",
+    ".sm.ok .sm-r>b{color:#0b5a3f}.sm.no .sm-r>b{color:#9f2a20}",
+    ".sm-jump{display:inline-flex;align-items:center;gap:4px;margin-left:4px;font-size:13px;font-weight:600;color:var(--blue7);text-decoration:underline;text-underline-offset:3px;white-space:nowrap}",
+    ".sm-jump::after{content:'\\2193'}",
     ".sm-g{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.25fr) minmax(0,.8fr) minmax(0,1fr) minmax(0,1.6fr);row-gap:10px}",
-    ".sm-c{padding:0 16px;border-left:1px solid var(--hair);min-width:0}",
+    ".sm-c{padding:0 16px;border-left:1px solid rgb(0 0 0/.08);min-width:0}",
     ".sm-c:first-child{border-left:0}",
     "@media (max-width:1100px){.sm-g{grid-template-columns:repeat(3,minmax(0,1fr))}.sm-c:nth-child(4){border-left:0}.sm-c.risk{grid-column:span 2}}",
-    ".sm-l{display:block;font-size:12px;color:var(--i600);line-height:1.35;margin-bottom:3px}",
-    ".sm-v{font-size:14px;font-weight:600;color:var(--i900);line-height:1.35;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}",
+    ".sm-l{display:block;font-size:12px;font-weight:600;color:var(--i700);line-height:1.35;margin-bottom:3px}",
+    ".sm-v{font-size:20px;font-weight:650;color:var(--i900);line-height:1.25;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap;font-variant-numeric:tabular-nums}",
+    ".sm-c.chip .sm-v{color:var(--blue7)}",
+    ".sm-v .pf{font-size:12.5px;padding:2px 10px;align-self:center}",
     ".sm-v small{font-size:12.5px;font-weight:500;color:var(--i700)}",
-    ".sm-c.risk .sm-v{font-weight:500;font-size:13.5px}",
-    ".sm-t{margin:10px 16px 0;padding-top:9px;border-top:1px solid var(--hair);font-size:13.5px;color:var(--i800);line-height:1.45}",
+    ".sm-c.risk .sm-v,.sm-c.tg .sm-v{font-weight:500;font-size:14px;line-height:1.4}",
     ".sm-tog{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--i700);cursor:pointer;white-space:nowrap}",
     ".sm-tog input{margin:0;accent-color:var(--blue7)}",
     "@media (max-width:640px){.sm-g{grid-template-columns:repeat(2,minmax(0,1fr))}.sm-c:nth-child(4){border-left:1px solid var(--hair)}.sm-c:nth-child(odd){border-left:0}.sm-c.risk{grid-column:1/-1}}",
@@ -113,18 +124,18 @@
     var cells = [];
     // 1. the chip
     var lab = af ? "Chip built and tested" : pass ? "Recommended chip" : "Best design";
-    cells.push(cell(lab, P.fmt(d.gates) + " gates"));
+    cells.push(cell(lab, P.fmt(d.gates) + " <small>gates</small>", "chip"));
     // 2. pass or fail, naming the miss
     var verdict;
     if (pass) verdict = '<span class="pf ok">Passes all your targets</span>';
     else if (miss.length === 1) verdict = '<span class="pf no">Fails ' + e(shortName(P, miss[0].t.metric)) + "</span> " + e(P.fmtVal(miss[0].t.metric, miss[0].v)) + " <small>target " + e(P.fmtTarget(miss[0].t).replace(/^at (least|most) /, "")) + "</small>";
     else if (miss.length) verdict = '<span class="pf no">Fails</span> ' + e(andList(miss.map(function (s) { return shortName(P, s.t.metric); })));
     else verdict = '<span class="pf na">Not measured</span>';
-    cells.push(cell("Your targets", verdict));
+    cells.push(cell("Your targets", verdict, "tg"));
     // 3 and 4. estimated cost and battery, from ChipInModels; absent for a device the power model does not cover
     if (kind) {
       var bt = batteryOf(kind, d);
-      cells.push(cell("Estimated cost", est(money(unitCost(kind, d, run.costInputs)) + " per unit", "cost")));
+      cells.push(cell("Estimated cost", est(money(unitCost(kind, d, run.costInputs)), "cost") + " <small>per unit</small>"));
       var bx = batteryText(bt);
       cells.push(cell("Estimated battery", est(e(bx.v), "battery_life") + " <small>" + e(bx.s) + "</small>"));
     }
@@ -132,8 +143,17 @@
     var risk = riskText(run, v, P, d, pass);
     if (risk) cells.push(cell("Main risk", e(risk.charAt(0).toUpperCase() + risk.slice(1)), "risk"));
     var mark = af || P.isMea(run) ? '<span class="mk mea" style="position:absolute;right:12px;top:-9px">measured</span>' : '<span class="mk sim" style="position:absolute;right:12px;top:-9px">simulated</span>';
+    // why this size, first: one sentence with the numbers that decided it, and a jump to the panel
     var t = tradeText(run, v, P, d, kind);
-    return '<section class="sm" aria-label="Summary">' + mark + '<div class="sm-g">' + cells.join("") + "</div>" + (t ? '<p class="sm-t">' + t + "</p>" : "") + "</section>";
+    var why = '<p class="sm-r"><b>Why ' + P.fmt(d.gates) + " gates:</b> " + reasonLead(run, v, P, d, pass) + (t ? " " + t : "") +
+      (kind ? ' <button type="button" class="sm-jump" data-ws-jump>Cost by size</button>' : "") + "</p>";
+    return '<section class="sm ' + (pass ? "ok" : "no") + '" aria-label="Summary">' + mark + why + '<div class="sm-g">' + cells.join("") + "</div></section>";
+  }
+  // the first clause of the reason: what kind of choice this design is
+  function reasonLead(run, v, P, d, pass) {
+    if (run.case === "af") return "the one circuit built and checked bit for bit.";
+    if (pass) return "the smallest design that clears all your targets.";
+    return "no size clears your bar on this data, so this is the best that could be built.";
   }
   function cell(label, val, cls) { return '<div class="sm-c' + (cls ? " " + cls : "") + '"><span class="sm-l">' + label + '</span><span class="sm-v">' + val + "</span></div>"; }
   function shortName(P, k) { return (P.MET[k].short || P.MET[k].name).toLowerCase(); }
@@ -182,22 +202,30 @@
       return "Going bigger is " + (lower ? "not the fix" : "untested") + ": the best candidate by validation F1, " + big + ", was too large to build" +
         (lower ? " and caught fewer AF windows (" + P.fmtVal("sensitivity", B.metrics.sensitivity_pooled) + " against " + P.fmtVal("sensitivity", C.metrics.sensitivity_pooled) + ", validation, " + e(w) + ")." : ".");
     }
+    var costWords = function (a, b) {
+      if (!kind) return "";
+      var inputs = {}, k; for (k in run.costInputs || {}) inputs[k] = run.costInputs[k]; inputs.kind = kind;
+      var dc = M().costDelta(designFor(kind, a), designFor(kind, b), inputs).unit_cost_delta;
+      return Math.abs(dc) < 0.005 ? " at " + est("the same unit cost", "cost") : " for " + est("about " + money(dc) + (dc > 0 ? " more" : " less") + " per unit", "cost");
+    };
     if (!v.ev.chosen) {
-      if (!d.counts || !d.counts.events_total) return "";
-      return "No size clears your bar on this data: the best at any size, " + P.fmt(d.gates) + " gates, catches " + P.fmt(d.counts.events_caught) + " of " + P.fmt(d.counts.events_total) + " " + e(c.events) + ", all " + e(c.whoP) + " pooled.";
+      var parts0 = [];
+      if (d.counts && d.counts.events_total) parts0.push("It catches " + P.fmt(d.counts.events_caught) + " of " + P.fmt(d.counts.events_total) + " " + e(c.events) + ", all " + e(c.whoP) + " pooled.");
+      // why bigger did not help: the bigger designs at the same channel count scored lower
+      var key = run.primary, rr = P.mFile(run) ? Object.assign({}, run, { judge: "pooled" }) : run;
+      var up = (v.vis || []).filter(function (x) { return x.gates > d.gates && x.channels === d.channels && x.role !== "baseline" && P.metricOf(rr, x, key).v != null; });
+      if (up.length && P.metricOf(rr, d, key).v != null) {
+        var top = up.reduce(function (a, x) { return P.metricOf(rr, x, key).v > P.metricOf(rr, a, key).v ? x : a; });
+        var big = up.reduce(function (a, x) { return x.gates > a.gates ? x : a; });
+        var tv = P.metricOf(rr, top, key).v, dv = P.metricOf(rr, d, key).v;
+        if (tv <= dv) parts0.push("Bigger designs, up to " + P.fmt(big.gates) + " gates, scored lower (" + e(P.fmtVal(key, tv)) + " at best)" + costWords(d, big) + ".");
+      }
+      return parts0.join(" ");
     }
     var S = sides(run, v, P); if (!S) return "";
     var parts = [];
-    if (S.smaller && S.misses.length) parts.push("Going smaller, to " + P.fmt(S.smaller.gates) + " gates, misses your " + e(andList(S.misses.map(function (s) { return P.MET[s.t.metric].name.toLowerCase(); }))) + " target" + (S.misses.length > 1 ? "s" : "") + ".");
-    if (S.bigger && S.gain != null) {
-      var costPart = "";
-      if (kind) {
-        var inputs = {}, k; for (k in run.costInputs || {}) inputs[k] = run.costInputs[k]; inputs.kind = kind;
-        var dc = M().costDelta(designFor(kind, S.ch), designFor(kind, S.bigger), inputs).unit_cost_delta;
-        costPart = Math.abs(dc) < 0.005 ? " at " + est("no change in unit cost", "cost") : " for " + est("about " + money(dc) + (dc > 0 ? " more" : " less") + " per unit", "cost");
-      }
-      parts.push("Going bigger, to " + P.fmt(S.bigger.gates) + " gates, " + e(gainWords(run, S, P)) + costPart + ".");
-    }
+    if (S.smaller && S.misses.length) parts.push("One step smaller, " + P.fmt(S.smaller.gates) + " gates, misses " + e(andList(S.misses.map(function (s) { return shortName(P, s.t.metric) + (s.v != null ? " (" + P.fmtVal(s.t.metric, s.v) + ", target " + P.fmtTarget(s.t).replace(/^at (least|most) /, "") + ")" : ""); }))) + ".");
+    if (S.bigger && S.gain != null) parts.push("Bigger, " + P.fmt(S.bigger.gates) + " gates, " + e(gainWords(run, S, P)) + costWords(S.ch, S.bigger) + ".");
     return parts.join(" ");
   }
 
@@ -270,6 +298,14 @@
     el._sig = s;
     var h = cardHTML(run, v, P);
     el.innerHTML = h; el.style.display = h ? "" : "none";
+    if (!el._jump) {
+      el._jump = true;
+      el.addEventListener("click", function (e) {
+        if (!e.target.closest("[data-ws-jump]")) return;
+        var ws = document.getElementById("whySize");
+        if (ws && ws.style.display !== "none") ws.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
   }
   window.ChipInSummary = { tick: tick, cardHTML: cardHTML, marks: marks, simple: simple, keep: keep, toggleHTML: toggleHTML, legendHTML: legendHTML, drawMarks: drawMarks, css: css };
 })();

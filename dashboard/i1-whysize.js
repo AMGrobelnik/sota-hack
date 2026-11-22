@@ -16,11 +16,14 @@
   "use strict";
   var M = function () { return window.ChipInModels; };
   var CSS = [
-    ".ws{background:#fff;border:1px solid rgb(0 0 0/.07);border-radius:16px;box-shadow:var(--sh-hair);padding:14px 18px 12px}",
+    // the panel carries the brand accent: a blue left rule and a faint blue tint set it apart from the chart
+    ".ws{background:#f7f9ff;border:1px solid #dbe3f8;border-left:4px solid var(--blue7);border-radius:14px;box-shadow:var(--sh-hair);padding:14px 18px 12px;scroll-margin-top:12px}",
     ".ws-h{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:0 0 2px}",
-    ".ws-h h2{font-size:15px;font-weight:650;margin:0;color:var(--i900)}",
-    ".ws-lede{font-size:13.5px;color:var(--i800);margin:0 0 12px;line-height:1.45}",
+    ".ws-h h2{font-size:17px;font-weight:700;margin:0;color:var(--blue7)}",
+    ".ws-lede{font-size:14px;color:var(--i800);margin:0 0 10px;line-height:1.45}",
     ".ws-g{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) minmax(0,1.2fr);border-top:1px solid var(--hair)}",
+    ".ws-g.two{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);border-top-color:rgb(0 0 0/.08)}",
+    ".ws-g.two .ws-c:nth-child(2){padding-right:0}",
     ".ws-c{padding:10px 16px 4px;border-left:1px solid var(--hair);min-width:0}",
     ".ws-c:first-child{border-left:0;padding-left:0}.ws-c:last-child{padding-right:0}",
     ".ws-c h3{font-size:12.5px;font-weight:650;color:var(--i900);margin:0 0 6px;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}",
@@ -55,6 +58,7 @@
     ".ws-d>summary{cursor:pointer;color:var(--blue7);font-weight:600;width:fit-content;max-width:100%}",
     ".ws-d>div{margin-top:8px}",
     "@media (max-width:1100px){.ws-g{grid-template-columns:1fr 1fr}.ws-c:nth-child(3){grid-column:1/-1;border-left:0;padding-left:0;border-top:1px solid var(--hair)}.ws-c:nth-child(2){padding-right:0}}",
+    "@media (max-width:767px){.ws-g.two{grid-template-columns:1fr}}",
     "@media (max-width:767px){.ov #whySize{order:8}.ws{padding:12px 14px 10px}.ws-g{grid-template-columns:1fr}.ws-c{border-left:0;padding:10px 0 4px;border-top:1px solid var(--hair)}.ws-c:first-child{border-top:0}.ws-k{grid-template-columns:1fr}}",
     "@media (max-width:420px){.ws-x{grid-template-columns:1fr}}",
   ].join("\n");
@@ -72,6 +76,7 @@
   var DOT = { "primary coin cell": "#047857", "rechargeable lithium": "#b45309", "larger pack or mains": "#b91c1c" };
   var SHORT = { "primary coin cell": "coin cell", "rechargeable lithium": "rechargeable", "larger pack or mains": "larger pack" };
   var MK = function (t) { return '<span class="mk no">' + t + "</span>"; };
+  var EST_MK = '<span class="mk est">estimated</span>';
   var srcMark = function (d) { return d && d.source === "measured" ? '<span class="mk mea">measured</span>' : '<span class="mk sim">simulated</span>'; };
 
   function final(run, v, P) {
@@ -104,12 +109,13 @@
       return out;
     }
     var f = (v.ev.fronts || []).find(function (x) { return x.b.ch === d.channels; });
-    var up = (f ? f.pts : []).filter(function (x) { return x.gates > d.gates; });
+    var up = (f ? f.pts : []).filter(function (x) { return x.gates > d.gates; }).sort(function (a, b) { return a.gates - b.gates; });
     // no bigger frontier point (a best design that clears nothing): the bigger designs at the same channel count
     if (!up.length) up = (v.vis || []).filter(function (x) { return x.gates > d.gates && x.channels === d.channels && x.role !== "baseline"; }).sort(function (a, b) { return a.gates - b.gates; });
     if (!up.length) return [];
+    // the next two sizes up, the one nearest twice the size and the largest, smallest first
     var two = up.reduce(function (a, x) { return Math.abs(Math.log(x.gates / (2 * d.gates))) < Math.abs(Math.log(a.gates / (2 * d.gates))) ? x : a; });
-    var pick = [up[0], two, up[up.length - 1]].filter(function (x, i, a) { return a.indexOf(x) === i; });
+    var pick = [up[0], up[1], two, up[up.length - 1]].filter(function (x, i, a) { return x && a.indexOf(x) === i; }).sort(function (a, b) { return a.gates - b.gates; });
     return pick.map(function (x) { return { d: x }; });
   }
   function costHTML(run, v, P, ctx, d, rows) {
@@ -136,7 +142,7 @@
       ? "<b>Pad-limited:</b> below about " + est(fmtInt(padGates) + " gates", "area") + " the pads set the die size, so silicon cost barely rises with size."
       : "Above about " + est(fmtInt(padGates) + " gates", "area") + " the logic outgrows the pads and the die grows with gates.";
     var small = rows.length ? (Math.abs(maxD) < 0.005 ? " Going bigger here costs " + est("nothing more", "cost") + " per unit." : " The largest step here is " + est(money(maxD) + " per unit", "cost") + ".") : "";
-    return '<div class="ws-c"><h3>Cost per unit ' + MK("estimated") + '</h3><table class="ws-t">' + head + body + "</table>" +
+    return '<div class="ws-c"><h3>Cost per unit ' + EST_MK + '</h3><table class="ws-t">' + head + body + "</table>" +
       '<p class="ws-p">' + pad + small + "</p>" +
       '<button type="button" class="ws-b" data-ws-cost>Edit cost assumptions</button></div>';
   }
@@ -150,7 +156,7 @@
     var story = M().channelStory(kind, { budgets: budgets, gates: d.gates, decisionsPerSecond: 1 });
     var maxShare = rows.reduce(function (a, r) { return Math.max(a, r.chip_share); }, mine.chip_share);
     var n = count(d), u = M().DEVICE_KINDS[kind].unit;
-    var html = '<div class="ws-c"><h3>Battery ' + MK("estimated") + "</h3>" +
+    var html = '<div class="ws-c"><h3>Battery ' + EST_MK + "</h3>" +
       '<p class="ws-p" style="margin-top:0">Device ' + est(mW(mine.total_uw), "device_power") + " at " + n + " " + esc(unitOf(kind, n)) + "; the chip is " + est(share(mine.chip_share), "chip_power") + " of it.</p>";
     if (maxShare < 0.01) html += '<p class="ws-p"><b>The chip is never your battery bottleneck.</b></p>';
     html += '<p class="ws-p">What moves it: the number of ' + esc(u) + ".</p>";
@@ -204,9 +210,11 @@
   function innerHTML(run, v, P, ctx, d) {
     var rows = biggerOf(run, v, P, d);
     var b = batteryHTML(run, P, ctx, d);
+    // cost against size first, full width (../i1-sizecost.js); the table stays as the fallback without it
+    var SC = window.ChipInSizeCost, cost = SC ? SC.html(run, v, P, ctx, d, rows) : "";
     return '<div class="ws-h"><h2>Why this size</h2></div>' +
-      '<p class="ws-lede">' + ledeText(run, v, P, ctx, d, rows) + "</p>" +
-      '<div class="ws-g">' + costHTML(run, v, P, ctx, d, rows) + b.html + changesHTML(b.cls) + "</div>" +
+      '<p class="ws-lede">' + ledeText(run, v, P, ctx, d, rows) + "</p>" + cost +
+      '<div class="ws-g' + (cost ? " two" : "") + '">' + (cost ? "" : costHTML(run, v, P, ctx, d, rows)) + b.html + changesHTML(b.cls) + "</div>" +
       checksHTML(run, P, d);
   }
 
