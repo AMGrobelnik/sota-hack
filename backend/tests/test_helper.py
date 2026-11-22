@@ -15,7 +15,7 @@ import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
 from chipin_backend.api.config import ApiConfig, load_api_config
-from chipin_backend.api.helper import HELPER, Conversations, HelperConfig
+from chipin_backend.api.helper import HELPER, Conversations, HelperConfig, instructions
 from chipin_backend.api.helper_model import ModelReply, OpenRouterLadder, Rung, ToolCall
 from chipin_backend.api.helper_tools import (
     TOOL_NAMES,
@@ -253,6 +253,30 @@ def test_a_symlink_out_of_the_runs_folder_is_refused(tools: HelperTools, runs: P
             tools.get_run(bad)  # type: ignore[arg-type]
 
 
+def test_list_files_leaves_out_links_out_of_the_run_and_helpers(
+    tools: HelperTools, runs: Path, tmp_path: Path
+) -> None:
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    (outside / "big.bin").write_bytes(b"x" * 9999)
+    workspace = runs / RUN_A / "workspace"
+    (workspace / "link.bin").symlink_to(outside / "big.bin")
+    (workspace / "linked_dir").symlink_to(outside, target_is_directory=True)
+    (workspace / "inside_link.md").symlink_to(workspace / "report.md")
+    for helper in ("progress", "subagent", "agents/a1/progress"):
+        (workspace / helper).parent.mkdir(parents=True, exist_ok=True)
+        (workspace / helper).write_text("#!/bin/sh\n")
+    (workspace / "agents" / "a1" / "note.md").write_text("a subagent's note")
+    paths = {f["path"]: f["size"] for f in tools.list_files(RUN_A)["files"]}
+    assert "workspace/report.md" in paths
+    assert not any("link.bin" in p or "linked_dir" in p for p in paths), paths
+    assert 9999 not in paths.values()
+    assert paths["workspace/inside_link.md"] == paths["workspace/report.md"]  # a link inside stays
+    assert "workspace/agents/a1/note.md" in paths
+    for helper in ("workspace/progress", "workspace/subagent", "workspace/agents/a1/progress"):
+        assert helper not in paths
+
+
 def test_unknown_tools_and_bad_arguments_are_tool_errors(tools: HelperTools) -> None:
     with pytest.raises(ToolError):
         run_tool(tools, "delete_run", {"run_id": RUN_A})
@@ -429,6 +453,22 @@ async def test_a_turn_streams_tools_actions_and_an_answer(config: BackendConfig,
     assert "Chippy" in first[0]["content"] and RUN_A in first[1]["content"]  # instructions, view and open run
     tool_msg = model.calls[1]["messages"][-1]
     assert tool_msg["role"] == "tool" and "1b05ecf2359a" in tool_msg["content"]
+
+
+async def test_an_unknown_tool_shows_no_tool_line(config: BackendConfig, runs: Path) -> None:
+    model = Scripted([call("start_run", prompt="x"), call("get_run", run_id=RUN_A), answer("Done.")])
+    async with await _client(config, runs, model) as client:
+        frames = await _ask(client, "start a run")
+    assert [f["name"] for f in frames if f["type"] == "tool"] == ["get_run"]
+    assert not any(f["type"] in ("action", "proposal") for f in frames)
+    tool_msg = model.calls[1]["messages"][-1]
+    assert tool_msg["role"] == "tool" and "unknown tool" in tool_msg["content"]  # the model is told
+
+
+def test_instructions_ask_for_the_run_and_no_tool_names() -> None:
+    text = instructions()
+    assert "short id" in text and "more than one run" in text
+    assert "Never name your tools to the user" in text
 
 
 async def test_proposals_are_never_executed_by_the_server(

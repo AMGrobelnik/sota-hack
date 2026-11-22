@@ -451,9 +451,12 @@ class HelperTools:
             rel = p.relative_to(run.path)
             if any(part.startswith(".") for part in rel.parts) or not p.is_file():
                 continue
+            # A symlink (or a file under a linked folder) that leads out of the run is not listed.
+            if not p.resolve().is_relative_to(run.path):
+                continue
             if p.name.lower() in REFUSED_NAMES or (len(rel.parts) == 1 and p.name in REFUSED_RUN_FILES):
                 continue
-            if rel.parts[0] == "workspace" and str(rel) == "workspace/progress":
+            if _is_workspace_helper(rel):
                 continue
             if query and query.lower() not in str(rel).lower():
                 continue
@@ -661,6 +664,14 @@ def run_tool(tools: HelperTools, name: str, arguments: Any) -> Any:
 
 
 # ---------------------------------------------------------------- bounds
+
+
+def _is_workspace_helper(rel: Path) -> bool:
+    """The ``progress`` / ``subagent`` helpers, as the files route hides them."""
+    parts = rel.parts
+    if len(parts) == 2:
+        return parts[0] == "workspace" and parts[1] in ("progress", "subagent")
+    return len(parts) == 4 and parts[:2] == ("workspace", "agents") and parts[3] == "progress"
 
 
 def _bound(value: Any, low: int, high: int) -> int:

@@ -62,6 +62,7 @@ from chipin_backend.api.helper_ui import (
 
 INSTRUCTIONS_PATH = Path(__file__).with_name("helper_instructions.md")
 _CONVERSATION_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
+KNOWN_TOOLS = TOOL_NAMES | ACTION_NAMES | PROPOSAL_NAMES
 
 CLOSING_NOTE = (
     "The tool budget for this turn is used up. Answer now from the tool results above in at most "
@@ -352,7 +353,8 @@ async def run_turn(
             result, item = await _call_tool(state, ui, call.name, call.arguments)
             if item is not None:
                 yield item
-            yield {"type": "tool", "name": call.name, "ok": "error" not in result}
+            if call.name in KNOWN_TOOLS:  # an invented tool name never reaches the page
+                yield {"type": "tool", "name": call.name, "ok": "error" not in result}
             messages.append(
                 {"role": "tool", "tool_call_id": call.id, "content": json.dumps(result, default=str)}
             )
