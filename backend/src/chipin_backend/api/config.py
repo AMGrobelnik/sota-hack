@@ -8,6 +8,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
+from chipin_backend.api.helper import HelperConfig
 from chipin_backend.api.transcribe import TranscribeConfig
 from chipin_backend.config import Effort
 
@@ -32,6 +33,7 @@ class ApiConfig(BaseModel):
         default_factory=lambda: {"lite": "low", "pro": "high", "max": "xhigh", "ultra": "max"}
     )
     transcribe: TranscribeConfig = Field(default_factory=TranscribeConfig)
+    helper: HelperConfig = Field(default_factory=HelperConfig)
 
 
 def load_api_config(path: Path = API_CONFIG_PATH) -> ApiConfig:
