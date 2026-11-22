@@ -46,6 +46,8 @@
       var cs = getComputedStyle(e);
       if (cs.visibility === "hidden" || cs.display === "none" || cs.opacity === "0") continue;
       var q = e.getBoundingClientRect();
+      /* a page-sized drawing (the map itself, a leader-line overlay) is not an obstacle: what is drawn on it is checked by its own text */
+      if (/^(SVG|IMG|CANVAS)$/i.test(e.tagName) && q.width * q.height > 0.4 * innerWidth * innerHeight) continue;
       if (q.width && q.height && q.left < r.right && q.right > r.left && q.top < r.bottom && q.bottom > r.top) return false;
     }
     return true;
