@@ -135,7 +135,7 @@
     if (run.case === "af") lim = [pick(/one feasibility spike/i), pick(/not a real cell library/i), pick(/example targets/i)];
     else if (file) lim = [pick(/not clinical evidence/i), pick(/classifier only/i)];
     else lim = ["Demo data: no real " + esc(c.who) + " was recorded."];
-    lim.push("Regulatory points on the page are illustrative, to check with your regulatory team.");
+    lim.push("Regulatory points on the page are general information from the cited sources, not regulatory advice: check every point with a regulatory specialist.");
     out.limits = lim.filter(Boolean);
     return out;
   }

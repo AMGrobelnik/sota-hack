@@ -2,7 +2,7 @@
  * i1-regulation.js: the Regulation panel of the ChipIn i1 dashboard, beside Why this size. Defines window.ChipInRegulation.
  *
  * Two short groups of entries, each from a cited public source: what starts to apply as the battery grows, and what
- * differs between a smaller and a larger chip. Each entry shows its title and rule; why it matters and the source
+ * differs between a smaller and a larger chip. Each entry shows its title and to check tag; its rule, why it matters and the source
  * open on expand. Every entry is a point to check with a regulatory specialist; none carries a verdict.
  * Above them, the battery class for this chip and the bigger sizes Why this size shows (ChipInWhySize.biggerOf),
  * each from ChipInModels.deviceBudget and batteryClass, the same as Why this size.
@@ -29,7 +29,7 @@
     ".rg-e>summary b{font-size:12.5px;font-weight:600;color:var(--i900)}",
     ".rg-e>summary b::before{content:'+';display:inline-block;width:12px;color:var(--rg-c);font-weight:700}",
     ".rg-e[open]>summary b::before{content:'-'}",
-    ".rg-e>summary .r{grid-column:1/-1;font-size:12px;color:var(--i700);line-height:1.4;padding-left:12px}",
+    ".rg-e>div p.r{color:var(--i800)}",
     ".rg-e>div{padding:0 0 8px 12px;font-size:12px;color:var(--i700);line-height:1.45}",
     ".rg-e>div p{margin:0 0 3px}",
     ".rg-e>div p.w b{color:var(--i900);font-weight:600}",
@@ -105,8 +105,8 @@
 
   function entryHTML(e) {
     var src = e.src.map(function (x) { return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + "</a>"; }).join(" · ");
-    return '<details class="rg-e"><summary><b>' + esc(e.title) + '</b><span class="rg-st chk" title="To check with a regulatory specialist">to check</span>' +
-      '<span class="r">' + esc(e.rule) + "</span></summary><div>" +
+    return '<details class="rg-e"><summary title="' + esc(e.rule) + '"><b>' + esc(e.title) + '</b><span class="rg-st chk" title="To check with a regulatory specialist">to check</span>' +
+      "</summary><div>" + '<p class="r">' + esc(e.rule) + "</p>" +
       '<p class="w"><b>Why it matters here:</b> ' + esc(e.why) + "</p>" +
       "<p>Source: " + src + "</p></div></details>";
   }

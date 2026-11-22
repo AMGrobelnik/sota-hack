@@ -27,6 +27,7 @@
     ".sm.ok .sm-r>b{color:#0b5a3f}.sm.no .sm-r>b{color:#9f2a20}",
     ".sm-jump{display:inline-flex;align-items:center;gap:4px;margin-left:4px;font-size:13px;font-weight:600;color:var(--blue7);text-decoration:underline;text-underline-offset:3px;white-space:nowrap}",
     ".sm-jump::after{content:'\\2193'}",
+    ".sm-mt{border:0;background:none;padding:0;margin-left:6px;font:inherit;font-size:13px;font-weight:600;color:var(--i700);cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px;white-space:nowrap}",
     ".sm-g{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.6fr) minmax(0,.8fr) minmax(0,1fr) minmax(0,1.4fr);row-gap:10px}",
     "@media (min-width:641px){.sm-c.tg .sm-v{flex-wrap:nowrap;white-space:nowrap}}",
     ".sm-c{padding:0 16px;border-left:1px solid rgb(0 0 0/.08);min-width:0}",
@@ -146,7 +147,7 @@
     var mark = af || P.isMea(run) ? '<span class="mk mea" style="position:absolute;right:12px;top:-9px">measured</span>' : '<span class="mk sim" style="position:absolute;right:12px;top:-9px">simulated</span>';
     // why this size, first: one sentence with the numbers that decided it, and a jump to the panel
     var t = tradeText(run, v, P, d, kind);
-    var why = '<p class="sm-r"><b>Why ' + P.fmt(d.gates) + " gates:</b> " + reasonLead(run, v, P, d, pass) + (t ? " " + t : "") +
+    var why = '<p class="sm-r"><b>Why ' + P.fmt(d.gates) + " gates:</b> " + reasonLead(run, v, P, d, pass) + (t ? ' <span class="sm-more" hidden>' + t + '</span><button type="button" class="sm-mt" data-sm-more aria-expanded="false">' + (run.case === "af" ? "Why not bigger" : "Smaller and bigger") + "</button>" : "") +
       (kind ? ' <button type="button" class="sm-jump" data-ws-jump>Cost by size</button>' : "") + "</p>";
     return '<section class="sm ' + (pass ? "ok" : "no") + '" aria-label="Summary">' + mark + why + '<div class="sm-g">' + cells.join("") + "</div></section>";
   }
@@ -302,6 +303,8 @@
     if (!el._jump) {
       el._jump = true;
       el.addEventListener("click", function (e) {
+        var mt = e.target.closest("[data-sm-more]");
+        if (mt) { var sp = el.querySelector(".sm-more"), on = sp.hidden; sp.hidden = !on; mt.setAttribute("aria-expanded", String(on)); if (!mt.dataset.l) mt.dataset.l = mt.textContent; mt.textContent = on ? "Less" : mt.dataset.l; return; }
         if (!e.target.closest("[data-ws-jump]")) return;
         var ws = document.getElementById("whySize");
         if (ws && ws.style.display !== "none") ws.scrollIntoView({ behavior: "smooth", block: "start" });

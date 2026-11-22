@@ -145,19 +145,18 @@
     var story = M().channelStory(kind, { budgets: budgets, gates: d.gates, decisionsPerSecond: 1 });
     var maxShare = rows.reduce(function (a, r) { return Math.max(a, r.chip_share); }, mine.chip_share);
     var n = count(d), u = M().DEVICE_KINDS[kind].unit;
-    var html = '<div class="ws-c"><h3>Battery ' + EST_MK + "</h3>" +
-      '<p class="ws-p" style="margin-top:0">Device ' + est(mW(mine.total_uw), "device_power") + " at " + n + " " + esc(unitOf(kind, n)) + "; the chip is " + est(share(mine.chip_share), "chip_power") + " of it.</p>";
-    if (maxShare < 0.01) html += '<p class="ws-p"><b>The chip is never your battery bottleneck.</b></p>';
-    html += '<p class="ws-p">What moves it: the number of ' + esc(u) + ".</p>";
-    html += '<ul class="ws-l">' + rows.map(function (r) {
+    // at rest one line: where the battery class tips (or that it holds); the rest opens in the panel's drawer
+    var t = story.tips && story.tips[0];
+    var html = '<div class="ws-c"><h3>Battery ' + EST_MK + "</h3>" + '<p class="ws-p" style="margin-top:0">' + (t
+      ? "<b>Tips from " + esc(SHORT[t.from]) + " to " + esc(SHORT[t.to]) + " at " + t.budget + " " + esc(unitOf(kind, t.budget)) + ".</b>"
+      : esc((SHORT[rows[0].class] || "").replace(/^./, function (c) { return c.toUpperCase(); })) + " from " + rows[0].budget + " to " + rows[rows.length - 1].budget + " " + esc(u) + ".") + "</p></div>";
+    var more = '<p class="ws-p" style="margin-top:0">Device ' + est(mW(mine.total_uw), "device_power") + " at " + n + " " + esc(unitOf(kind, n)) + "; the chip is " + est(share(mine.chip_share), "chip_power") + " of it." +
+      (maxShare < 0.01 ? " <b>The chip is never your battery bottleneck.</b>" : "") + " What moves it: the number of " + esc(u) + ".</p>";
+    more += '<ul class="ws-l">' + rows.map(function (r) {
       var lt = r.class === "primary coin cell" ? life(r.life_days) : r.class === "rechargeable lithium" ? life(r.life_days) + "/charge" : "";
       return '<li class="' + (r.budget === n ? "me" : "") + '"><i style="background:' + DOT[r.class] + '"></i>' + r.budget + " " + esc(unitOf(kind, r.budget)) + " <span>" + (lt ? est(lt, "battery_life") + ", " : "") + est(SHORT[r.class], "battery_class") + "</span></li>";
     }).join("") + "</ul>";
-    var t = story.tips && story.tips[0];
-    html += '<p class="ws-p">' + (t
-      ? "<b>Tips from " + esc(SHORT[t.from]) + " to " + esc(SHORT[t.to]) + " at " + t.budget + " " + esc(unitOf(kind, t.budget)) + ".</b>"
-      : esc((SHORT[rows[0].class] || "").replace(/^./, function (c) { return c.toUpperCase(); })) + " from " + rows[0].budget + " to " + rows[rows.length - 1].budget + " " + esc(u) + ".") + "</p></div>";
-    return { html: html, cls: M().batteryClass(mine.total_uw).class };
+    return { html: html, more: more, cls: M().batteryClass(mine.total_uw).class };
   }
 
   /* ------------------------------------------------------------------------------ the panel */
@@ -165,20 +164,20 @@
     var big = rows.length ? rows[rows.length - 1].d : null, r = big ? delta(ctx, d, big) : null;
     var cost = r ? (Math.abs(r.unit_cost_delta) < 0.005 ? "costs the same" : "costs about " + money(r.unit_cost_delta) + (r.unit_cost_delta > 0 ? " more" : " less")) : "";
     var bat = r ? (r.battery_class[0] !== r.battery_class[1] ? "moves the battery to " + SHORT[r.battery_class[1]] : Math.abs(r.life_days[1] / r.life_days[0] - 1) < 0.01 ? "barely changes the battery" : "changes battery life from " + life(r.life_days[0]) + " to " + life(r.life_days[1])) : "";
-    var bigger = r ? "A bigger chip " + est(cost, "cost") + " and " + est(bat, "battery_life") + "." : "";
-    if (run.case === "af") return "The one chip built and tested. " + bigger;
-    if (!v.ev.chosen) return "No size clears your targets on this data; this is for the best design, " + P.fmt(d.gates) + " gates. " + bigger;
-    return "The smallest chip that clears all your targets. " + bigger;
+    var bigger = r ? "a bigger chip " + est(cost, "cost") + " and " + est(bat, "battery_life") + "." : "";
+    if (run.case === "af") return "The one chip built and tested" + (bigger ? "; " + bigger : ".");
+    if (!v.ev.chosen) return "No size clears your targets on this data, so this is the best design, " + P.fmt(d.gates) + " gates" + (bigger ? "; " + bigger : ".");
+    return "The smallest chip that clears all your targets" + (bigger ? "; " + bigger : ".");
   }
   function innerHTML(run, v, P, ctx, d) {
     var rows = biggerOf(run, v, P, d);
     var b = batteryHTML(run, P, ctx, d);
     // cost against size first, full width (../i1-sizecost.js); the table stays as the fallback without it
     var SC = window.ChipInSizeCost, cost = SC ? SC.html(run, v, P, ctx, d, rows) : "";
-    return '<div class="ws-h"><h2>Why this size</h2></div>' +
+    return { more: b.more, html: '<div class="ws-h"><h2>Why this size</h2></div>' +
       '<p class="ws-lede">' + ledeText(run, v, P, ctx, d, rows) + "</p>" + cost +
       '<div class="ws-g ' + (cost ? "one" : "two") + '">' + (cost ? "" : costHTML(run, v, P, ctx, d, rows)) + b.html + "</div>" +
-      '<p class="ws-p">Regulatory points to check with a regulatory specialist are in one place: <button type="button" class="ws-lk" data-ws-reg>the Regulation panel</button>.</p>';
+      '<p class="ws-p" title="General information to check with a regulatory specialist">Regulatory points to check: <button type="button" class="ws-lk" data-ws-reg>the Regulation panel</button>.</p>' };
   }
 
   function tick(el, run, v, P, ctx, openCost) {
@@ -194,7 +193,7 @@
     }
     if (!el.querySelector(".ws")) {
       var u = M().DEVICE_KINDS[ctx.caseKind].unit;
-      el.innerHTML = '<section class="ws" aria-label="Why this size"><div class="ws-in"></div><details class="ws-d"><summary>Battery by ' + esc(u) + ": parts, sources and your wear time</summary><div class=\"ws-slot\"></div></details></section>";
+      el.innerHTML = '<section class="ws" aria-label="Why this size"><div class="ws-in"></div><details class="ws-d"><summary>Battery by ' + esc(u) + ": parts, sources and your wear time</summary><div class=\"ws-more\"></div><div class=\"ws-slot\"></div></details></section>";
       el.querySelector(".ws").addEventListener("click", function (e) {
         if (e.target.closest("[data-ws-cost]") && openCost) openCost();
         var rg = e.target.closest("[data-ws-reg]") && document.getElementById("regPanel");
@@ -207,7 +206,9 @@
     var s = [run.id, d.id, d.gates, run.primary, v.ev.key, JSON.stringify(ctx.costInputs || null), (ctx.budgets || []).map(function (b) { return b.key; }).join(",")].join("|");
     if (el._sig === s) return;
     el._sig = s;
-    el.querySelector(".ws-in").innerHTML = innerHTML(run, v, P, ctx, d);
+    var o = innerHTML(run, v, P, ctx, d);
+    el.querySelector(".ws-in").innerHTML = o.html;
+    el.querySelector(".ws-more").innerHTML = o.more;
   }
   window.ChipInWhySize = { tick: tick, biggerOf: biggerOf };
 })();

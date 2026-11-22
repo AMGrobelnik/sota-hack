@@ -312,6 +312,7 @@ select.fin2{padding:0 8px}
 .insp{padding:14px 16px}
 .insp h2{font-size:13px;font-weight:650;margin:0 0 2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .insp .is{font-size:12px;color:var(--i600);margin:0 0 10px}
+.cid{font-family:var(--mono,ui-monospace,monospace);font-size:10.5px;font-weight:400;color:var(--i600);white-space:nowrap}
 .irow{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:7px 0;border-top:1px solid var(--hair);font-size:12.5px}
 .irow span:first-child{color:var(--i600)}
 .irow b{font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
@@ -750,11 +751,11 @@ select.gfin{padding:0 10px}
 <script src="../i1-designs.js?v=nm1"></script><!-- DESIGNS HOOK: the designs a run tried, in the Chip view (window.ChipInDesigns) -->
 <script src="../i1-questions.js"></script>
 <script src="../i1-search.js"></script><!-- SEARCH HOOK: the five search steps between Run and the run view, replayed on examples (window.ChipInSearch) --><!-- QUESTIONS HOOK: follow-up questions from a connected backend, one extra step before the spec card (window.ChipInQuestions) -->
-<script src="../i1-summary.js?v=rf1"></script><!-- SUMMARY HOOK: the result page's summary card, trade-off sentence and the chart's default view (window.ChipInSummary) -->
-<script src="../i1-whysize.js?v=rf1"></script><!-- WHY SIZE HOOK: the Why this size panel under the chart: cost along the curve, battery, what changes, to check (window.ChipInWhySize) -->
-<script src="../i1-regulation.js?v=rf2"></script><!-- REGULATION HOOK: the Regulation panel beside Why this size (window.ChipInRegulation) -->
-<script src="../i1-report.js?v=2"></script><!-- REPORT HOOK: Assumptions and limits link, one-page design report, compare two designs (window.ChipInReport) -->
-<script src="../i1-sizecost.js"></script><!-- SIZE COST HOOK: unit cost against chip size, stepped, at the top of Why this size (window.ChipInSizeCost) -->
+<script src="../i1-summary.js?v=fb2b"></script><!-- SUMMARY HOOK: the result page's summary card, trade-off sentence and the chart's default view (window.ChipInSummary) -->
+<script src="../i1-whysize.js?v=fb2b"></script><!-- WHY SIZE HOOK: the Why this size panel under the chart: cost along the curve, battery, what changes, to check (window.ChipInWhySize) -->
+<script src="../i1-regulation.js?v=fb2b"></script><!-- REGULATION HOOK: the Regulation panel beside Why this size (window.ChipInRegulation) -->
+<script src="../i1-report.js?v=fb2b"></script><!-- REPORT HOOK: Assumptions and limits link, one-page design report, compare two designs (window.ChipInReport) -->
+<script src="../i1-sizecost.js?v=fb2b"></script><!-- SIZE COST HOOK: unit cost against chip size, stepped, at the top of Why this size (window.ChipInSizeCost) -->
 <script src="../i1-colour.js"></script><!-- COLOUR HOOK: pass, fail, estimated and chosen colours in one place -->
 <script src="../i1-stage.js"></script><!-- STAGE HOOK: the loading stage every forward step of a new design passes through (window.ChipInStage) -->
 <script src="../i1-intake.js"></script><!-- INTAKE HOOK: the stage between steps and the scripted questions with no backend, #/new/ask (window.ChipInIntake) -->
@@ -2709,7 +2710,7 @@ function inspAF(run, v) {
   if (isCh && v.ph >= 5 && AF_DESIGN.verified) rows.push(["Circuit against its model", `${fmt(AF_DESIGN.verified.identical ?? AF_DESIGN.verified.vectors - AF_DESIGN.verified.mismatches)} of ${fmt(AF_DESIGN.verified.vectors)} test windows identical`]);
   if (isCh && afFinal(v)) for (const k of keys) { const t = run.targets.find(x => x.metric === k), x = metricOf(run, AF_DESIGN, k).v; rows.push([`${MET[k].name}, ${tw}, test`, `${fmtVal(k, x)}${t ? pfHTML(meets(t, x)) : ""}`]); }
   const title = isCh && v.ph >= 4 ? "The design that was built" : isCh && v.ph >= 3 ? "Best under the size cap" : d.best && v.ph >= 2 ? "Best overall, too large" : "Candidate";
-  return `<h2>${title} <span class="mk mea">measured</span></h2><p class="is">${esc(d.id)}</p>${rows.map(([a, b]) => `<div class="irow"><span>${a}</span><b>${b}</b></div>`).join("")}
+  return `<h2>${title} <span class="mk mea">measured</span></h2><p class="is">${esc(cfgWords(d))} <code class="cid" title="Technical id">${esc(d.id)}</code></p>${rows.map(([a, b]) => `<div class="irow"><span>${a}</span><b>${b}</b></div>`).join("")}
     <div class="ilinks"><a class="qbtn" href="#/run/${run.id}/chip">${I("chip", "s13")}The chip</a>${window.ChipInReport?.cmpBtn(run, v, d, rpP()) || "" /* REPORT HOOK: compare */}</div>`;
 }
 // the funnel from the file's counts, each stage lit by its step, and the measured search rate beside it
@@ -2754,7 +2755,7 @@ function nopassAF(run, v) {
 }
 function tipAF(run, v, d) {
   const sz = afSize(v, d);
-  return `<b>${esc(d.id)}</b>${esc(cfgText(d))}<br>${sz.m ? `${fmt(sz.g)} gates, measured` : `<i>about ${fmt(sz.g)} gates, estimated</i>`}<br>Sensitivity ${fmtVal("sensitivity", d.metrics.sensitivity_pooled)}, specificity ${fmtVal("specificity", d.metrics.specificity)}<br>${afScopeWord(MEASURED.af.scope)}, ${esc(d.basis)}${v.ph >= 3 && !d.under ? "<br>Over the size cap" : ""}`;
+  return `<b>${esc(cfgWords(d))}</b> <code class="cid">${esc(d.id)}</code><br>${sz.m ? `${fmt(sz.g)} gates, measured` : `<i>about ${fmt(sz.g)} gates, estimated</i>`}<br>Sensitivity ${fmtVal("sensitivity", d.metrics.sensitivity_pooled)}, specificity ${fmtVal("specificity", d.metrics.specificity)}<br>${afScopeWord(MEASURED.af.scope)}, ${esc(d.basis)}${v.ph >= 3 && !d.under ? "<br>Over the size cap" : ""}`;
 }
 function drawChartAF(run, v) {
   const cv = $("#tchart"); if (!cv) return;

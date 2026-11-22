@@ -42,6 +42,7 @@
     ".scx-far{font-size:11.5px;font-weight:600;color:var(--i700);text-align:center;border-top:1px dashed var(--i300);padding-top:3px;margin-top:2px}",
     ".scx-lev{display:flex;flex-wrap:wrap;gap:6px 18px;margin:10px 0 2px;font-size:13px;color:var(--i800);line-height:1.45}",
     ".scx-lev b{font-weight:650;color:var(--i900)}",
+    ".scx-d{margin:8px 0 0;font-size:13px;color:var(--i800)}.scx-d>summary{cursor:pointer;color:var(--blue7);font-weight:600;width:fit-content}.scx-m{margin:6px 0 0;line-height:1.45}",
     ".scx-ft{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:6px}",
     ".scx-ft p{margin:0;font-size:12.5px;color:var(--i700);line-height:1.45}",
     "@media (max-width:767px){.scx-g{grid-template-columns:64px repeat(var(--np),minmax(58px,1fr));column-gap:4px}.scx-g .mid{display:none}.scx-rl{font-size:11.5px}.scx-v{font-size:14px}.scx-cell{font-size:12px}}",
@@ -129,17 +130,19 @@
     var last = pts[pts.length - 1], dc = last.model.unit_cost - pts[0].model.unit_cost, sz = function (p) { return p.estSize ? "about " + P.about(p.gates) : P.fmt(p.gates); };
     var verdict;
     if (pts.length < 2) verdict = "No larger design in this run to compare.";
-    else if (Math.abs(dc) < 0.005) verdict = "<b>Unit cost stays at " + est(money(pts[0].model.unit_cost), "cost") + " from " + sz(pts[0]) + " to " + sz(last) + " gates.</b> The pads, not the logic, set the die size, and the silicon is only " + est(money(pts[0].model.die_cost), "cost") + " of it.";
+    else if (Math.abs(dc) < 0.005) verdict = "<b>Unit cost stays at " + est(money(pts[0].model.unit_cost), "cost") + " from " + sz(pts[0]) + " to " + sz(last) + " gates:</b> " + (pts[0].model.pad_limited && last.model.pad_limited ? "below about " + est(fmtInt(padGates) + " gates", "area") + " the pads, not the logic, set the die size, so cost only starts to rise above that." : "the silicon is a small share of it.");
     else verdict = "<b>Unit cost rises from " + est(money(pts[0].model.unit_cost), "cost") + " at " + sz(pts[0]) + " gates to " + est(money(last.model.unit_cost), "cost") + " at " + sz(last) + "</b> (" + stepTxt(pts[0].model.unit_cost, last.model.unit_cost, "cost", "$") + " per unit).";
-    var climb = far.length ? " Cost climbs only once the logic outgrows the pads, above about " + est(fmtInt(padGates) + " gates", "area") + ": at " + fmtInt(far[far.length - 1].gates) + " gates, " + stepTxt(pts[0].model.unit_cost, far[far.length - 1].model.unit_cost, "cost", "$") + " per unit." : "";
+    var silicon = "The silicon is " + est(money(pts[0].model.die_cost), "cost") + " of the " + est(money(pts[0].model.unit_cost), "cost") + " per unit.";
+    var climb = far.length ? "Cost climbs only once the logic outgrows the pads, above about " + est(fmtInt(padGates) + " gates", "area") + ": at " + fmtInt(far[far.length - 1].gates) + " gates, " + stepTxt(pts[0].model.unit_cost, far[far.length - 1].model.unit_cost, "cost", "$") + " per unit." : "";
 
     // the lever that does move the cost: the battery class
     var bc = i0.battery_cost, mine = pts[0].model.inputs.battery_class;
     var lev = '<div class="scx-lev"><span><b>What does move the cost:</b> the battery, ' + ["primary coin cell", "rechargeable lithium"].map(function (k) { return esc(SHORT[k]) + " " + est(money(bc[k]), "cost") + (k === mine ? " (this design)" : ""); }).join(", ") + ".</span></div>";
 
     return '<div class="scx"><div class="scx-h"><h3>Unit cost as the chip grows</h3><span class="mk est">estimated</span></div>' +
-      '<p class="scx-v">' + verdict + climb + "</p>" +
-      '<div class="scx-w"><div class="scx-g" style="--n:' + n + ";--np:" + np + '">' + g + "</div></div>" + lev +
+      '<p class="scx-v">' + verdict + "</p>" +
+      '<div class="scx-w"><div class="scx-g" style="--n:' + n + ";--np:" + np + '">' + g + "</div></div>" +
+      '<details class="scx-d"><summary>More on cost</summary><p class="scx-m">' + silicon + (climb ? " " + climb : "") + "</p>" + lev + "</details>" +
       '<div class="scx-ft"><button type="button" class="ws-b" data-ws-cost>Edit cost assumptions</button><p>Dark cap: the die&rsquo;s share. Hatched: sizes past this run.</p></div></div>';
   }
   window.ChipInSizeCost = { html: html };
