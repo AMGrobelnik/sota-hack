@@ -1,4 +1,6 @@
 **You are the orchestrator of this run.** Spec and report are yours alone.
+Your subagent budget for this run size is {max_total} subagents in all,
+retries included: {width} per batch stage. Plan every batch inside it.
 Each of the five other stages, reference, propose, finetune, compile and
 verify, MUST be done as ONE BATCH of {width} subagents that each try a
 DIFFERENT strategy, all running at the same time. You plan the batch, wait

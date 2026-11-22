@@ -408,12 +408,13 @@ def plan_fanout(
         return None
     biggest = max([*cfg.widths.values(), cfg.default_width, cfg.width or 0])
     width = raw.get("width", cfg.width)
+    total = cfg.totals.get(preset) if preset and width is None else None  # type: ignore[call-overload]
     if width is None:
         width = cfg.widths.get(preset, cfg.default_width) if preset else cfg.default_width  # type: ignore[call-overload]
     if isinstance(width, bool) or not isinstance(width, int) or not 1 <= width <= biggest:
         raise ValueError(f"fanout.width must be a whole number from 1 to {biggest}")
     spare = cfg.spare_starts if cfg.spare_starts is not None else max(2, -(-width // 5))
-    max_total = cfg.max_total or BATCHES * width + spare
+    max_total = cfg.max_total or total or BATCHES * width + spare
     max_usd = cfg.max_usd if cfg.max_usd is not None else round(cfg.usd_per_subagent * max_total, 2)
     if "max_usd" in raw:
         asked = raw["max_usd"]

@@ -60,12 +60,17 @@ class FanoutConfig(BaseModel):
 
     enabled: bool = False
     width: int | None = Field(default=None, ge=1)
-    #: ``max`` was not named by the owner: 15 is an assumption to confirm.
-    widths: dict[Preset, int] = Field(default_factory=lambda: {"lite": 3, "pro": 10, "max": 15, "ultra": 20})
+    #: Subagents per stage batch: the preset's total spread over the five batch stages.
+    widths: dict[Preset, int] = Field(default_factory=lambda: {"lite": 1, "pro": 3, "max": 6, "ultra": 20})
     default_width: int = Field(default=3, ge=1)
+    #: Subagents a run of the preset may start in all, retries included (the run
+    #: size: Lite 5, Pro 15, Max 30). A preset not listed gets five batches plus
+    #: ``spare_starts``; so does a request that names its own ``width``.
+    totals: dict[Preset, int] = Field(default_factory=lambda: {"lite": 5, "pro": 15, "max": 30})
     #: Subagents running at once; ``None`` = the batch size (a whole batch at once).
     max_parallel: int | None = Field(default=None, ge=1)
-    #: Subagents per run; ``None`` = five batches plus ``spare_starts``.
+    #: Subagents per run for every run; ``None`` = the preset's ``totals`` entry,
+    #: else five batches plus ``spare_starts``.
     max_total: int | None = Field(default=None, ge=1)
     #: Starts beyond the five batches, for retries; ``None`` = a fifth of the batch, at least 2.
     spare_starts: int | None = Field(default=None, ge=0)

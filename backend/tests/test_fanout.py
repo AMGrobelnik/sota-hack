@@ -134,7 +134,7 @@ async def test_two_subagents_run_at_the_same_time(config: BackendConfig) -> None
     assert not (folder / "subagent").exists(), "a subagent gets no ./subagent helper"
 
 
-@pytest.mark.parametrize(("preset", "width"), [("lite", 3), ("pro", 10), ("ultra", 20)])
+@pytest.mark.parametrize(("preset", "width"), [("lite", 1), ("pro", 3), ("max", 6), ("ultra", 20)])
 async def test_a_full_run_has_five_parallel_batches_each_merged(
     config: BackendConfig, preset: str, width: int
 ) -> None:
@@ -529,11 +529,11 @@ async def test_fanout_requests_are_checked(config: BackendConfig) -> None:
 @pytest.mark.parametrize(
     ("preset", "width", "total", "usd", "timeout"),
     [
-        ("lite", 3, 17, 0.85, 600),
-        ("pro", 10, 52, 2.6, 600),
-        ("max", 15, 78, 3.9, 600),
-        ("ultra", 20, 104, 5.2, 600),
-        (None, 10, 52, 2.6, 600),  # no preset: the large (pro) run size
+        ("lite", 1, 5, 0.25, 600),
+        ("pro", 3, 15, 0.75, 600),
+        ("max", 6, 30, 1.5, 600),
+        ("ultra", 20, 104, 5.2, 600),  # kept for old requests; the page offers three sizes
+        (None, 3, 15, 0.75, 600),  # no preset: the middle (pro) run size
     ],
 )
 async def test_the_preset_sets_the_batch_size_and_its_limits(
@@ -545,6 +545,9 @@ async def test_the_preset_sets_the_batch_size_and_its_limits(
     assert (plan["max_usd"], plan["timeout_s"]) == (pytest.approx(usd), timeout)
     assert plan["stages"] == list(BATCH_STAGES)
     assert f"limits: width {width}, max_parallel {width}, max_total {total}" in _outputs(item)
+    system = json.loads(item.run.record_path.read_text())["agent"]["system_prompt"]
+    assert f"subagent budget for this run size is {total} subagents in all" in system
+    assert f"{width} per batch stage" in system
 
 
 def test_the_limit_is_ten_minutes_and_a_config_overlay_changes_it(tmp_path: Path) -> None:
