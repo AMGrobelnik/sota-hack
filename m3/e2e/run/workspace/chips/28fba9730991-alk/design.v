@@ -1,4 +1,4 @@
-// optimizer: alkaid CSE for constant matvecs; the modules after `chip_28fba9730991` come from alkaid (LGPL-3.0)
+// optimizer: constant matvecs as shared shift-add graphs (solved by alkaid's CMVM); all Verilog here is written by chiplab
 // chipin.space chip lab: generated from chipir/1 design chip_28fba9730991. Do not edit; regenerate.
 module chip_28fba9730991 (
   input wire [159:0] x,
@@ -36,7 +36,7 @@ module chip_28fba9730991 (
   wire [4:0] i_x_29 = x[149:145];
   wire [4:0] i_x_30 = x[154:150];
   wire [4:0] i_x_31 = x[159:155];
-  // matvec conv: alkaid CSE shift-add network (28 of 28 rows)
+  // matvec conv: shared shift-add network (28 of 28 rows)
   wire [159:0] mvi_conv = {i_x_31, i_x_30, i_x_29, i_x_28, i_x_27, i_x_26, i_x_25, i_x_24, i_x_23, i_x_22, i_x_21, i_x_20, i_x_19, i_x_18, i_x_17, i_x_16, i_x_15, i_x_14, i_x_13, i_x_12, i_x_11, i_x_10, i_x_9, i_x_8, i_x_7, i_x_6, i_x_5, i_x_4, i_x_3, i_x_2, i_x_1, i_x_0};
   wire [230:0] mvo_conv;
   chip_28fba9730991_mv_conv u_chip_28fba9730991_mv_conv (.model_inp(mvi_conv), .model_out(mvo_conv));
@@ -184,7 +184,7 @@ module chip_28fba9730991 (
   wire [4:0] n_pool_3_t27 = ($signed({{2{1'b0}}, n_relu_26}) > $signed(n_pool_3_t26)) ? {{2{1'b0}}, n_relu_26} : n_pool_3_t26;
   wire [4:0] n_pool_3_t28 = ($signed({{2{1'b0}}, n_relu_27}) > $signed(n_pool_3_t27)) ? {{2{1'b0}}, n_relu_27} : n_pool_3_t27;
   wire [2:0] n_pool_3 = n_pool_3_t28[2:0];
-  // matvec score: alkaid CSE shift-add network (1 of 1 rows)
+  // matvec score: shared shift-add network (1 of 1 rows)
   wire [10:0] mvi_score = {n_pool_3, n_pool_2, n_pool_1, n_pool_0};
   wire [6:0] mvo_score;
   chip_28fba9730991_mv_score u_chip_28fba9730991_mv_score (.model_inp(mvi_score), .model_out(mvo_score));
@@ -194,454 +194,342 @@ module chip_28fba9730991 (
   assign y = n_dec_0;
 endmodule
 
+// constant matvec as a shared shift-add graph (graph solved by alkaid's CMVM, Verilog by chiplab)
 module chip_28fba9730991_mv_conv (
-    input [159:0] model_inp,
-    output [230:0] model_out
+  input wire [159:0] model_inp,
+  output wire [230:0] model_out
 );
-
-    // verilator lint_off UNUSEDSIGNAL
-    // Explicit quantization operation will drop bits if exists
-
-    wire [4:0] v0; assign v0[4:0] = model_inp[9:5];
-    wire [4:0] v1; assign v1[4:0] = model_inp[84:80];
-    wire [4:0] v2; assign v2[4:0] = model_inp[89:85];
-    wire [5:0] v3; chipin_alk_shift_adder #(5,5,0,0,6,0,0,1) op_3 (v1[4:0],v2[4:0],v3[5:0]);
-    wire [4:0] v4; assign v4[4:0] = model_inp[154:150];
-    wire [4:0] v5; assign v5[4:0] = model_inp[4:0];
-    wire [4:0] v6; assign v6[4:0] = model_inp[74:70];
-    wire [4:0] v7; assign v7[4:0] = model_inp[79:75];
-    wire [4:0] v8; assign v8[4:0] = model_inp[94:90];
-    wire [4:0] v9; assign v9[4:0] = model_inp[99:95];
-    wire [5:0] v10; chipin_alk_shift_adder #(5,5,0,0,6,0,0,1) op_10 (v8[4:0],v9[4:0],v10[5:0]);
-    wire [4:0] v11; assign v11[4:0] = model_inp[104:100];
-    wire [4:0] v12; assign v12[4:0] = model_inp[109:105];
-    wire [5:0] v13; chipin_alk_shift_adder #(5,5,0,0,6,0,0,1) op_13 (v11[4:0],v12[4:0],v13[5:0]);
-    wire [4:0] v14; assign v14[4:0] = model_inp[114:110];
-    wire [4:0] v15; assign v15[4:0] = model_inp[119:115];
-    wire [5:0] v16; chipin_alk_shift_adder #(5,5,0,0,6,0,0,1) op_16 (v14[4:0],v15[4:0],v16[5:0]);
-    wire [4:0] v17; assign v17[4:0] = model_inp[124:120];
-    wire [4:0] v18; assign v18[4:0] = model_inp[129:125];
-    wire [5:0] v19; chipin_alk_shift_adder #(5,5,0,0,6,0,0,1) op_19 (v17[4:0],v18[4:0],v19[5:0]);
-    wire [4:0] v20; assign v20[4:0] = model_inp[134:130];
-    wire [4:0] v21; assign v21[4:0] = model_inp[139:135];
-    wire [5:0] v22; chipin_alk_shift_adder #(5,5,0,0,6,0,0,1) op_22 (v20[4:0],v21[4:0],v22[5:0]);
-    wire [4:0] v23; assign v23[4:0] = model_inp[144:140];
-    wire [4:0] v24; assign v24[4:0] = model_inp[149:145];
-    wire [5:0] v25; chipin_alk_shift_adder #(5,5,0,0,6,0,0,1) op_25 (v23[4:0],v24[4:0],v25[5:0]);
-    wire [6:0] v26; chipin_alk_shift_adder #(5,6,0,1,7,0,0,0) op_26 (v6[4:0],v25[5:0],v26[6:0]);
-    wire [7:0] v27; chipin_alk_shift_adder #(7,5,1,0,8,0,0,0) op_27 (v26[6:0],5'b10011,v27[7:0]);
-    wire [6:0] v28; chipin_alk_shift_adder #(5,6,0,1,7,0,0,0) op_28 (v4[4:0],v25[5:0],v28[6:0]);
-    wire [6:0] v29; chipin_alk_shift_adder #(5,7,0,1,7,0,0,1) op_29 (v7[4:0],v28[6:0],v29[6:0]);
-    wire [4:0] v30; assign v30[4:0] = model_inp[159:155];
-    wire [7:0] v31; chipin_alk_ternary_adder #(5,0,1,0,5,0,1,0,7,1,0,0,8,0) op_31 (v30[4:0],v6[4:0],v29[6:0],v31[7:0]);
-    wire [8:0] v32; chipin_alk_shift_adder #(8,1,1,0,9,0,4,1) op_32 (v31[7:0],1'b1,v32[8:0]);
-    wire [4:0] v33; assign v33[4:0] = model_inp[19:15];
-    wire [6:0] v34; chipin_alk_ternary_adder #(5,0,1,0,6,1,1,0,5,0,0,0,7,0) op_34 (v8[4:0],v3[5:0],v33[4:0],v34[6:0]);
-    wire [7:0] v35; chipin_alk_ternary_adder #(5,0,0,0,5,0,1,0,7,1,0,0,8,0) op_35 (v0[4:0],v5[4:0],v34[6:0],v35[7:0]);
-    wire [7:0] v36; chipin_alk_shift_adder #(8,3,1,0,8,0,0,0) op_36 (v35[7:0],3'b111,v36[7:0]);
-    wire [5:0] v37; chipin_alk_shift_adder #(5,5,0,0,6,0,0,0) op_37 (v5[4:0],v33[4:0],v37[5:0]);
-    wire [7:0] v38; chipin_alk_ternary_adder #(6,1,0,0,6,1,0,0,6,0,0,0,8,0) op_38 (v10[5:0],v3[5:0],v37[5:0],v38[7:0]);
-    wire [4:0] v39; assign v39[4:0] = model_inp[29:25];
-    wire [6:0] v40; chipin_alk_ternary_adder #(5,0,1,0,6,1,1,0,5,0,0,0,7,0) op_40 (v11[4:0],v10[5:0],v39[4:0],v40[6:0]);
-    wire [4:0] v41; assign v41[4:0] = model_inp[39:35];
-    wire [6:0] v42; chipin_alk_ternary_adder #(5,0,1,0,6,1,1,0,5,0,0,0,7,0) op_42 (v14[4:0],v13[5:0],v41[4:0],v42[6:0]);
-    wire [4:0] v43; assign v43[4:0] = model_inp[49:45];
-    wire [6:0] v44; chipin_alk_ternary_adder #(5,0,1,0,6,1,1,0,5,0,0,0,7,0) op_44 (v17[4:0],v16[5:0],v43[4:0],v44[6:0]);
-    wire [4:0] v45; assign v45[4:0] = model_inp[59:55];
-    wire [6:0] v46; chipin_alk_ternary_adder #(5,0,1,0,6,1,1,0,5,0,0,0,7,0) op_46 (v20[4:0],v19[5:0],v45[4:0],v46[6:0]);
-    wire [4:0] v47; assign v47[4:0] = model_inp[69:65];
-    wire [6:0] v48; chipin_alk_ternary_adder #(5,0,1,0,6,1,1,0,5,0,0,0,7,0) op_48 (v23[4:0],v22[5:0],v47[4:0],v48[6:0]);
-    wire [4:0] v49; assign v49[4:0] = model_inp[14:10];
-    wire [6:0] v50; chipin_alk_shift_adder #(5,6,0,1,7,0,0,0) op_50 (v49[4:0],v3[5:0],v50[6:0]);
-    wire [7:0] v51; chipin_alk_shift_adder #(7,5,1,0,8,0,0,0) op_51 (v50[6:0],5'b10011,v51[7:0]);
-    wire [7:0] v52; chipin_alk_ternary_adder #(5,0,1,0,5,0,1,0,7,1,0,0,8,0) op_52 (v9[4:0],v49[4:0],v34[6:0],v52[7:0]);
-    wire [8:0] v53; chipin_alk_shift_adder #(8,1,1,0,9,0,4,1) op_53 (v52[7:0],1'b1,v53[8:0]);
-    wire [5:0] v54; chipin_alk_shift_adder #(5,5,0,0,6,0,0,0) op_54 (v49[4:0],v39[4:0],v54[5:0]);
-    wire [7:0] v55; chipin_alk_ternary_adder #(6,1,0,0,6,1,0,0,6,0,0,0,8,0) op_55 (v13[5:0],v10[5:0],v54[5:0],v55[7:0]);
-    wire [7:0] v56; chipin_alk_ternary_adder #(5,0,0,0,5,0,1,0,7,1,0,0,8,0) op_56 (v33[4:0],v49[4:0],v40[6:0],v56[7:0]);
-    wire [7:0] v57; chipin_alk_shift_adder #(8,3,1,0,8,0,0,0) op_57 (v56[7:0],3'b111,v57[7:0]);
-    wire [4:0] v58; assign v58[4:0] = model_inp[24:20];
-    wire [6:0] v59; chipin_alk_shift_adder #(5,6,0,1,7,0,0,0) op_59 (v58[4:0],v10[5:0],v59[6:0]);
-    wire [7:0] v60; chipin_alk_shift_adder #(7,5,1,0,8,0,0,0) op_60 (v59[6:0],5'b10011,v60[7:0]);
-    wire [7:0] v61; chipin_alk_ternary_adder #(5,0,1,0,5,0,1,0,7,1,0,0,8,0) op_61 (v12[4:0],v58[4:0],v40[6:0],v61[7:0]);
-    wire [8:0] v62; chipin_alk_shift_adder #(8,1,1,0,9,0,4,1) op_62 (v61[7:0],1'b1,v62[8:0]);
-    wire [5:0] v63; chipin_alk_shift_adder #(5,5,0,0,6,0,0,0) op_63 (v58[4:0],v41[4:0],v63[5:0]);
-    wire [7:0] v64; chipin_alk_ternary_adder #(6,1,0,0,6,1,0,0,6,0,0,0,8,0) op_64 (v16[5:0],v13[5:0],v63[5:0],v64[7:0]);
-    wire [7:0] v65; chipin_alk_ternary_adder #(5,0,0,0,5,0,1,0,7,1,0,0,8,0) op_65 (v39[4:0],v58[4:0],v42[6:0],v65[7:0]);
-    wire [7:0] v66; chipin_alk_shift_adder #(8,3,1,0,8,0,0,0) op_66 (v65[7:0],3'b111,v66[7:0]);
-    wire [4:0] v67; assign v67[4:0] = model_inp[34:30];
-    wire [6:0] v68; chipin_alk_shift_adder #(5,6,0,1,7,0,0,0) op_68 (v67[4:0],v13[5:0],v68[6:0]);
-    wire [7:0] v69; chipin_alk_shift_adder #(7,5,1,0,8,0,0,0) op_69 (v68[6:0],5'b10011,v69[7:0]);
-    wire [7:0] v70; chipin_alk_ternary_adder #(5,0,1,0,5,0,1,0,7,1,0,0,8,0) op_70 (v15[4:0],v67[4:0],v42[6:0],v70[7:0]);
-    wire [8:0] v71; chipin_alk_shift_adder #(8,1,1,0,9,0,4,1) op_71 (v70[7:0],1'b1,v71[8:0]);
-    wire [5:0] v72; chipin_alk_shift_adder #(5,5,0,0,6,0,0,0) op_72 (v67[4:0],v43[4:0],v72[5:0]);
-    wire [7:0] v73; chipin_alk_ternary_adder #(6,1,0,0,6,1,0,0,6,0,0,0,8,0) op_73 (v19[5:0],v16[5:0],v72[5:0],v73[7:0]);
-    wire [7:0] v74; chipin_alk_ternary_adder #(5,0,0,0,5,0,1,0,7,1,0,0,8,0) op_74 (v41[4:0],v67[4:0],v44[6:0],v74[7:0]);
-    wire [7:0] v75; chipin_alk_shift_adder #(8,3,1,0,8,0,0,0) op_75 (v74[7:0],3'b111,v75[7:0]);
-    wire [4:0] v76; assign v76[4:0] = model_inp[44:40];
-    wire [6:0] v77; chipin_alk_shift_adder #(5,6,0,1,7,0,0,0) op_77 (v76[4:0],v16[5:0],v77[6:0]);
-    wire [7:0] v78; chipin_alk_shift_adder #(7,5,1,0,8,0,0,0) op_78 (v77[6:0],5'b10011,v78[7:0]);
-    wire [7:0] v79; chipin_alk_ternary_adder #(5,0,1,0,5,0,1,0,7,1,0,0,8,0) op_79 (v18[4:0],v76[4:0],v44[6:0],v79[7:0]);
-    wire [8:0] v80; chipin_alk_shift_adder #(8,1,1,0,9,0,4,1) op_80 (v79[7:0],1'b1,v80[8:0]);
-    wire [5:0] v81; chipin_alk_shift_adder #(5,5,0,0,6,0,0,0) op_81 (v76[4:0],v45[4:0],v81[5:0]);
-    wire [7:0] v82; chipin_alk_ternary_adder #(6,1,0,0,6,1,0,0,6,0,0,0,8,0) op_82 (v22[5:0],v19[5:0],v81[5:0],v82[7:0]);
-    wire [7:0] v83; chipin_alk_ternary_adder #(5,0,0,0,5,0,1,0,7,1,0,0,8,0) op_83 (v43[4:0],v76[4:0],v46[6:0],v83[7:0]);
-    wire [7:0] v84; chipin_alk_shift_adder #(8,3,1,0,8,0,0,0) op_84 (v83[7:0],3'b111,v84[7:0]);
-    wire [4:0] v85; assign v85[4:0] = model_inp[54:50];
-    wire [6:0] v86; chipin_alk_shift_adder #(5,6,0,1,7,0,0,0) op_86 (v85[4:0],v19[5:0],v86[6:0]);
-    wire [7:0] v87; chipin_alk_shift_adder #(7,5,1,0,8,0,0,0) op_87 (v86[6:0],5'b10011,v87[7:0]);
-    wire [7:0] v88; chipin_alk_ternary_adder #(5,0,1,0,5,0,1,0,7,1,0,0,8,0) op_88 (v21[4:0],v85[4:0],v46[6:0],v88[7:0]);
-    wire [8:0] v89; chipin_alk_shift_adder #(8,1,1,0,9,0,4,1) op_89 (v88[7:0],1'b1,v89[8:0]);
-    wire [5:0] v90; chipin_alk_shift_adder #(5,5,0,0,6,0,0,0) op_90 (v85[4:0],v47[4:0],v90[5:0]);
-    wire [7:0] v91; chipin_alk_ternary_adder #(6,1,0,0,6,1,0,0,6,0,0,0,8,0) op_91 (v25[5:0],v22[5:0],v90[5:0],v91[7:0]);
-    wire [7:0] v92; chipin_alk_ternary_adder #(5,0,0,0,5,0,1,0,7,1,0,0,8,0) op_92 (v45[4:0],v85[4:0],v48[6:0],v92[7:0]);
-    wire [7:0] v93; chipin_alk_shift_adder #(8,3,1,0,8,0,0,0) op_93 (v92[7:0],3'b111,v93[7:0]);
-    wire [4:0] v94; assign v94[4:0] = model_inp[64:60];
-    wire [6:0] v95; chipin_alk_shift_adder #(5,6,0,1,7,0,0,0) op_95 (v94[4:0],v22[5:0],v95[6:0]);
-    wire [7:0] v96; chipin_alk_shift_adder #(7,5,1,0,8,0,0,0) op_96 (v95[6:0],5'b10011,v96[7:0]);
-    wire [7:0] v97; chipin_alk_ternary_adder #(5,0,1,0,5,0,1,0,7,1,0,0,8,0) op_97 (v24[4:0],v94[4:0],v48[6:0],v97[7:0]);
-    wire [8:0] v98; chipin_alk_shift_adder #(8,1,1,0,9,0,4,1) op_98 (v97[7:0],1'b1,v98[8:0]);
-    wire [5:0] v99; chipin_alk_shift_adder #(5,5,0,0,6,0,0,0) op_99 (v94[4:0],v7[4:0],v99[5:0]);
-    wire [7:0] v100; chipin_alk_ternary_adder #(6,0,0,0,5,0,1,0,7,1,0,0,8,0) op_100 (v99[5:0],v30[4:0],v28[6:0],v100[7:0]);
-    wire [7:0] v101; chipin_alk_ternary_adder #(5,0,0,0,5,0,1,0,7,1,0,0,8,0) op_101 (v47[4:0],v94[4:0],v29[6:0],v101[7:0]);
-    wire [7:0] v102; chipin_alk_shift_adder #(8,3,1,0,8,0,0,0) op_102 (v101[7:0],3'b111,v102[7:0]);
-
-    // verilator lint_on UNUSEDSIGNAL
-
-    assign model_out[7:0] = v38[7:0];
-    assign model_out[15:8] = v55[7:0];
-    assign model_out[23:16] = v64[7:0];
-    assign model_out[31:24] = v73[7:0];
-    assign model_out[39:32] = v82[7:0];
-    assign model_out[47:40] = v91[7:0];
-    assign model_out[55:48] = v100[7:0];
-    assign model_out[64:56] = v53[8:0];
-    assign model_out[73:65] = v62[8:0];
-    assign model_out[82:74] = v71[8:0];
-    assign model_out[91:83] = v80[8:0];
-    assign model_out[100:92] = v89[8:0];
-    assign model_out[109:101] = v98[8:0];
-    assign model_out[118:110] = v32[8:0];
-    assign model_out[126:119] = v51[7:0];
-    assign model_out[134:127] = v60[7:0];
-    assign model_out[142:135] = v69[7:0];
-    assign model_out[150:143] = v78[7:0];
-    assign model_out[158:151] = v87[7:0];
-    assign model_out[166:159] = v96[7:0];
-    assign model_out[174:167] = v27[7:0];
-    assign model_out[182:175] = v36[7:0];
-    assign model_out[190:183] = v57[7:0];
-    assign model_out[198:191] = v66[7:0];
-    assign model_out[206:199] = v75[7:0];
-    assign model_out[214:207] = v84[7:0];
-    assign model_out[222:215] = v93[7:0];
-    assign model_out[230:223] = v102[7:0];
-
+  wire [4:0] v0;
+  assign v0 = model_inp[9:5];
+  wire [4:0] v1;
+  assign v1 = model_inp[84:80];
+  wire [4:0] v2;
+  assign v2 = model_inp[89:85];
+  wire [5:0] v3;
+  wire [7:0] s3 = {{3{1'b0}}, v1} - {{3{1'b0}}, v2};
+  assign v3 = s3[5:0];
+  wire [4:0] v4;
+  assign v4 = model_inp[154:150];
+  wire [4:0] v5;
+  assign v5 = model_inp[4:0];
+  wire [4:0] v6;
+  assign v6 = model_inp[74:70];
+  wire [4:0] v7;
+  assign v7 = model_inp[79:75];
+  wire [4:0] v8;
+  assign v8 = model_inp[94:90];
+  wire [4:0] v9;
+  assign v9 = model_inp[99:95];
+  wire [5:0] v10;
+  wire [7:0] s10 = {{3{1'b0}}, v8} - {{3{1'b0}}, v9};
+  assign v10 = s10[5:0];
+  wire [4:0] v11;
+  assign v11 = model_inp[104:100];
+  wire [4:0] v12;
+  assign v12 = model_inp[109:105];
+  wire [5:0] v13;
+  wire [7:0] s13 = {{3{1'b0}}, v11} - {{3{1'b0}}, v12};
+  assign v13 = s13[5:0];
+  wire [4:0] v14;
+  assign v14 = model_inp[114:110];
+  wire [4:0] v15;
+  assign v15 = model_inp[119:115];
+  wire [5:0] v16;
+  wire [7:0] s16 = {{3{1'b0}}, v14} - {{3{1'b0}}, v15};
+  assign v16 = s16[5:0];
+  wire [4:0] v17;
+  assign v17 = model_inp[124:120];
+  wire [4:0] v18;
+  assign v18 = model_inp[129:125];
+  wire [5:0] v19;
+  wire [7:0] s19 = {{3{1'b0}}, v17} - {{3{1'b0}}, v18};
+  assign v19 = s19[5:0];
+  wire [4:0] v20;
+  assign v20 = model_inp[134:130];
+  wire [4:0] v21;
+  assign v21 = model_inp[139:135];
+  wire [5:0] v22;
+  wire [7:0] s22 = {{3{1'b0}}, v20} - {{3{1'b0}}, v21};
+  assign v22 = s22[5:0];
+  wire [4:0] v23;
+  assign v23 = model_inp[144:140];
+  wire [4:0] v24;
+  assign v24 = model_inp[149:145];
+  wire [5:0] v25;
+  wire [7:0] s25 = {{3{1'b0}}, v23} - {{3{1'b0}}, v24};
+  assign v25 = s25[5:0];
+  wire [6:0] v26;
+  wire [8:0] s26 = {{4{1'b0}}, v6} + {{3{v25[5]}}, v25};
+  assign v26 = s26[6:0];
+  wire [7:0] v27;
+  wire [9:0] s27 = {{3{v26[6]}}, v26} + 10'd19;
+  assign v27 = s27[7:0];
+  wire [6:0] v28;
+  wire [8:0] s28 = {{4{1'b0}}, v4} + {{3{v25[5]}}, v25};
+  assign v28 = s28[6:0];
+  wire [6:0] v29;
+  wire [8:0] s29 = {{4{1'b0}}, v7} - {{2{v28[6]}}, v28};
+  assign v29 = s29[6:0];
+  wire [4:0] v30;
+  assign v30 = model_inp[159:155];
+  wire [7:0] v31;
+  wire [9:0] s31 = 10'd0 - {{5{1'b0}}, v30} - {{5{1'b0}}, v6} + {{3{v29[6]}}, v29};
+  assign v31 = s31[7:0];
+  wire [8:0] v32;
+  wire [10:0] s32 = {{3{v31[7]}}, v31} + 11'd2032;
+  assign v32 = s32[8:0];
+  wire [4:0] v33;
+  assign v33 = model_inp[19:15];
+  wire [6:0] v34;
+  wire [8:0] s34 = 9'd0 - {{4{1'b0}}, v8} - {{3{v3[5]}}, v3} + {{4{1'b0}}, v33};
+  assign v34 = s34[6:0];
+  wire [7:0] v35;
+  wire [9:0] s35 = {{5{1'b0}}, v0} - {{5{1'b0}}, v5} + {{3{v34[6]}}, v34};
+  assign v35 = s35[7:0];
+  wire [7:0] v36;
+  wire [9:0] s36 = {{2{v35[7]}}, v35} + 10'd7;
+  assign v36 = s36[7:0];
+  wire [5:0] v37;
+  wire [7:0] s37 = {{3{1'b0}}, v5} + {{3{1'b0}}, v33};
+  assign v37 = s37[5:0];
+  wire [7:0] v38;
+  wire [9:0] s38 = {{4{v10[5]}}, v10} + {{4{v3[5]}}, v3} + {{4{1'b0}}, v37};
+  assign v38 = s38[7:0];
+  wire [4:0] v39;
+  assign v39 = model_inp[29:25];
+  wire [6:0] v40;
+  wire [8:0] s40 = 9'd0 - {{4{1'b0}}, v11} - {{3{v10[5]}}, v10} + {{4{1'b0}}, v39};
+  assign v40 = s40[6:0];
+  wire [4:0] v41;
+  assign v41 = model_inp[39:35];
+  wire [6:0] v42;
+  wire [8:0] s42 = 9'd0 - {{4{1'b0}}, v14} - {{3{v13[5]}}, v13} + {{4{1'b0}}, v41};
+  assign v42 = s42[6:0];
+  wire [4:0] v43;
+  assign v43 = model_inp[49:45];
+  wire [6:0] v44;
+  wire [8:0] s44 = 9'd0 - {{4{1'b0}}, v17} - {{3{v16[5]}}, v16} + {{4{1'b0}}, v43};
+  assign v44 = s44[6:0];
+  wire [4:0] v45;
+  assign v45 = model_inp[59:55];
+  wire [6:0] v46;
+  wire [8:0] s46 = 9'd0 - {{4{1'b0}}, v20} - {{3{v19[5]}}, v19} + {{4{1'b0}}, v45};
+  assign v46 = s46[6:0];
+  wire [4:0] v47;
+  assign v47 = model_inp[69:65];
+  wire [6:0] v48;
+  wire [8:0] s48 = 9'd0 - {{4{1'b0}}, v23} - {{3{v22[5]}}, v22} + {{4{1'b0}}, v47};
+  assign v48 = s48[6:0];
+  wire [4:0] v49;
+  assign v49 = model_inp[14:10];
+  wire [6:0] v50;
+  wire [8:0] s50 = {{4{1'b0}}, v49} + {{3{v3[5]}}, v3};
+  assign v50 = s50[6:0];
+  wire [7:0] v51;
+  wire [9:0] s51 = {{3{v50[6]}}, v50} + 10'd19;
+  assign v51 = s51[7:0];
+  wire [7:0] v52;
+  wire [9:0] s52 = 10'd0 - {{5{1'b0}}, v9} - {{5{1'b0}}, v49} + {{3{v34[6]}}, v34};
+  assign v52 = s52[7:0];
+  wire [8:0] v53;
+  wire [10:0] s53 = {{3{v52[7]}}, v52} + 11'd2032;
+  assign v53 = s53[8:0];
+  wire [5:0] v54;
+  wire [7:0] s54 = {{3{1'b0}}, v49} + {{3{1'b0}}, v39};
+  assign v54 = s54[5:0];
+  wire [7:0] v55;
+  wire [9:0] s55 = {{4{v13[5]}}, v13} + {{4{v10[5]}}, v10} + {{4{1'b0}}, v54};
+  assign v55 = s55[7:0];
+  wire [7:0] v56;
+  wire [9:0] s56 = {{5{1'b0}}, v33} - {{5{1'b0}}, v49} + {{3{v40[6]}}, v40};
+  assign v56 = s56[7:0];
+  wire [7:0] v57;
+  wire [9:0] s57 = {{2{v56[7]}}, v56} + 10'd7;
+  assign v57 = s57[7:0];
+  wire [4:0] v58;
+  assign v58 = model_inp[24:20];
+  wire [6:0] v59;
+  wire [8:0] s59 = {{4{1'b0}}, v58} + {{3{v10[5]}}, v10};
+  assign v59 = s59[6:0];
+  wire [7:0] v60;
+  wire [9:0] s60 = {{3{v59[6]}}, v59} + 10'd19;
+  assign v60 = s60[7:0];
+  wire [7:0] v61;
+  wire [9:0] s61 = 10'd0 - {{5{1'b0}}, v12} - {{5{1'b0}}, v58} + {{3{v40[6]}}, v40};
+  assign v61 = s61[7:0];
+  wire [8:0] v62;
+  wire [10:0] s62 = {{3{v61[7]}}, v61} + 11'd2032;
+  assign v62 = s62[8:0];
+  wire [5:0] v63;
+  wire [7:0] s63 = {{3{1'b0}}, v58} + {{3{1'b0}}, v41};
+  assign v63 = s63[5:0];
+  wire [7:0] v64;
+  wire [9:0] s64 = {{4{v16[5]}}, v16} + {{4{v13[5]}}, v13} + {{4{1'b0}}, v63};
+  assign v64 = s64[7:0];
+  wire [7:0] v65;
+  wire [9:0] s65 = {{5{1'b0}}, v39} - {{5{1'b0}}, v58} + {{3{v42[6]}}, v42};
+  assign v65 = s65[7:0];
+  wire [7:0] v66;
+  wire [9:0] s66 = {{2{v65[7]}}, v65} + 10'd7;
+  assign v66 = s66[7:0];
+  wire [4:0] v67;
+  assign v67 = model_inp[34:30];
+  wire [6:0] v68;
+  wire [8:0] s68 = {{4{1'b0}}, v67} + {{3{v13[5]}}, v13};
+  assign v68 = s68[6:0];
+  wire [7:0] v69;
+  wire [9:0] s69 = {{3{v68[6]}}, v68} + 10'd19;
+  assign v69 = s69[7:0];
+  wire [7:0] v70;
+  wire [9:0] s70 = 10'd0 - {{5{1'b0}}, v15} - {{5{1'b0}}, v67} + {{3{v42[6]}}, v42};
+  assign v70 = s70[7:0];
+  wire [8:0] v71;
+  wire [10:0] s71 = {{3{v70[7]}}, v70} + 11'd2032;
+  assign v71 = s71[8:0];
+  wire [5:0] v72;
+  wire [7:0] s72 = {{3{1'b0}}, v67} + {{3{1'b0}}, v43};
+  assign v72 = s72[5:0];
+  wire [7:0] v73;
+  wire [9:0] s73 = {{4{v19[5]}}, v19} + {{4{v16[5]}}, v16} + {{4{1'b0}}, v72};
+  assign v73 = s73[7:0];
+  wire [7:0] v74;
+  wire [9:0] s74 = {{5{1'b0}}, v41} - {{5{1'b0}}, v67} + {{3{v44[6]}}, v44};
+  assign v74 = s74[7:0];
+  wire [7:0] v75;
+  wire [9:0] s75 = {{2{v74[7]}}, v74} + 10'd7;
+  assign v75 = s75[7:0];
+  wire [4:0] v76;
+  assign v76 = model_inp[44:40];
+  wire [6:0] v77;
+  wire [8:0] s77 = {{4{1'b0}}, v76} + {{3{v16[5]}}, v16};
+  assign v77 = s77[6:0];
+  wire [7:0] v78;
+  wire [9:0] s78 = {{3{v77[6]}}, v77} + 10'd19;
+  assign v78 = s78[7:0];
+  wire [7:0] v79;
+  wire [9:0] s79 = 10'd0 - {{5{1'b0}}, v18} - {{5{1'b0}}, v76} + {{3{v44[6]}}, v44};
+  assign v79 = s79[7:0];
+  wire [8:0] v80;
+  wire [10:0] s80 = {{3{v79[7]}}, v79} + 11'd2032;
+  assign v80 = s80[8:0];
+  wire [5:0] v81;
+  wire [7:0] s81 = {{3{1'b0}}, v76} + {{3{1'b0}}, v45};
+  assign v81 = s81[5:0];
+  wire [7:0] v82;
+  wire [9:0] s82 = {{4{v22[5]}}, v22} + {{4{v19[5]}}, v19} + {{4{1'b0}}, v81};
+  assign v82 = s82[7:0];
+  wire [7:0] v83;
+  wire [9:0] s83 = {{5{1'b0}}, v43} - {{5{1'b0}}, v76} + {{3{v46[6]}}, v46};
+  assign v83 = s83[7:0];
+  wire [7:0] v84;
+  wire [9:0] s84 = {{2{v83[7]}}, v83} + 10'd7;
+  assign v84 = s84[7:0];
+  wire [4:0] v85;
+  assign v85 = model_inp[54:50];
+  wire [6:0] v86;
+  wire [8:0] s86 = {{4{1'b0}}, v85} + {{3{v19[5]}}, v19};
+  assign v86 = s86[6:0];
+  wire [7:0] v87;
+  wire [9:0] s87 = {{3{v86[6]}}, v86} + 10'd19;
+  assign v87 = s87[7:0];
+  wire [7:0] v88;
+  wire [9:0] s88 = 10'd0 - {{5{1'b0}}, v21} - {{5{1'b0}}, v85} + {{3{v46[6]}}, v46};
+  assign v88 = s88[7:0];
+  wire [8:0] v89;
+  wire [10:0] s89 = {{3{v88[7]}}, v88} + 11'd2032;
+  assign v89 = s89[8:0];
+  wire [5:0] v90;
+  wire [7:0] s90 = {{3{1'b0}}, v85} + {{3{1'b0}}, v47};
+  assign v90 = s90[5:0];
+  wire [7:0] v91;
+  wire [9:0] s91 = {{4{v25[5]}}, v25} + {{4{v22[5]}}, v22} + {{4{1'b0}}, v90};
+  assign v91 = s91[7:0];
+  wire [7:0] v92;
+  wire [9:0] s92 = {{5{1'b0}}, v45} - {{5{1'b0}}, v85} + {{3{v48[6]}}, v48};
+  assign v92 = s92[7:0];
+  wire [7:0] v93;
+  wire [9:0] s93 = {{2{v92[7]}}, v92} + 10'd7;
+  assign v93 = s93[7:0];
+  wire [4:0] v94;
+  assign v94 = model_inp[64:60];
+  wire [6:0] v95;
+  wire [8:0] s95 = {{4{1'b0}}, v94} + {{3{v22[5]}}, v22};
+  assign v95 = s95[6:0];
+  wire [7:0] v96;
+  wire [9:0] s96 = {{3{v95[6]}}, v95} + 10'd19;
+  assign v96 = s96[7:0];
+  wire [7:0] v97;
+  wire [9:0] s97 = 10'd0 - {{5{1'b0}}, v24} - {{5{1'b0}}, v94} + {{3{v48[6]}}, v48};
+  assign v97 = s97[7:0];
+  wire [8:0] v98;
+  wire [10:0] s98 = {{3{v97[7]}}, v97} + 11'd2032;
+  assign v98 = s98[8:0];
+  wire [5:0] v99;
+  wire [7:0] s99 = {{3{1'b0}}, v94} + {{3{1'b0}}, v7};
+  assign v99 = s99[5:0];
+  wire [7:0] v100;
+  wire [9:0] s100 = {{4{1'b0}}, v99} - {{5{1'b0}}, v30} + {{3{v28[6]}}, v28};
+  assign v100 = s100[7:0];
+  wire [7:0] v101;
+  wire [9:0] s101 = {{5{1'b0}}, v47} - {{5{1'b0}}, v94} + {{3{v29[6]}}, v29};
+  assign v101 = s101[7:0];
+  wire [7:0] v102;
+  wire [9:0] s102 = {{2{v101[7]}}, v101} + 10'd7;
+  assign v102 = s102[7:0];
+  assign model_out[7:0] = v38;
+  assign model_out[15:8] = v55;
+  assign model_out[23:16] = v64;
+  assign model_out[31:24] = v73;
+  assign model_out[39:32] = v82;
+  assign model_out[47:40] = v91;
+  assign model_out[55:48] = v100;
+  assign model_out[64:56] = v53;
+  assign model_out[73:65] = v62;
+  assign model_out[82:74] = v71;
+  assign model_out[91:83] = v80;
+  assign model_out[100:92] = v89;
+  assign model_out[109:101] = v98;
+  assign model_out[118:110] = v32;
+  assign model_out[126:119] = v51;
+  assign model_out[134:127] = v60;
+  assign model_out[142:135] = v69;
+  assign model_out[150:143] = v78;
+  assign model_out[158:151] = v87;
+  assign model_out[166:159] = v96;
+  assign model_out[174:167] = v27;
+  assign model_out[182:175] = v36;
+  assign model_out[190:183] = v57;
+  assign model_out[198:191] = v66;
+  assign model_out[206:199] = v75;
+  assign model_out[214:207] = v84;
+  assign model_out[222:215] = v93;
+  assign model_out[230:223] = v102;
 endmodule
 
+// constant matvec as a shared shift-add graph (graph solved by alkaid's CMVM, Verilog by chiplab)
 module chip_28fba9730991_mv_score (
-    input [10:0] model_inp,
-    output [6:0] model_out
+  input wire [10:0] model_inp,
+  output wire [6:0] model_out
 );
-
-    // verilator lint_off UNUSEDSIGNAL
-    // Explicit quantization operation will drop bits if exists
-
-    wire [1:0] v0; assign v0[1:0] = model_inp[4:3];
-    wire [2:0] v1; assign v1[2:0] = model_inp[2:0];
-    wire [2:0] v2; assign v2[2:0] = model_inp[7:5];
-    wire [5:0] v3; chipin_alk_shift_adder #(3,2,0,0,6,0,-2,1) op_3 (v2[2:0],v0[1:0],v3[5:0]);
-    wire [2:0] v4; assign v4[2:0] = model_inp[10:8];
-    wire [3:0] v5; chipin_alk_shift_adder #(3,3,0,0,4,0,0,1) op_5 (v1[2:0],v4[2:0],v5[3:0]);
-    wire [6:0] v6; chipin_alk_ternary_adder #(6,1,0,0,4,1,0,2,4,1,1,0,7,0) op_6 (v3[5:0],v5[3:0],v5[3:0],v6[6:0]);
-    wire [6:0] v7; chipin_alk_shift_adder #(7,1,1,0,7,0,3,1) op_7 (v6[6:0],1'b1,v7[6:0]);
-
-    // verilator lint_on UNUSEDSIGNAL
-
-    assign model_out[6:0] = v7[6:0];
-
+  wire [1:0] v0;
+  assign v0 = model_inp[4:3];
+  wire [2:0] v1;
+  assign v1 = model_inp[2:0];
+  wire [2:0] v2;
+  assign v2 = model_inp[7:5];
+  wire [5:0] v3;
+  wire [7:0] s3 = ({{5{1'b0}}, v2} << 2) - {{6{1'b0}}, v0};
+  assign v3 = s3[5:0];
+  wire [2:0] v4;
+  assign v4 = model_inp[10:8];
+  wire [3:0] v5;
+  wire [5:0] s5 = {{3{1'b0}}, v1} - {{3{1'b0}}, v4};
+  assign v5 = s5[3:0];
+  wire [6:0] v6;
+  wire [8:0] s6 = {{3{v3[5]}}, v3} + ({{5{v5[3]}}, v5} << 2) - {{5{v5[3]}}, v5};
+  assign v6 = s6[6:0];
+  wire [6:0] v7;
+  wire [8:0] s7 = {{2{v6[6]}}, v6} + 9'd504;
+  assign v7 = s7[6:0];
+  assign model_out[6:0] = v7;
 endmodule
-
-
-
-
-module chipin_alk_shift_adder #(
-    parameter BW_INPUT0 = 32,
-    parameter BW_INPUT1 = 32,
-    parameter SIGNED0 = 0,
-    parameter SIGNED1 = 0,
-    parameter BW_OUT = 32,
-    parameter DROP_LSBS = 0,
-    parameter SHIFT1 = 0,
-    parameter IS_SUB = 0
-) (
-    input [BW_INPUT0-1:0] in0,
-    input [BW_INPUT1-1:0] in1,
-    output [BW_OUT-1:0] out
-);
-
-  localparam IN0_NEED_BITS = (SHIFT1 < 0) ? BW_INPUT0 - SHIFT1 : BW_INPUT0;
-  localparam IN1_NEED_BITS = (SHIFT1 > 0) ? BW_INPUT1 + SHIFT1 : BW_INPUT1;
-  localparam EXTRA_PAD = (SIGNED0 != SIGNED1) ? IS_SUB + 1 : IS_SUB + 0;
-  localparam BW_ADD = (IN0_NEED_BITS > IN1_NEED_BITS) ? IN0_NEED_BITS + EXTRA_PAD + 1 : IN1_NEED_BITS + EXTRA_PAD + 1;
-  localparam IN0_PAD_LEFT = (SHIFT1 < 0) ? BW_ADD - BW_INPUT0 + SHIFT1 : BW_ADD - BW_INPUT0;
-  localparam IN0_PAD_RIGHT = (SHIFT1 < 0) ? -SHIFT1 : 0;
-  localparam IN1_PAD_LEFT = (SHIFT1 > 0) ? BW_ADD - BW_INPUT1 - SHIFT1 : BW_ADD - BW_INPUT1;
-  localparam IN1_PAD_RIGHT = (SHIFT1 > 0) ? SHIFT1 : 0;
-
-  localparam ABS_SHIFT = (SHIFT1 > 0) ? SHIFT1 : (SHIFT1 < 0) ? -SHIFT1 : 0;
-
-  // verilator lint_off UNUSEDSIGNAL
-  wire [BW_ADD-1:0] in0_ext;
-  wire [BW_ADD-1:0] in1_ext;
-  wire [BW_ADD-1:0] accum;
-  // verilator lint_on UNUSEDSIGNAL
-
-  generate
-    if (SIGNED0 == 1) begin : in0_is_signed
-      assign in0_ext = {{IN0_PAD_LEFT{in0[BW_INPUT0-1]}}, in0, {IN0_PAD_RIGHT{1'b0}}};
-    end else begin : in0_is_unsigned
-      assign in0_ext = {{IN0_PAD_LEFT{1'b0}}, in0, {IN0_PAD_RIGHT{1'b0}}};
-    end
-  endgenerate
-
-  generate
-    if (SIGNED1 == 1) begin : in1_is_signed
-      assign in1_ext = {{IN1_PAD_LEFT{in1[BW_INPUT1-1]}}, in1, {IN1_PAD_RIGHT{1'b0}}};
-    end else begin : in1_is_unsigned
-      assign in1_ext = {{IN1_PAD_LEFT{1'b0}}, in1, {IN1_PAD_RIGHT{1'b0}}};
-    end
-  endgenerate
-
-  generate
-    if (SHIFT1 == 0) begin : no_shift
-      if (IS_SUB == 1) begin : is_sub
-        assign accum = in0_ext - in1_ext;
-      end else begin : is_add
-        assign accum = in0_ext + in1_ext;
-      end
-    end else if (SHIFT1 > 0) begin : shift_pos
-      // copy lower SHIFT1 bits
-      assign accum[ABS_SHIFT-1:0] = in0_ext[ABS_SHIFT-1:0];
-      // upper bits
-      if (ABS_SHIFT >= BW_INPUT0 && SIGNED0 == 0) begin : disjoint
-        // in0 unsigned, disjoint
-        if (IS_SUB == 0) begin : is_add
-          assign accum[BW_ADD-1:ABS_SHIFT] = in1_ext[BW_ADD-1:ABS_SHIFT];
-        end else begin : is_sub
-          assign accum[BW_ADD-1:ABS_SHIFT] = -in1_ext[BW_ADD-1:ABS_SHIFT];
-        end
-      end else begin : with_add
-        // in0 signed or has overlap
-        if (IS_SUB == 1) begin : is_sub
-          assign accum[BW_ADD-1:ABS_SHIFT] = in0_ext[BW_ADD-1:ABS_SHIFT] - in1_ext[BW_ADD-1:ABS_SHIFT];
-        end else begin : is_add
-          assign accum[BW_ADD-1:ABS_SHIFT] = in0_ext[BW_ADD-1:ABS_SHIFT] + in1_ext[BW_ADD-1:ABS_SHIFT];
-        end
-      end
-    end else begin : shift_neg
-      // lower |SHIFT1| bits
-      if (IS_SUB == 0) begin : lower_add
-        assign accum[ABS_SHIFT-1:0] = in1_ext[ABS_SHIFT-1:0];
-      end else begin : lower_sub
-        assign accum[ABS_SHIFT-1:0] = -in1_ext[ABS_SHIFT-1:0];
-      end
-      // upper bits
-      if (ABS_SHIFT >= BW_INPUT1 && SIGNED1 == 0) begin : disjoint
-        // in1 unsigned, disjoint
-        if (IS_SUB == 0) begin : is_add
-          assign accum[BW_ADD-1:ABS_SHIFT] = in0_ext[BW_ADD-1:ABS_SHIFT];
-        end else begin : is_sub
-          wire [BW_ADD-1-ABS_SHIFT:0] borrow = {{(BW_ADD-1-ABS_SHIFT){1'b0}}, |in1_ext[ABS_SHIFT-1:0]};
-          assign accum[BW_ADD-1:ABS_SHIFT] = in0_ext[BW_ADD-1:ABS_SHIFT] - borrow;
-        end
-      end else begin : with_add
-        // in1 signed or has overlap
-        if (IS_SUB == 0) begin : is_add
-          assign accum[BW_ADD-1:ABS_SHIFT] = in0_ext[BW_ADD-1:ABS_SHIFT] + in1_ext[BW_ADD-1:ABS_SHIFT];
-        end else begin : is_sub
-          wire [BW_ADD-1-ABS_SHIFT:0] borrow = {{(BW_ADD-1-ABS_SHIFT){1'b0}}, |in1_ext[ABS_SHIFT-1:0]};
-          assign accum[BW_ADD-1:ABS_SHIFT] = in0_ext[BW_ADD-1:ABS_SHIFT] - in1_ext[BW_ADD-1:ABS_SHIFT] - borrow;
-        end
-      end
-    end
-  endgenerate
-  assign out = accum[BW_OUT-1+DROP_LSBS:DROP_LSBS];
-
-endmodule
-
-
-
-
-module chipin_alk_ternary_adder #(
-    parameter BW_INPUT0 = 32,
-    parameter SIGNED0 = 0,
-    parameter NEGATE0 = 0,
-    parameter PAD0 = 0,
-    parameter BW_INPUT1 = 32,
-    parameter SIGNED1 = 0,
-    parameter NEGATE1 = 0,
-    parameter PAD1 = 0,
-    parameter BW_INPUT2 = 32,
-    parameter SIGNED2 = 0,
-    parameter NEGATE2 = 0,
-    parameter PAD2 = 0,
-    parameter BW_OUT = 32,
-    parameter DROP_LSBS = 0
-) (
-    input [BW_INPUT0-1:0] in0,
-    input [BW_INPUT1-1:0] in1,
-    input [BW_INPUT2-1:0] in2,
-    output [BW_OUT-1:0] out
-);
-
-  function integer max2;
-    input integer lhs;
-    input integer rhs;
-    begin
-      max2 = (lhs > rhs) ? lhs : rhs;
-    end
-  endfunction
-
-  function integer min2;
-    input integer lhs;
-    input integer rhs;
-    begin
-      min2 = (lhs < rhs) ? lhs : rhs;
-    end
-  endfunction
-
-  function integer select3;
-    input integer sel;
-    input integer val0;
-    input integer val1;
-    input integer val2;
-    begin
-      select3 = (sel == 0) ? val0 : (sel == 1) ? val1 : val2;
-    end
-  endfunction
-
-  localparam OUT_HIGH_ABS = DROP_LSBS + BW_OUT - 1;
-  localparam MIN_PAD = min2(min2(PAD0, PAD1), PAD2);
-  localparam LOW_COUNT = ((PAD0 == MIN_PAD) ? 1 : 0) + ((PAD1 == MIN_PAD) ? 1 : 0) + ((PAD2 == MIN_PAD) ? 1 : 0);
-  localparam LOW_INPUT = (PAD0 == MIN_PAD) ? 0 : (PAD1 == MIN_PAD) ? 1 : 2;
-  localparam LOW_NEGATE = select3(LOW_INPUT, NEGATE0, NEGATE1, NEGATE2);
-  localparam NO_NEXT_PAD = OUT_HIGH_ABS + 2;
-  localparam NEXT_PAD0 = (PAD0 > MIN_PAD) ? PAD0 : NO_NEXT_PAD;
-  localparam NEXT_PAD1 = (PAD1 > MIN_PAD) ? PAD1 : NO_NEXT_PAD;
-  localparam NEXT_PAD2 = (PAD2 > MIN_PAD) ? PAD2 : NO_NEXT_PAD;
-  localparam UPPER_START = min2(min2(NEXT_PAD0, NEXT_PAD1), NEXT_PAD2);
-  localparam LOW_COPY_ABS_LO = max2(DROP_LSBS, MIN_PAD);
-  localparam LOW_COPY_ABS_HI = min2(OUT_HIGH_ABS, UPPER_START - 1);
-  localparam LOWCOPY_ENABLE = (LOW_COUNT == 1) && (LOW_NEGATE == 0) && (UPPER_START != NO_NEXT_PAD) &&
-                              (UPPER_START > DROP_LSBS) && (LOW_COPY_ABS_HI >= LOW_COPY_ABS_LO);
-
-  localparam FULL_MAX_TERM_BW = max2(max2(BW_INPUT0 + PAD0, BW_INPUT1 + PAD1), BW_INPUT2 + PAD2);
-  localparam FULL_BW_ADD = max2(FULL_MAX_TERM_BW + 4, BW_OUT + DROP_LSBS + 1);
-  localparam FULL_LEFT_PAD0 = FULL_BW_ADD - BW_INPUT0 - PAD0;
-  localparam FULL_LEFT_PAD1 = FULL_BW_ADD - BW_INPUT1 - PAD1;
-  localparam FULL_LEFT_PAD2 = FULL_BW_ADD - BW_INPUT2 - PAD2;
-
-  generate
-    if (LOWCOPY_ENABLE) begin : lowcopy
-      localparam LOW_PAD = select3(LOW_INPUT, PAD0, PAD1, PAD2);
-      localparam LOW_OUT_LO = LOW_COPY_ABS_LO - DROP_LSBS;
-      localparam LOW_OUT_HI = LOW_COPY_ABS_HI - DROP_LSBS;
-      localparam ZERO_HI = min2(OUT_HIGH_ABS, LOW_PAD - 1) - DROP_LSBS;
-      localparam SUFFIX_BW_RAW = OUT_HIGH_ABS - UPPER_START + 1;
-      localparam SUFFIX_BW = (SUFFIX_BW_RAW > 0) ? SUFFIX_BW_RAW : 1;
-      localparam SUFFIX_MAX_TERM_BW =
-          max2(max2(max2(BW_INPUT0 + PAD0 - UPPER_START, 1), max2(BW_INPUT1 + PAD1 - UPPER_START, 1)),
-               max2(BW_INPUT2 + PAD2 - UPPER_START, 1));
-      localparam SUFFIX_BW_ADD = max2(SUFFIX_MAX_TERM_BW + 4, SUFFIX_BW + 1);
-      localparam EXT_BW = max2(DROP_LSBS + BW_OUT, UPPER_START + SUFFIX_BW_ADD);
-      localparam LEFT_PAD0 = EXT_BW - BW_INPUT0 - PAD0;
-      localparam LEFT_PAD1 = EXT_BW - BW_INPUT1 - PAD1;
-      localparam LEFT_PAD2 = EXT_BW - BW_INPUT2 - PAD2;
-
-      // verilator lint_off UNUSEDSIGNAL
-      wire [EXT_BW-1:0] in0_ext;
-      wire [EXT_BW-1:0] in1_ext;
-      wire [EXT_BW-1:0] in2_ext;
-
-      if (SIGNED0 == 1) begin : in0_is_signed
-        assign in0_ext = {{LEFT_PAD0{in0[BW_INPUT0-1]}}, in0, {PAD0{1'b0}}};
-      end else begin : in0_is_unsigned
-        assign in0_ext = {{LEFT_PAD0{1'b0}}, in0, {PAD0{1'b0}}};
-      end
-
-      if (SIGNED1 == 1) begin : in1_is_signed
-        assign in1_ext = {{LEFT_PAD1{in1[BW_INPUT1-1]}}, in1, {PAD1{1'b0}}};
-      end else begin : in1_is_unsigned
-        assign in1_ext = {{LEFT_PAD1{1'b0}}, in1, {PAD1{1'b0}}};
-      end
-
-      if (SIGNED2 == 1) begin : in2_is_signed
-        assign in2_ext = {{LEFT_PAD2{in2[BW_INPUT2-1]}}, in2, {PAD2{1'b0}}};
-      end else begin : in2_is_unsigned
-        assign in2_ext = {{LEFT_PAD2{1'b0}}, in2, {PAD2{1'b0}}};
-      end
-
-      wire signed [SUFFIX_BW_ADD-1:0] term0 =
-          (NEGATE0 == 1) ? -$signed(in0_ext[UPPER_START+SUFFIX_BW_ADD-1:UPPER_START])
-                         :  $signed(in0_ext[UPPER_START+SUFFIX_BW_ADD-1:UPPER_START]);
-      wire signed [SUFFIX_BW_ADD-1:0] term1 =
-          (NEGATE1 == 1) ? -$signed(in1_ext[UPPER_START+SUFFIX_BW_ADD-1:UPPER_START])
-                         :  $signed(in1_ext[UPPER_START+SUFFIX_BW_ADD-1:UPPER_START]);
-      wire signed [SUFFIX_BW_ADD-1:0] term2 =
-          (NEGATE2 == 1) ? -$signed(in2_ext[UPPER_START+SUFFIX_BW_ADD-1:UPPER_START])
-                         :  $signed(in2_ext[UPPER_START+SUFFIX_BW_ADD-1:UPPER_START]);
-      wire signed [SUFFIX_BW_ADD-1:0] accum = term0 + term1 + term2;
-      // verilator lint_on UNUSEDSIGNAL
-
-      if (LOW_PAD > DROP_LSBS) begin : zero_low_bits
-        assign out[ZERO_HI:0] = {(ZERO_HI + 1){1'b0}};
-      end
-
-      if (LOW_INPUT == 0) begin : low_from_in0
-        assign out[LOW_OUT_HI:LOW_OUT_LO] = in0_ext[LOW_COPY_ABS_HI:LOW_COPY_ABS_LO];
-      end else if (LOW_INPUT == 1) begin : low_from_in1
-        assign out[LOW_OUT_HI:LOW_OUT_LO] = in1_ext[LOW_COPY_ABS_HI:LOW_COPY_ABS_LO];
-      end else begin : low_from_in2
-        assign out[LOW_OUT_HI:LOW_OUT_LO] = in2_ext[LOW_COPY_ABS_HI:LOW_COPY_ABS_LO];
-      end
-
-      if (UPPER_START <= OUT_HIGH_ABS) begin : add_upper_bits
-        assign out[BW_OUT-1:UPPER_START-DROP_LSBS] = accum[SUFFIX_BW-1:0];
-      end
-    end else begin : full
-      // verilator lint_off UNUSEDSIGNAL
-      wire [FULL_BW_ADD-1:0] in0_ext;
-      wire [FULL_BW_ADD-1:0] in1_ext;
-      wire [FULL_BW_ADD-1:0] in2_ext;
-
-      if (SIGNED0 == 1) begin : in0_is_signed
-        assign in0_ext = {{FULL_LEFT_PAD0{in0[BW_INPUT0-1]}}, in0, {PAD0{1'b0}}};
-      end else begin : in0_is_unsigned
-        assign in0_ext = {{FULL_LEFT_PAD0{1'b0}}, in0, {PAD0{1'b0}}};
-      end
-
-      if (SIGNED1 == 1) begin : in1_is_signed
-        assign in1_ext = {{FULL_LEFT_PAD1{in1[BW_INPUT1-1]}}, in1, {PAD1{1'b0}}};
-      end else begin : in1_is_unsigned
-        assign in1_ext = {{FULL_LEFT_PAD1{1'b0}}, in1, {PAD1{1'b0}}};
-      end
-
-      if (SIGNED2 == 1) begin : in2_is_signed
-        assign in2_ext = {{FULL_LEFT_PAD2{in2[BW_INPUT2-1]}}, in2, {PAD2{1'b0}}};
-      end else begin : in2_is_unsigned
-        assign in2_ext = {{FULL_LEFT_PAD2{1'b0}}, in2, {PAD2{1'b0}}};
-      end
-
-      wire signed [FULL_BW_ADD-1:0] term0 = (NEGATE0 == 1) ? -$signed(in0_ext) : $signed(in0_ext);
-      wire signed [FULL_BW_ADD-1:0] term1 = (NEGATE1 == 1) ? -$signed(in1_ext) : $signed(in1_ext);
-      wire signed [FULL_BW_ADD-1:0] term2 = (NEGATE2 == 1) ? -$signed(in2_ext) : $signed(in2_ext);
-      wire signed [FULL_BW_ADD-1:0] accum = term0 + term1 + term2;
-      // verilator lint_on UNUSEDSIGNAL
-
-      assign out = accum[BW_OUT-1+DROP_LSBS:DROP_LSBS];
-    end
-  endgenerate
-
-endmodule
-
