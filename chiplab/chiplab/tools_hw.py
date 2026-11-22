@@ -156,6 +156,12 @@ def compile_stream(design_id: str, tt: bool = True, postproc: dict | None = None
     (d / (fn[:-2] + ".json")).write_text(json.dumps(sinfo, default=str))
     out = {"design_id": design_id, "top": sinfo.get("top"), "verilog": str(d / fn), "files": [str(d / fn)],
            **{k: sinfo.get(k) for k in ("transfers_per_frame", "counter_bits", "truncated", "uo_map")}}
+    if not (postproc or channel_serial):   # the plain wrapper's own flip-flops and sky130 area, apart from the core
+        try:                               # (answer only: the stream files stay byte-identical)
+            from chiplab.ir.estimate import stream_wrapper
+            out.update(stream_wrapper(ir, tt=tt))
+        except (KeyError, ValueError, TypeError):
+            pass
     if postproc or channel_serial:
         out.update({k: sinfo.get(k) for k in ("postproc", "channel_serial", "frames_per_decision", "output_fields")})
     if area:

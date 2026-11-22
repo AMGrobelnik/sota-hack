@@ -57,7 +57,9 @@ def cache_stats() -> dict:
 
 
 @tool("Fast pre-synthesis gate estimates for many designs (chipir/1 documents or design ids), labelled as "
-      "estimates. Use it to rank candidates; only finalists need real synthesis. Optionally keep the best N.",
+      "estimates. Use it to rank candidates; only finalists need real synthesis. Optionally keep the best N. "
+      "est_error_notes gives the fit's held-out error for each design family present (intnn, composed, torchlogix, "
+      "treelut, alkaid); the stream wrapper's flip-flops and area are separate fields, not in gates_est.",
       {"designs": "list — chipir/1 dicts or design_id strings", "keep": "int — how many smallest to mark kept (optional)"},
       lane="inline")
 def estimate_batch(designs: list, keep: int | None = None) -> dict:
@@ -65,13 +67,18 @@ def estimate_batch(designs: list, keep: int | None = None) -> dict:
     from chiplab.ir.schema import design_id
     ids, est = [], []
     for d in designs:
+        opt = None
         if isinstance(d, str):
-            d = json.loads((config.HOME / "designs" / d / "ir.json").read_text())
-        ids.append(design_id(d)); est.append(estimate(d))
+            dd = config.HOME / "designs" / d
+            meta = json.loads((dd / "meta.json").read_text()) if (dd / "meta.json").exists() else {}
+            opt = "alkaid" if meta.get("optimizer") or d.endswith("-alk") else None
+            d = json.loads((dd / "ir.json").read_text())
+        ids.append(design_id(d)); est.append(estimate(d, optimizer=opt))
     order = sorted(range(len(ids)), key=lambda i: est[i]["gates_est"])
     kept = [ids[i] for i in order[:keep]] if keep else None
     return {"ids": ids, "gates_est": [e["gates_est"] for e in est], "features": est, "kept_ids": kept,
-            "est_basis": est[0]["basis"] if est else None}
+            "est_basis": est[0]["basis"] if est else None,
+            "est_error_notes": {e["family"]: e["est_error_note"] for e in est}}
 
 
 @tool("Synthesize many designs at once (fans out over the CPU lane). Returns job ids.",
