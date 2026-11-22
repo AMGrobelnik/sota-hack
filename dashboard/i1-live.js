@@ -510,6 +510,8 @@
     if (V.sel) M.designs.forEach(function (x) { if (x.id === V.sel) d = x; });
     return d || M.chosen || M.designs[M.designs.length - 1] || null;
   }
+  // a status line's area unit as written for a person: um2 as µm² (square micrometres)
+  var units = function (s) { return s ? String(s).replace(/(?<![A-Za-z])um(?:\^?2|²)(?![\w])/g, "µm²") : s; };
   var primaryOf = function (M) {
     if (V.y) return V.y;
     if (M.spec && M.spec.primary) return M.spec.primary;
@@ -763,7 +765,7 @@
         }
         return chat ? '<div class="msg lv-cm" style="--rc:#2b55d0"><span class="mav" style="background:#2b55d01a;color:#2b55d0">' + I("chip", "s16") + '</span><div><div class="who">' + esc(it.author || "ChipIn") + who + '<span class="when">' + rel(M, it.ts) + '</span></div><div class="mt lv-md">' + md(it.text) + "</div></div></div>"
           : '<div class="lv-r lv-m"><div class="lv-mh"><b>' + esc(it.author || "ChipIn") + "</b>" + who + w + '</div><div class="lv-md">' + md(it.text) + "</div></div>";
-      case "status": return '<div class="lv-r lv-s"><i></i><span>' + who + esc(it.text) + "</span>" + w + "</div>";
+      case "status": return '<div class="lv-r lv-s"><i></i><span>' + who + esc(units(it.text)) + "</span>" + w + "</div>";
       case "tool": {
         var g = it.state === "done" ? I("check", "s12 lv-ok") : it.state === "failed" ? I("x", "s12 lv-bad") : M.running ? '<span class="spin"></span>' : I("minus", "s12");
         return '<div class="lv-r lv-t" data-tool="' + esc(it.id) + '"><button class="lv-th" aria-expanded="false">' + g + "<b>" + esc(it.name || "Tool") + "</b><span>" + who + esc(it.summary || "") + "</span>" + w + "</button></div>";
@@ -935,7 +937,7 @@
     var x = M.x, key = x.v + "|" + M.status + "|" + !!M.lost + "|" + (V.sel || "") + "|" + (V.y || "") + "|" + (M.chosenId || "");
     if (ch("ban", banHTML(M))) $("#lvBan").innerHTML = V.sig.ban;
     if (ch("head", key)) $("#lvHead").innerHTML = headHTML(M);
-    var stl = M.lost ? "Waiting for the backend to answer again" : M.running ? M.st.statusLine || "Waiting for the agent's first step" : M.status === "succeeded" ? "Finished" + (M.elapsed != null ? " in " + clock(M.elapsed) : "") + "." : "";
+    var stl = M.lost ? "Waiting for the backend to answer again" : M.running ? units(M.st.statusLine) || "Waiting for the agent's first step" : M.status === "succeeded" ? "Finished" + (M.elapsed != null ? " in " + clock(M.elapsed) : "") + "." : "";
     if (ch("status", stl)) { var s = $("#lvStatus"); s.className = "status" + (M.running ? "" : " done"); s.innerHTML = stl ? (M.running && !M.lost ? '<span class="spin"></span>' : "") + "<span>" + esc(stl) + "</span>" : ""; s.style.display = stl ? "" : "none"; }
     if (ch("stages", JSON.stringify(M.st.stages) + M.status)) $("#lvStages").innerHTML = stagesHTML(M);
     if (ch("subs", key)) $("#lvSubs").innerHTML = subsHTML(M);
@@ -947,6 +949,8 @@
     if (ch("ysel", key)) {
       var keys = M.T.map(function (t) { return t.metric; });
       M.designs.forEach(function (d) { Object.keys(d.metrics).forEach(function (k) { if (keys.indexOf(k) < 0 && num(d.metrics[k]) != null && (MET[k] || /^[a-z_]+$/.test(k))) keys.push(k); }); });
+      // a one-off screening run with no false-alarm target: no false-alarm option (as the Chip view and playback chart)
+      if (F.screenOnly(M.spec, M.T)) keys = keys.filter(function (k) { return F.keyInfo(k).base !== "fa_per_hour"; });
       if (!keys.length) keys = [primaryOf(M)];
       var p = primaryOf(M); if (keys.indexOf(p) < 0) keys.unshift(p);
       $("#lvY").innerHTML = keys.map(function (k) { return '<option value="' + esc(k) + '"' + (k === p ? " selected" : "") + ">" + esc(metaOf(k).n) + (M.T.some(function (t) { return t.metric === k; }) ? "" : " (no target)") + "</option>"; }).join("");

@@ -134,7 +134,8 @@
     ["RTL simulation, random vectors", "rtl_sim_random_vectors", "rtl_sim_random_mismatches"]
   ];
   var CHECK_KEYS = {}; CHECKS.forEach(function (c) { CHECK_KEYS[c[1]] = 1; CHECK_KEYS[c[2]] = 1; });
-  var OTHER = { verification_level: ["Verification level", ""], formal_proved: ["Formal proof", ""], candidates: ["Candidates", ""], patients_pass: ["Patients clearing every target", ""], patients_total: ["Patients", ""] };
+  var OTHER = { luts: ["Lookup tables (FPGA estimate)", "LUTs"], rtl_vectors: ["Test vectors run on the circuit", ""], rtl_mismatches: ["Mismatches against the model", ""],
+    verification_level: ["Verification level", ""], formal_proved: ["Formal proof", ""], candidates: ["Candidates", ""], patients_pass: ["Patients clearing every target", ""], patients_total: ["Patients", ""] };
   function numText(v, unit) {
     var s = Math.abs(v) >= 1000 ? fmt(v) : String(+v.toFixed(Math.abs(v) >= 100 ? 1 : 3));
     if (v === 1 && /^(tiles|gates|levels|LUTs|vectors|transistors)$/.test(unit || "")) unit = unit.replace(/s$/, "");
@@ -187,13 +188,14 @@
       return /^[A-Z][a-z]/.test(l) ? l.charAt(0).toLowerCase() + l.slice(1) : l;
     }).replace(/\b(?:fa|false alarms?)[ _]per[ _]h(?:our|r)?\b/gi, function (m) { return /^F[a-z]/.test(m) ? "False alarms per hour" : "false alarms per hour"; })
       .replace(/\b(H|h)eld_?out\b/g, "$1eld-out").replace(/\bHELDOUT\b/g, "HELD-OUT")
-      .replace(FRAC_AFTER, function (m, w, mid, v) { return w + mid + pct(v); })
+      .replace(FRAC_AFTER, function (m, w, mid, v) { return /^(?:validation|test|held.?out)$/i.test(w) && v.indexOf(".") < 0 ? m : w + mid + v.split("/").map(pct).join("/"); })
       .replace(FRAC_BEFORE, function (m, v, sp, w) { return pct(v) + sp + w; })
       .replace(/(?<![\w.:])\d+\.\d{4,}(?!\w|\.\d|:\d)/g, function (m) { return tidyNum(Number(m)); });
   }
   // numbers in a sentence as a person writes them: a ratio named by its metric ("specificity 0.9888",
   // "0.9871 sens") as a percentage with one decimal, any other long float rounded to its size
-  var FRAC_AFTER = /\b(sensitivity|specificity|accuracy|precision|recall|agreement|sens|spec)((?:,\s*(?:held-out|validation|training|per window))*\s*(?:(?:of|was|is|at|reached|hit|=|:|≈|~)\s*)?(?:about\s+)?)(0?\.\d+|1\.0+|1|0)(?![\d.%]|\s*(?:per\b|\/|gates?\b))/gi;
+  // "validation 0.912/0.897": a pair of ratios after the word, each as a percentage
+  var FRAC_AFTER = /\b(sensitivity|specificity|accuracy|precision|recall|agreement|validation|test|held[-\u2010\u2011]?out|sens|spec)((?:,\s*(?:held-out|validation|training|per window))*\s*(?:(?:of|was|is|at|reached|hit|=|:|≈|~)\s*)?(?:about\s+)?)((?:0?\.\d+|1\.0+)(?:\/(?:0?\.\d+|1\.0+))+|0?\.\d+|1\.0+|1|0)(?!\d|\.\d|%|\s*(?:per\b|\/|gates?\b))/gi;
   var FRAC_BEFORE = /(?<![\w.])(0?\.\d{2,}|1(?:\.0+)?)(\s+)(sens(?:itivity)?|spec(?:ificity)?)\b(?!\s+(?:targets?|bars?|goals?)\b)/gi;
   var pct = function (v) { return +(Number(v) * 100).toFixed(1) + "%"; };
   function tidyNum(v) { var a = Math.abs(v); return String(a >= 100 ? Math.round(v) : a >= 10 ? +v.toFixed(1) : a >= 1 ? +v.toFixed(2) : +v.toPrecision(3)); }
@@ -534,18 +536,20 @@
     srcRows(own, "");
     if (id === f.chosen && f.src[""]) { var loose = {}; Object.keys(f.src[""]).forEach(function (k) { if (!own[k]) loose[k] = f.src[""][k]; }); srcRows(loose, ", no chip named"); }
     // what the agent reported for this chip: one row per measure and set of patients
+    var BW = function (b) { return b === "held-out" ? "test (held-out)" : b; };
     var agent = {}, order = [], put = function (label, k, v, prio, b) { var key = label; if (!agent[key]) order.push(key); if (!agent[key] || agent[key].prio < prio) agent[key] = { label: label, k: k, v: v, prio: prio, b: b }; };
     Object.keys(mm).forEach(function (k) {
       if (seen[k]) return;
       var ki = keyInfo(k), v = num(mm[k]);
       if (v == null || (noFA && ki.base === "fa_per_hour")) return;
       if (MET[ki.base]) {
-        var b = ki.basis || (rec && rec.basis === "test" ? "held-out" : rec && rec.basis === "validation" ? "validation" : "");
+        // the basis the key itself names (validation_, test_, _train); none readable, no basis word
+        var b = ki.basis || "";
         // a per-window figure is its own row and is not judged against a per-recording target
-        put(MET[ki.base].n + (ki.scope ? ", " + ki.scope : "") + (b ? ", " + b : ""), ki.scope ? null : ki.base, ki.scope ? fmtV(ki.base, ratio(ki.base, v) / ki.per, m.spec) : ratio(ki.base, v) / ki.per, (/^chip_/.test(k) ? 3 : ki.basis ? 2 : 1), b);
+        put(MET[ki.base].n + (ki.scope ? ", " + ki.scope : "") + (b ? ", " + BW(b) : ""), ki.scope ? null : ki.base, ki.scope ? fmtV(ki.base, ratio(ki.base, v) / ki.per, m.spec) : ratio(ki.base, v) / ki.per, (/^chip_/.test(k) ? 3 : ki.basis ? 2 : 1), b);
       } else if (!LAB[ki.base] && !CHECK_KEYS[k]) { var mt = metricText(k, v, uu[k], m.spec); put(mt.label, null, mt.value, 1, ""); }
     });
-    if (rec) Object.keys(rec.metrics).forEach(function (k) { var v = num(rec.metrics[k]); if (v == null || !MET[k] || (noFA && k === "fa_per_hour")) return; var b = rec.basis === "test" ? "held-out" : rec.basis === "validation" ? "validation" : ""; put(MET[k].n + (b ? ", " + b : ""), k, v, 0, b); });
+    if (rec) Object.keys(rec.metrics).forEach(function (k) { var v = num(rec.metrics[k]); if (v == null || !MET[k] || (noFA && k === "fa_per_hour")) return; var b = rec.basis === "test" ? "held-out" : rec.basis === "validation" ? "validation" : rec.basis === "train" || rec.basis === "training" ? "training" : ""; put(MET[k].n + (b ? ", " + BW(b) : ""), k, v, 0, b); });
     var rank = function (r) { return (r.b === "validation" ? 0 : r.b === "held-out" ? 1 : 2) * 10 + (r.k === "sensitivity" ? 0 : r.k === "fa_per_hour" ? 1 : r.k === "specificity" ? 2 : 3); };
     var ag = order.map(function (k) { return agent[k]; }).sort(function (a, b) { return rank(a) - rank(b); });
     var row = function (r) { return '<div class="irow"><span>' + esc(r[0]) + "</span><b>" + r[1] + "</b></div>"; };

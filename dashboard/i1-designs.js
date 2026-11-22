@@ -587,7 +587,9 @@
       it.facts.push(["Size", it.size ? (it.size.k === "e" ? sizeHTML(it.size, "Estimated by the agent; the chip lab has not measured it") : it.size.g === 0 ? "0 gates, measured by the lab" : `${fmt(it.size.g)} gates, measured by the lab`) : "not reported"]);
       const dep = num(r.depth) != null ? r.depth : num(cm.depth); if (dep != null) it.facts.push(["Logic depth", fmt(dep)]);
       const bn = r.basis === "validation" ? ", validation" : r.basis === "test" ? ", held-out" : "";
-      Object.keys(r.metrics || {}).filter(k => num(r.metrics[k]) != null && ["sensitivity", "specificity", "fa_per_hour"].indexOf(k) >= 0).forEach(k => {
+      // a one-off screening run with no false-alarm target shows no false-alarm rows (as the Chip view and chart)
+      const noFA = F ? F.screenOnly(ctx.spec, T) : false;
+      Object.keys(r.metrics || {}).filter(k => num(r.metrics[k]) != null && ["sensitivity", "specificity", "fa_per_hour"].indexOf(k) >= 0 && !(noFA && k === "fa_per_hour")).forEach(k => {
         const t = T.find(x => x.metric === k), v = r.metrics[k];
         it.facts.push([(F ? F.metaOf(k).n : k) + bn, esc(F ? F.fmtV(k, v, ctx.spec) : v) + (t ? (F.meets(t, v) ? ' <span class="pf ok">Pass</span>' : ' <span class="pf no">Fail</span>') : "")]);
       });
