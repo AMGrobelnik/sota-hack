@@ -1,0 +1,61 @@
+# ChipIn worker pod image: Python 3.12, the backend, and the claude CLI.
+#
+# Build from backend/ (the context), then push to a registry the team owns
+# and set compute.runpod.image in config/backend.local.yaml:
+#
+#   docker build -f Dockerfile.worker -t <registry>/chipin-worker:<tag> .
+#
+# Only the package, its pyproject and the committed config are copied: no
+# .env, no *.local.yaml, no runs. The pod gets one secret, its per-pod worker
+# token (CHIPIN_WORKER_TOKEN), from the launcher. RunPod's create request
+# sets the command (worker port and TTL); the CMD below is the same default.
+#
+# The CLI is the pinned release binary, checked against the release
+# manifest's sha256.
+#
+# NOT YET USABLE FOR REAL AGENTS: the pod receives no Claude login and no
+# OpenRouter key, so only the `stub` backend can run here, and the launcher
+# refuses any other backend on a pod (compute.runpod.allow_paid_pods also
+# defaults to false). A real agent on a pod needs a credential path chosen by
+# the team (for example a RunPod account secret referenced from the pod env,
+# scoped to OpenRouter spend) and a non-root user; neither exists yet.
+# The worker's TTL ends its process, not the pod: RunPod restarts the
+# container and the pod bills until the launcher or the reaper terminates it.
+
+FROM python:3.12-slim-bookworm
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+ARG TARGETARCH
+ARG CLAUDE_VERSION=2.1.322
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl git tmux \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN case "${TARGETARCH:-amd64}" in \
+         amd64) PLATFORM=linux-x64 ;; \
+         arm64) PLATFORM=linux-arm64 ;; \
+         *) echo "unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
+       esac \
+    && BASE=https://downloads.claude.ai/claude-code-releases \
+    && MANIFEST="$(curl -fsSL "${BASE}/${CLAUDE_VERSION}/manifest.json")" \
+    && [[ ${MANIFEST} =~ \"${PLATFORM}\"[^}]*\"checksum\"[[:space:]]*:[[:space:]]*\"([a-f0-9]{64})\" ]] \
+    && CHECKSUM="${BASH_REMATCH[1]}" \
+    && curl -fsSL "${BASE}/${CLAUDE_VERSION}/${PLATFORM}/claude" -o /usr/local/bin/claude \
+    && echo "${CHECKSUM}  /usr/local/bin/claude" | sha256sum -c - \
+    && chmod 755 /usr/local/bin/claude
+
+COPY --from=ghcr.io/astral-sh/uv:0.12.17 /uv /usr/local/bin/uv
+
+WORKDIR /app
+COPY pyproject.toml README.md ./
+COPY src ./src
+COPY config/backend.yaml ./config/backend.yaml
+# Editable, so the package finds config/ and writes runs/ and logs/ under /app.
+RUN uv pip install --system --no-cache -e .
+
+# IS_SANDBOX tells the claude CLI it runs in a disposable sandbox, which it
+# requires before it accepts --dangerously-skip-permissions as root.
+ENV PYTHONUNBUFFERED=1 DISABLE_AUTOUPDATER=1 IS_SANDBOX=1
+EXPOSE 8080
+CMD ["python", "-m", "chipin_backend.compute.runpod.worker", "--port", "8080"]
