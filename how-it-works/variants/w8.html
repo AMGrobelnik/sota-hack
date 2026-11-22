@@ -107,10 +107,6 @@ window.COPY = {
               'Spec and report are the orchestrator’s own.',
               'Next, each stage up close, in the same layout.'] },
     { key: 'st0' }, { key: 'st1' }, { key: 'st2' }, { key: 'st3' }, { key: 'st4' }, { key: 'st5' }, { key: 'st6' },
-    { key: 'tools', title: 'The skills: the chip lab',
-      lines: ['{n} command-line tools in one program: {core} core, {opt} optional extras for data and training.',
-              'Agents call them. The lab compiles, checks, measures and packages, and reports every number with its basis.',
-              'The last column names the stage that uses each tool.'] },
     { key: 'meas', title: 'Measured so far: the chip lab',
       lines: ['Lab figures, each with its scope.',
               'Most of these chips have untrained or placeholder weights. They test the tools, not detection.'] }
@@ -243,6 +239,23 @@ window.COPY = {
       { name: 'Subagents', text: 'A smaller model by default.' }
     ],
     reporter: 'Progress reporter: every stage, number and file, as it happens'
+  },
+
+  /* The box under the stages (from round 4, t1). Which tools light up comes only
+     from each stage's skills list, so the box and the stage panels always agree.
+     cols: [group, first, end, label]. */
+  lab: {
+    calls: '{s} calls {k}',
+    idle: 'Each stage lights the tools it calls',
+    legend: [['lit', 'Called in this stage'], ['any', 'Any stage'], ['opt', 'Optional extra']],
+    cols: [
+      [[0, 0, 9, 'Model to gates']],
+      [[1, 0, 6, 'Checking and scoring']],
+      [[2, 0, 6, 'Physical chip']],
+      [[3, 0, 4, 'Cost and comparison'], [4, 0, 4, 'Batches']],
+      [[4, 4, 11, 'Jobs, from any stage']],
+      [[5, 0, 8, 'Optional: data, training']]
+    ]
   },
 
   tools: {
@@ -463,6 +476,21 @@ html.cam { scroll-snap-type: y mandatory; }
 .ov { opacity: var(--ov, 0); }
 .ov rect { fill: rgba(15, 26, 42, .9); stroke: rgba(214, 228, 242, .35); stroke-width: 1; }
 .ov text { fill: #fff; font-weight: 650; }
+/* the chip lab box under the stages */
+#lab { transition: opacity .4s ease; }
+#lab.dim { opacity: .3; }
+.labbg { fill: #0c1625; stroke: rgba(91, 228, 155, .35); stroke-width: 1.2; }
+.tile rect { fill: #142439; stroke: rgba(214, 228, 242, .22); stroke-width: 1; transition: fill .35s ease, stroke .35s ease; }
+.tile.any rect { stroke-dasharray: 4 3; }
+.tile.opt rect { stroke: rgba(255, 184, 107, .6); }
+.tile text { fill: #8fa2b8; transition: fill .35s ease; }
+.tile.lit rect { fill: rgba(91, 228, 155, .2); stroke: var(--signal); stroke-width: 2; }
+.tile.opt.lit rect { stroke: var(--amber); }
+.tile.lit text { fill: #fff; font-weight: 650; }
+/* pipeline stop: each stage panel jumps to its own stop */
+.pon .panel { cursor: pointer; outline: none; }
+.pon .panel:hover .hd, .pon .panel:focus-visible .hd { stroke: var(--signal); stroke-width: 6; }
+.pon .panel:hover .num, .pon .panel:focus-visible .num { fill: var(--signal); }
 .ov { pointer-events: none; }
 .ovon .ov .jump { pointer-events: auto; cursor: pointer; }
 .ovon .rg { cursor: pointer; }
@@ -497,6 +525,8 @@ html.cam { scroll-snap-type: y mandatory; }
   var TOOLN = 0, TOOLOPT = 0;
   C.tools.groups.forEach(function (g) { TOOLN += g.tools.length; if (g.optional) TOOLOPT += g.tools.length; });
   function fill(s) { return String(s).replace(/\{n\}/g, String(TOOLN)).replace(/\{core\}/g, String(TOOLN - TOOLOPT)).replace(/\{opt\}/g, String(TOOLOPT)); }
+  var OPT = {}, ANY = {};
+  C.tools.groups.forEach(function (g) { g.tools.forEach(function (t) { if (g.optional) OPT[t[0]] = 1; if (t[2][0] === 'any') ANY[t[0]] = 1; }); });
   document.title = C.pageTitle;
   var md = document.createElement('meta'); md.name = 'description'; md.content = C.description; document.head.appendChild(md);
   document.querySelector('[data-c="brand"]').textContent = C.brand;
@@ -840,49 +870,76 @@ html.cam { scroll-snap-type: y mandatory; }
   })();
   var PBOT = Y0 + PH;
 
-  // ---------- lower row: chip lab, then what it has measured ----------
-  var OW = PSTEP * 6 + PWID, LOW = PBOT + 160, TW = 1060, MW = 1060, MGAP = 200;
-  var TX = PX + Math.round((OW - (TW + MGAP + MW)) / 2), MX = TX + TW + MGAP;
+  // ---------- the chip lab box: one group under the stages; it slides to the current stage ----------
+  var OW = PSTEP * 6 + PWID, LB = C.lab;
+  var TILEW = 190, TILEH = 30, TGAP = 5, CGAP = 12, GHEAD = 24, LPAD = 22, LTOP = 62;
+  var GW = LPAD * 2 + LB.cols.length * TILEW + (LB.cols.length - 1) * CGAP;
+  var colH = LB.cols.map(function (col) { var h = 0; col.forEach(function (seg, k) { h += (k ? 10 : 0) + GHEAD + (seg[2] - seg[1]) * (TILEH + TGAP); }); return h; });
+  var GH = LTOP + Math.max.apply(null, colH) + LPAD - TGAP;
+  var BUSY = PBOT + 34, LABY = BUSY + 32;
+  function drawGrid(p, lit, sub) {
+    R(p, 0, 0, GW, GH, 'labbg', 16);
+    P(p, 'M' + (GW / 2) + ' ' + (BUSY - LABY) + 'V0', 'lnd');
+    T(p, LPAD, 18, fill(TO.title), { size: 24, weight: 650, cls: 'c1' });
+    var subEl = E('text', { x: GW - LPAD, y: 18 + 16, 'font-size': 20, 'font-weight': 600, 'class': 'cg', 'text-anchor': 'end' }, p);
+    subEl.textContent = sub || '';
+    var tiles = {};
+    LB.cols.forEach(function (col, ci) {
+      var x = LPAD + ci * (TILEW + CGAP), y = LTOP;
+      col.forEach(function (seg, k) {
+        if (k) y += 10;
+        T(p, x + 2, y, seg[3], { size: 13.5, weight: 600, cls: 'c3' });
+        y += GHEAD;
+        TO.groups[seg[0]].tools.slice(seg[1], seg[2]).forEach(function (t) {
+          var cls = 'tile' + (ANY[t[0]] ? ' any' : '') + (OPT[t[0]] ? ' opt' : '') + (lit && lit.indexOf(t[0]) >= 0 ? ' lit' : '');
+          var tg = E('g', { 'class': cls, 'data-t': t[0] }, p);
+          R(tg, x, y, TILEW, TILEH, '', 6);
+          T(tg, x + 10, y + (TILEH - 14) / 2 - 1, t[0], { size: 14, weight: 500, mono: true });
+          tiles[t[0]] = tg;
+          y += TILEH + TGAP;
+        });
+      });
+    });
+    // legend, in the free space under the second and third columns
+    var lx = LPAD + TILEW + CGAP, ly = LTOP + GHEAD + 6 * (TILEH + TGAP) + 14;
+    LB.legend.forEach(function (l, k) {
+      var tg = E('g', { 'class': 'tile ' + l[0] }, p);
+      R(tg, lx, ly + k * 28, 30, 18, '', 4);
+      T(p, lx + 40, ly + k * 28 + 1, l[1], { size: 14, cls: 'c3' });
+    });
+    return { tiles: tiles, sub: subEl };
+  }
+  function callsText(sk) { return sk ? LB.calls.replace('{s}', sk.name).replace('{k}', sk.skills.length) : LB.idle; }
+  var PL = PX - 20, PR = PX + 6 * PSTEP + PWID + 20;
+  function clampX(cx) { return Math.max(PL + GW / 2, Math.min(PR - GW / 2, cx)); }
+  var SLOT = ST.map(function (s, i) { return clampX(PX + i * PSTEP + PWID / 2); });
+  var HOME = clampX(PX + (6 * PSTEP + PWID) / 2);
+  function labRect(cx) { return { x: cx - GW / 2 - 10, y: BUSY - 10, w: GW + 20, h: LABY + GH + 10 - (BUSY - 10) }; }
+  // a stage stop frames its panel and the box under it
+  ST.forEach(function (s, i) {
+    var a = REG['st' + i], b = labRect(SLOT[i]);
+    var x0 = Math.min(a.x, b.x), y0 = Math.min(a.y, b.y), x1 = Math.max(a.x + a.w, b.x + b.w), y1 = Math.max(a.y + a.h, b.y + b.h);
+    reg('st' + i, x0, y0, x1 - x0, y1 - y0);
+  });
+  // the box at rest, under the middle of the pipeline, is the map's chip lab region
+  var lr = labRect(HOME);
+  reg('tools', lr.x, LABY - 10, lr.w, GH + 20);
+
+  // the lower row: what the lab has measured, under the box
+  var LOW = LABY + GH + 130, MW = 1060, MX = Math.round(HOME - MW / 2);
   (function () {
     // bus from the stages to the chip lab
-    var g = map.querySelector('[data-r="pipe"]'), busY = PBOT + 56;
+    var g = map.querySelector('[data-r="pipe"]'), busY = BUSY;
     for (var i = 0; i < ST.length; i++) P(g, 'M' + (PX + i * PSTEP + PWID / 2) + ' ' + (PBOT + 2) + 'V' + busY, 'lnd');
     P(g, 'M' + (PX + PWID / 2) + ' ' + busY + 'H' + (PX + 6 * PSTEP + PWID / 2), 'lnd');
-    var bx = TX + TW / 2; P(g, 'M' + bx + ' ' + busY + 'V' + (LOW - 34)); head(g, bx, LOW - 24, 'down', 'ah', 10);
-    T(g, bx + 14, busY + 14, PI.bus, { size: 18, cls: 'c3' });
+    T(g, HOME + 14, busY - 26, PI.bus, { size: 18, cls: 'c3' });
   })();
 
-  (function () {
-    var g = E('g', { 'class': 'rg', 'data-r': 'tools' }, map), y = LOW;
-    y += T(g, TX, y, fill(TO.title), { size: 24, weight: 650, cls: 'c1' }) + 22;
-    var CW = (TW - 40) / 2, NW = 166, SW = 82, DW = CW - NW - SW;
-    var cols = [[0, 1, 2], [3, 4, 5]], bottoms = [];
-    cols.forEach(function (gi, c) {
-      var x = TX + c * (CW + 40), cy = y;
-      T(g, x, cy, TO.head[0], { size: 13, cls: 'c3' }); T(g, x + NW, cy, TO.head[1], { size: 13, cls: 'c3' }); T(g, x + NW + DW + 8, cy, TO.head[2], { size: 13, cls: 'c3' });
-      cy += 22;
-      gi.forEach(function (k) {
-        var grp = TO.groups[k];
-        R(g, x, cy, CW, 28, 'bx', 6);
-        T(g, x + 10, cy + 6, grp.name + ' (' + grp.tools.length + ')', { size: 15, weight: 650, cls: 'c1' });
-        cy += 32;
-        grp.tools.forEach(function (t) {
-          var st = t[2].join(', ');
-          var n = Math.max(NL(t[1], 15, 400, false, DW - 8), NL(st, 13, 400, false, SW - 4)), rh = (n - 1) * 19 + 15 + 11;
-          T(g, x + 2, cy + 6, t[0], { size: 13.5, weight: 500, mono: true, cls: 'ck' });
-          T(g, x + NW, cy + 5, t[1], { size: 15, w: DW - 8, lh: 19, cls: 'c2' });
-          T(g, x + NW + DW + 8, cy + 6, st, { size: 13, w: SW - 4, lh: 19, cls: t[2][0] === 'any' ? 'c3' : 'cg' });
-          cy += rh;
-          P(g, 'M' + x + ' ' + cy + 'H' + (x + CW), 'rule');
-        });
-        cy += 10;
-      });
-      bottoms.push(cy);
-    });
-    var tb = Math.max.apply(null, bottoms);
-    R(g, TX - 20, LOW - 22, TW + 40, tb - LOW + 34, 'rule', 14);
-    reg('tools', TX - 24, LOW - 26, TW + 48, tb - LOW + 42);
-  })();
+  // the box itself, drawn over the bus
+  var labG = E('g', { id: 'lab' }, map);
+  var LABD = drawGrid(labG, null, LB.idle);
+  function placeLab(cx) { labG.setAttribute('transform', 'translate(' + (cx - GW / 2).toFixed(1) + ' ' + LABY + ')'); }
+  placeLab(HOME);
 
   // ---------- region: measured so far, the chip lab ----------
   (function () {
@@ -902,8 +959,7 @@ html.cam { scroll-snap-type: y mandatory; }
     y += T(g, X, y, ME.note, { size: 17, cls: 'c3' });
     reg('meas', X - 20, m0 - 20, DW + 40, y - m0 + 40);
     // the lab's figures
-    var ay = LOW + 15;
-    P(g, 'M' + (TX + TW + 22) + ' ' + ay + 'H' + (MX - 34)); head(g, MX - 24, ay, 'right', 'ah', 10);
+    P(g, 'M' + HOME + ' ' + (LABY + GH + 12) + 'V' + (LOW - 40)); head(g, HOME, LOW - 30, 'down', 'ah', 10);
   })();
 
   // ---------- whole map and overview labels ----------
@@ -933,6 +989,7 @@ html.cam { scroll-snap-type: y mandatory; }
     var camKey = s.key === 'intro' ? 'all' : s.key;
     o.rect = REG[camKey];
     o.whole = camKey === 'all';
+    o.labX = m ? SLOT[+m[1]] : HOME;
     return o;
   });
   var N = STEPS.length, TOTAL = N - 1;
@@ -997,6 +1054,11 @@ html.cam { scroll-snap-type: y mandatory; }
     var r = st.rect, pad = 16;
     var fs = E('svg', { viewBox: (r.x - pad) + ' ' + (r.y - pad) + ' ' + (r.w + 2 * pad) + ' ' + (r.h + 2 * pad), 'class': 'mapsvg', role: 'img', 'aria-label': st.title }, fig);
     var use = E('use', { href: '#map' }, fs);
+    // the plain sequence has no camera, so a stage figure gets the lab box lit for that stage
+    if (st.stage != null || st.whole) {
+      var sk = st.stage != null ? ST[st.stage] : null;
+      drawGrid(E('g', { transform: 'translate(' + (st.labX - GW / 2) + ' ' + LABY + ')' }, fs), sk ? sk.skills : null, callsText(sk));
+    }
     if (st.whole) use.setAttribute('style', '--ov:1');
     var dbox = H('div', 'detail', null, sec);
     detail(st, dbox);
@@ -1036,6 +1098,11 @@ html.cam { scroll-snap-type: y mandatory; }
     });
     var fr = st.stage != null ? 'pipe' : FOCUS[st.key];
     regions.forEach(function (r) { r.classList.toggle('dim', !!fr && r.getAttribute('data-r') !== fr); });
+    // the lab box lights the tools of the current stage
+    var sk = st.stage != null ? ST[st.stage] : null;
+    labG.classList.toggle('dim', !!fr && fr !== 'pipe');
+    for (var tn in LABD.tiles) LABD.tiles[tn].classList.toggle('lit', !!sk && sk.skills.indexOf(tn) >= 0);
+    LABD.sub.textContent = callsText(sk);
     wl.innerHTML = '';
     var b = document.createElement('b'); b.textContent = i === 0 ? C.where.overview : C.where.step.replace('{n}', i).replace('{t}', TOTAL);
     wl.appendChild(b); wl.appendChild(document.createTextNode('  ' + (i === 0 ? '' : st.title)));
@@ -1052,6 +1119,8 @@ html.cam { scroll-snap-type: y mandatory; }
     var ov = Math.max(0, Math.min(1, (0.26 - scale) / 0.08));
     cam.style.setProperty('--ov', ov.toFixed(3));
     setOv(ov > 0.5);
+    placeLab(STEPS[i].labX + (STEPS[i + 1].labX - STEPS[i].labX) * t);
+    setPon(Math.abs(f - PIPE) < 0.25);
     mcam.setAttribute('x', cx - w / 2); mcam.setAttribute('y', cy - h / 2); mcam.setAttribute('width', w); mcam.setAttribute('height', h);
     setCurrent(Math.round(f));
   }
@@ -1060,7 +1129,10 @@ html.cam { scroll-snap-type: y mandatory; }
 
   // whole-map view: each section label (and its region) jumps to that section's first stop
   var jumps = [].slice.call(map.querySelectorAll('.ov .jump')), ovOn = null;
-  function firstStop(k) { for (var i = 0; i < N; i++) if (STEPS[i].key === k) return i; return 0; }
+  // the chip lab has no stop of its own: its box sits under the stages, so it opens the first stage
+  var JUMPTO = { tools: 'st0' };
+  function firstStop(k) { k = JUMPTO[k] || k; for (var i = 0; i < N; i++) if (STEPS[i].key === k) return i; return 0; }
+  var PIPE = firstStop('pipe');
   function setOv(on) {
     if (on === ovOn) return; ovOn = on;
     cam.classList.toggle('ovon', on);
@@ -1078,6 +1150,23 @@ html.cam { scroll-snap-type: y mandatory; }
     r.addEventListener('click', function () { if (ovOn) go(firstStop(k)); });
     r.addEventListener('mouseenter', function () { if (ovOn) label(k).classList.add('hov'); });
     r.addEventListener('mouseleave', function () { label(k).classList.remove('hov'); });
+  });
+  labG.addEventListener('click', function () { if (ovOn) go(firstStop('tools')); });
+  labG.addEventListener('mouseenter', function () { if (ovOn) label('tools').classList.add('hov'); });
+  labG.addEventListener('mouseleave', function () { label('tools').classList.remove('hov'); });
+
+  // pipeline stop: each stage panel jumps to that stage's own stop
+  var ponOn = null;
+  function setPon(on) {
+    if (on === ponOn) return; ponOn = on;
+    cam.classList.toggle('pon', on);
+    panels.forEach(function (p) { p.setAttribute('tabindex', on ? '0' : '-1'); });
+    if (!on && panels.indexOf(document.activeElement) >= 0) document.activeElement.blur();
+  }
+  panels.forEach(function (p, i) {
+    p.setAttribute('role', 'link'); p.setAttribute('tabindex', '-1'); p.setAttribute('aria-label', ST[i].name);
+    p.addEventListener('click', function (e) { if (ponOn) { e.stopPropagation(); go(firstStop('st' + i)); } });
+    p.addEventListener('keydown', function (e) { if (ponOn && e.key === 'Enter') { e.preventDefault(); go(firstStop('st' + i)); } });
   });
   addEventListener('scroll', req, { passive: true });
   addEventListener('resize', function () { applyMode(); });
@@ -1119,7 +1208,9 @@ html.cam { scroll-snap-type: y mandatory; }
       isCam = want;
       root.classList.toggle('cam', want); root.classList.toggle('flow', !want);
       cam.setAttribute('aria-hidden', want ? 'false' : 'true');
-      if (!want) { panels.concat(regions).forEach(function (p) { p.classList.remove('on', 'dim'); }); cam.style.setProperty('--ov', '0'); setOv(false); cur = -1; }
+      if (!want) { panels.concat(regions).forEach(function (p) { p.classList.remove('on', 'dim'); }); cam.style.setProperty('--ov', '0'); setOv(false); setPon(false); cur = -1; }
+      // the plain sequence draws its own lit box in each figure, so the live one hides
+      labG.setAttribute('visibility', want ? 'visible' : 'hidden');
     }
     if (isCam) { measureVp(); req(); }
   }
