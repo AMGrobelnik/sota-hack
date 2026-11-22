@@ -239,19 +239,22 @@ def build_set(m3_designs: Path | None, families: set[str] | None = None) -> list
 
 
 def scale_rows(path: Path) -> list[tuple[str, dict, str | None, int]]:
-    """Measured designs from the scale package: a list (or {"designs"/"results": [...]}) of rows that carry a
-    chipir/1 document (ir, or ir_path relative to the file) and a measured generic gate count (gates)."""
+    """Measured designs from the scale package (m3/scale/results.json, schema scale/1): every design with a
+    generic gate count; its IR is rebuilt from models/<name>.json beside the file (intnn, ingested as the sweep
+    does) and kept only if the design id matches the measured one. variant alkaid = the alkaid optimiser."""
     doc = json.loads(path.read_text())
-    rows = doc if isinstance(doc, list) else doc.get("designs") or doc.get("results") or []
     out = []
-    for r in rows:
-        ir = r.get("ir")
-        if ir is None and r.get("ir_path"):
-            p = (path.parent / r["ir_path"]).resolve()
-            ir = json.loads(p.read_text()) if p.exists() else None
-        g = r.get("gates") or (r.get("metrics") or {}).get("gates")
-        if isinstance(ir, dict) and isinstance(g, (int, float)) and g > 0:
-            out.append(("scale", ir, r.get("optimizer"), int(g)))
+    for r in doc.get("designs", []):
+        g, name = r.get("gates"), r.get("name")
+        mp = path.parent / "models" / f"{name}.json"
+        if not (isinstance(g, (int, float)) and g > 0 and mp.exists()):
+            continue
+        ir = to_ir(json.loads(mp.read_text())["model"], name=name)
+        opt = "alkaid" if r.get("variant") == "alkaid" else None
+        if r.get("design_id") and design_id(ir) != r["design_id"].removesuffix("-alk"):
+            print(f"  scale row {r.get('key')}: rebuilt IR does not match {r['design_id']}, skipped", file=sys.stderr)
+            continue
+        out.append(("scale", ir, opt, int(g)))
     return out
 
 
@@ -506,7 +509,7 @@ def main():
            "data": ("generated designs synthesised by scripts/refit_estimator.py" +
                     (f" plus {sum(1 for k in kinds if k == 'scale')} measured designs from the scale package" if "scale" in kinds else "")),
            "basis": (f"estimate (shipped fit on {len(rows)} synthesised designs in {len(set(fams))} families, held-out "
-                     f"r²={after['all']['r2']:.2f}, median error {after['all']['median_abs_pct_err']:.0f}% on a 20% held-out split)")}
+                     f"r²={after['all']['r2']:.3f}, median error {after['all']['median_abs_pct_err']:.0f}% on a 20% held-out split)")}
     if a.wrapper:
         out["wrapper"] = calibrate_wrapper(items, timeout=a.timeout)
     elif a.out.exists() and json.loads(a.out.read_text()).get("wrapper"):

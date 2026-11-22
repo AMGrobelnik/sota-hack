@@ -77,6 +77,15 @@ def test_shipped_fit_prices_luts_and_bit_sums(monkeypatch, tmp_path):
     assert set(c["per_family_heldout"]) >= {"intnn", "composed", "torchlogix", "treelut", "alkaid"}
 
 
+def test_large_intnn_estimate(monkeypatch, tmp_path):
+    """A 1.6k-weight network (over 10k gates) outside the calibration set stays within 20%."""
+    import refit_estimator
+    monkeypatch.setattr(config, "HOME", tmp_path)
+    ir = refit_estimator._mlp("big_test", np.random.default_rng(7999), 40, 6, False, [40], 1, 1)
+    g = _synth_gates(ir)
+    assert g > 10000 and abs(E.estimate(ir)["gates_est"] - g) / g < 0.2, (E.estimate(ir)["gates_est"], g)
+
+
 def test_torchlogix_estimate_not_free(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "HOME", tmp_path)
     errs = []
@@ -131,6 +140,7 @@ def test_wrapper_ffs_match_synthesis(tt):
 
 
 def test_wrapper_fields_reported_separately(monkeypatch, tmp_path):
+    import chiplab.tools_hw  # noqa: F401  (registers compile_stream)
     from chiplab.tools import TOOLS
     monkeypatch.setattr(config, "HOME", tmp_path)
     ir = multilayer_ir(4)

@@ -1685,7 +1685,7 @@ chiplab cache-stats --json '{}'
 
 ### `estimate-batch`
 
-Fast pre-synthesis gate estimates for many designs (chipir/1 documents or design ids), labelled as estimates. Use it to rank candidates; only finalists need real synthesis. Optionally keep the best N.
+Fast pre-synthesis gate estimates for many designs (chipir/1 documents or design ids), labelled as estimates. Use it to rank candidates; only finalists need real synthesis. Optionally keep the best N. est_error_notes gives the fit's held-out error for each design family present (intnn, composed, torchlogix, treelut, alkaid); the stream wrapper's flip-flops and area are separate fields, not in gates_est.
 
 - Python: `lab.estimate_batch(designs: list, keep: int | None = None) -> dict`
 - Lane: inline; cached: False
