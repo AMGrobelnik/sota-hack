@@ -179,7 +179,7 @@
   var W = {}; // id -> { w (reader watcher), st, x (extra state), open }
   function watchRun(id) {
     if (W[id]) return W[id];
-    var x = { f: F.create(), items: [], tools: {}, subOpen: {}, final: null, finalTried: false, spec: null, specTried: false, evidence: null, v: 0, files: null, filesAt: 0, filesN: -1, chips: {}, umsg: {}, lastUser: null, wantLive: false };
+    var x = { f: F.create(), items: [], tools: {}, subOpen: {}, final: null, spec: null, named: {}, evidence: null, v: 0, files: null, filesAt: 0, filesN: -1, chips: {}, umsg: {}, lastUser: null, wantLive: false };
     var rec = { id: id, x: x, open: true, st: null, w: null, h: null };
     rec.h = {
       onEvent: function (ev, st) {
@@ -430,10 +430,10 @@
   /* ----- overview ----- */
   function overviewHTML() {
     return '<div class="ov lv-ov" id="lvOv"><div id="lvBan"></div><header class="ovh" id="lvHead"></header><div class="status" id="lvStatus" role="status"></div>' +
-      '<div class="lv-stages" id="lvStages"></div><div id="lvSubs"></div><div class="tiles" id="lvTiles" style="position:relative"></div>' +
+      '<div class="lv-stages" id="lvStages"></div><div class="tiles" id="lvTiles" style="position:relative"></div>' +
       '<section class="cgrid2"><div class="pan chartp"><div class="chh"><h2>Chip size against</h2><select class="ys" id="lvY" aria-label="Metric on the chart"></select><span class="grow"></span><span id="lvChMark"></span></div>' +
       '<div class="cwrap" id="lvWrap"><canvas id="lvChart" tabindex="0" role="img" aria-label="Trade-off chart"></canvas><div class="ctip" id="lvTip"></div></div><div class="legend" id="lvLegend"></div><div id="lvUnsized"></div></div>' +
-      '<div class="side"><section class="pan lv-log" id="lvLog" aria-label="Agent log"><div class="lv-lh"><h2>Agent log</h2><span class="lv-n" id="lvLogN"></span></div><div class="lv-fw"><div class="lv-feed" id="lvFeed" role="log" aria-live="polite"></div><button class="lv-jump" id="lvJump" hidden>' + I("down", "s12") + 'Latest</button></div>' + boxHTML() + '</section><aside class="pan insp" id="lvInsp" aria-label="Selected design"></aside></div></section>' +
+      '<div class="side"><div id="lvSubs"></div><section class="pan lv-log" id="lvLog" aria-label="Agent log"><div class="lv-lh"><h2>Agent log</h2><span class="lv-n" id="lvLogN"></span></div><div class="lv-fw"><div class="lv-feed" id="lvFeed" role="log" aria-live="polite"></div><button class="lv-jump" id="lvJump" hidden>' + I("down", "s12") + 'Latest</button></div>' + boxHTML() + '</section><aside class="pan insp" id="lvInsp" aria-label="Selected design"></aside></div></section>' +
       '<div class="fun" id="lvFun"></div><p class="funn" id="lvFunN"></p><section class="pan lv-files" id="lvFiles" aria-label="Files"></section>' +
       '<div class="ovf"><span id="lvFoot"></span><span>' + esc(CREDIT) + "</span></div></div>";
   }
@@ -605,7 +605,7 @@
     rows.push(["Circuit against its model", vf ? (num(vf.vectors) != null ? fmt(vf.vectors) + " vectors, " : "") + (num(vf.mismatches) != null ? fmt(vf.mismatches) + " mismatches" : "") + (vf.level != null ? ", level " + esc(vf.level) : "") + (vf.proved ? ", proved equal" : "") : "not checked yet"]);
     var files = chipFiles(M, d.id);
     return "<h2>Design " + esc(d.id) + " " + (s ? '<span class="mk ' + (s.m ? "mea" : "no") + '">' + (s.m ? "size measured" : "size estimated") + "</span>" : "") + (isCh ? '<span class="pf ok">Chosen</span>' : "") + "</h2>" +
-      '<p class="is">' + esc(d.data === "synthetic" ? "Scored on synthetic data" : /^public:/.test(d.data || "") ? "Scored on public data: " + d.data.slice(7) : d.data ? String(d.data) : "") + "</p>" +
+      '<p class="is">' + esc(d.data === "synthetic" ? "Scored on synthetic data" : /^public:/.test(d.data || "") ? "Scored on public data: " + d.data.slice(7) : d.data ? String(d.data) : "") + "</p>" + F.variantHTML(d) +
       rows.map(function (r) { return '<div class="irow"><span>' + r[0] + "</span><b>" + r[1] + "</b></div>"; }).join("") +
       (d.note ? '<p class="inote">' + esc(d.note) + "</p>" : "") +
       '<div class="ilinks">' + (d.per_patient.length ? '<a class="qbtn" href="#/live/' + encodeURIComponent(M.id) + '/patients">' + I("right", "s13") + "Where it fails</a>" : "") +
@@ -786,20 +786,37 @@
     var rank = function (a) { return a.kind === "report" ? (a.path === "workspace/report.md" ? 0 : 1) : a.kind === "chip" ? 2 : 3; };
     return out.sort(function (a, b) { return rank(a) - rank(b); });
   }
+  // files the page needs by name are read by their own path, never looked up in the file list
+  // (the backend caps that list): once their stage is done or the run ended, and again if the
+  // list later names one that was missing. A missing file is quietly accepted.
+  var NAMED = [
+    { path: "workspace/spec.json", ready: function (M) { var s = M.st.stages.spec; return !M.running || (s && s.state === "done"); },
+      take: function (x, j) { if (!x.spec) x.spec = j; } },
+    { path: "workspace/final_record.json", ready: function (M) { return !M.running; }, take: function (x, j) { x.final = F.scrubEvent(j); } }
+  ];
+  function readNamed(M) {
+    var x = M.x; if (C.state !== "on") return;
+    var got = x.named || (x.named = {});
+    NAMED.forEach(function (n) {
+      // states: none yet, busy, ok, miss (absent; tried again once the list names it), gone (missed twice)
+      var st = got[n.path], listed = !!(x.files && x.files[n.path] != null);
+      if (st ? st !== "miss" || !listed : !n.ready(M) && !listed) return;
+      got[n.path] = "busy";
+      L.readFile(M.id, n.path).then(function (r) {
+        var j = null; try { j = JSON.parse(r.text); } catch (e) { /* not JSON: nothing taken from it */ }
+        got[n.path] = "ok";
+        if (j && typeof j === "object") { n.take(x, j); x.v++; }
+      }).catch(function () { got[n.path] = st === "miss" ? "gone" : "miss"; });
+    });
+  }
   function refreshSizes(M) {
     var x = M.x, n = M.st.artifacts.length;
+    readNamed(M);
     if (C.state !== "on" || x.filesN === n || Date.now() - x.filesAt < 2500) return;
     x.filesAt = Date.now(); x.filesN = n;
     L.listFiles(M.id).then(function (files) {
       x.files = {}; files.forEach(function (f) { x.files[f.path] = f.size; }); x.v++;
-      if (!x.finalTried && x.files["workspace/final_record.json"] != null) {
-        x.finalTried = true;
-        L.readFile(M.id, "workspace/final_record.json").then(function (r) { try { var j = JSON.parse(r.text); if (j && typeof j === "object") { x.final = F.scrubEvent(j); x.v++; } } catch (e) { /* not JSON: no held-out rows from it */ } }).catch(function () { /* none */ });
-      }
-      if (!x.spec && !x.specTried && x.files["workspace/spec.json"] != null) {
-        x.specTried = true;
-        L.readFile(M.id, "workspace/spec.json").then(function (r) { try { var s = JSON.parse(r.text); if (s && typeof s === "object") { x.spec = s; x.v++; } } catch (e) { /* not JSON: the stored spec stays */ } }).catch(function () { /* none */ });
-      }
+      readNamed(M);
     }).catch(function () { x.filesN = -1; });
   }
   // a chip lab chip report is named by its chip, so it is not mistaken for the run's report
@@ -1158,7 +1175,12 @@
     ".lv-stages span{font-size:12px;font-weight:600;color:var(--i800);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}.lv-stages li:not(.done):not(.now):not(.fail) span{color:var(--i550);font-weight:500}",
     ".lv-stages small{font-size:11px;color:var(--i550);font-variant-numeric:tabular-nums;white-space:nowrap;min-height:14px}",
     ".lv-log{display:flex;flex-direction:column;padding:12px 0 0;min-height:260px}",
-    "@media (min-width:1101px){.lv-ov .side .lv-log{flex:1.9 1 0;min-height:0}.lv-ov .side .insp{flex:1 1 0}}",
+    /* wide screens: as in playback, tiles straight above the chart and the side column beside it, here
+       the compact batches first, then the agent log at a fixed height and the inspector; the column may
+       run past the chart, so the headline, tiles, batches and the whole chart fit a laptop screen */
+    "@media (min-width:1101px){.lv-ov .cgrid2:has(.side){align-items:start}.lv-ov .cgrid2:has(.side) .side{contain:none;overflow:visible}" +
+      ".lv-ov .side .lv-log{flex:none;height:min(440px,max(320px,calc(100vh - 440px)));min-height:0}.lv-ov .side .insp{flex:none;max-height:none;min-height:0;overflow:visible}" +
+      ".lv-ov .side .cf-sb summary{grid-template-columns:78px auto minmax(0,1fr);gap:4px 8px}.lv-ov .side .cf-sbb{padding-left:0}}",
     ".lv-lh{display:flex;align-items:baseline;gap:8px;padding:0 16px 8px;border-bottom:1px solid var(--hair)}.lv-lh h2{font-size:13px;font-weight:650;margin:0}.lv-n{font-size:11.5px;color:var(--i550)}",
     ".lv-feed{flex:1;overflow:auto;min-height:0;padding:6px 10px 10px 12px;overscroll-behavior:contain}",
     "@media (max-width:1100px){.lv-feed{max-height:340px}.lv-log{min-height:0}}",
@@ -1223,7 +1245,7 @@
     "@media (prefers-reduced-motion:no-preference){.lv-ust[data-d=sending] i{animation:lvpulse 1s ease-in-out infinite alternate}@keyframes lvpulse{to{background:var(--i300)}}}",
     ".lv-mh .lv-ust{margin-left:2px}.you.lv-y{flex-direction:column;align-items:flex-end;gap:4px}.you.lv-y .lv-ust{margin-right:6px}.lv-pend{opacity:.75}",
     "@media (max-width:1100px){.lv-fw{flex:none}}",
-    "@media (max-width:767px){.lv-stages small{display:none}.lv-stages span{font-size:10.5px}.lv-pr{grid-template-columns:44px minmax(0,1fr);row-gap:2px}.lv-pv,.lv-pf{grid-column:2;font-size:11.5px}.lv-sb{grid-template-columns:1fr}.lv-sl,.lv-mg{grid-column:1;grid-row:auto}.lv-cost{display:none}.lv-in{max-width:none}.lv-cfg .crow2{flex-wrap:wrap}.lv-runnote{flex-basis:100%;margin:0 0 8px}}"
+    "@media (max-width:767px){.lv-stages small{display:none}.lv-stages span{font-size:10.5px;overflow:visible;text-overflow:clip;max-width:none}.lv-stages li:nth-child(even) span{margin-top:13px}.lv-pr{grid-template-columns:44px minmax(0,1fr);row-gap:2px}.lv-pv,.lv-pf{grid-column:2;font-size:11.5px}.lv-sb{grid-template-columns:1fr}.lv-sl,.lv-mg{grid-column:1;grid-row:auto}.lv-cost{display:none}.lv-in{max-width:none}.lv-cfg .crow2{flex-wrap:wrap}.lv-runnote{flex-basis:100%;margin:0 0 8px}}"
   ].join("\n");
   document.head.appendChild(css);
 

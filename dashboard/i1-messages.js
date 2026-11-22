@@ -91,7 +91,7 @@
     if (seq != null) { if (S.ev[seq]) return; S.ev[seq] = ev; }
     var agent = typeof ev.agent === "string" && ev.agent ? ev.agent : null;
     switch (ev.type) {
-      case "run.started": S.t0 = tsMs(ev.ts); S.prompt = ev.prompt || ""; S.status = "running"; break;
+      case "run.started": S.t0 = tsMs(ev.ts); S.prompt = ev.prompt || ""; S.status = "running"; if (ev.spec && typeof ev.spec === "object") S.spec = ev.spec; break;
       case "stage": {
         var n = ev.stage || ev.name; if (!n) break;
         var st = S.stages[n] || (S.stages[n] = { state: null, reason: "", seq: seq });
@@ -167,12 +167,19 @@
     }
     return "";
   }
+  // a metric as the Chip tab words it: the one label and unit map in ../i1-fold.js
+  function metricLine(S, e) {
+    var F = window.ChipInFold;
+    if (!F || !F.metricText) return String(e.key || "metric").replace(/_/g, " ") + " " + e.value + (e.unit ? " " + e.unit : "");
+    var m = F.metricText(String(e.key || "metric"), e.value, e.unit, S && S.spec);
+    return m.label + ": " + m.value;
+  }
   function itemFirst(S, r) {
     var e = S.ev[r.first] || {};
     switch (r.kind) {
       case "msg": case "user": return firstLine(e.text);
       case "tool": case "lab": return rawText(r);
-      case "metric": return String(e.key || "metric").replace(/_/g, " ") + " " + e.value + (e.unit ? " " + e.unit : "") + (e.chip ? " (chip " + e.chip + ")" : "");
+      case "metric": return metricLine(S, e) + (e.chip ? " (chip " + e.chip + ")" : "");
       case "file": return "Wrote " + (e.path || e.name || "a file");
       case "chosen": return "Chose chip " + (e.chip || "");
       case "error": return firstLine(e.message || e.text || "Error");
@@ -504,7 +511,7 @@
         var st = S.stages[n.name] || {}, state = st.state || (n.sum ? "done" : "");
         var g = state === "done" ? '<span class="cm-sd cm-ok" title="Done"></span>' : state === "started" ? (S.finished ? '<span class="cm-sd cm-halt" title="Ended before it was marked done"></span>' : '<span class="cm-spin" title="Running"></span>') : state === "skipped" ? '<span class="cm-sd cm-skip" title="Skipped"></span>' : state === "failed" ? '<span class="cm-sd cm-bad" title="Failed"></span>' : '<span class="cm-sd"></span>';
         glyph = g;
-        if (n.sum) { text = n.sum.text; if (!n.sum.final) cls = "cm-interim"; }
+        if (n.sum) { text = sumText(S, n); if (!n.sum.final) cls = "cm-interim"; }
         else if (state === "skipped") text = "Skipped" + (st.reason ? ": " + st.reason : "");
         else { var nw = T.newest(n.id); text = nw ? lineOf(S, nw) : state === "started" ? "Started" : "No activity yet"; pend = !!nw; }
         var na = 0, ng = 0; (n.kids || []).forEach(function (c) { var x = T.N[c]; if (x.level === "batch") na += (x.kids || []).filter(function (k) { return T.N[k].level === "agent"; }).length; if (x.level === "group") ng++; });
@@ -516,7 +523,7 @@
       case "batch": {
         var ags = (n.kids || []).filter(function (c) { return T.N[c].level === "agent"; }), running = ags.filter(function (c) { var a = T.N[c]; return a.sub && a.sub.state === "running"; }).length;
         var k = n.id.split(":")[2] || "1";
-        if (n.sum) text = n.sum.text; else { text = plural(ags.length, "subagent") + (running && !S.finished ? ", " + running + " running" : ""); pend = true; }
+        if (n.sum) text = sumText(S, n); else { text = plural(ags.length, "subagent") + (running && !S.finished ? ", " + running + " running" : ""); pend = true; }
         glyph = '<span class="cm-gl" style="--k:var(--c-lead,#6b46c1)">' + ico("agent") + "</span>";
         meta = plural(ags.length, "subagent");
         return { html: chev + glyph + '<span class="cm-main"><b class="cm-nm">Batch ' + esc(k) + '</b><span class="cm-tx' + (pend ? " cm-pend" : "") + '">' + (pend ? pendDot() : "") + esc(text) + srcMark(n.sum) + "</span></span>" + metaHTML(meta), cls: "" };
@@ -524,7 +531,7 @@
       case "agent": {
         var sb = n.sub || {}, state2 = sb.state || (n.sum ? "done" : "running");
         var g2 = state2 === "running" ? (S.finished ? '<span class="cm-sd cm-halt" title="Ended without a finish event"></span>' : '<span class="cm-spin" title="Running"></span>') : /fail|error/.test(state2) ? '<span class="cm-sd cm-bad" title="Failed"></span>' : '<span class="cm-sd cm-ok" title="Done"></span>';
-        if (n.sum) text = n.sum.text;
+        if (n.sum) text = sumText(S, n);
         else { var nw2 = T.newest(n.id); text = nw2 ? lineOf(S, nw2) : firstLine(sb.strategy) || "Starting"; pend = true; }
         var strat = firstLine(String(sb.strategy || "").replace(/^Strategy:\s*/i, ""));
         meta = (state2 === "running" && !S.finished ? "running" : state2 === "running" ? "ended" : state2) + (n.items ? ", " + plural(n.items, "step") : "");
@@ -534,7 +541,7 @@
         };
       }
       case "group": {
-        text = n.sum.text;
+        text = sumText(S, n);
         meta = plural(n.items, "step");
         return { html: chev + '<span class="cm-gd"></span><span class="cm-main"><span class="cm-tx">' + esc(text) + srcMark(n.sum) + "</span></span>" + metaHTML(meta, n.lastSeq != null ? rel(S, n.lastSeq) : ""), cls: "" };
       }
@@ -544,7 +551,7 @@
       }
       case "item": {
         var r = n.raw, kind = r ? r.kind : "msg", K = KIND[kind] || KIND.msg;
-        if (n.sum) text = n.sum.text; else { text = r ? itemFirst(S, r) : ""; pend = true; }
+        if (n.sum) text = sumText(S, n); else { text = r ? itemFirst(S, r) : ""; pend = true; }
         var nm = r && (kind === "tool" || kind === "lab") ? (kind === "lab" ? labName(r) : r.name || "Tool") : "";
         var stt = r && (kind === "tool" || kind === "lab") ? (r.state === "done" ? "" : r.state === "failed" ? '<span class="cm-fail">failed</span>' : S.finished ? '<span class="cm-fail cm-mute">no result</span>' : '<span class="cm-spin cm-sm" title="Running"></span>') : "";
         var num = r ? labNumber(r) : "";
@@ -556,13 +563,20 @@
       default: return { html: esc(n.id), cls: "" };
     }
   }
-  function lineOf(S, n) { return n.sum ? n.sum.text : n.raw ? itemFirst(S, n.raw) : ""; }
+  function lineOf(S, n) { return n.sum ? sumText(S, n) : n.raw ? itemFirst(S, n.raw) : ""; }
+  // a line's summary as shown: a metric step in the page's own words (the Chip tab's label and unit),
+  // any other summary with the raw metric keys in it read as their labels
+  function sumText(S, n) {
+    if (n.level === "item" && n.raw && n.raw.kind === "metric") return itemFirst(S, n.raw);
+    var F = window.ChipInFold;
+    return F && F.humanKeys ? F.humanKeys(n.sum.text) : n.sum.text;
+  }
   function metaHTML(a, t) { return '<span class="cm-meta">' + (a ? "<span>" + esc(a) + "</span>" : "") + (t ? '<span class="cm-t">' + esc(t) + "</span>" : "") + "</span>"; }
 
   function pre(t, cls) { return '<pre class="cm-pre' + (cls ? " " + cls : "") + '">' + esc(t) + "</pre>"; }
   function bodyHTML(S, n) {
     var out = [], evs = n.seqs.slice().sort(function (a, b) { return a - b; }).map(function (q) { return S.ev[q]; }).filter(Boolean);
-    if (n.sum) out.push('<p class="cm-bs"><span>Summary</span>' + esc(n.sum.text) + (n.sum.source === "verbatim" ? ' <em>(its own words)</em>' : n.sum.source === "fallback" ? " <em>(first line, no model answer)</em>" : "") + "</p>");
+    if (n.sum) out.push('<p class="cm-bs"><span>Summary</span>' + esc(sumText(S, n)) + (n.sum.source === "verbatim" ? ' <em>(its own words)</em>' : n.sum.source === "fallback" ? " <em>(first line, no model answer)</em>" : "") + "</p>");
     var tool = null;
     evs.forEach(function (e) { if (e.type === "tool") tool = tool || {}; });
     if (tool) {
@@ -577,7 +591,7 @@
     evs.forEach(function (e) {
       if (e.type === "tool") return;
       var h = e.type === "message" ? (e.role === "user" ? "Your message" : (e.author || "Agent") + (e.agent ? ", " + e.agent : "")) : e.type === "metric" ? "Metric" : e.type === "artifact" ? "File" : e.type === "chosen" ? "Chosen chip" : e.type === "error" ? "Error" : e.type;
-      var t = e.type === "message" ? e.text : e.type === "metric" ? e.key + " = " + e.value + (e.unit ? " " + e.unit : "") + (e.chip ? "\nchip " + e.chip : "") : e.type === "artifact" ? (e.name || "") + "\n" + (e.path || "") + (e.kind ? "\n" + e.kind : "") : e.type === "chosen" ? "chip " + e.chip : e.type === "error" ? e.message || e.text || "" : JSON.stringify(e);
+      var t = e.type === "message" ? e.text : e.type === "metric" ? metricLine(S, e) + (e.chip ? "\nchip " + e.chip : "") : e.type === "artifact" ? (e.name || "") + "\n" + (e.path || "") + (e.kind ? "\n" + e.kind : "") : e.type === "chosen" ? "chip " + e.chip : e.type === "error" ? e.message || e.text || "" : JSON.stringify(e);
       out.push('<div class="cm-sec"><h4>' + esc(h) + '<span>event ' + e.seq + "</span></h4>" + pre(t || "") + "</div>");
     });
     if (!evs.length) out.push('<p class="cm-mute">The events this line covers have not reached this page.</p>');

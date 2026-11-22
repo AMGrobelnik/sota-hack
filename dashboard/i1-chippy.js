@@ -645,7 +645,7 @@
       case "open_run": return goHash(runHash(a.run_id, a.tab || "overview"));
       case "switch_tab": return goHash(runHash(a.run_id || where().id, a.tab));
       case "select_design": return selectDesign(a.run_id, a.design_id, (String(a.route || "").match(/\/([a-z]+)$/) || [])[1]);
-      case "set_playback": return setPlayback(a.run_id, +a.seconds || 0);
+      case "set_playback": return setPlayback(a.run_id, +a.seconds || 0, typeof a.seq === "number" ? a.seq : null);
       case "open_file": return openFile(a.run_id, a.path);
       case "new_spec": return newSpec(a.brief);
       case "highlight": return highlight(a.element_id);
@@ -682,29 +682,21 @@
       return inspId() === design;
     });
   }
-  // move the playback clock: the module's seek() if offered, else the playback track's own keys
-  function setPlayback(id, s) {
+  // move the playback clock with the playback module's seek(): fractional seconds as sent, and the
+  // event's seq when the action names one (exact: the page shows the state after that event)
+  function setPlayback(id, s, seq) {
     var w = where();
     var onBar = function () { return $("#pbTrk") && clockNow(); };
     if (!((w.kind === "rec" || w.kind === "example") && w.id === id && onBar())) {
-      return goHash(runHash(id, w.id === id ? w.tab : "overview", true) + "?t=" + Math.round(s)).then(function () {
+      return goHash(runHash(id, w.id === id ? w.tab : "overview", true) + "?t=" + s).then(function () {
         return until(onBar, 8000);
-      }).then(function (ok) { return ok ? null : { bad: "This backend does not serve the recorded view of run " + shortId(id) + ", so the clock could not move." }; });
+      }).then(function (ok) { return ok ? seek(s, seq) : { bad: "This backend does not serve the recorded view of run " + shortId(id) + ", so the clock could not move." }; });
     }
-    return Promise.resolve(seek(s));
+    return Promise.resolve(seek(s, seq));
   }
-  function seek(s) {
+  function seek(s, seq) {
     var P = window.ChipInPlayback;
-    if (P && typeof P.seek === "function") { P.seek(s); return null; }
-    var trk = $("#pbTrk"), ck = clockNow(); if (!trk || !ck) return { bad: "No playback bar is on the page." };
-    s = Math.max(0, Math.min(ck.total, s));
-    var key = function (k, sh) { trk.dispatchEvent(new KeyboardEvent("keydown", { key: k, shiftKey: !!sh, bubbles: true, cancelable: true })); };
-    if (ck.playing) key(" ");
-    key("Home");
-    var left = Math.floor(s);
-    for (; left >= 30; left -= 30) key("PageUp");
-    for (; left >= 10; left -= 10) key("ArrowRight", true);
-    for (; left >= 1; left -= 1) key("ArrowRight");
+    if (!P || typeof P.seek !== "function" || !P.seek(s, seq)) return { bad: "No playback bar is on the page." };
     return null;
   }
   function openFile(id, path) {

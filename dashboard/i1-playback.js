@@ -10,6 +10,9 @@
  *   ChipInPlayback.pastLink(where)       the quiet "Past runs" button for the start page or a run header
  *   ChipInPlayback.cleanHash(h)          the address without its ?t=&speed= part (the page routes on the rest)
  *   ChipInPlayback.state()               what the open recorded run shows now (for tests)
+ *   ChipInPlayback.seek(s, seq)          moves the bar to s seconds (fractions kept) and pauses; with seq, a
+ *                                        recorded run shows exactly the state after that event. Whole seconds
+ *                                        just short of a stage start (1364 for 1364.673) land in that stage.
  *
  * The design follows the run viewer of an earlier product by one of the team, rewritten for this page:
  *   - The clock stores an anchor (time at the last play, pause, seek or speed change, and the wall clock
@@ -75,8 +78,7 @@
   css.textContent = [
     ".pb-row [hidden]{display:none!important}",
     ".top:has(+ .pb-row) #stp .spill.paused{display:none}",
-    "@media (max-width:767px){.rv-st{scrollbar-width:none}.rv-st::-webkit-scrollbar{display:none}.rv-st li{flex:none;min-width:0;padding:0 8px}}",
-    ".pb-row{flex:none;display:flex;align-items:center;gap:6px;min-height:40px;padding:0 14px 0 12px;border-bottom:1px solid var(--hair);background:rgb(255 255 255/.66)}",
+        ".pb-row{flex:none;display:flex;align-items:center;gap:6px;min-height:40px;padding:0 14px 0 12px;border-bottom:1px solid var(--hair);background:rgb(255 255 255/.66)}",
     ".pb-b{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;color:var(--i700);flex:none}",
     ".pb-b:hover{background:var(--i100)}.pb-b[disabled]{opacity:.35;cursor:default;background:none}",
     ".pb-b svg{width:14px;height:14px}.pb-b svg.pb-fi{fill:currentColor;stroke:none}.pb-b svg.pb-si{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}",
@@ -130,6 +132,8 @@
     ".rv-st li.done{color:var(--i800)}.rv-st li.done i{border-color:var(--okt);background:var(--okt)}",
     ".rv-st li.skipped{color:var(--i500);text-decoration:line-through}.rv-st li.skipped i{border-style:dashed}",
     ".rv-st .r{color:var(--i500);font-weight:400;text-decoration:none;font-size:11px}",
+    /* a phone: the seven dots on one regular grid, each name in full under its dot, every other name a line lower */
+    "@media (max-width:767px){.rv-st{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));overflow:visible;padding:10px 4px 8px}.rv-st li{flex-direction:column;align-items:center;gap:3px;min-width:0;padding:0;font-size:10.5px;text-align:center}.rv-st li:nth-child(even)>span{margin-top:13px}}",
     ".rv-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:14px;align-items:start}",
     ".rv-side{display:flex;flex-direction:column;gap:14px;min-width:0}",
     ".rv-pan{padding:12px 14px}.rv-pan h2{font-size:13.5px;font-weight:650;margin:0 0 6px}",
@@ -410,7 +414,7 @@
   function cleanHash(h) { h = h == null ? location.hash : h; var i = h.indexOf("?"); return i >= 0 ? h.slice(0, i) : h; }
   function writeHash(ck) {
     var p = hashParts(), q = [];
-    if (!(ck.live && ck.atLive) && !(!ck.live && ck.now() >= ck.total - 1e-6)) q.push("t=" + (Math.round(ck.now() * 10) / 10));
+    if (!(ck.live && ck.atLive) && !(!ck.live && ck.now() >= ck.total - 1e-6)) q.push("t=" + +ck.now().toFixed(3));
     if (ck.speed !== 1) q.push("speed=" + ck.speed);
     var next = p.path + (q.length ? "?" + q.join("&") : "");
     if (next !== location.hash) { try { history.replaceState(history.state, "", location.pathname + location.search + next); } catch (e) { /* file:// */ } }
@@ -788,7 +792,8 @@
 
   // what the page shows at time t, from the state after every event up to t
   function model(rec, t) {
-    var n = countAt(rec, t), st = stateAt(rec, n), f = st.f;
+    var pin = V && V.pin && V.pin.rec === rec && Math.abs(V.pin.t - t) < 1e-9 ? V.pin.n : null;
+    var n = pin != null ? pin : countAt(rec, t), st = stateAt(rec, n), f = st.f;
     // the designs are the design records only, as the live view and designs.json count them
     var list = F.designs(f).map(function (d) {
       var p = { id: d.id, label: d.label || "", gates: num(d.gates) > 0 ? d.gates : null, est: num(d.gates_est) > 0 ? d.gates_est : null, m: {}, basis: d.basis || "", d: d };
@@ -1021,9 +1026,29 @@
     };
   }
 
+  /* ---------- seek: Chippy's set_playback and anything else that names a moment ---------- */
+  function seek(s, seq) {
+    if (!BAR) return false;
+    var c = BAR.ctl, ck = c.clock, t = +s, rec = c.kind === "recorded" && V ? V.rec : null, pin = null;
+    if (rec && typeof seq === "number" && isFinite(seq)) {
+      for (var i = 0; i < rec.events.length; i++) if (rec.events[i].seq === seq) { t = rec.events[i]._a; pin = i + 1; break; }
+    }
+    if (!isFinite(t)) return false;
+    if (pin == null && t === Math.floor(t)) { // whole seconds: a stage that starts within the next second
+      var m = (c.marks || []).filter(function (x) { return x.t > t && x.t <= t + 1; }).sort(function (a, b) { return a.t - b.t; })[0];
+      if (m) t = m.t;
+    }
+    t = clamp(t, 0, ck.total);
+    if (ck.playing) ck.pause();
+    ck.seek(t, false);
+    if (rec) V.pin = pin != null ? { rec: rec, t: ck.now(), n: pin } : null;
+    commit();
+    return true;
+  }
+
   window.ChipInPlayback = {
     version: 1, SPEEDS: SPEEDS.slice(), owns: owns, render: render, mountExample: mountExample, pastLink: pastLink, cleanHash: cleanHash,
-    state: state, openPicker: openPicker,
+    state: state, openPicker: openPicker, seek: seek,
     clock: function () { return BAR ? { t: BAR.ctl.clock.now(), total: BAR.ctl.clock.total, speed: BAR.ctl.clock.speed, playing: BAR.ctl.clock.playing, live: BAR.ctl.clock.live && BAR.ctl.clock.atLive, kind: BAR.ctl.kind } : null; }
   };
 })();

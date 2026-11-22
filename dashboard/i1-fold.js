@@ -13,13 +13,20 @@
  *   ChipInFold.funnel(f, T)        { proposed, scored, compiled, verified, clear, chosen }
  *   ChipInFold.heldOut(f, id, fin) the held-out figures for chip id, or null
  *   ChipInFold.subsHTML(f, spec, open), chipHTML(m), patientsHTML(m): the shared panels
+ *   ChipInFold.variantHTML(d)      the "Variant of <id>" line for a record with variant_of, else ""
  *   ChipInFold.targetsOf, fmtV, fmtT, meets, passAll, metaOf, dataMark, metricText, sizeOf
+ *   ChipInFold.humanKeys(s)        a sentence with any raw metric key in it read as that key's label
  *
  * Designs: one record per id, as the backend keeps designs.json: a record whose previous_id
  * (prev_id is accepted) names an earlier record takes over that record's place.
- * Cost: a cost event with an agent is that subagent's running total; one without is the
- * orchestrator's, until an event carries subagents_usd: that one and every later one without
- * an agent is the whole run's total so far (a follow-up's included). Never a sum of events. */
+ * Cost: every cost event from the current backend carries run_total_usd (the whole run so far,
+ * summaries included) and agent_usd (the named agent's own spend, or the orchestrator's); the
+ * newest run_total_usd is the run's cost. Older recordings without them: a cost event with an
+ * agent is that subagent's running total; one without is the orchestrator's, until an event
+ * carries subagents_usd: that one and every later one without an agent is the whole run's total
+ * so far (a follow-up's included). Never a sum of events.
+ * Metric labels: metricText(key, value, unit, spec) is the one map from a metric key to the label
+ * and unit a person reads; the Chip tab, the inspector and the message view all use it. */
 (function () {
   "use strict";
 
@@ -126,6 +133,16 @@
     return { label: cap(String(k).replace(/_/g, " ")), value: numText(v, u) };
   }
 
+  // a raw metric key written into a sentence (a summary's "heldout_fa_per_hour") read as its label
+  function humanKeys(s) {
+    return String(s == null ? "" : s).replace(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g, function (k) {
+      var b = keyInfo(k).base;
+      if (!(MET[b] || LAB[b] || OTHER[b] || CHECK_KEYS[b])) return k;
+      var l = metricText(k, 0, "", null).label;
+      return /^[A-Z][a-z]/.test(l) ? l.charAt(0).toLowerCase() + l.slice(1) : l;
+    });
+  }
+
   function dataMark(spec, designs) {
     var mode = spec && spec.data && spec.data.mode, pub = null, syn = mode === "simulate";
     (designs || []).forEach(function (d) { var s = String(d && d.data || ""); if (s === "synthetic") syn = true; else if (/^public:/.test(s)) pub = s.slice(7); });
@@ -137,7 +154,7 @@
   /* ---------- the fold ---------- */
   function create() {
     return { designs: {}, order: [], chips: {}, units: {}, run: {}, runUnits: {}, chosen: null, spec: null,
-      cost: { orch: null, agents: {}, total: null, totalMode: false }, subs: {}, subOrder: [], merged: {}, mergedOrder: [] };
+      cost: { orch: null, agents: {}, total: null, totalMode: false, runTotal: null }, subs: {}, subOrder: [], merged: {}, mergedOrder: [] };
   }
   function normDesign(d) {
     if (!d || typeof d !== "object" || typeof d.id !== "string" || !d.id) return null;
@@ -180,10 +197,11 @@
       }
       case "chosen": if (typeof ev.chip === "string" && ev.chip) f.chosen = ev.chip; break;
       case "cost": {
-        var c = f.cost, part = costPart(ev);
-        if (typeof ev.agent === "string" && ev.agent) c.agents[ev.agent] = part;
+        var c = f.cost, part = costPart(ev), own = num(ev.agent_usd);
+        if (num(ev.run_total_usd) != null) c.runTotal = ev.run_total_usd;
+        if (typeof ev.agent === "string" && ev.agent) { if (own != null) part.usd = own; c.agents[ev.agent] = part; }
         else if (num(ev.subagents_usd) != null || c.totalMode) { c.totalMode = true; c.total = part; }
-        else c.orch = part;
+        else { if (own != null) part.usd = own; c.orch = part; }
         break;
       }
       case "subagent.started": {
@@ -207,13 +225,18 @@
     return null;
   }
   var designs = function (f) { return f.order.map(function (i) { return f.designs[i]; }).filter(Boolean); };
+  // { usd, tokens_in, tokens_out, summaries_usd }; usd is run_total_usd when the events carry it
+  // (it already counts the summaries, so summaries_usd is then null), else the older reckoning
   function cost(f) {
-    var c = f.cost, add = function (a, b) { return a == null ? b : b == null ? a : a + b; };
-    if (c.total) return c.total;
-    var ids = Object.keys(c.agents);
-    if (!c.orch && !ids.length) return null;
-    var out = c.orch ? { usd: c.orch.usd, tokens_in: c.orch.tokens_in, tokens_out: c.orch.tokens_out, summaries_usd: c.orch.summaries_usd } : { usd: null, tokens_in: null, tokens_out: null, summaries_usd: null };
-    ids.forEach(function (k) { var a = c.agents[k]; out.usd = add(out.usd, a.usd); out.tokens_in = add(out.tokens_in, a.tokens_in); out.tokens_out = add(out.tokens_out, a.tokens_out); });
+    var c = f.cost, add = function (a, b) { return a == null ? b : b == null ? a : a + b; }, out;
+    if (c.total) out = { usd: c.total.usd, tokens_in: c.total.tokens_in, tokens_out: c.total.tokens_out, summaries_usd: c.total.summaries_usd };
+    else {
+      var ids = Object.keys(c.agents);
+      if (!c.orch && !ids.length) return null;
+      out = c.orch ? { usd: c.orch.usd, tokens_in: c.orch.tokens_in, tokens_out: c.orch.tokens_out, summaries_usd: c.orch.summaries_usd } : { usd: null, tokens_in: null, tokens_out: null, summaries_usd: null };
+      ids.forEach(function (k) { var a = c.agents[k]; out.usd = add(out.usd, a.usd); out.tokens_in = add(out.tokens_in, a.tokens_in); out.tokens_out = add(out.tokens_out, a.tokens_out); });
+    }
+    if (num(c.runTotal) != null) { out.usd = c.runTotal; out.summaries_usd = null; }
     return out;
   }
   function funnel(f, T) {
@@ -259,6 +282,11 @@
 
   /* ---------- shared panels ---------- */
   var BAR_CSS = "";
+  // one quiet line for a design record that is another compile of an earlier design (variant_of)
+  function variantHTML(d) {
+    var v = d && typeof d.variant_of === "string" ? d.variant_of : "";
+    return v ? '<p class="cf-var" data-variant-of="' + esc(v) + '">Variant of <span class="cf-vid">' + esc(v) + "</span></p>" : "";
+  }
   function barsHTML(rows, t) {
     return rows.slice().sort(function (a, b) { return a.caught / (a.total || 1) - b.caught / (b.total || 1); }).map(function (p) {
       var r = p.total ? p.caught / p.total : 0, ok = t ? r >= t.value - 1e-12 : true, fa = num(p.false_alarms);
@@ -344,7 +372,7 @@
     var ag = order.map(function (k) { return agent[k]; }).sort(function (a, b) { return rank(a) - rank(b); });
     var row = function (r) { return '<div class="irow"><span>' + esc(r[0]) + "</span><b>" + r[1] + "</b></div>"; };
     var mark = dataMark(m.spec, rec ? [rec] : []);
-    return '<div class="vh"><p class="cf-k">Chip ' + esc(id) + (id === m.chosenId ? ", chosen" : "") + " " + mark + '</p><h2>The chip</h2><p class="vs">Two kinds of figure: what the chip lab measured on the circuit, and what the agent computed on the patients.</p></div>' +
+    return '<div class="vh"><p class="cf-k">Chip ' + esc(id) + (id === m.chosenId ? ", chosen" : "") + " " + mark + "</p>" + variantHTML(rec) + '<h2>The chip</h2><p class="vs">Two kinds of figure: what the chip lab measured on the circuit, and what the agent computed on the patients.</p></div>' +
       '<section class="stage cf-sec" data-sec="lab"><h3 class="cf-h3">Measured by the chip lab</h3>' + (lab.length || checks.length ? '<div class="cf-kv">' + lab.map(function (r) { return row([r[0], r[1]]); }).join("") + "</div>" : '<p class="cf-sub">The lab has not reported figures for this chip yet.</p>') +
       (checks.length ? '<h4 class="cf-h4">Vectors checked against the model</h4><div class="cf-kv">' + checks.map(function (c) { return row([c[0], esc(c[1])]); }).join("") + "</div>" + (checks.length > 1 ? '<p class="cf-sub">Each kind of check runs its own set of input vectors, so the counts differ.</p>' : "") : "") + "</section>" +
       '<section class="stage cf-sec" data-sec="agent"><h3 class="cf-h3">Reported by the agent</h3>' + (ag.length ? '<div class="cf-kv">' + ag.map(function (r) {
@@ -384,6 +412,7 @@
   css.textContent = [
     ".cf-sec{margin-top:14px}.cf-h3{font-size:14px;font-weight:650;margin:0 0 6px}.cf-h4{font-size:12.5px;font-weight:650;margin:12px 0 4px;color:var(--i700)}",
     ".cf-k{font-size:12.5px;color:var(--i600);margin:0 0 4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}",
+    ".cf-var{font-size:12px;color:var(--i600);margin:0 0 4px}.cf-vid{font-family:var(--mono);font-size:11px;color:var(--i700)}",
     ".cf-sub{font-size:12.5px;color:var(--i600);margin:4px 0 8px;line-height:1.5}",
     ".cf-kv{max-width:620px}.cf-kv .irow b{display:inline-flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:4px 8px;text-align:right}",
     ".cf-tg{font-weight:400;color:var(--i600);font-size:12px}",
@@ -407,8 +436,8 @@
 
   window.ChipInFold = {
     version: 1, scrub: scrub, scrubEvent: scrubEvent, create: create, fold: fold, designs: designs, cost: cost, funnel: funnel, heldOut: heldOut,
-    subsHTML: subsHTML, wireSubs: wireSubs, chipHTML: chipHTML, patientsHTML: patientsHTML,
+    subsHTML: subsHTML, wireSubs: wireSubs, chipHTML: chipHTML, patientsHTML: patientsHTML, variantHTML: variantHTML,
     targetsOf: targetsOf, fmtV: fmtV, fmtT: fmtT, meets: meets, passAll: passAll, metaOf: metaOf, MET: MET, FAU: FAU, faUnit: faUnit,
-    dataMark: dataMark, metricText: metricText, keyInfo: keyInfo, sizeOf: sizeOf, ratio: ratio, normDesign: normDesign
+    dataMark: dataMark, metricText: metricText, humanKeys: humanKeys, keyInfo: keyInfo, sizeOf: sizeOf, ratio: ratio, normDesign: normDesign
   };
 })();
