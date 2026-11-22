@@ -463,6 +463,13 @@ html.cam { scroll-snap-type: y mandatory; }
 .ov { opacity: var(--ov, 0); }
 .ov rect { fill: rgba(15, 26, 42, .9); stroke: rgba(214, 228, 242, .35); stroke-width: 1; }
 .ov text { fill: #fff; font-weight: 650; }
+.ov { pointer-events: none; }
+.ovon .ov .jump { pointer-events: auto; cursor: pointer; }
+.ovon .rg { cursor: pointer; }
+.ov .jump { outline: none; }
+.ov .jump rect { transition: stroke .2s ease; }
+.ov .jump:hover rect, .ov .jump:focus-visible rect, .ov .jump.hov rect { stroke: var(--signal); stroke-width: 6; }
+.ov .jump:hover text, .ov .jump:focus-visible text, .ov .jump.hov text { fill: var(--signal); }
 </style>
 </head>
 <body>
@@ -908,8 +915,10 @@ html.cam { scroll-snap-type: y mandatory; }
     ['spec', 'run', 'agent', 'talk', 'pipe', 'tools', 'meas'].forEach(function (k) {
       var r = REG[k], s = C.overview[k], size = 96, w = mw(s, size, 650) + 90, h = size + 70;
       var x = r.x + r.w / 2 - w / 2, y = r.y + r.h / 2 - h / 2;
-      R(g, x, y, w, h, '', 20);
-      T(g, x + w / 2, y + 35, s, { size: size, weight: 650, anchor: 'middle', cls: '' });
+      // a jump link to the section's first stop, live only on the whole-map view
+      var a = E('g', { 'class': 'jump', 'data-k': k, role: 'link', tabindex: '-1', 'aria-label': s }, g);
+      R(a, x, y, w, h, '', 20);
+      T(a, x + w / 2, y + 35, s, { size: size, weight: 650, anchor: 'middle', cls: '' });
     });
   })();
 
@@ -1042,11 +1051,34 @@ html.cam { scroll-snap-type: y mandatory; }
     var scale = vp.clientWidth / w;
     var ov = Math.max(0, Math.min(1, (0.26 - scale) / 0.08));
     cam.style.setProperty('--ov', ov.toFixed(3));
+    setOv(ov > 0.5);
     mcam.setAttribute('x', cx - w / 2); mcam.setAttribute('y', cy - h / 2); mcam.setAttribute('width', w); mcam.setAttribute('height', h);
     setCurrent(Math.round(f));
   }
   function req() { if (!raf) raf = requestAnimationFrame(frame); }
   function go(n) { window.scrollTo({ top: n * unit(), behavior: 'smooth' }); }
+
+  // whole-map view: each section label (and its region) jumps to that section's first stop
+  var jumps = [].slice.call(map.querySelectorAll('.ov .jump')), ovOn = null;
+  function firstStop(k) { for (var i = 0; i < N; i++) if (STEPS[i].key === k) return i; return 0; }
+  function setOv(on) {
+    if (on === ovOn) return; ovOn = on;
+    cam.classList.toggle('ovon', on);
+    jumps.forEach(function (j) { j.setAttribute('tabindex', on ? '0' : '-1'); if (!on) j.classList.remove('hov'); });
+    if (!on && jumps.indexOf(document.activeElement) >= 0) document.activeElement.blur();
+  }
+  function label(k) { return map.querySelector('.ov .jump[data-k="' + k + '"]'); }
+  jumps.forEach(function (j) {
+    var k = j.getAttribute('data-k');
+    j.addEventListener('click', function () { if (ovOn) go(firstStop(k)); });
+    j.addEventListener('keydown', function (e) { if (ovOn && e.key === 'Enter') { e.preventDefault(); go(firstStop(k)); } });
+  });
+  regions.forEach(function (r) {
+    var k = r.getAttribute('data-r');
+    r.addEventListener('click', function () { if (ovOn) go(firstStop(k)); });
+    r.addEventListener('mouseenter', function () { if (ovOn) label(k).classList.add('hov'); });
+    r.addEventListener('mouseleave', function () { label(k).classList.remove('hov'); });
+  });
   addEventListener('scroll', req, { passive: true });
   addEventListener('resize', function () { applyMode(); });
   addEventListener('keydown', function (e) {
@@ -1087,7 +1119,7 @@ html.cam { scroll-snap-type: y mandatory; }
       isCam = want;
       root.classList.toggle('cam', want); root.classList.toggle('flow', !want);
       cam.setAttribute('aria-hidden', want ? 'false' : 'true');
-      if (!want) { panels.concat(regions).forEach(function (p) { p.classList.remove('on', 'dim'); }); cam.style.setProperty('--ov', '0'); cur = -1; }
+      if (!want) { panels.concat(regions).forEach(function (p) { p.classList.remove('on', 'dim'); }); cam.style.setProperty('--ov', '0'); setOv(false); cur = -1; }
     }
     if (isCam) { measureVp(); req(); }
   }
