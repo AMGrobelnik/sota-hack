@@ -143,6 +143,9 @@ class SteerSink:
             data["usd"] = float(data.get("usd") or 0.0) + float(base.get("usd") or 0.0)
             data["input_tokens"] = int(data.get("input_tokens") or 0) + int(base.get("tokens_in") or 0)
             data["output_tokens"] = int(data.get("output_tokens") or 0) + int(base.get("tokens_out") or 0)
+            for key in ("subagents_usd", "summaries_usd"):  # the total's parts, so it reads as a total
+                if base.get(key) is not None:
+                    data[key] = base[key]
             event = replace(event, data=data)
         self.translator.emit(event)
 

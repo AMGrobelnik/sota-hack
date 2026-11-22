@@ -27,6 +27,7 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 
 from chipin_backend.llm.endpoints import CHAT_COMPLETIONS_URL
+from chipin_backend.scrub import scrub_value
 
 
 class Rung(BaseModel):
@@ -148,7 +149,7 @@ class OpenRouterLadder:
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": rung.model,
-            "messages": messages,
+            "messages": scrub_value(messages),  # nothing private leaves the machine
             "tools": list(tools),
             "tool_choice": tool_choice,
             "stream": True,

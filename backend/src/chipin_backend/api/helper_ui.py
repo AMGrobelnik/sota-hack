@@ -14,10 +14,12 @@ second lookup; this module never sends it.
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from chipin_backend.api.events import STAGES
 from chipin_backend.api.helper_tools import HelperTools, ToolError, function_tool
 from chipin_backend.runs import is_safe_run_id
 
@@ -182,9 +184,16 @@ ACTION_SCHEMAS: list[dict[str, Any]] = [
     ),
     function_tool(
         "ui_set_playback",
-        "Move the run's playback clock to a moment: 'seconds' on the page's clock (active time, "
-        "silences over 30 minutes skipped; the playback_s the read tools give), or 'seq', an event's seq.",
-        {"seconds": {"type": "number"}, "seq": {"type": "integer"}, "run_id": _RUN},
+        "Move the run's playback clock to a moment. To show a stage, give 'stage' (the clock goes to "
+        "the moment it started); for another event give 'seq', its seq from the read tools; 'seconds' "
+        "on the page's clock (active time, silences over 30 minutes skipped) only when there is no "
+        "seq, copied in full, never rounded down.",
+        {
+            "stage": {"type": "string", "enum": list(STAGES)},
+            "seq": {"type": "integer"},
+            "seconds": {"type": "number"},
+            "run_id": _RUN,
+        },
         [],
     ),
     function_tool(
@@ -225,6 +234,15 @@ PROPOSAL_SCHEMAS: list[dict[str, Any]] = [
 ]
 ACTION_NAMES = frozenset(t["function"]["name"] for t in ACTION_SCHEMAS)
 PROPOSAL_NAMES = frozenset(t["function"]["name"] for t in PROPOSAL_SCHEMAS)
+
+
+def _at_or_after(seconds: float, *, event: bool = True) -> float:
+    """``seconds`` rounded UP to the hundredth, so the page lands where it was sent, never before.
+
+    ``event``: ``seconds`` is an event's own time; it is moved one millisecond past it first, as
+    the page reads event times to the millisecond and must find the event already happened.
+    """
+    return math.ceil(round((seconds + (0.001 if event else 0.0)) * 100, 6)) / 100
 
 
 class UiActions:
@@ -318,19 +336,41 @@ class UiActions:
         return {"kind": "select_design", "run_id": rid, "design_id": design_id, "route": f"#/run/{rid}/{tab}"}
 
     def _set_playback(
-        self, seconds: float | None = None, run_id: str | None = None, seq: int | None = None
+        self,
+        seconds: float | None = None,
+        run_id: str | None = None,
+        seq: int | None = None,
+        stage: str | None = None,
     ) -> dict[str, Any]:
         rid = self._run_id(run_id)
+        if stage is not None:
+            row = next((r for r in self.tools.get_stages(rid)["stages"] if r["stage"] == stage), None)
+            if row is None or not isinstance(row.get("started_seq"), int):
+                raise ToolError(
+                    f"run {rid} has no start of a {stage!r} stage; stages are {', '.join(STAGES)}"
+                )
+            seq = row["started_seq"]
         if seq is not None:
             if not isinstance(seq, int) or isinstance(seq, bool) or seq < 1:
                 raise ToolError("seq must be an event seq, 1 or more")
             at = self.tools.playback_clock(rid).at_seq(seq)
             if at is None:
                 raise ToolError(f"run {rid} has no timed events to place seq {seq} on")
-            return {"kind": "set_playback", "run_id": rid, "seconds": round(at, 2), "seq": seq}
+            item = {"kind": "set_playback", "run_id": rid, "seconds": _at_or_after(at), "seq": seq}
+            return {**item, "stage": stage} if stage else item
         if not isinstance(seconds, int | float) or isinstance(seconds, bool) or seconds < 0:
-            raise ToolError("seconds must be a number of seconds, 0 or more (or give seq)")
-        return {"kind": "set_playback", "run_id": rid, "seconds": round(float(seconds), 2)}
+            raise ToolError("seconds must be a number of seconds, 0 or more (or give stage or seq)")
+        at = float(seconds)
+        # A stage start rounded down by up to a second (1364 for 1364.673) still lands in that stage.
+        starts = [
+            r["started_playback_s"]
+            for r in self.tools.get_stages(rid)["stages"]
+            if isinstance(r.get("started_playback_s"), int | float)
+        ]
+        snapped = min((t for t in starts if at < t <= at + 1), default=None)
+        if snapped is not None:
+            return {"kind": "set_playback", "run_id": rid, "seconds": _at_or_after(snapped)}
+        return {"kind": "set_playback", "run_id": rid, "seconds": _at_or_after(at, event=False)}
 
     def _open_file(self, path: str, run_id: str | None = None) -> dict[str, Any]:
         rid = self._run_id(run_id)

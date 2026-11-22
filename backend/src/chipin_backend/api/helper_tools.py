@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from chipin_backend.api.costs import annotate_costs
 from chipin_backend.api.events import STAGES
 from chipin_backend.api.history import with_summaries
 from chipin_backend.api.playback import PlaybackClock
@@ -216,7 +217,7 @@ def _chosen(events: list[dict[str, Any]]) -> str | None:
 
 
 def stages_of(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Each stage's last state, first start, last end, rounds and skip reason."""
+    """Each stage's last state, first start, last end (with their event seqs), rounds and skip reason."""
     out: dict[str, dict[str, Any]] = {}
     for e in events:
         if e.get("type") != "stage":
@@ -228,8 +229,10 @@ def stages_of(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         row["state"] = e.get("state")
         if e.get("state") == "started" and row["started"] is None:
             row["started"] = e.get("ts")
+            row["started_seq"] = e.get("seq")
         if e.get("state") in ("done", "skipped"):
             row["ended"] = e.get("ts")
+            row["ended_seq"] = e.get("seq")
         if e.get("reason"):
             row["reason"] = e.get("reason")
         if isinstance(e.get("round"), int):
@@ -335,6 +338,25 @@ def _top_order(line: dict[str, Any]) -> tuple[int, int, int]:
     return (1, stage_at.get(name, 99), int(line.get("seq") or 0))
 
 
+def _batch_subagents(events: list[dict[str, Any]], children: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Every subagent of a batch (its agent lines' agents) with its route, how it ended and its result."""
+    ids = [str(x.get("agent") or str(x["id"]).removeprefix("agent:")) for x in children]
+    started = {str(e.get("id")): e for e in events if e.get("type") == "subagent.started"}
+    finished = {str(e.get("id")): e for e in events if e.get("type") == "subagent.finished"}
+    rows = []
+    for sid in ids:
+        begin, end = started.get(sid, {}), finished.get(sid, {})
+        row = {
+            "id": sid,
+            "name": begin.get("name"),
+            "route": _clip(begin.get("strategy") or begin.get("brief"), 200),
+            "state": end.get("state"),
+            "result": _clip(end.get("result") or end.get("error"), 200),
+        }
+        rows.append({k: v for k, v in row.items() if v})
+    return rows
+
+
 def _focus_id(focus: str, lines: list[dict[str, Any]]) -> str:
     """``focus`` as a summary id: an id as given, or a bare stage name for its stage line."""
     ids = {line["id"] for line in lines}
@@ -389,9 +411,7 @@ class HelperTools:
         designs = designs_of(run, events)
         clock = PlaybackClock.from_events(self._playback_events(run))
         finished = [e for e in events if e.get("type") == "run.finished"]
-        costs = [e for e in events if e.get("type") == "cost" and "subagents_usd" in e] or [
-            e for e in events if e.get("type") == "cost" and not e.get("agent")
-        ]
+        costs = [e for e in annotate_costs(events) if e.get("type") == "cost"]
         return {
             "id": run.id,
             "status": (finished[-1].get("status") if finished else None) or rec.get("status"),
@@ -404,7 +424,7 @@ class HelperTools:
             "chosen_chip": _chosen(events),
             "designs": len(designs),
             "stages": {r["stage"]: r.get("state") for r in stages_of(events)},
-            "cost_usd": (costs[-1].get("usd") if costs else (rec.get("cost") or {}).get("usd")),
+            "cost_usd": (costs[-1]["run_total_usd"] if costs else (rec.get("cost") or {}).get("usd")),
             "events": len(events),
             "playback_total_s": clock.total_s,
             "idle_gaps_skipped": len(clock.gaps),
@@ -428,9 +448,16 @@ class HelperTools:
         rows = stages_of(events)
         for row in rows:
             for key in ("started", "ended"):
-                if row.get(key):
+                seq = row.get(f"{key}_seq")
+                if isinstance(seq, int):
+                    row[f"{key}_playback_s"] = clock.at_seq(seq)
+                elif row.get(key):
                     row[f"{key}_playback_s"] = clock.at_ts(row[key])
-        return {"stages": rows, "playback_total_s": clock.total_s}
+        return {
+            "stages": rows,
+            "playback_total_s": clock.total_s,
+            "seek": "to show a stage, pass its started_seq (or stage) to ui_set_playback, not seconds",
+        }
 
     def get_designs(self, run_id: str) -> dict[str, Any]:
         run = self.store.get(run_id)
@@ -527,6 +554,9 @@ class HelperTools:
             fid = _focus_id(str(focus), lines)
             out["focus"] = next(x for x in lines if x["id"] == fid)
             picked = [x for x in lines if x.get("parent") == fid]
+            if out["focus"]["level"] == "batch":
+                out["subagents"] = _batch_subagents(events, picked)
+                out["read_all"] = "the batch tried one route per subagent: name every one of them"
         elif level or stage:
             picked = [
                 x

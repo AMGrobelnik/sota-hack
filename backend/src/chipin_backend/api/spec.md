@@ -37,6 +37,10 @@ with the reason: fix the record and send it again. Fields:
   ids, one row per patient of that split (their sums must equal `counts`);
 - `verified`: `{"vectors": 512, "mismatches": 0, "level": "<the lab's level>", "proved": true}` from the lab's
   verify tools (`level` as the lab returned it, never "None"), else `null`; `data`: `synthetic` or `public:<dataset>`; `note`: one short sentence.
+- `variant_of`: when this record is the SAME model as another design you reported (same features, weights and
+  rule), compiled another way (another lab route or option), set it to that design's `id`, so the chart groups
+  the two as one model and your count of designs stays right; leave it out for a different model. It never
+  renames a record (that is `previous_id`).
 
 Send a design's record when it is first scored, again as soon as the lab has compiled it (with the lab's measured
 `gates` and its `design_id`, before you verify anything), and again when it is verified (with `verified`); the user

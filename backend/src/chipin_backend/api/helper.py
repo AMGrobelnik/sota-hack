@@ -18,6 +18,10 @@ tools off, so it ends in an answer. Conversations live in this process's
 memory only, bounded in count and length; spending is capped per conversation
 and per UTC day. A missing key or a failed model never breaks the page: the
 stream carries a plain error line and ends.
+
+Nothing private leaves the machine or reaches the page: tool results, the
+open run's facts, every message sent to the model and every frame sent to
+the page pass the export's scrubber (``chipin_backend/scrub.py``).
 """
 
 from __future__ import annotations
@@ -59,6 +63,7 @@ from chipin_backend.api.helper_ui import (
     parse_view,
     suggestions,
 )
+from chipin_backend.scrub import scrub_value
 
 INSTRUCTIONS_PATH = Path(__file__).with_name("helper_instructions.md")
 _CONVERSATION_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
@@ -271,6 +276,7 @@ async def run_turn(
             )
         except ToolError as exc:
             context["open_run"] = {"error": str(exc)}
+        context = scrub_value(context)
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": instructions()},
         {
@@ -298,7 +304,7 @@ async def run_turn(
         reply = ModelReply(error="the model gave no reply")
         try:
             async for event in model.stream(
-                messages=messages, tools=tools, tool_choice="none" if final_pass else "auto"
+                messages=scrub_value(messages), tools=tools, tool_choice="none" if final_pass else "auto"
             ):
                 if event.get("type") == "delta":
                     streamed += event["text"]
@@ -377,13 +383,14 @@ async def _call_tool(
     """``(result for the model, page item or None)``; a bad call is an error result, not a crash."""
     try:
         if name in TOOL_NAMES:
-            return {"result": await asyncio.to_thread(run_tool, state.tools, name, args)}, None
+            result = await asyncio.to_thread(run_tool, state.tools, name, args)
+            return {"result": scrub_value(result)}, None
         if name in ACTION_NAMES or name in PROPOSAL_NAMES:
             item, result = await asyncio.to_thread(ui.handle, name, args)
-            return result, item
+            return scrub_value(result), scrub_value(item)
         raise ToolError(f"unknown tool {name!r}")
     except ToolError as exc:
-        return {"error": str(exc)}, None
+        return {"error": scrub_value(str(exc))}, None
 
 
 def _over_budget(state: HelperState, conversation: Conversation) -> str:
@@ -451,7 +458,7 @@ async def post_message(request: web.Request) -> web.StreamResponse:
         )
         async with aclosing(turn):
             async for frame in turn:
-                await response.write(_sse(frame))
+                await response.write(_sse(scrub_value(frame)))
     except (ConnectionResetError, ConnectionError):
         logger.debug("chippy: the page closed the stream of conversation {}", conversation_id)
     finally:
@@ -467,7 +474,7 @@ async def post_suggestions(request: web.Request) -> web.Response:
         return body
     view = parse_view(body.get("view"))
     picks = await asyncio.to_thread(suggestions, state.tools, view)
-    return web.json_response({"suggestions": picks})
+    return web.json_response({"suggestions": scrub_value(picks)})
 
 
 def add_helper_routes(

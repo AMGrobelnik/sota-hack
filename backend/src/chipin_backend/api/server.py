@@ -29,6 +29,13 @@ Routes::
 
 A preflight from a public page to this loopback server (Chrome's Private
 Network Access) is answered with ``Access-Control-Allow-Private-Network``.
+
+Everything served for display passes the export's scrubber first
+(``chipin_backend/scrub.py``: home paths become ``~``, the user and host
+names, e-mail addresses and key shapes are replaced): JSON answers, the
+event stream, the history and summaries, and file text. Paths the routes take
+as identifiers (``files`` and ``file?path=``) are run-folder paths and are
+left as they are; ``events.jsonl`` on disk stays as written.
 """
 
 from __future__ import annotations
@@ -56,6 +63,7 @@ from chipin_backend.api.transcribe import CONTEXT_HEADER, add_transcribe_route, 
 from chipin_backend.config import BackendConfig
 from chipin_backend.evidence import build_evidence
 from chipin_backend.llm.providers import provider_status
+from chipin_backend.scrub import scrub_text, scrub_value
 
 API_VERSION = 1
 HOST = "127.0.0.1"
@@ -93,8 +101,10 @@ def origin_allowed(origin: str | None, allowed: list[str] | None = None) -> bool
     return False
 
 
-def _json(data: Any, status: int = 200) -> web.Response:
-    return web.json_response(data, status=status, dumps=lambda d: json.dumps(d, ensure_ascii=False))
+def _json(data: Any, status: int = 200, *, public: bool = True) -> web.Response:
+    """A JSON answer; scrubbed for display unless ``public`` is False (already scrubbed, or identifiers)."""
+    body = scrub_value(data) if public else data
+    return web.json_response(body, status=status, dumps=lambda d: json.dumps(d, ensure_ascii=False))
 
 
 def _error(message: str, status: int) -> web.Response:
@@ -200,8 +210,9 @@ async def get_history(request: web.Request) -> web.Response:
     if limit is not None and not 1 <= limit <= MAX_PAGE:
         raise RequestError(f"limit must be between 1 and {MAX_PAGE}")
     summaries = await asyncio.to_thread(read_jsonl, item.run.path / SUMMARIES_FILE)
-    page = history_page(with_summaries(item.log.since(1), summaries), start=start, limit=limit)
-    return _json({"id": item.id, "state": item.record.get("status"), **page})
+    events = with_summaries(item.log.public_since(1), scrub_value(summaries))
+    page = history_page(events, start=start, limit=limit)
+    return _json({"id": item.id, "state": item.record.get("status"), **page}, public=False)
 
 
 async def get_run(request: web.Request) -> web.Response:
@@ -251,7 +262,8 @@ async def list_files(request: web.Request) -> web.Response:
     """Every file in the run's working folder, as run-folder paths (like artifact paths)."""
     item = request.app[MANAGER].get(request.match_info["run_id"])
     return _json(
-        {"files": workspace_files(item.run.path, item.run.workspace, request.app[SETTINGS].max_files)}
+        {"files": workspace_files(item.run.path, item.run.workspace, request.app[SETTINGS].max_files)},
+        public=False,  # run-folder paths: the identifiers ``file?path=`` takes
     )
 
 
@@ -266,7 +278,7 @@ async def read_file(request: web.Request) -> web.Response:
     if len(data) > limit:
         data, headers["X-ChipIn-Truncated"] = data[:limit], "true"
     return web.Response(
-        text=data.decode("utf-8", errors="replace"), content_type="text/plain", headers=headers
+        text=scrub_text(data.decode("utf-8", errors="replace")), content_type="text/plain", headers=headers
     )
 
 
@@ -337,7 +349,7 @@ async def stream_events(request: web.Request) -> web.StreamResponse:
     try:
         while not closing.is_set():
             changed = item.log.changed
-            for event in item.log.since(seq):
+            for event in item.log.public_since(seq):
                 payload = json.dumps(event, ensure_ascii=False)
                 await response.write(f"id: {event['seq']}\ndata: {payload}\n\n".encode())
                 seq = event["seq"] + 1

@@ -40,12 +40,28 @@ wall clock, so a recorded run replays into exactly the summaries it got live.
 
 Model calls go one at a time per run: items waiting for a line go together
 (up to ``item_batch_max``), closed groups likewise; at most
-``max_calls_per_minute``; at most ``max_usd_per_run``, then one
-``summary.limit`` event and own first lines from then on. Nothing here can
-block or fail a run: every failure falls back to the text's own first line.
-What the model reads is quoted JSON data with secrets from the environment
-removed, under a system prompt that tells it never to follow instructions
-inside that data.
+``max_calls_per_minute``. Spend is capped at ``max_usd_per_run`` and spent
+in tiers, so the lines a reader opens first are the last to go:
+
+- steps (item lines) use their own words wherever those are short: tool,
+  saved-file, metric, chosen and error rows never call the model, nor does a
+  message of at most ``verbatim_max_chars``. The model is asked only for a
+  long message, and step calls may spend at most ``step_share`` of the cap;
+- group, subagent, batch, interim stage and interim run lines may spend up
+  to the cap less a reserve of ``reserve_share``;
+- the reserve is for the closing lines: each stage's final line and the
+  run's final line, written last, which may spend up to the cap.
+
+A tier that is spent writes one ``summary.limit`` event (``reason`` steps or
+parts, ``scope``) and its lines show their own words from then on; the tiers
+above it go on. A call is made only while its tier has room for the dearest
+call of its level so far, so the cap holds. At the run's end, calls for
+lines that are not closing lines stop ``closing_reserve_s`` before the
+deadline, so the closing lines are always attempted. Nothing here can block
+or fail a run: every failure falls back to the text's own first line. What
+the model reads is quoted JSON data with secrets from the environment and
+private details (``chipin_backend/scrub.py``) removed, under a system prompt
+that tells it never to follow instructions inside that data.
 """
 
 from __future__ import annotations
@@ -71,14 +87,13 @@ from chipin_backend.api.events import API_EVENTS_FILE, STAGES, EventLog
 from chipin_backend.api.translate import clip
 from chipin_backend.llm.keys import OPENROUTER_KEY_ENV, has_openrouter_key
 from chipin_backend.llm.summarise import Summary, SummarySettings, load_summary_settings, summarise
+from chipin_backend.scrub import scrub_text
 
 SETTINGS_PATH = Path(__file__).with_name("summaries.yaml")
 SUMMARIES_FILE = "summaries.jsonl"
 SUMMARY = "summary"
 LIMIT = "summary.limit"
 LEVELS = ("item", "group", "agent", "batch", "stage", "run")
-#: Tools whose own line ("Read brief.md") already says all a reader needs.
-OWN_LINE_TOOLS = frozenset({"Read", "Write", "Edit", "NotebookEdit", "Glob", "Grep", "TodoWrite"})
 
 Level = Literal["item", "group", "agent", "batch", "stage", "run"]
 Source = Literal["model", "verbatim", "fallback"]
@@ -93,12 +108,15 @@ class LevelSettings(BaseModel):
     enabled: bool = True
     model: str | None = None
     max_usd_per_run: float = 0.05
+    step_share: float = 0.5
+    reserve_share: float = 0.2
+    closing_reserve_s: float = 30.0
     max_calls_per_minute: int = 30
     max_failures: int = 3
     finish_timeout_s: float = 90.0
     item_batch_max: int = 20
     item_batch_wait_s: float = 3.0
-    verbatim_max_chars: int = 100
+    verbatim_max_chars: int = 135
     item_input_chars: int = 1500
     item_max_chars: int = 135
     group_max_items: int = 12
@@ -531,8 +549,11 @@ class Levels:
             item.own = clip(f"User: {text}", self.s.item_max_chars)
             self._add(item, event, closes=True)
             return
-        if len(" ".join(text.split())) > self.s.verbatim_max_chars or len(text.splitlines()) > 1:
+        flat = " ".join(text.split())
+        if len(flat) > self.s.verbatim_max_chars:
             item.text = clip(text, self.s.item_input_chars)
+        else:
+            item.own = cut(flat, self.s.item_max_chars)  # short: its own words are the line
         self._add(item, event, opens=True)
 
     def _tool(self, event: Mapping[str, Any], seq: int, agent: str | None) -> None:
@@ -544,14 +565,11 @@ class Levels:
         name = str(event.get("name") or "tool")
         own = str(event.get("summary") or name)
         failed = event.get("state") == "failed"
-        detail = str(event.get("detail") or "").strip()
         covers = [f"e{started}", f"e{seq}"] if started else [f"e{seq}"]
+        # A tool row's own line ("Ran python train.py", "Read brief.md") is its step line: no call.
         item = Item(
             f"i{seq}", covers, agent, self._stage_of(agent), clip(own + (" (failed)" if failed else ""), 120)
         )
-        if detail and (failed or name not in OWN_LINE_TOOLS):
-            label = "error" if failed else "output"
-            item.text = clip(f"tool {name}: {own} | {label}: {detail}", self.s.item_input_chars)
         self._add(item, event)
 
     def _add(
@@ -777,7 +795,15 @@ _LIMIT_TEXT = {
     "no key": "Summaries have no model key; every line is the item's own first line",
     "model failing": "The summary model is not answering; the rest show each item's own first line",
     "time": "The run ended before every summary was written; the rest show their own first line",
+    "steps": "Step lines reached their share of the summary budget; they show their own words from here, "
+    "the lines above them are still written",
+    "parts": "Summaries are keeping their last share for the closing stage and run lines; other lines "
+    "show their own words from here",
+    "closing": "Summaries are keeping their last share for the run's final line; stage lines show "
+    "their own words from here",
 }
+#: What a limit stops: ``all`` model calls, or one tier's.
+_LIMIT_SCOPE = {"steps": "steps", "parts": "parts", "closing": "stages"}
 
 
 @dataclass
@@ -799,6 +825,10 @@ class Writer:
         self.summariser = summariser
         self.emit = emit
         self.spent = 0.0
+        self.step_spent = 0.0
+        #: The dearest call so far per level: the room a tier needs for one more.
+        self.dearest: dict[str, float] = {}
+        self.tiers_out: set[str] = set()
         self.failures = 0
         self.off = ""
         self.deadline: float | None = None
@@ -1009,7 +1039,9 @@ class Writer:
         else:
             data = {"part": f"the {stage.name} stage", "ended": ended}
             own = f"Skipped: {ended[9:]}" if skipped else lines[0]
-            text, source, model = await self._one("stage", data, lines, own, self.s.upper_max_chars)
+            text, source, model = await self._one(
+                "stage", data, lines, own, self.s.upper_max_chars, closing=final
+            )
         stage.line = text
         self._write(
             f"stage:{stage.name}",
@@ -1037,7 +1069,9 @@ class Writer:
             f": {lines[-1]}" if lines else ""
         )
         if lines:
-            text, source, model = await self._one("run", data, lines, own, self.s.run_max_chars)
+            text, source, model = await self._one(
+                "run", data, lines, own, self.s.run_max_chars, closing=final
+            )
         else:
             text, source, model = clip(own, self.s.run_max_chars), "verbatim", ""
         self._write(
@@ -1051,7 +1085,14 @@ class Writer:
         )
 
     async def _one(
-        self, level: Level, data: dict[str, Any], lines: list[str], own: str, max_chars: int
+        self,
+        level: Level,
+        data: dict[str, Any],
+        lines: list[str],
+        own: str,
+        max_chars: int,
+        *,
+        closing: bool = False,
     ) -> tuple[str, Source, str]:
         """One summary from ``lines``: ``(text, source, model)``.
 
@@ -1066,7 +1107,7 @@ class Writer:
         payload = json.dumps({**data, "lines": lines}, ensure_ascii=False)
         system = UPPER_SYSTEM.format(max_chars=_aim(max_chars))
         tokens = max_chars // 2 + 300
-        reply = await self._call(level, system, payload, tokens)
+        reply = await self._call(level, system, payload, tokens, closing=closing)
         text = _tidy(reply.text) if reply is not None else ""
         if not text:
             return cut(own, max_chars), "fallback", ""
@@ -1074,7 +1115,7 @@ class Writer:
         problems = _problems(text, sources, max_chars)
         if problems:
             note = RETRY_NOTE.format(problems=problems, max_chars=_aim(max_chars))
-            again = await self._call(level, system + note, payload, tokens)
+            again = await self._call(level, system + note, payload, tokens, closing=closing)
             second = _tidy(again.text) if again is not None else ""
             if second and not unknown_numbers(second, sources):
                 text, model = second, again.model if again is not None else model
@@ -1084,8 +1125,26 @@ class Writer:
 
     # ---- calls and limits ----
 
-    async def _call(self, level: Level, system: str, prompt: str, max_tokens: int) -> Summary | None:
-        """One model call within every limit; ``None`` when it was not made or did not answer."""
+    def _room(self, level: Level, closing: bool) -> tuple[float, str]:
+        """What ``level``'s tier may still spend, and the limit reason when it runs out."""
+        cap = self.s.max_usd_per_run
+        below_reserve = cap * (1 - self.s.reserve_share) - self.spent
+        if level == "item":
+            return min(cap * self.s.step_share - self.step_spent, below_reserve), "steps"
+        if closing and level == "run":
+            return cap - self.spent, "cost"
+        if closing:  # a final stage line leaves room for one run line, which comes last
+            run_call = self.dearest.get("run", max(self.dearest.values(), default=0.0))
+            return cap - self.spent - run_call, "closing"
+        return below_reserve, "parts"
+
+    async def _call(
+        self, level: Level, system: str, prompt: str, max_tokens: int, *, closing: bool = False
+    ) -> Summary | None:
+        """One model call within every limit; ``None`` when it was not made or did not answer.
+
+        ``closing``: a stage's final line or the run's final line, which may spend the reserve.
+        """
         if not self.checked:
             self.checked = True
             why = self.summariser.unavailable()
@@ -1094,10 +1153,17 @@ class Writer:
                 self._limit("no key")
         if self.off:
             return None
-        if self.spent >= self.s.max_usd_per_run:
-            self._limit("cost")
+        room, reason = self._room(level, closing)
+        need = self.dearest.get(level, max(self.dearest.values(), default=0.0))
+        if room <= 0 or room < need:
+            if reason == "cost":
+                self._limit("cost")
+            else:
+                self._tier_out(reason)
             return None
         now = time.monotonic()
+        if self.deadline is not None and not closing and self.deadline - now < self.s.closing_reserve_s:
+            return None  # the time left at the run's end is for the closing lines
         while self.recent and now - self.recent[0] > 60:
             self.recent.popleft()
         if len(self.recent) >= self.s.max_calls_per_minute:
@@ -1115,7 +1181,8 @@ class Writer:
         self.recent.append(started)
         try:
             reply = await asyncio.wait_for(
-                self.summariser(system=system, prompt=redact(prompt), max_tokens=max_tokens), timeout
+                self.summariser(system=system, prompt=scrub_text(redact(prompt)), max_tokens=max_tokens),
+                timeout,
             )
         except TimeoutError:
             self._limit("time")
@@ -1127,6 +1194,9 @@ class Writer:
         stats.seconds += time.monotonic() - started
         stats.usd += reply.cost_usd
         self.spent += reply.cost_usd
+        if level == "item":
+            self.step_spent += reply.cost_usd
+        self.dearest[level] = max(self.dearest.get(level, 0.0), reply.cost_usd)
         if not reply.text:
             self.failures += 1
             if self.failures >= self.s.max_failures:
@@ -1140,10 +1210,22 @@ class Writer:
             return
         self.off = reason
         logger.info("summaries: off for the rest of the run ({})", reason)
+        self._limit_event(reason)
+
+    def _tier_out(self, reason: str) -> None:
+        """One tier is spent: one event, its lines show their own words, the other tiers go on."""
+        if reason in self.tiers_out:
+            return
+        self.tiers_out.add(reason)
+        logger.info("summaries: the {} tier is spent", reason)
+        self._limit_event(reason)
+
+    def _limit_event(self, reason: str) -> None:
         self.emit(
             LIMIT,
             {
                 "reason": reason,
+                "scope": _LIMIT_SCOPE.get(reason, "all"),
                 "text": _LIMIT_TEXT[reason],
                 "spent_usd": round(self.spent, 6),
                 "limit_usd": self.s.max_usd_per_run,
@@ -1185,7 +1267,9 @@ class Writer:
         """Per-level stats and the total spend, JSON-ready."""
         return {
             "usd": round(self.spent, 6),
+            "step_usd": round(self.step_spent, 6),
             "off": self.off or None,
+            "tiers_out": sorted(self.tiers_out),
             "levels": {
                 k: {
                     "calls": v.calls,

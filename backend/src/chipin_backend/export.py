@@ -21,117 +21,26 @@ export that still does not fit is refused.
 
 from __future__ import annotations
 
-import getpass
 import json
-import re
-import socket
-from collections.abc import Callable
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
+from chipin_backend.api.costs import annotate_costs
 from chipin_backend.api.history import run_facts, with_summaries
 from chipin_backend.api.summaries import SUMMARIES_FILE, read_jsonl
+from chipin_backend.scrub import REMOVED, Scrubber
 
 FORMAT = "chipin-recorded-run"
 VERSION = 1
-REMOVED = "[removed]"
 #: Default bound on the whole file, and on each artifact's text.
 MAX_BYTES = 1_500_000
 ARTIFACT_MAX_BYTES = 64_000
 #: Longest string kept in an event once the file has to shrink.
 SHRUNK_TEXT = 600
 TEXT_SUFFIXES = frozenset({".md", ".txt", ".json", ".csv", ".yaml", ".yml", ".v", ".log", ".tsv"})
-
-#: Key and token shapes of the services a run can touch, and generic ``name=value`` secrets.
-KEY_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
-    re.compile(p)
-    for p in (
-        r"sk-(?:or-v1-|ant-|proj-)?[A-Za-z0-9_\-]{16,}",
-        r"\bgh[pousr]_[A-Za-z0-9]{20,}",
-        r"\bgithub_pat_[A-Za-z0-9_]{20,}",
-        r"\bAKIA[0-9A-Z]{16}\b",
-        r"\bhf_[A-Za-z0-9]{20,}",
-        r"\bxox[abprs]-[A-Za-z0-9-]{10,}",
-        r"\brpa_[A-Za-z0-9]{20,}",
-        r"\bAIza[0-9A-Za-z_\-]{30,}",
-        r"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}",
-        r"(?i)\bbearer\s+[A-Za-z0-9._\-]{16,}",
-    )
-)
-SECRET_ASSIGN = re.compile(
-    r"(?i)\b((?:[a-z0-9]+_)*(?:token|api_?key|apikey|secret|password|passwd))(\"?'?\s*[:=]\s*[\"']?)([A-Za-z0-9._\-/+]{8,})"
-)
-EMAIL = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}")
-HOME_GENERIC = re.compile(r"(?:/Users|/home)/[^/\s\"'`:;,)]+")
-
-
-@dataclass
-class Scrubber:
-    """Replaces home paths, keys, e-mail addresses, host and user names in strings; counts each."""
-
-    home: str = field(default_factory=lambda: str(Path.home()))
-    host_names: tuple[str, ...] = field(default_factory=lambda: _host_names())
-    user: str = field(default_factory=lambda: _user_name())
-    counts: dict[str, int] = field(
-        default_factory=lambda: {"home_paths": 0, "keys": 0, "emails": 0, "host": 0, "user": 0}
-    )
-
-    def _sub(
-        self, pattern: re.Pattern[str], repl: str | Callable[[re.Match[str]], str], text: str, key: str
-    ) -> str:
-        out, n = pattern.subn(repl, text)
-        self.counts[key] += n
-        return out
-
-    def text(self, value: str) -> str:
-        """``value`` with every private detail replaced."""
-        out = value
-        if self.home and self.home != "/":
-            n = out.count(self.home)
-            if n:
-                out = out.replace(self.home, "~")
-                self.counts["home_paths"] += n
-        out = self._sub(HOME_GENERIC, "~", out, "home_paths")
-        for pattern in KEY_PATTERNS:
-            out = self._sub(pattern, REMOVED, out, "keys")
-        out = self._sub(SECRET_ASSIGN, lambda m: f"{m.group(1)}{m.group(2)}{REMOVED}", out, "keys")
-        out = self._sub(EMAIL, REMOVED, out, "emails")
-        for host in self.host_names:
-            out = self._sub(re.compile(rf"\b{re.escape(host)}\b", re.IGNORECASE), "[host]", out, "host")
-        if self.user:
-            out = self._sub(re.compile(rf"\b{re.escape(self.user)}\b"), "[user]", out, "user")
-        return out
-
-    def value(self, data: Any) -> Any:
-        """``data`` (any JSON value) with every string scrubbed, keys of objects included."""
-        if isinstance(data, str):
-            return self.text(data)
-        if isinstance(data, list):
-            return [self.value(v) for v in data]
-        if isinstance(data, dict):
-            return {self.text(str(k)): self.value(v) for k, v in data.items()}
-        return data
-
-
-def _host_names() -> tuple[str, ...]:
-    try:
-        full = socket.gethostname()
-    except OSError:
-        return ()
-    names = {full, full.split(".")[0]}
-    return tuple(sorted((n for n in names if len(n) >= 4), key=len, reverse=True))
-
-
-def _user_name() -> str:
-    try:
-        name = getpass.getuser()
-    except (OSError, KeyError):
-        return ""
-    return name if len(name) >= 4 else ""
 
 
 class ExportError(ValueError):
@@ -246,7 +155,7 @@ def build_export(
     events_path = folder / "events.jsonl"
     if not events_path.is_file():
         raise ExportError(f"no events.jsonl in {folder.name}")
-    events = _read_events(events_path)
+    events = annotate_costs(_read_events(events_path))
     if not events:
         raise ExportError(f"{folder.name} has no events")
     events = with_summaries(events, read_jsonl(folder / SUMMARIES_FILE))
@@ -342,6 +251,7 @@ __all__ = [
     "ARTIFACT_MAX_BYTES",
     "FORMAT",
     "MAX_BYTES",
+    "REMOVED",
     "ExportError",
     "Scrubber",
     "build_export",

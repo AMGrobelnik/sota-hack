@@ -213,10 +213,19 @@ async def test_a_run_without_messages_is_unchanged(fast: TestClient, config: Bac
 async def test_follow_up_costs_add_up(tmp_path: Path) -> None:
     log = EventLog(tmp_path / "events.jsonl", "run", asyncio.get_running_loop())
     translator = Translator(log, JsonlEventSink(tmp_path / "raw.jsonl"))
-    steering = Steering(cost_base={"usd": 0.5, "tokens_in": 100, "tokens_out": 10})
+    base = {"usd": 0.5, "tokens_in": 100, "tokens_out": 10, "subagents_usd": 0.3}
+    steering = Steering(cost_base=base)
     sink = steering.sink(translator, log)
     sink.emit(AgentEvent("cost", "a", {"usd": 0.25, "input_tokens": 50, "output_tokens": 5}))
-    assert translator.cost == {"usd": 0.75, "tokens_in": 150, "tokens_out": 15}
+    # the follow-up's total keeps its parts, so it reads as a total (subagents inside, not added again)
+    assert translator.cost == {
+        "usd": 0.75,
+        "tokens_in": 150,
+        "tokens_out": 15,
+        "turn_usd": 0.25,
+        "subagents_usd": 0.3,
+    }
+    assert log.since(1)[-1]["run_total_usd"] == 0.75
     steering.in_agent.append(("m3", "x"))
     sink.emit(AgentEvent("status", "a", {"message": DELIVERED_TEXT, "user_message_delivered": True}))
     assert log.since(1)[-1] == {**log.since(1)[-1], "type": "status", "message_id": "m3"}

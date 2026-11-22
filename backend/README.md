@@ -181,9 +181,10 @@ line down to the full message or tool call. `api/summaries.py`, settings in
 | `run`   | the run                       | the stage lines     |
 
 - An item is an agent message, a tool call with its result (one item for
-  both), a metric, an artifact, a chosen chip or an error. A one-line
-  message of up to 100 characters, and a tool whose own line says it all
-  (`Read brief.md`), keep their own words; the rest go to the model.
+  both), a metric, an artifact, a chosen chip or an error. Tool rows
+  (`Ran python train.py`), saved-file rows, metric, chosen and error rows
+  keep their own words and never call the model; so does a message of up
+  to 135 characters. Only a longer message goes to the model.
 - A group is a run of consecutive items of one agent in one stage. It
   closes when the stage changes, the agent starts subagents, a user message
   arrives, it reaches 12 items, an item comes more than 120 s after the
@@ -226,14 +227,31 @@ Limits, per run:
   (a lone batch waits 3 s for company); closed groups up to 8 a call. So
   a wide run makes bigger calls, not more of them.
 - At most 30 calls a minute, and at most `max_usd_per_run` ($0.05) of
-  model spend. Past the limit one `summary.limit` event (`reason`,
-  `text`, `spent_usd`, `limit_usd`) is written and every later line is the
-  text's own first line. Three failed calls in a row (`model failing`), no
-  key (`no key`) or the 90 s left at the run's end running out (`time`) do
-  the same. A summary never blocks or fails a run.
+  model spend, spent in tiers so the top lines are the last to go:
+  - step (item) calls may spend at most `step_share` (half) of the cap;
+  - group, subagent, batch and interim stage and run lines may spend up
+    to the cap less `reserve_share` (a fifth);
+  - that reserve is for the closing lines (each stage's final line and the
+    run's final line), which are written last and may spend up to the cap.
+
+  A call is made only while its tier has room for the dearest call of its
+  level so far. When a tier is spent, one `summary.limit` event
+  (`reason` `steps` or `parts`, `scope`, `text`, `spent_usd`,
+  `limit_usd`) is written; that tier's lines show their own words from
+  then on and the tiers above go on. A final stage line always leaves
+  room for one run line (`reason` `closing`, `scope` `stages`, when it
+  cannot); when the run's final line finds the cap spent, `reason` is
+  `cost` (`scope` `all`). Three failed calls in a row
+  (`model failing`), no key (`no key`) or the 90 s left at the run's end
+  running out (`time`) stop every call. At the run's end, the last
+  `closing_reserve_s` (30 s) before that deadline are for the closing
+  lines. A summary never blocks or fails a run.
 - The model reads the run's text as quoted JSON, told never to follow
   instructions in it; values of secret-named environment variables and
-  key-shaped strings are replaced by `[redacted]` first.
+  key-shaped strings are replaced by `[redacted]` first, and home paths,
+  the user and host names and e-mail addresses are scrubbed as in the
+  export (`chipin_backend/scrub.py`) before any request leaves the
+  machine.
 - The model is the summary model above (`openai/gpt-oss-120b` on the fast
   tiers), or `model` in `summaries.yaml`; the key is `OPENROUTER_API_KEY`.
 - Off: `enabled: false`, or `run --preset ... --no-summary`; the run is
@@ -353,7 +371,7 @@ browsers are not.
 | `chosen`                       | `chip`: the run's chosen one |
 | `design`                       | one candidate design record  |
 | `artifact`                     | a file, such as the report   |
-| `cost`                         | agent cost and tokens        |
+| `cost`                         | `run_total_usd`, see below   |
 | `error`                        | what went wrong              |
 | `evidence`                     | the three evidence summaries |
 | `summary`                      | one summary, see "Levels"    |
@@ -377,6 +395,30 @@ run's chosen chip; a later one replaces an earlier one. Presets map to agent eff
 with fan-out on they also set the subagents per stage batch (see "Fan-out").
 A run cut short ends `stopped`, its summary saying whether the user
 stopped it or the server was shut down.
+
+### Cost events
+
+Every `cost` event carries two fields that need no interpretation:
+
+| Field           | Meaning                              |
+| --------------- | ------------------------------------ |
+| `run_total_usd` | the whole run's cost so far          |
+| `agent_usd`     | this agent's own cost so far         |
+
+- `run_total_usd` counts the orchestrator, every subagent and the level
+  summaries. The newest `cost` event's value is the run's cost: show it,
+  never add the events up.
+- `agent_usd` is the spend so far of the agent named by `agent`, or of
+  the orchestrator when the event has no `agent`.
+- The older fields stay for compatibility, with their old meanings:
+  `usd` (a subagent's own cost when `agent` is set; else the
+  orchestrator's, or the run's total when `subagents_usd` is set, and
+  in a follow-up), `tokens_in`, `tokens_out`, `subagents_usd`,
+  `summaries_usd` (never inside `usd`) and `turn_usd` (a follow-up's own
+  turn).
+- The backend adds both fields as each event is written
+  (`api/costs.py`), and to the events of older runs when the server, the
+  history route or the export reads them back.
 
 ### Talking to the agent
 
@@ -409,6 +451,13 @@ and the end of the run; it goes as a follow-up then) or `follow_up`.
 - Error text in the stream and the API names no local absolute path: a
   path inside the run folder is shown relative to it, any other by its
   last part.
+- Everything the API serves for display (JSON answers, the event stream,
+  history, summaries, designs, file text, Chippy's frames and suggestions)
+  passes the export's scrubber (`chipin_backend/scrub.py`): home paths
+  become `~`, the user and host names `[user]` and `[host]`, e-mail
+  addresses and key shapes `[removed]`. The run-folder paths the files
+  routes take (`workspace/report.md`) are left as they are, and
+  `events.jsonl` on disk stays as written.
 - Errors: 404 unknown run, 400 empty text, 413 too long, 409 a failed run,
   429 too many runs in progress (for a follow-up), 401 no token.
 - The standing instructions say a user message takes priority over the
@@ -768,7 +817,11 @@ exit status 2 with the reason (then nothing is recorded):
   `mismatches` is at most `vectors`. Unknown fields are refused.
 - A later record with the same `id` replaces the earlier one;
   `previous_id` moves an earlier record to a new id (the lab's
-  `design_id` once compiled). The tailer checks each record again, emits
+  `design_id` once compiled).
+- `variant_of` (optional) names another design's `id` when this record
+  is the same model compiled another way (another lab route or option).
+  Both records stay; the page can group variants as one model. It must
+  differ from `id` and from `previous_id`. The tailer checks each record again, emits
   a `design` event (`design`: the record, `revision`: 1 for the first
   report of that design), and keeps the latest per design in
   `runs/<run_id>/designs.json`.

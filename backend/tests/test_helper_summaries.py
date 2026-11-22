@@ -229,8 +229,9 @@ def test_read_tools_give_playback_times(tools: HelperTools) -> None:
 def test_set_playback_takes_seconds_or_an_event_seq(tools: HelperTools) -> None:
     ui = UiActions(tools, ViewContext(page="run", run_id=RUN))
     item, result = ui.handle("ui_set_playback", {"seq": 8})
-    assert (item["kind"], item["seconds"], item["seq"]) == ("set_playback", 30.0, 8)
-    assert result["playback_s"] == 30.0
+    # an event's time is rounded up past it, so the page lands with the event already shown
+    assert (item["kind"], item["seconds"], item["seq"]) == ("set_playback", 30.01, 8)
+    assert result["playback_s"] == 30.01
     assert ui.handle("ui_set_playback", {"seconds": 12.5})[0]["seconds"] == 12.5
     for bad in ({}, {"seq": 0}, {"seq": True}, {"seconds": -1}):
         with pytest.raises(ToolError, match=r"seq|seconds"):
@@ -250,7 +251,7 @@ async def test_a_turn_reads_summaries_and_jumps_to_the_moment(config: BackendCon
             client, "show me when the design was verified", {"route": f"#/run/{RUN}/overview"}
         )
     actions = [f for f in frames if f["type"] == "action"]
-    assert [(a["kind"], a["seconds"]) for a in actions] == [("set_playback", 20.0)]
+    assert [(a["kind"], a["seconds"]) for a in actions] == [("set_playback", 20.01)]
     tool_msg = model.calls[1]["messages"][-1]
     sent = json.loads(tool_msg["content"])["result"]
     assert [x["id"] for x in sent["lines"]] == ["g1", "batch:propose:1"]

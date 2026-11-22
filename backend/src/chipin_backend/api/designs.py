@@ -11,7 +11,10 @@ one with exit status 2 and the reason; nothing is written then. The progress
 tailer checks it again, keeps the latest record per ``id`` in the run's
 ``designs.json`` and emits a ``design`` event carrying it. A record with
 ``previous_id`` takes over the record of that id (a candidate renamed to the
-lab's design id once compiled). ``GET /api/runs/{id}/designs`` serves the file.
+lab's design id once compiled). A record with ``variant_of`` is a design of
+its own that is the same model as the design of that id compiled another way
+(another lab route or option); both stay, and the page can group them.
+``GET /api/runs/{id}/designs`` serves the file.
 """
 
 from __future__ import annotations
@@ -49,6 +52,7 @@ def validate_design(record: Any) -> dict[str, Any]:
         "verified": False,
         "note": False,
         "previous_id": False,
+        "variant_of": False,
         "agent": False,
     }
     count_keys = (
@@ -245,6 +249,13 @@ def validate_design(record: Any) -> dict[str, Any]:
     previous = text("previous_id", record.get("previous_id"), 200, required=False)
     if previous is not None and previous != out["id"]:
         out["previous_id"] = previous
+    variant = text("variant_of", record.get("variant_of"), 200, required=False)
+    if variant is not None:
+        if variant == out["id"]:
+            fail("variant_of names another design (the same model compiled another way), not this one")
+        if variant == previous:
+            fail("variant_of and previous_id name the same design: previous_id renames, variant_of groups")
+        out["variant_of"] = variant
     agent = text("agent", record.get("agent"), 100, required=False)
     if agent is not None:
         out["agent"] = agent

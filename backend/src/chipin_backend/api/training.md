@@ -22,7 +22,8 @@ plain `python3` may not be. Run every training and data script with it: `"$CHIPI
   `patients_pass` and `patients_total`.
 - **As soon as a candidate is scored**, before anything is compiled, send its design record with `gates: null`
   and your `gates_est`, under your own name for it (see "Design records"); the compile and verify updates
-  follow under the lab's `design_id` with `previous_id`.
+  follow under the lab's `design_id` with `previous_id`. The same model compiled another way is a record of
+  its own with `variant_of` set to the first one's id.
 - **Label every such figure "synthetic data"** in `report.md` and in status lines. Synthetic figures show the
   pipeline works; they are never clinical evidence.
 - With the chip lab, hand the trained weights to it with `ingest-model`, and pass the held-out windows and

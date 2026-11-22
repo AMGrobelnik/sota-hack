@@ -143,6 +143,12 @@ class Translator:
                 "usd": data.get("usd"),
                 "tokens_in": data.get("input_tokens"),
                 "tokens_out": data.get("output_tokens"),
+                # a follow-up's total keeps its parts: its own turn, the subagents, the summaries
+                **{
+                    k: data[k]
+                    for k in ("turn_usd", "subagents_usd", "summaries_usd")
+                    if data.get(k) is not None
+                },
             }
             self.log.append("cost", **self.cost)
         elif kind == "status" and data.get("message"):
