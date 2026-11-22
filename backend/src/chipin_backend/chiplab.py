@@ -14,7 +14,8 @@ only has to let the agent reach the lab:
 
 When the lab is on, the agent also gets ``CHIPIN_PROGRESS_CHIP=1``: the
 ``./progress`` helper takes ``metric ... --chip <design_id>`` and
-``chosen <design_id>``, so the lab tags each number with its chip.
+``chosen <design_id>``. The lab's own metrics carry no ``--chip``; the
+progress tailer links each to the design the lab's preceding status line names.
 
 With none of these set, the lab counts as present only when ``chiplab`` is
 already on the agent's ``PATH`` (the lab's default install puts it in

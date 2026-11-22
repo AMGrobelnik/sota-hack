@@ -22,6 +22,8 @@ Routes::
     GET  /api/history                -> {"runs": [...]} picker facts per run, newest first
     GET  /api/runs/{id}/history?from=<seq>&limit=<n>   -> every event, or one page of them
     POST /api/transcribe?lang=en     -> {"text", "model", "audio_seconds", "latency_ms"}
+    POST /api/helper/messages      -> Chippy, the helper agent (see api/helper.py)
+    POST /api/helper/suggestions   -> example prompts for the current view
 
 A preflight from a public page to this loopback server (Chrome's Private
 Network Access) is answered with ``Access-Control-Allow-Private-Network``.
@@ -42,6 +44,7 @@ from loguru import logger
 
 from chipin_backend.api.config import ApiConfig
 from chipin_backend.api.events import public_text
+from chipin_backend.api.helper import add_helper_routes, helper_ready
 from chipin_backend.api.history import MAX_PAGE, history_page, run_facts, with_summaries
 from chipin_backend.api.manager import ApiAgent, ApiRunner, RequestError, RunManager
 from chipin_backend.api.summaries import SUMMARIES_FILE, read_jsonl
@@ -125,6 +128,7 @@ async def health(request: web.Request) -> web.Response:
             "version": API_VERSION,
             "defaults": {"agent": manager.agent, "runner": manager.runner},
             "transcribe": transcribe_ready(request.app),
+            "helper": helper_ready(request.app),
             "providers": provider_status(manager.config.providers),
         }
     )
@@ -359,6 +363,7 @@ def create_app(
     app.router.add_get("/api/history", list_history)
     app.router.add_get("/api/runs/{run_id}/history", get_history)
     add_transcribe_route(app, api.transcribe)
+    add_helper_routes(app, api.helper, app[MANAGER].runs_dir)
     if frontend is not None:
         app[FRONTEND] = frontend.resolve()
         app.router.add_get("/", index)

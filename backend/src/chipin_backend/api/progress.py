@@ -11,8 +11,10 @@ The helper appends one JSON line per call to the run's ``progress.jsonl``::
 
 :class:`ProgressTailer` reads new lines from that file and writes ``stage``,
 ``metric``, ``chosen``, ``status`` and ``artifact`` events. A metric's
-optional ``chip`` names the design it measures; ``chosen`` names the run's
-chosen chip, and a later one replaces an earlier one. A malformed line is skipped
+optional ``chip`` names the design it measures (for the chip lab's own untagged
+metrics, the design its latest status line names; see :data:`LAB_DESIGN_METRICS`);
+``chosen`` names the run's chosen chip, and a later one replaces an earlier one. A
+malformed line is skipped
 with a warning; the helper itself rejects bad arguments with exit status 2,
 so the agent learns at once.
 """
@@ -22,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+import re
 import stat
 import sys
 from collections.abc import Callable
@@ -37,6 +40,45 @@ PROGRESS_FILE = "progress.jsonl"
 HELPER_NAME = "progress"
 ARTIFACT_KINDS = ("file", "report", "chip")
 STAGE_STATES = ("started", "done", "skipped")
+
+#: The chip lab reports through this helper by itself, without ``--chip``: before a tool
+#: about one design it writes a status line naming it ("ChipIn is synthesising chip
+#: <design_id>", its ``VERB`` table), then that tool's metrics. These are the lab's metric
+#: keys about one design and the unit it always sends with each (its ``METRIC_KEYS`` less
+#: the batch counts ``candidates`` and ``best_gates``). An untagged metric with such a key
+#: and unit takes the design of the lab's latest status line; a lab status line about no
+#: one design (a batch, an import) clears it, so a metric about no design stays untagged.
+#: The agent's own status lines change nothing.
+LAB_DESIGN_METRICS: dict[str, str] = {
+    "gates": "gates",
+    "depth": "gates",
+    "transistors": "transistors",
+    "luts_ice40": "LUT4",
+    "luts_xc7": "LUT6",
+    "area_um2": "um2",
+    "ge": "GE",
+    "tt_tiles": "tiles",
+    "cost_eur": "EUR",
+    "vectors_checked": "vectors",
+    "mismatches": "vectors",
+    "verification_level": "level",
+    "timing_slack_ns": "ns",
+    "fmax_mhz": "MHz",
+    "energy_pj": "pJ",
+    "leakage_uw": "uW",
+    "power_uw_at_rate": "uW",
+}
+#: The lab's status lines (its ``VERB`` table, after "ChipIn is" or "ChipIn <went wrong> while").
+_LAB_LEAD = r"^ChipIn (?:is|(?:found a problem|ran out of time|hit an error|stopped) while) "
+_LAB_DESIGN = re.compile(
+    _LAB_LEAD + r"(?:synthesising|counting LUTs for|mapping|checking|proving|proving the clocked|"
+    r"simulating the streaming|laying out|timing|building an FPGA bitstream for|packaging|"
+    r"writing the report for|measuring gate activity of) chip(?: (\w[\w.-]*))?\b"
+)
+_LAB_NO_DESIGN = re.compile(
+    _LAB_LEAD + r"(?:bringing a model in|compiling a design|composing a multi-head chip|"
+    r"checking submitted Verilog|ranking candidate chips|synthesising candidate chips)\s*$"
+)
 
 _HELPER = '''\
 """ChipIn progress helper: tells the dashboard what this run is doing.
@@ -203,6 +245,8 @@ class ProgressTailer:
         self.on_stage = on_stage
         self._offset = 0
         self.artifacts: set[str] = set()
+        #: The design the lab's latest status line names (``None``: none); see :data:`LAB_DESIGN_METRICS`.
+        self.lab_design: str | None = None
 
     def skip_to_end(self) -> None:
         """Start after the lines already in the file (a follow-up of a finished run)."""
@@ -267,18 +311,22 @@ class ProgressTailer:
             value = item["value"]
             if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
                 raise ValueError("metric value is not a finite number")
+            key = str(item["key"])
             chip = item.get("chip")
-            self.log.append(
-                "metric",
-                key=str(item["key"]),
-                value=value,
-                unit=item.get("unit"),
-                chip=_chip(chip) if chip is not None else None,
-            )
+            if chip is not None:
+                chip = _chip(chip)
+            elif key in LAB_DESIGN_METRICS and item.get("unit") == LAB_DESIGN_METRICS[key]:
+                chip = self.lab_design
+            self.log.append("metric", key=key, value=value, unit=item.get("unit"), chip=chip)
         elif kind == "chosen":
             self.log.append("chosen", chip=_chip(item["chip"]))
         elif kind == "status":
-            self.log.append("status", text=clip(str(item["text"]), 200))
+            text = str(item["text"])
+            if found := _LAB_DESIGN.match(text):
+                self.lab_design = clip(found.group(1), 200) if found.group(1) else None
+            elif _LAB_NO_DESIGN.match(text):
+                self.lab_design = None
+            self.log.append("status", text=clip(text, 200))
         elif kind == "artifact":
             self.add_artifact(str(item["path"]), str(item.get("kind", "file")))
         else:
