@@ -130,7 +130,7 @@ def test_scrubber_removes_private_details() -> None:
     assert HOME not in text and "/home/other" not in text and KEY not in text and EMAIL not in text
     assert "abcdef123456" not in text and "lab-mac-7" not in text and "someone" not in text
     assert text.startswith("open ~/proj and ~/x")
-    assert s.counts == {"home_paths": 2, "keys": 2, "emails": 1, "host": 1, "user": 1}
+    assert s.counts == {"home_paths": 2, "keys": 2, "emails": 1, "host": 1, "user": 1, "system_paths": 0}
 
 
 def _run_folder(root: Path) -> Path:

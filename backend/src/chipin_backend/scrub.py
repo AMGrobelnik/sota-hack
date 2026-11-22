@@ -7,7 +7,10 @@ time, matched in any case and next to an underscore or digit, never inside a
 longer word) become ``[host]`` and ``[user]``. The export (``export.py``), every API
 route that serves text for display, and every request to an outside model
 (the summary model and Chippy's model) pass through the same rules, so what
-the page shows and what a model reads never holds a private detail. Files on
+the page shows and what a model reads never holds a private detail. System temp
+paths (``/tmp``, ``/private/var/folders``) become ``[tmp]`` and toolchain paths
+(``/opt``, ``/usr/local``, ``/nix``, ``/Applications``) become ``[toolchain]``,
+each with only its final file name. Files on
 disk (``events.jsonl`` and the rest) stay as they were written.
 """
 
@@ -48,6 +51,26 @@ HOME_GENERIC = re.compile(r"(?:/Users|/home)/[^/\s\"'`:;,)]+", re.IGNORECASE)
 HOME_ENCODED = re.compile(
     r"%2F(?:Users|home)%2F(?:(?!%2F)[^/\s\"'`:;,)&?#%]|%(?!2F)[0-9A-F]{2})+", re.IGNORECASE
 )
+
+
+#: An absolute path starts where no word, ``/``, ``.``, ``~`` or ``-`` comes before it, so URLs,
+#: ``and/or``, ``1/2``, ``~`` paths and relative paths are left alone.
+_START = r"(?<![\w/.~\-])"
+_REST = r"(?P<rest>(?:/[^\s\"'`)\]}>,;:]*)?)(?![\w.\-])"
+#: System temp paths: their folders can hold a project name, a session id or a numeric user id.
+TEMP_PATH = re.compile(rf"{_START}(?:/private)?/(?:tmp|var/folders){_REST}")
+#: Toolchain install and build paths (plain system paths such as ``/usr/bin`` stay).
+TOOLCHAIN_PATH = re.compile(rf"{_START}/(?:opt|usr/local|nix|Applications){_REST}")
+
+
+def _leaf(label: str) -> Callable[[re.Match[str]], str]:
+    """``label`` followed by only the final file name of the matched path, when it has one."""
+
+    def repl(match: re.Match[str]) -> str:
+        name = match.group("rest").rsplit("/", 1)[-1]
+        return f"{label}/{name}" if name else label
+
+    return repl
 
 
 def _name_pattern(name: str) -> re.Pattern[str]:
@@ -94,7 +117,14 @@ class Scrubber:
     host_names: tuple[str, ...] = field(default_factory=_host_names)
     user: str = field(default_factory=_user_name)
     counts: dict[str, int] = field(
-        default_factory=lambda: {"home_paths": 0, "keys": 0, "emails": 0, "host": 0, "user": 0}
+        default_factory=lambda: {
+            "home_paths": 0,
+            "keys": 0,
+            "emails": 0,
+            "host": 0,
+            "user": 0,
+            "system_paths": 0,
+        }
     )
 
     def __post_init__(self) -> None:
@@ -118,6 +148,8 @@ class Scrubber:
                 self.counts["home_paths"] += n
         out = self._sub(HOME_GENERIC, "~", out, "home_paths")
         out = self._sub(HOME_ENCODED, "~", out, "home_paths")
+        out = self._sub(TEMP_PATH, _leaf("[tmp]"), out, "system_paths")
+        out = self._sub(TOOLCHAIN_PATH, _leaf("[toolchain]"), out, "system_paths")
         for pattern in KEY_PATTERNS:
             out = self._sub(pattern, REMOVED, out, "keys")
         out = self._sub(SECRET_ASSIGN, lambda m: f"{m.group(1)}{m.group(2)}{REMOVED}", out, "keys")
@@ -167,6 +199,8 @@ __all__ = [
     "KEY_PATTERNS",
     "REMOVED",
     "SECRET_ASSIGN",
+    "TEMP_PATH",
+    "TOOLCHAIN_PATH",
     "Scrubber",
     "default_scrubber",
     "scrub_text",
