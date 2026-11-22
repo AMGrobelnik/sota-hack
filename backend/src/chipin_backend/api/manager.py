@@ -69,6 +69,8 @@ ApiRunner = Literal["local"]
 ApiStatus = Literal["running", "succeeded", "failed", "stopped"]
 #: Contract agent name -> backend registry name.
 AGENT_BACKENDS: dict[str, str] = {"claude": "claude_cli", "stub": SCRIPTED, "openrouter": "openrouter"}
+#: The agents a ``POST /api/runs`` body may name per run.
+REQUEST_AGENTS: frozenset[str] = frozenset({"claude", "openrouter"})
 #: Contract runner name -> backend run mode.
 RUNNER_MODES: dict[str, RunMode] = {"local": "flex"}
 #: ``machine`` values from the dashboard that mean this Mac.
@@ -237,13 +239,14 @@ class RunManager:
         """Validate a ``POST /api/runs`` body, make the run folder and start the agent."""
         prompt, preset, machine, answers, files = _validate(body, self.api)
         run_spec = _run_spec(body, self.api)
-        provider, model = self._provider_choice(body)
+        agent = self._agent_choice(body)
+        provider, model = self._provider_choice(body, agent)
         effort = self.api.presets[preset] if preset else None
         try:
             plan = plan_fanout(
                 body.get("fanout"),
                 self.api.fanout,
-                orchestrator=Orchestrator(self.agent, model, provider, effort),
+                orchestrator=Orchestrator(agent, model, provider, effort),
                 preset=preset,
                 config=self.config,
                 agents=AGENT_BACKENDS,
@@ -267,12 +270,14 @@ class RunManager:
             "prompt": prompt,
             "status": "running",
             "started_at": utc_now(),
-            "agent": self.agent,
+            "agent": agent,
             "runner": self.runner,
             "preset": preset,
             "machine": machine,
         }
-        if self.agent == "openrouter":
+        if body.get("agent") is not None and self.agent != "stub":
+            record["agent_requested"] = True
+        if agent == "openrouter":
             record["provider"] = provider
             record["model"] = model
         elif model is not None:
@@ -292,19 +297,19 @@ class RunManager:
         spec = AgentSpec(
             name="chipin",
             prompts=[first],
-            backend=AGENT_BACKENDS[self.agent],  # type: ignore[arg-type]
+            backend=AGENT_BACKENDS[agent],  # type: ignore[arg-type]
             model=model,
             provider=provider,
             effort=effort,
             system_prompt=instructions,
             timeout_s=self.api.run_timeout_s,
-            env=stub_env if self.agent == "stub" else {},
+            env=stub_env if agent == "stub" else {},
         )
         item.levels = attach(log, run.path, self.levels) if self.summary else None
         log.append(
             "run.started",
             prompt=prompt,
-            agent=self.agent,
+            agent=agent,
             runner=self.runner,
             spec=run_spec.to_json() if run_spec else None,
         )
@@ -312,7 +317,14 @@ class RunManager:
         steering.attach(item, spec)
         item.task = asyncio.create_task(self._drive(item, spec, translator), name=f"run-{item.id}")
         watch(self, item)
-        logger.info("run {} started: agent={} runner={} preset={}", item.id, self.agent, self.runner, preset)
+        logger.info(
+            "run {} started: agent={} model={} runner={} preset={}",
+            item.id,
+            agent,
+            model,
+            self.runner,
+            preset,
+        )
         return item
 
     def _fanout(
@@ -347,22 +359,35 @@ class RunManager:
         fanout.install()
         return fanout
 
-    def _provider_choice(self, body: dict[str, Any]) -> tuple[str | None, str | None]:
-        """The body's ``provider`` and ``model``, checked before a run folder is made.
+    def _agent_choice(self, body: dict[str, Any]) -> ApiAgent:
+        """The run's agent: the body's ``agent`` (``claude`` or ``openrouter``), else the server's.
+
+        A stub server keeps every run on the stub, so a test or demo never calls a model.
+        """
+        asked = body.get("agent")
+        if asked is None:
+            return self.agent
+        if asked not in REQUEST_AGENTS:
+            raise RequestError(f"agent must be one of {sorted(REQUEST_AGENTS)}")
+        return self.agent if self.agent == "stub" else asked
+
+    def _provider_choice(self, body: dict[str, Any], agent: ApiAgent) -> tuple[str | None, str | None]:
+        """The body's ``provider`` and ``model`` for ``agent``, checked before a run folder is made.
 
         Only the ``openrouter`` agent takes a provider; an unknown or unconfigured one,
         or one whose key is not set, is a 400 that names the problem (never a key).
-        The ``claude`` agent takes a model only (a Claude model id or alias).
+        The ``claude`` agent takes a model only (a Claude model id or alias); the stub
+        records the model it was asked for and calls none.
         """
         provider, model = body.get("provider"), body.get("model")
         if provider is None and model is None:
             return None, None
         if not all(v is None or (isinstance(v, str) and v.strip()) for v in (provider, model)):
             raise RequestError("provider and model must be non-empty strings")
-        if self.agent == "claude" and provider is None:
+        if agent in ("claude", "stub") and provider is None:
             return None, model.strip()
-        if self.agent != "openrouter":
-            raise RequestError("provider and model need the server started with --agent openrouter")
+        if agent != "openrouter":
+            raise RequestError("a provider needs the openrouter agent")
         try:
             chosen = resolve_provider(self.config.providers, provider)
             chosen.api_key()
@@ -634,6 +659,7 @@ __all__ = [
     "AGENT_BACKENDS",
     "API_RECORD_FILE",
     "INSTRUCTIONS_PATH",
+    "REQUEST_AGENTS",
     "RUNNER_MODES",
     "ApiAgent",
     "ApiRun",

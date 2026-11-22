@@ -56,7 +56,7 @@ from chipin_backend.api.designs import designs_view
 from chipin_backend.api.events import public_text
 from chipin_backend.api.helper import add_helper_routes, helper_ready
 from chipin_backend.api.history import MAX_PAGE, history_page, run_facts, with_summaries
-from chipin_backend.api.manager import ApiAgent, ApiRunner, RequestError, RunManager
+from chipin_backend.api.manager import REQUEST_AGENTS, ApiAgent, ApiRunner, RequestError, RunManager
 from chipin_backend.api.session_token import new_token
 from chipin_backend.api.summaries import SUMMARIES_FILE, read_jsonl
 from chipin_backend.api.transcribe import CONTEXT_HEADER, add_transcribe_route, transcribe_ready
@@ -157,7 +157,12 @@ async def health(request: web.Request) -> web.Response:
         {
             "ok": True,
             "version": API_VERSION,
-            "defaults": {"agent": manager.agent, "runner": manager.runner},
+            "defaults": {
+                "agent": manager.agent,
+                "runner": manager.runner,
+                # the agents a run may name in its own request (none on a stub server)
+                "run_agents": [] if manager.agent == "stub" else sorted(REQUEST_AGENTS),
+            },
             "transcribe": transcribe_ready(request.app),
             "helper": helper_ready(request.app),
             "providers": provider_status(manager.config.providers),

@@ -101,7 +101,7 @@ async def test_health_needs_no_token(client: TestClient) -> None:
     assert await resp.json() == {
         "ok": True,
         "version": 1,
-        "defaults": {"agent": "stub", "runner": "local"},
+        "defaults": {"agent": "stub", "runner": "local", "run_agents": []},
         "transcribe": False,
         "helper": False,
         "providers": [
@@ -116,7 +116,7 @@ async def test_default_agent_is_claude_on_this_mac(config: BackendConfig) -> Non
     app = create_app(_config(config), _api(0.01), token=TOKEN)
     async with TestClient(TestServer(app)) as c:
         body = await (await c.get("/api/health")).json()
-    assert body["defaults"] == {"agent": "claude", "runner": "local"}
+    assert body["defaults"] == {"agent": "claude", "runner": "local", "run_agents": ["claude", "openrouter"]}
 
 
 @pytest.mark.parametrize("headers", [{}, {TOKEN_HEADER: "wrong"}])

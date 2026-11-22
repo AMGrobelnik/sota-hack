@@ -15,8 +15,9 @@
   resume_session``), the run goes back to ``running`` and ends with a new
   ``run.finished``; the ``cost`` event and the run's cost are the totals so
   far. The delivery status comes when the agent starts answering.
-* A follow-up uses the agent the server was started with when it was chosen
-  explicitly (``serve --agent``); otherwise the run's recorded agent.
+* A follow-up uses the run's own agent when its request named one; else the
+  agent the server was started with when it was chosen explicitly
+  (``serve --agent``); otherwise the run's recorded agent.
 * A follow-up whose agent cannot be started (after the backend's own retries,
   or raising before it answered) ends with an ``error`` event and a ``run.finished`` that puts the run back
   as it was (``succeeded`` or ``stopped``): the run is not failed, and the
@@ -220,8 +221,8 @@ async def _inject(
 
 
 def _agent(manager: RunManager, item: ApiRun) -> str:
-    """The agent that answers: the server's explicit choice, else the run's recorded agent."""
-    if manager.agent_chosen:
+    """The agent that answers: the run's own choice, else the server's explicit one, else the recorded."""
+    if manager.agent_chosen and not item.record.get("agent_requested"):
         return manager.agent
     return str(item.record.get("agent") or manager.agent)
 
