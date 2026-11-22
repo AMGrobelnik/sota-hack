@@ -1,0 +1,86 @@
+"""Opt-in alkaid emission: same function as the default emitter (ABC cec), gates bit-exact vs the IR, and the
+default emitter's output is unaffected."""
+import json
+
+import numpy as np
+import pytest
+
+pytest.importorskip("alkaid")
+
+from chiplab.config import find_bin  # noqa: E402
+from chiplab.emit.optimized import emit_optimized  # noqa: E402
+from chiplab.emit.verilog import emit  # noqa: E402
+from chiplab.hw.yosys import synth_generic  # noqa: E402
+from chiplab.verify.bitexact import check  # noqa: E402
+from chiplab.verify.formal import prove  # noqa: E402
+from chiplab.verify.formal_extra import prove_same_function  # noqa: E402
+
+pytestmark = pytest.mark.skipif(not (find_bin("yosys") and find_bin("yosys-abc")), reason="yosys not installed")
+
+
+def small_net(seed=0, signed=False):
+    r = np.random.default_rng(seed)
+    return {"ir": "chipir/1", "name": f"alk{seed}", "inputs": [{"name": "x", "lanes": 6, "bits": 5, "signed": signed}],
+            "nodes": [{"id": "h0", "op": "matvec", "src": "x", "b": r.integers(-4, 5, 5).tolist(),
+                       "W": (r.integers(-3, 4, (5, 6)) * (r.random((5, 6)) > 0.3)).tolist() + [], },
+                      {"id": "h1", "op": "shift", "src": "h0", "k": 1},
+                      {"id": "h2", "op": "clip", "src": "h1", "lo": 0, "hi": 15},
+                      {"id": "s", "op": "matvec", "src": "h2", "W": [r.integers(-2, 3, 5).tolist(), [0] * 5, [4, 0, 0, 0, 0]],
+                       "b": [-1, 3, 0]},
+                      {"id": "y", "op": "argmax", "src": "s"}],
+            "outputs": [{"name": "y", "src": "y"}, {"name": "s", "src": "s"}], "meta": {}}
+
+
+TINY = {"ir": "chipir/1", "name": "tiny", "inputs": [{"name": "x", "lanes": 4, "bits": 4, "signed": False}],
+        "nodes": [{"id": "m", "op": "matvec", "src": "x", "W": [[1, -1, 0, 1], [0, 1, 1, -1], [3, 1, -2, 0], [0, 0, 0, 0], [8, 0, 0, 0]],
+                   "b": [1, 0, -2, 5, 0]}], "outputs": [{"name": "y", "src": "m"}], "meta": {}}
+
+
+def test_tiny_matvec_fast(tmp_path):
+    """Constant row, power-of-two row (implied trailing zeros), bias: same function, bit-exact, node proof."""
+    from chiplab.verify.formal_extra import prove_matvec_nodes
+    td, di = emit(TINY); ta, ai = emit_optimized(TINY, "alkaid")
+    (tmp_path / "d.v").write_text(td); (tmp_path / "a.v").write_text(ta)
+    assert prove_same_function(tmp_path / "d.v", tmp_path / "a.v", di["top"], ai["top"], tmp_path / "same", 120)["proved"] is True
+    pn = prove_matvec_nodes(TINY, ta, tmp_path / "nodes", 120)
+    assert pn["proved"] is True and all(n.get("same_module", True) for n in pn["nodes"]), pn
+    syn = synth_generic(tmp_path / "a.v", ai["top"], tmp_path / "syn")
+    X = np.random.default_rng(0).integers(0, 16, size=(20000, 4))
+    assert check(TINY, syn["netlist_json"], ai, X)["bit_exact"]
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("seed,signed", [(0, False), (1, True), (2, False)])
+def test_alkaid_same_function_and_bit_exact(seed, signed, tmp_path):
+    ir = small_net(seed, signed)
+    td, di = emit(ir)
+    ta, ai = emit_optimized(ir, "alkaid")
+    assert di["top"] == ai["top"] and di["inputs"] == ai["inputs"] and di["outputs"] == ai["outputs"]
+    assert any(n["impl"] == "alkaid" for n in ai["optimizer"]["nodes"]), ai["optimizer"]
+    (tmp_path / "d.v").write_text(td); (tmp_path / "a.v").write_text(ta)
+    same = prove_same_function(tmp_path / "d.v", tmp_path / "a.v", di["top"], ai["top"], tmp_path / "same", 300)
+    assert same["proved"] is True, same
+    syn = synth_generic(tmp_path / "a.v", ai["top"], tmp_path / "syn")
+    r = np.random.default_rng(seed)
+    lo, hi = (-16, 16) if signed else (0, 32)
+    res = check(ir, syn["netlist_json"], ai, r.integers(lo, hi, size=(20000, 6)))
+    assert res["bit_exact"], res["pairs"]
+    pf = prove(ir, ai, __import__("pathlib").Path(syn["gate_verilog"]), tmp_path / "a.v", tmp_path / "formal", 300)
+    assert pf["proved"] is True, pf
+
+
+def test_default_emit_unchanged_by_hook():
+    ir = small_net(3)
+    assert emit(ir)[0] == emit(ir, None, node_impl=None)[0]
+    assert emit_optimized(ir, "none")[0] == emit(ir)[0]
+
+
+@pytest.mark.slow
+def test_negative_control_wrong_rtl_is_refuted(tmp_path):
+    ir = small_net(4)
+    td, di = emit(ir)
+    bad = json.loads(json.dumps(ir)); bad["nodes"][0]["b"][0] += 1
+    ta, ai = emit_optimized(bad, "alkaid", top=di["top"])
+    (tmp_path / "d.v").write_text(td); (tmp_path / "a.v").write_text(ta)
+    same = prove_same_function(tmp_path / "d.v", tmp_path / "a.v", di["top"], ai["top"], tmp_path / "same", 300)
+    assert same["proved"] is False, same

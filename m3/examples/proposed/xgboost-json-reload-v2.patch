@@ -1,0 +1,10 @@
+--- a/chiplab/chiplab/ingest/xgb_worker.py
++++ b/chiplab/chiplab/ingest/xgb_worker.py
+@@ -16,5 +16,7 @@
+     from chiplab.ingest.treelut import from_xgboost
+     m = xgb.XGBClassifier()
+     m.load_model(model_json)
++    if m.n_estimators is None:  # load_model does not restore it; TreeLUT needs the trees per class
++        m.set_params(n_estimators=m.get_booster().num_boosted_rounds())
+     return from_xgboost(m, w_feature, w_tree, name=name)
+ 

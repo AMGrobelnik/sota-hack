@@ -81,6 +81,41 @@ def synthesize_batch(design_ids: list, target: str = "generic", session_id: str 
                                                     for d in design_ids], session_id=session_id)
 
 
+@tool("Ingest many models at once: each item is an ingest_model argument dict ({format, model|path|b64, name, ...}). "
+      "They run in parallel on the CPU lane (start workers with `chiplab workers`). Returns job ids; with wait=true it "
+      "waits and returns the design ids in the same order (null where an ingest failed).",
+      {"models": "list[dict] — ingest_model arguments, one per model", "wait": "bool — wait for all and return design ids (false)",
+       "wait_timeout": "int seconds to wait (900)"}, lane="inline")
+def ingest_batch(models: list, wait: bool = False, wait_timeout: int = 900, session_id: str | None = None,
+                 run_id: str | None = None) -> dict:
+    import time
+    from chiplab.jobs import queue
+    args = [{**m, **({"run_id": run_id} if run_id else {})} for m in models]
+    jobs = submit_batch.__wrapped__("ingest_model", args, session_id=session_id)
+    out = {"job_ids": jobs["job_ids"], "n": jobs["n"], "lane": jobs["lane"], "candidates": jobs["n"]}
+    if not wait:
+        return out
+    t0, results = time.time(), {}
+    while len(results) < len(jobs["job_ids"]):
+        for j in jobs["job_ids"]:
+            if j not in results:
+                s = queue.status(j, with_result=True)
+                if s["state"] in ("done", "failed", "timeout", "cancelled"):
+                    results[j] = s.get("result") or {"status": s["state"], "error": s.get("error")}
+        if len(results) < len(jobs["job_ids"]):
+            if time.time() - t0 > wait_timeout:
+                out.update(status="timeout", error=f"timed out after {wait_timeout}s waiting for {len(jobs['job_ids']) - len(results)} "
+                                                   f"ingest jobs (are workers running? `chiplab workers`)")
+                break
+            time.sleep(0.5)
+    ids = [results.get(j, {}).get("design_id") if results.get(j, {}).get("status") == "ok" else None for j in jobs["job_ids"]]
+    out.update(design_ids=ids, failed=[{"index": k, "job_id": j, "error": results.get(j, {}).get("error")}
+                                       for k, (j, d) in enumerate(zip(jobs["job_ids"], ids)) if d is None])
+    if out.get("status") != "timeout" and out["failed"]:
+        out["status"] = "error" if len(out["failed"]) == len(ids) else "ok"
+    return out
+
+
 @tool("Bit-exact check many designs at once on the GPU lane. Returns job ids.",
       {"design_ids": "list[str]", "inputs": "str — random|val|vectors", "n": "int"}, lane="inline")
 def simulate_batch(design_ids: list, inputs: str = "random", n: int = 100000, session_id: str | None = None,
@@ -91,9 +126,10 @@ def simulate_batch(design_ids: list, inputs: str = "random", n: int = 100000, se
 
 
 @tool("Compile a chipir/1 document directly (no training batch): validates, emits Verilog, lints. Same as "
-      "compile_verilog(ir=...).", {"ir": "dict — chipir/1"}, lane="cpu", cacheable=True)
-def compile_ir(ir: dict) -> dict:
-    return TOOLS["compile_verilog"]["fn"].__wrapped__(ir=ir)
+      "compile_verilog(ir=...).", {"ir": "dict — chipir/1",
+      "optimizer": "str — none (default) | alkaid (smaller constant multiplies; design id gets -alk)"}, lane="cpu", cacheable=True)
+def compile_ir(ir: dict, optimizer: str | None = None) -> dict:
+    return TOOLS["compile_verilog"]["fn"].__wrapped__(ir=ir, optimizer=optimizer)
 
 
 def _unused():  # keep ToolError imported for plugins that extend this module

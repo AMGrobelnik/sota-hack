@@ -59,11 +59,12 @@ def run_isolated(workdir: Path, cmd: list[str], timeout: int = 300, allow_host: 
                 config.LIBRELANE_IMAGE] + cmd
         mode = "docker (no network, 2 GB, 2 CPUs, 256 pids, read-only source)"
     else:
-        full = ["timeout", str(timeout)] + [c.replace("/src/", str(workdir / "src") + "/").replace("/out/", str(workdir / "out") + "/") for c in cmd]
-        full[2] = config.find_bin(full[2]) or full[2]
+        # no GNU `timeout` (absent on macOS): subprocess.run's own timeout below enforces the limit
+        full = [c.replace("/src/", str(workdir / "src") + "/").replace("/out/", str(workdir / "out") + "/") for c in cmd]
+        full[0] = config.find_bin(full[0]) or full[0]
         mode = "local process with timeout (Docker not available)"
     try:
-        p = subprocess.run(full, capture_output=True, text=True, timeout=timeout + 30)
+        p = subprocess.run(full, capture_output=True, text=True, timeout=timeout if mode.startswith("local") else timeout + 30)
         return p.returncode, p.stdout + p.stderr, mode
     except subprocess.TimeoutExpired:
         return 124, f"timed out after {timeout}s", mode

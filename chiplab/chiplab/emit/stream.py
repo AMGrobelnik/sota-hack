@@ -44,9 +44,12 @@ def _clog2(n: int) -> int:
     return max(1, math.ceil(math.log2(n))) if n > 1 else 1
 
 
-def emit_stream(core_ir: dict, core_info: dict | None = None, tt: bool = True) -> tuple[str, dict]:
+def emit_stream(core_ir: dict, core_info: dict | None = None, tt: bool = True, core_text: str | None = None) -> tuple[str, dict]:
     """Return (verilog with the core and the wrapper, info). info lists the protocol and the output bit map."""
-    core_text, info = emit(core_ir) if core_info is None else (emit(core_ir)[0], core_info)
+    if core_text is not None:  # an alternative implementation of the same core (e.g. the alkaid-optimised RTL)
+        info = core_info or emit(core_ir)[1]
+    else:
+        core_text, info = emit(core_ir) if core_info is None else (emit(core_ir)[0], core_info)
     did = design_id(core_ir)
     top = f"tt_um_chipin_{did}" if tt else f"chipin_{did}_stream"
     tr = transfers(info)

@@ -137,7 +137,13 @@ echo "wrote $CFG"
 mkdir -p "$HOME/.local/bin"
 printf '#!/bin/sh\nexec "%s/.venv/bin/chiplab" "$@"\n' "$HERE" > "$HOME/.local/bin/chiplab"
 chmod +x "$HOME/.local/bin/chiplab"
-case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) echo "note: add ~/.local/bin to PATH so agents find the chiplab launcher";; esac
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) ;;
+  *) case "${SHELL##*/}" in zsh) RC="$HOME/.zprofile" ;; bash) RC="$HOME/.bashrc" ;; *) RC="$HOME/.profile" ;; esac
+     echo "note: ~/.local/bin is not on PATH, so agents won't find the chiplab launcher. Run this, then restart the shell"
+     echo "      that starts the ChipIn backend:"
+     echo "        echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> $RC" ;;
+esac
 
 say "chiplab doctor"
 "$HERE/.venv/bin/chiplab" doctor | "$HERE/.venv/bin/python" -c '

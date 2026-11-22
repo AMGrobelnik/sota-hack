@@ -25,6 +25,9 @@ text: [SPEC.md](SPEC.md).
 - **Several outputs and several sensors on one chip.** `compose-chip` puts several model heads on one chip, each
   reading the same input port or its own port (sensor 1, sensor 2, ...). Simple fusion logic between their
   decisions: AND, OR, k-of-n vote.
+- **Smaller chips on request.** `"optimizer": "alkaid"` on `ingest-model` / `compile-ir` builds constant multiplies from
+  alkaid's shared shift-adds. The spike drops from 2,285 to 1,405 gates (−38%) and fits one Tiny Tapeout tile. It's fully
+  proven (gates = RTL, RTL = golden model of the IR). The design id gets `-alk`, so both variants coexist.
 - **Streaming hardware.** `compile-stream` wraps the chip so inputs arrive one value per clock with a strobe. That's
   what an 8-pin Tiny Tapeout slot or a small FPGA needs.
 - **Many candidates at once, by several agents.** Async jobs on resource lanes, a cache keyed by design content, a
@@ -185,7 +188,9 @@ All measured on one Linux machine: RTX 3090, Yosys 0.71, OSS CAD Suite 2026-11-2
 | TreeLUT boosted trees | 661 gates (binary, 8 trees, depth 3); 1,537 gates (3 classes), bit-exact against TreeLUT's predict | tests |
 | 3 heads on separate input ports + AND / 2-of-3 / OR fusion | 2,622 gates, depth 53; level 1 4,000/4,000; level 3 300/300 frames (Tiny Tapeout and generic wrappers) | tests |
 | Larger AF candidate (16 inputs × 8-bit, 8 hidden) | 5,075 gates, depth 60, synthesised in 1 s (Yosys's default ABC script timed out after 15 min) | `synthesize` |
-| Gate estimator | r² = 0.75 on 32 synthesised designs | `estimate-batch` refit |
+| Spike with `optimizer: alkaid` | 1,405 gates (−38%), depth 52; sky130 10,257 µm² = 2,733 GE, 1 Tiny Tapeout tile; bit-exact 50,000 vectors; golden-model proof 2.2 s; streaming RTL sim and sequential proof pass | `ingest-model` with `optimizer`, then the same tools |
+| 3-head fusion chip with `optimizer: alkaid` | 2,622 → 1,831 gates (−30%), −29% area | Builder measurements |
+| Gate estimator | held-out r² 0.95, median error 14% (shipped fit on 257 designs) | `estimate-batch` |
 | Population training (optional extra) | 256 candidates as one GPU program, ~2,100–2,500 candidates/min | `train-batch`; one-at-a-time GPU baseline is launch-bound, so no speedup is claimed |
 
 Layout, timing and power (LibreLane, sky130) and the Tiny Tapeout build are validated with one smoke run on a
@@ -201,8 +206,9 @@ small design; their numbers go in the chip report when run.
   registry carries these fields and the report says "context only" otherwise.
 - **GF180 and IHP layouts work** (validated on the M3 Max and here). GF180 is slower, so its default clock for
   timing is 40 ns, against 20 ns on sky130 and IHP.
-- **Optimisation headroom:** alkaid's shift-add sharing makes constant matrix multiplies 29–45% smaller than the
-  lab's current emitter, which is not yet adopted.
+- **alkaid-optimised RTL** embeds alkaid's helper modules (LGPL-3.0), copied in at generation time; the default
+  emitter stays the lab's own. Gate counts and area can disagree for alkaid designs (fewer gates, sometimes similar area),
+  so look at both.
 - Transistor counts, pre-layout tile counts and `estimate-batch` gate counts are estimates and are labelled as such.
 
 ## 11. Architecture, repo layout and licences
@@ -232,7 +238,7 @@ Wrapped or reused, not reimplemented. Licences as published by each project:
 | cocotb | BSD-3-Clause | testbenches |
 | torchlogix | MIT | logic-gate network models (dependency) |
 | TreeLUT | MIT | vendored in `chiplab/ingest/vendor/treelut` with its licence |
-| alkaid | LGPL-3.0 | optional dependency only, not vendored |
+| alkaid | LGPL-3.0 | optional dependency, not vendored; its helper modules appear in `optimizer: alkaid` RTL |
 | Huey | MIT | job queue |
 | diskcache | Apache-2.0 | result cache |
 | PyTorch | BSD-3-Clause | training and GPU bit-exact checks |

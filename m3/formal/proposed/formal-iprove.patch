@@ -1,0 +1,64 @@
+diff -ruN a/chiplab/chiplab/verify/formal.py b/chiplab/chiplab/verify/formal.py
+--- a/chiplab/chiplab/verify/formal.py	2026-11-21 21:17:13
++++ b/chiplab/chiplab/verify/formal.py	2026-11-21 21:28:34
+@@ -11,7 +11,7 @@
+ proved; RTL == IR then rests on construction and tests/test_ir_fuzz.py).
+ 
+ Default is B only (fast: well under a second of ABC on a 2.2k-gate chip). A is opt-in (golden=True): it first tries
+-the whole design in one techmapped miter with ABC &cec (prove_rtl_vs_golden_whole: every input, no range assumptions;
++the whole design in one techmapped miter with ABC iprove (prove_rtl_vs_golden_whole: every input, no range assumptions;
+ the 2.2k-gate spike in a few seconds), and falls back to the node-by-node proof only if that is inconclusive.
+ """
+ from __future__ import annotations
+@@ -115,11 +115,11 @@
+ 
+ 
+ def _abc_verdict(out: str) -> bool | None:
+-    """ABC's last 'Networks are ...' line (the new &cec engine may say UNDECIDED before the old engine decides)."""
+-    last = [ln for ln in out.splitlines() if "Networks are" in ln][-1:]
+-    if not last or "UNDECIDED" in last[0] or "structural hashing" in last[0]:
++    """ABC iprove on a one-output miter: UNSATISFIABLE = the miter never fires (equivalent); SATISFIABLE = a CEX."""
++    last = [ln.strip() for ln in out.splitlines() if "SATISFIABLE" in ln][-1:]
++    if not last:
+         return None
+-    return False if "NOT EQUIVALENT" in last[0].upper() else ("Networks are equivalent" in last[0] or None)
++    return True if last[0].startswith("UNSATISFIABLE") else (False if last[0].startswith("SATISFIABLE") else None)
+ 
+ 
+ def prove_rtl_vs_golden_whole(ir: dict, port_info: dict, rtl: Path, workdir: Path, timeout: int = 600) -> dict:
+@@ -127,9 +127,10 @@
+ 
+     Both sides are lowered with `techmap` (no alumacc/maccmap): each `a + b + c` stays a ripple-adder chain in source
+     order. The golden model and the production emitter add the same terms in the same order, so their partial sums
+-    are equal signals, and ABC `&cec` (simulation + SAT sweeping) merges them one by one with small SAT calls. The
++    are equal signals, and ABC `iprove` (rewriting, fraiging and SAT on the miter output) merges them. The
+     lab's synthesis (alumacc/maccmap + ABC) reshapes those adders, which is why golden vs gates directly, or Yosys
+-    `sat` on one node, takes minutes; RTL vs golden here takes seconds (spike: ~3 s of ABC)."""
++    `sat` on one node, takes minutes; RTL vs golden here takes seconds (spike ~3 s, 3-head chip ~10 s; `&cec -m` on the
++    same miter needed minutes for the 3-head chip's 2-of-3 vote cone)."""
+     workdir.mkdir(parents=True, exist_ok=True)
+     t0, top = time.time(), port_info["top"]
+     (workdir / "gold.v").write_text(emit_golden(ir, "gold_top", port_info))
+@@ -141,7 +142,7 @@
+         return {"proved": None, "nodes": [], "detail": str(e)[-300:], "seconds": round(time.time() - t0, 1)}
+     left = max(10, int(timeout - (time.time() - t0)))
+     try:
+-        p = subprocess.run([oss_bin("yosys-abc"), "-c", "read_aiger miter.aig; &get; &cec -m"], cwd=workdir,
++        p = subprocess.run([oss_bin("yosys-abc"), "-c", "read_aiger miter.aig; iprove"], cwd=workdir,
+                            capture_output=True, text=True, timeout=left)
+         out = p.stdout + p.stderr
+     except subprocess.TimeoutExpired:
+@@ -175,11 +176,11 @@
+     w = prove_rtl_vs_golden_whole(ir, port_info, rtl, workdir / "golden_whole", timeout)
+     if w["proved"] is True:
+         return {"proved": True, "against": "independent golden model of the IR (emit/golden.py)",
+-                "method": "abc cec (gates == RTL) + abc &cec on one techmapped miter (RTL == golden, every input)",
++                "method": "abc cec (gates == RTL) + abc iprove on one techmapped miter (RTL == golden, every input)",
+                 "nodes": w["nodes"], "seconds": round(time.time() - t0, 1), "verification_level": 2}
+     if w["proved"] is False:
+         return {"proved": False, "against": "independent golden model of the IR (emit/golden.py)",
+-                "method": "abc &cec, whole-design miter", "nodes": w["nodes"],
++                "method": "abc iprove, whole-design miter", "nodes": w["nodes"],
+                 "detail": "emitter disagrees with golden model", "seconds": round(time.time() - t0, 1),
+                 "verification_level": 1}
+     # ... and node by node if the whole miter was inconclusive
