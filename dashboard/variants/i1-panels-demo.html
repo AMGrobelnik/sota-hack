@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ChipIn panels, component demo</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='none' stroke='%233D6DF0' stroke-width='7' d='M53 12.5H23A10.5 10.5 0 0 0 12.5 23V41A10.5 10.5 0 0 0 23 51.5H53'/%3E%3Crect fill='%233D6DF0' x='26' y='25' width='14' height='14' rx='1.5'/%3E%3C/svg%3E">
+<style>
+/* the tokens of dashboard/variants/i1.html, so the panels look as they will when mounted there */
+:root{
+  --page:#f5f6f8;--card:#fff;
+  --i900:#141a2e;--i800:#262c40;--i700:#3a4052;--i600:#4a5062;--i550:#555b6d;--i500:#5c6276;--i300:#b2b6c2;--i200:#d5d8e0;--i150:#e7e9ee;--i100:#f1f2f6;
+  --blue:#3d6df0;--blue6:#3d6df0;--blue7:#2b55d0;
+  --c-chip:#a04812;--caught:#0f7a55;--missed:#c2362b;
+  --ok:#10b981;--okt:#047857;--okbg:#ecfdf5;--badt:#b91c1c;--badbg:#fdf0ee;--amb:#b45309;--amb-bg:#fff8eb;
+  --hair:rgb(0 0 0/.07);
+  --sans:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --serif:"Source Serif 4","Iowan Old Style","Charter","Georgia",serif;
+  --sh-hair:0 1px 3px rgb(0 0 0/.04);--ease:cubic-bezier(.4,0,.2,1);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--sans);color:var(--i900);background:var(--page);font-size:14px;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px;border-radius:6px}
+.wrap{max-width:1320px;margin:0 auto;padding:28px 24px 64px}
+.note{display:inline-flex;font-size:11px;font-weight:600;color:var(--i600);background:#fff;border:1px solid rgb(0 0 0/.1);border-radius:99px;padding:2px 10px}
+h1{font-family:var(--serif);font-weight:400;font-size:28px;line-height:1.2;letter-spacing:-.012em;margin:12px 0 4px}
+.lead{font-size:13.5px;color:var(--i600);margin:0;max-width:760px;line-height:1.5}
+.case{margin-top:44px}
+.ch{display:flex;align-items:flex-end;gap:12px 24px;flex-wrap:wrap;margin:0 0 14px}
+.ch .tx{flex:1;min-width:260px}
+.ch h2{font-family:var(--serif);font-weight:400;font-size:23px;margin:0;letter-spacing:-.01em;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.ch p{font-size:13px;color:var(--i600);margin:4px 0 0;line-height:1.5}
+.mk{display:inline-flex;align-items:center;font-family:var(--sans);font-size:10.5px;font-weight:600;border-radius:99px;padding:1px 7px;white-space:nowrap}
+.mk.sim{color:#7c3a06;background:#fff3e0}.mk.mea{color:#0b5a3f;background:#e6f5ed}
+.ctl{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.ctl label{font-size:12px;color:var(--i600);display:inline-flex;align-items:center;gap:6px}
+.ctl input,.ctl select{height:32px;border:1px solid var(--i200);border-radius:9px;background:#fff;padding:0 8px;font-size:12.5px}
+.ctl input{width:76px}
+.qb{height:32px;padding:0 12px;border-radius:9px;border:1px solid rgb(0 0 0/.12);background:#fff;font-size:12.5px;font-weight:500;color:var(--i800);cursor:pointer}
+.qb:hover{background:var(--i100)}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:14px;align-items:start}
+.side{display:flex;flex-direction:column;gap:14px;min-width:0}
+.insp{background:#fff;border:1px solid rgb(0 0 0/.07);border-radius:16px;box-shadow:var(--sh-hair);padding:14px 16px}
+.insp h3{font-size:13px;font-weight:650;margin:0 0 2px}
+.insp .is{font-size:12px;color:var(--i600);margin:0 0 6px}
+.irow{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.irow>span:first-child{color:var(--i600);flex:none}
+.irow>span:last-child{text-align:right;font-variant-numeric:tabular-nums}
+.est{font-style:italic;text-decoration:underline dotted rgb(20 26 46/.5);text-underline-offset:3px;cursor:help}
+.ip{font-size:12.5px;color:var(--i700);line-height:1.5;margin:8px 0 0}
+.sw{display:inline-flex;align-items:center;gap:5px;margin-left:10px;white-space:nowrap}
+.sw i{width:8px;height:8px;border-radius:50%}
+footer{margin-top:52px;font-size:12px;color:var(--i600);line-height:1.5}
+@media (max-width:1100px){.grid{grid-template-columns:1fr}}
+@media (max-width:767px){.wrap{padding:18px 12px 48px}h1{font-size:24px}.case{margin-top:34px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="note">Component demo</span>
+  <h1>Battery, confidence, cost and measured panels</h1>
+  <p class="lead">Each example below mounts the panels from <code>i1-panels.js</code> with one context. Change the wear-time target or the disposable answer and the battery rows follow; the dashboard calls the same functions.</p>
+  <div id="cases"></div>
+  <footer id="credit"></footer>
+</div>
+<script src="../chipin-models.js"></script>
+<script src="../i1-panels.js"></script>
+<script>
+(function () {
+  "use strict";
+  var P = window.ChipInPanels, MD = window.ChipInModels;
+
+  // AF feasibility design, as the dashboard holds it (dashboard/variants/i1.html, AF_DESIGN): measured
+  var AF = { id: "AF-1", channels: 1, gates: 2330, metrics: { sensitivity_pooled: 0.8333, specificity: 0.8764, sensitivity_window: 0.7315, specificity_window: 0.8790 },
+    counts: { events_caught: null, events_total: 96, negatives_correct: null, negatives_total: 704, hours: null, patients: 800 }, source: "measured" };
+  // two designs of the dashboard's simulated Incubator Watch run (the chosen chip and the next one on its frontier)
+  var INC = [{"id":"R4-145","channels":2,"sensors":2,"gates":2092,"metrics":{"sensitivity_worst":0.903846,"sensitivity_pooled":0.930952,"specificity":0.991926,"specificity_worst":0.986232,"accuracy":0.987796,"lead_time_s":11.2,"false_alarms_per_hour":0.484429,"false_alarms_per_hour_worst":0.826087},"counts":{"events_caught":1173,"events_total":1260,"negatives_correct":17200,"negatives_total":17340,"hours":289,"patients":12},"per_patient":[{"id":1,"caught":94,"total":104,"neg_correct":1312,"neg_total":1320},{"id":2,"caught":95,"total":105,"neg_correct":1250,"neg_total":1260},{"id":3,"caught":62,"total":65,"neg_correct":1492,"neg_total":1500},{"id":4,"caught":111,"total":117,"neg_correct":1246,"neg_total":1260},{"id":5,"caught":101,"total":109,"neg_correct":1550,"neg_total":1560},{"id":6,"caught":120,"total":130,"neg_correct":1310,"neg_total":1320},{"id":7,"caught":116,"total":122,"neg_correct":1361,"neg_total":1380},{"id":8,"caught":107,"total":117,"neg_correct":1546,"neg_total":1560},{"id":9,"caught":108,"total":116,"neg_correct":1608,"neg_total":1620},{"id":10,"caught":84,"total":87,"neg_correct":1366,"neg_total":1380},{"id":11,"caught":82,"total":86,"neg_correct":1607,"neg_total":1620},{"id":12,"caught":93,"total":102,"neg_correct":1552,"neg_total":1560}],"source":"simulated"},{"id":"R3-104","channels":2,"sensors":2,"gates":2334,"metrics":{"sensitivity_worst":0.906977,"sensitivity_pooled":0.945238,"specificity":0.992618,"specificity_worst":0.986232,"accuracy":0.989409,"lead_time_s":10.1,"false_alarms_per_hour":0.442907,"false_alarms_per_hour_worst":0.826087},"counts":{"events_caught":1191,"events_total":1260,"negatives_correct":17212,"negatives_total":17340,"hours":289,"patients":12},"per_patient":[{"id":1,"caught":99,"total":104,"neg_correct":1315,"neg_total":1320},{"id":2,"caught":99,"total":105,"neg_correct":1252,"neg_total":1260},{"id":3,"caught":62,"total":65,"neg_correct":1487,"neg_total":1500},{"id":4,"caught":111,"total":117,"neg_correct":1255,"neg_total":1260},{"id":5,"caught":101,"total":109,"neg_correct":1548,"neg_total":1560},{"id":6,"caught":123,"total":130,"neg_correct":1313,"neg_total":1320},{"id":7,"caught":115,"total":122,"neg_correct":1369,"neg_total":1380},{"id":8,"caught":113,"total":117,"neg_correct":1545,"neg_total":1560},{"id":9,"caught":109,"total":116,"neg_correct":1608,"neg_total":1620},{"id":10,"caught":81,"total":87,"neg_correct":1361,"neg_total":1380},{"id":11,"caught":78,"total":86,"neg_correct":1609,"neg_total":1620},{"id":12,"caught":100,"total":102,"neg_correct":1550,"neg_total":1560}],"source":"simulated"}];
+
+  // measured facts the dashboard would hand in from its AF results (team notes on the AF feasibility run)
+  var AF_FACTS = [
+    { title: "AF feasibility circuit: 2,330 gates", text: "After synthesis the classifier is 2,330 gates with a longest path of 52 cells.", scope: "One compiled design, single-lead ECG." },
+    { title: "Circuit accuracy on held-out recordings", text: "Record level: sensitivity 83.3%, specificity 87.6%. Window level: 73.2% and 87.9%.", scope: "PhysioNet/CinC 2017, split by recording: 800 test recordings, 96 with AF." },
+    { title: "Full-precision model on the same test set", text: "Record level: sensitivity 96.9%, specificity 95.3%. Window level: 97.5% and 93.3%.", scope: "The circuit is less accurate than this model: a model gap, not a hardware gap." },
+    { title: "Bit for bit: 3,880 of 3,880 test windows identical", text: "The circuit and its model agree on every test window, 0 mismatches.", scope: "Every test window of the AF run." },
+    { title: "Search speed", text: "About 1,625 candidates a minute trained in one batch of 256, against about 27.6 a minute one at a time: about 59 times faster.", scope: "The AF run's candidate search." }
+  ];
+
+  function budgetsFrom(list, unit, labels) {
+    return list.map(function (n) { return { key: String(n), label: (labels && labels[n]) || (n + " " + (n === 1 ? unit.replace(/s$/, "") : unit)), channels: n, sensors: n }; });
+  }
+
+  var CASES = [
+    { id: "ecg", title: "AF patch", src: "measured", blurb: "Single-lead ECG adhesive patch, the measured feasibility design. Lead budgets from the power model show where the patch tips.",
+      ctx: { caseKind: "ecg-patch", budgets: budgetsFrom(MD.DEVICE_KINDS["ecg-patch"].budgets, "leads"), chosen: AF, selected: null,
+        targets: [{ metric: "sensitivity", op: ">=", value: 0.9 }, { metric: "specificity", op: ">=", value: 0.85 }], primary: "sensitivity",
+        batteryTargetHours: 168, reusable: false, decisionsPerSecond: 1, dataSource: "measured", patientsUnseen: 800, who: "recordings", costInputs: null },
+      facts: function () { return AF_FACTS.concat(P.defaultFacts()); } },
+    { id: "eeg", title: "Neonatal EEG brain monitor", src: "measured", blurb: "Measured on open data (Helsinki). Chosen: the best worst-baby design; selected: the smallest design one step below it.",
+      ctx: { caseKind: "eeg-monitor", budgets: budgetsFrom([1, 2, 4, 18], "channels", { 18: "Full montage, 18" }), chosen: null, selected: null,
+        targets: [{ metric: "sensitivity", op: ">=", value: 0.9 }, { metric: "false_alarms_per_hour", op: "<=", value: 1 }], primary: "sensitivity",
+        batteryTargetHours: 72, reusable: true, decisionsPerSecond: 1, dataSource: "measured", patientsUnseen: 10, who: "babies", costInputs: null },
+      facts: function () { return P.defaultFacts(); } },
+    { id: "inc", title: "Incubator Watch", src: "simulated", blurb: "Radar plus thermal infrared, simulated. Chosen: the dashboard's chip for 90% worst-baby sensitivity; selected: the next design on its frontier.",
+      ctx: { caseKind: "incubator-radar-thermal", budgets: [{ key: "1", label: "Radar only", channels: 1, sensors: 1 }, { key: "2", label: "Radar + thermal", channels: 2, sensors: 2 }], chosen: INC[0], selected: INC[1],
+        targets: [{ metric: "sensitivity", op: ">=", value: 0.9 }, { metric: "false_alarms_per_hour", op: "<=", value: 1 }], primary: "sensitivity",
+        batteryTargetHours: null, reusable: true, decisionsPerSecond: 1, dataSource: "simulated", patientsUnseen: 12, who: "babies", costInputs: null },
+      facts: function () { return P.defaultFacts(); } }
+  ];
+
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function pct(x) { return (x * 100).toFixed(1) + "%"; }
+
+  function inspHTML(c) {
+    var ctx = c.ctx, d = ctx.selected || ctx.chosen;
+    if (!d) return '<h3>Inspector lines</h3><p class="is">Waiting for the data file.</p>';
+    var cl = P.costLine(ctx);
+    var rows = [ctx.chosen, ctx.selected].filter(Boolean).map(function (x) {
+      var iv = P.intervalFor(x, ctx.primary);
+      return '<div class="irow"><span>' + (x === ctx.chosen ? "Chosen" : "Selected") + " " + esc(x.id) + '</span><span data-iv="' + esc(x.id) + '">' + (iv ? pct(iv.value) + ", range " + pct(iv.low) + " to " + pct(iv.high) + " (" + iv.k + " of " + iv.n + ")" : "no range") + "</span></div>";
+    }).join("");
+    var tints = ctx.budgets.map(function (b) {
+      var k = P.batteryClassFor(ctx, b.key);
+      return '<span class="sw"><i style="background:var(' + k.color + ')"></i>' + esc(b.label) + ": " + esc(k.label.toLowerCase()) + "</span>";
+    }).join(" ");
+    return '<h3>Inspector lines</h3><p class="is">What the dashboard\'s inspector and chart would read from the module.</p>' + rows +
+      '<div class="irow"><span>Unit cost</span><span data-unit-line><span class="est" title="' + esc(cl.tip) + '">' + esc(cl.unit_cost_text) + "</span></span></div>" +
+      (cl.delta_text ? '<p class="ip" data-delta-line><span class="est" title="' + esc(cl.tip) + '">' + esc(cl.delta_text) + "</span></p>" : "") +
+      '<p class="ip">Curve tints: ' + tints + "</p>";
+  }
+
+  var host = document.getElementById("cases");
+  CASES.forEach(function (c) {
+    var s = document.createElement("section");
+    s.className = "case"; s.id = "case-" + c.id;
+    s.innerHTML = '<div class="ch"><div class="tx"><h2>' + esc(c.title) + ' <span class="mk ' + (c.src === "measured" ? "mea" : "sim") + '">' + c.src + "</span></h2><p>" + esc(c.blurb) + "</p></div>" +
+      '<div class="ctl"><label>Wear time, hours <input type="number" min="0" step="1" data-t value="' + (c.ctx.batteryTargetHours || "") + '" placeholder="none"></label>' +
+      '<label>Device <select data-r><option value="null">Not set</option><option value="false">Disposable</option><option value="true">Reusable</option></select></label>' +
+      '<button class="qb" data-cost>Cost assumptions</button><button class="qb" data-meas>Measured so far</button></div></div>' +
+      '<div class="grid"><div data-bat></div><div class="side"><div data-conf></div><div class="insp" data-insp></div></div></div>';
+    host.appendChild(s);
+    s.querySelector("[data-r]").value = String(c.ctx.reusable);
+    c.bat = P.mountBattery(s.querySelector("[data-bat]"), c.ctx);
+    c.conf = P.mountConfidence(s.querySelector("[data-conf]"), c.ctx);
+    c.refresh = function () { c.bat.update(c.ctx); c.conf.update(c.ctx); s.querySelector("[data-insp]").innerHTML = inspHTML(c); };
+    c.refresh();
+    s.querySelector("[data-t]").addEventListener("input", function (e) { var v = Number(e.target.value); c.ctx.batteryTargetHours = e.target.value === "" || !(v > 0) ? null : v; c.refresh(); });
+    s.querySelector("[data-r]").addEventListener("change", function (e) { c.ctx.reusable = JSON.parse(e.target.value); c.refresh(); });
+    s.querySelector("[data-cost]").addEventListener("click", function () { P.openCost(c.ctx, function (inputs) { c.ctx.costInputs = inputs; c.refresh(); }); });
+    s.querySelector("[data-meas]").addEventListener("click", function () { P.openMeasured(c.facts()); });
+  });
+  document.getElementById("credit").textContent = P.footerCredit();
+
+  // the measured EEG designs come from the dashboard's data file
+  fetch("../data/neonatal-eeg.json").then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function (j) {
+    var c = CASES[1], byId = {};
+    j.designs.forEach(function (d) { byId[d.id] = d; });
+    c.ctx.chosen = byId["c2-h32-t-s2"] || null;
+    c.ctx.selected = byId["c1-h0-w4-s2"] || null;
+    c.refresh();
+  }).catch(function () {
+    document.querySelector("#case-eeg [data-insp]").innerHTML = '<h3>Inspector lines</h3><p class="is">The EEG data file did not load, so this example has no design.</p>';
+  });
+
+  window.__panelsDemo = CASES;
+})();
+</script>
+</body>
+</html>
