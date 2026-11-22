@@ -151,7 +151,7 @@ async def get_run(request: web.Request) -> web.Response:
 
 
 async def get_evidence(request: web.Request) -> web.Response:
-    """Number tracing, weight bytes per decision and stage timings of a finished run, computed now."""
+    """Number check, weight bytes per decision and stage timings of a finished run, computed now."""
     item = request.app[MANAGER].get(request.match_info["run_id"])
     if item.record.get("status") == "running":
         raise RequestError("the run is still in progress", status=409)

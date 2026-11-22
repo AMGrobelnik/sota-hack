@@ -93,7 +93,7 @@ def _parser() -> argparse.ArgumentParser:
     evidence = sub.add_parser(
         "evidence",
         parents=[common],
-        help="trace the report's numbers, weight bytes per decision and stage timings of a run",
+        help="check the report numbers against their sources, weight bytes per decision, stage timings",
     )
     evidence.add_argument("run", help="a run id under the runs folder, or a run folder")
     evidence.add_argument("--json", action="store_true", help="print JSON instead of markdown")

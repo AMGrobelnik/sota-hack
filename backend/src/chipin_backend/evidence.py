@@ -115,7 +115,7 @@ def find_prompt(run: Path, events: list[dict[str, Any]]) -> str:
     return brief.read_text(encoding="utf-8") if brief.is_file() else ""
 
 
-# ---------------------------------------------------------------- A. number tracing
+# ---------------------------------------------------------------- A. number check
 
 _STOP = frozenset(
     re.findall(
@@ -205,8 +205,9 @@ CLASS_NAMES = {
 LIMITS = (
     'A "no source" number means nothing the tools measured in this run has this value: treat it as '
     'unsupported until shown otherwise. "Source found" means a machine-produced source in this run holds '
-    "this value in this unit. It does not establish which design, stage or quantity the sentence gives "
-    "the value to, nor relations between numbers, nor negations. The check reads only the run folder."
+    "this value in this unit. It does not establish which design or stage the sentence gives the value to, "
+    "which of several quantities sharing that unit it means, nor relations between numbers, nor negations, "
+    "nor the direction of a margin. The check reads only the run folder."
 )
 _PREFIX = {"p": 1e-12, "n": 1e-9, "u": 1e-6, "µ": 1e-6, "m": 1e-3, "": 1.0, "k": 1e3, "M": 1e6, "G": 1e9}
 _BASES = ("Hz", "W", "J", "s", "m2", "m²", "m", "V")
@@ -373,7 +374,7 @@ class Source:
     """One machine-produced number in the run folder.
 
     ``terms`` are the words of the key's last meaningful segment; ``kinds`` the counted things
-    or physical quantities the key or unit names; ``confirmed`` is False for a figure a file
+    or physical quantities the key or unit names; ``reproduced`` is False for a figure a file
     declares that the run's own data does not reproduce.
     """
 
@@ -387,7 +388,7 @@ class Source:
     percent: bool = False
     ratio: bool = False
     structural: bool = False
-    confirmed: bool = True
+    reproduced: bool = True
 
 
 def _word_around(line: str, start: int, end: int) -> tuple[int, int]:
@@ -661,7 +662,7 @@ def _model_sources(run: Path) -> list[Source]:
 
     The stored count is machine-countable (the length of every weight and bias array). A declared
     ``meta.params`` that equals it is named in the same source; one that differs (weight sharing,
-    unrolled weights) is a separate, unconfirmed source.
+    unrolled weights) is a separate source, not reproduced from the data.
     """
     sources = []
     for path in model_files(run):
@@ -682,7 +683,7 @@ def _model_sources(run: Path) -> list[Source]:
                 "(the declared count is not reproduced from the data)"
             )
             source = _source(label, "declared_parameters", declared, None, from_event=False)
-            source.confirmed = False
+            source.reproduced = False
             sources.append(source)
     return sources
 
@@ -717,13 +718,13 @@ def collect_sources(run: Path, events: list[dict[str, Any]]) -> list[Source]:
 
 def _match(claim: Claim, source: Source) -> str | None:
     """``None`` if ``source`` does not round to ``claim`` at the digits shown; else ``""`` when
-    nothing stands between value and meaning, or why the meaning is not confirmed.
+    nothing was found between value and claim, or why the match stays unclear.
 
     A percent claim matches only a percentage (as written) or a 0-to-1 ratio (times 100). When
     both carry a physical unit (a rate in words is in hertz), the values must agree after both
-    are converted to the base unit; when only one does, the meaning is not confirmed. A negative
+    are converted to the base unit; when only one does, the match is unclear. A negative
     source matches a negative claim or a sentence of shortfall ("misses by"), never one of a
-    margin met ("to spare"); a sentence with neither leaves the meaning not confirmed.
+    margin met ("to spare"); a sentence with neither leaves the match unclear.
     """
     magnitude = abs(source.value)
     if claim.percent:
@@ -775,7 +776,7 @@ def classify_claim(claim: Claim, sources: list[Source]) -> tuple[str, list[Sourc
     named = [s for s in hits if not s.structural or claim.noun in s.kinds or _shared_words(claim, s)]
 
     def settle(agree: list[Source], declared_reason: str) -> tuple[str, list[Source], str | None] | None:
-        if full := [s for s in agree if s.confirmed and not gaps[id(s)]]:
+        if full := [s for s in agree if s.reproduced and not gaps[id(s)]]:
             return SOURCE_FOUND, rank(full), None
         if agree:
             first = rank(agree)[0]
@@ -810,7 +811,7 @@ def classify_claim(claim: Claim, sources: list[Source]) -> tuple[str, list[Sourc
     return NO_SOURCE, [], None
 
 
-def trace_numbers(run: Path, events: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def check_numbers(run: Path, events: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Measurement A over the run's final report: every number in one of three classes, or excluded."""
     events = read_events(run) if events is None else events
     report = find_report(run, events)
@@ -1302,7 +1303,7 @@ def build_evidence(run: Path, *, write: bool = True, finishing: bool = False) ->
         else "finishing (measured just before run.finished)"
         if finishing
         else "NOT finished (no run.finished event)",
-        "numbers": trace_numbers(run, events),
+        "numbers": check_numbers(run, events),
         "weights": weight_bytes(run, events),
         "stages": stage_timings(events),
     }
@@ -1439,6 +1440,7 @@ __all__ = [
     "EVIDENCE_MD",
     "LIMITS",
     "build_evidence",
+    "check_numbers",
     "classify_claim",
     "emit_evidence",
     "evidence_summary",
@@ -1448,6 +1450,5 @@ __all__ = [
     "render_markdown",
     "select_chip",
     "stage_timings",
-    "trace_numbers",
     "weight_bytes",
 ]

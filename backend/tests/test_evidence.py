@@ -24,11 +24,11 @@ from chipin_backend.evidence import (
     EVIDENCE_MD,
     LIMITS,
     build_evidence,
+    check_numbers,
     emit_evidence,
     evidence_summary,
     render_markdown,
     stage_timings,
-    trace_numbers,
     weight_bytes,
 )
 
@@ -86,7 +86,7 @@ def test_numbers_found_through_formatting(tmp_path: Path) -> None:
         "spends 456 pJ per decision and passes 85.4% of the checks.\n"
     )
     run = _run(tmp_path, events, report, {"workspace/lab/d1.tp.json": lab_answer})
-    found = _by_text(trace_numbers(run))
+    found = _by_text(check_numbers(run))
 
     assert found["2,367 gates"]["source"].startswith("metric gates = 2367")
     assert found["2.4k"]["class"] == "source_found"
@@ -99,7 +99,7 @@ def test_numbers_found_through_formatting(tmp_path: Path) -> None:
 
 def test_a_planted_number_has_no_source_not_wrong(tmp_path: Path) -> None:
     run = _run(tmp_path, [_metric(1, 0, "gates", 2367, "gates")], "It has 2367 gates and lasts 731 days.\n")
-    result = trace_numbers(run)
+    result = check_numbers(run)
     found = _by_text(result)
     assert found["731 days"]["class"] == "no_source" and "source" not in found["731 days"]
     assert (result["source_found"], result["no_source"]) == (1, 1)
@@ -124,7 +124,7 @@ def test_non_claims_are_excluded(tmp_path: Path) -> None:
             "```",
         ]
     )
-    result = trace_numbers(_run(tmp_path, events, report))
+    result = check_numbers(_run(tmp_path, events, report))
     assert {entry["class"] for entry in result["numbers"]} == {"excluded"}
     reasons = {entry["text"]: entry["reason"] for entry in result["numbers"]}
     assert reasons["2"] == "list numbering"
@@ -142,7 +142,7 @@ def test_non_claims_are_excluded(tmp_path: Path) -> None:
 def test_small_integers_need_a_matching_key(tmp_path: Path) -> None:
     events = [_metric(1, 0, "tt_tiles", 2, "tiles"), _metric(2, 0, "mismatches", 0, "vectors")]
     report = "It fits in 2 tiles with 0 mismatches.\nWe tried 2 ideas.\n"
-    result = trace_numbers(_run(tmp_path, events, report))
+    result = check_numbers(_run(tmp_path, events, report))
     statuses = [(e["line"], e["text"], e["class"]) for e in result["numbers"]]
     assert statuses == [(1, "2 tiles", "source_found"), (1, "0", "source_found"), (2, "2", "no_source")]
     assert "small integer" in result["numbers"][2]["reason"]
@@ -157,11 +157,11 @@ def test_a_percent_matches_only_a_percentage_or_ratio(tmp_path: Path) -> None:
     report = "Sensitivity reached 93% on held-out subjects.\nThe optimiser cut the cost by 40% overall.\n"
     events = [_metric(1, 0, "alkaid_cost", 40)]
     files = {"workspace/lab/d1.tp.json": _lab("d1", seconds=93.4, cost=40)}
-    found = _by_text(trace_numbers(_run(tmp_path / "a", events, report, files)))
+    found = _by_text(check_numbers(_run(tmp_path / "a", events, report, files)))
     assert (found["93%"]["class"], found["40%"]["class"]) == ("no_source", "no_source")
 
     ratios = [_metric(1, 0, "sensitivity", 0.93), _metric(2, 0, "pass_fraction", 0.4)]
-    found = _by_text(trace_numbers(_run(tmp_path / "b", ratios, report)))
+    found = _by_text(check_numbers(_run(tmp_path / "b", ratios, report)))
     assert found["93%"]["class"] == "source_found" and found["93%"]["source"].startswith("metric sensitivity")
     assert found["40%"]["class"] == "value_found_unclear"  # a ratio, but of what?
 
@@ -172,7 +172,7 @@ def test_structural_fields_are_sources_only_when_named(tmp_path: Path) -> None:
         "Parameter counts (81, 41, 193), a measured line-length front-end.\n"
         "The netlist is 41 lines long, built from seed 17.\n"
     )
-    numbers = trace_numbers(_run(tmp_path, [], report, files))["numbers"]
+    numbers = check_numbers(_run(tmp_path, [], report, files))["numbers"]
     by_line = {(e["line"], e["text"]): e for e in numbers}
     assert by_line[(1, "41")]["class"] == "no_source"
     assert by_line[(2, "41")]["class"] == "source_found" and by_line[(2, "41")]["source"].endswith(
@@ -186,14 +186,14 @@ def test_structural_fields_are_sources_only_when_named(tmp_path: Path) -> None:
 def test_a_counted_noun_must_agree_with_the_source(tmp_path: Path) -> None:
     events = [_metric(1, 0, "gates", 1356, "gates")]
     report = "We screened 1,356 patients.\nDesign C has 1,356 gates.\n"
-    found = _by_text(trace_numbers(_run(tmp_path, events, report)))
+    found = _by_text(check_numbers(_run(tmp_path, events, report)))
     patients = found["1,356 patients"]
     assert patients["class"] == "no_source" and "source" not in patients
     assert "patients" in patients["reason"] and "metric gates = 1356" in patients["reason"]
     assert found["1,356 gates"]["class"] == "source_found"
 
 
-def test_parameter_counts_trace_to_model_files(tmp_path: Path) -> None:
+def test_parameter_counts_have_a_source_in_the_model_files(tmp_path: Path) -> None:
     files = {
         "workspace/designs/A.ir.json": {
             "name": "A",
@@ -208,7 +208,7 @@ def test_parameter_counts_trace_to_model_files(tmp_path: Path) -> None:
         "workspace/lab/A.compile.json": _lab("A", lines=15),
     }
     report = "Parameter counts are 15 and 11.\nB stores 24 parameters.\n"
-    found = _by_text(trace_numbers(_run(tmp_path, [], report, files)))
+    found = _by_text(check_numbers(_run(tmp_path, [], report, files)))
     assert found["15"]["class"] == "source_found"
     assert found["15"]["source"].startswith("workspace/designs/A.ir.json (model A): 15 stored weight values")
     assert "meta.params declares the same" in found["15"]["source"]
@@ -241,7 +241,7 @@ def test_the_classes_are_separate_everywhere(tmp_path: Path) -> None:
 def _classes(
     root: Path, events: list[dict[str, Any]], report: str, files: dict[str, Any] | None = None
 ) -> dict[str, str]:
-    return {e["text"]: e["class"] for e in trace_numbers(_run(root, events, report, files))["numbers"]}
+    return {e["text"]: e["class"] for e in check_numbers(_run(root, events, report, files))["numbers"]}
 
 
 def test_a_unit_scale_must_agree_after_conversion(tmp_path: Path) -> None:
@@ -280,7 +280,7 @@ def test_time_words_carry_their_scale(tmp_path: Path) -> None:
     assert found["1.35 ns"] == "source_found" and found["198.9 seconds"] == "source_found"
 
 
-def test_a_unit_on_one_side_only_leaves_the_meaning_unconfirmed(tmp_path: Path) -> None:
+def test_a_unit_on_one_side_only_leaves_the_match_unclear(tmp_path: Path) -> None:
     files = {"workspace/lab/d.tp.json": _lab("d", power=0.04986)}
     found = _classes(tmp_path / "a", [], "The chip draws 0.05 µW in power.\n", files)
     assert found == {"0.05 µW": "value_found_unclear"}
@@ -311,7 +311,7 @@ def test_a_negative_source_needs_a_shortfall(tmp_path: Path) -> None:
         "It has a positive slack of 1.35 ns.\n"
         "The worst path is 1.35 ns from the clock edge.\n"
     )
-    numbers = trace_numbers(_run(tmp_path, [], report, files))["numbers"]
+    numbers = check_numbers(_run(tmp_path, [], report, files))["numbers"]
     assert [e["class"] for e in numbers] == [
         "source_found",
         "source_found",
@@ -325,10 +325,10 @@ def test_a_negative_source_needs_a_shortfall(tmp_path: Path) -> None:
     assert _classes(tmp_path / "b", [], "The clock period is -20 ns.\n", positive) == {"20 ns": "no_source"}
 
 
-def test_a_weight_width_traces_only_to_a_weight_width(tmp_path: Path) -> None:
+def test_a_weight_width_finds_only_a_weight_width_source(tmp_path: Path) -> None:
     port = {"workspace/lab/B.compile.json": _lab("B", ports={"inputs": [{"name": "x", "bits": 5}]})}
     report = "Weights are stored at 5 bits.\nThe input port is 5 bits.\n"
-    numbers = trace_numbers(_run(tmp_path / "a", [], report, port))["numbers"]
+    numbers = check_numbers(_run(tmp_path / "a", [], report, port))["numbers"]
     assert [e["class"] for e in numbers] == ["value_found_unclear", "source_found"]
     assert "weight width" in numbers[0]["reason"]
     weights = {"workspace/lab/B.compile.json": _lab("B", weight_bits=5)}
@@ -372,13 +372,13 @@ def _sweep_fixture(root: Path) -> tuple[Path, str]:
 def test_no_bare_number_with_a_neutral_noun_has_a_source(tmp_path: Path) -> None:
     run, base = _sweep_fixture(tmp_path)
     report, first_new = run / "workspace" / "report.md", len(base.splitlines()) + 1
-    traced = []
+    found_as_source = []
     for n in range(11, 200):
         report.write_text(f"{base}\nWe counted {n} of the widgets.\n", encoding="utf-8")
-        planted = [e for e in trace_numbers(run)["numbers"] if e["line"] >= first_new]
+        planted = [e for e in check_numbers(run)["numbers"] if e["line"] >= first_new]
         assert [e["text"] for e in planted] == [str(n)]
-        traced += [n for e in planted if e["class"] == "source_found"]
-    assert traced == []
+        found_as_source += [n for e in planted if e["class"] == "source_found"]
+    assert found_as_source == []
 
 
 # ---- B. weight bytes ----
@@ -642,3 +642,8 @@ async def test_a_failing_evidence_hook_never_fails_the_run(
     last = json.loads(lines[-1])
     assert (last["type"], last["status"]) == ("run.finished", "succeeded")
     assert all(json.loads(line)["type"] != "evidence" for line in lines)
+
+
+def test_the_readme_quotes_the_limits_paragraph_word_for_word() -> None:
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text()
+    assert f"> {LIMITS}\n" in readme

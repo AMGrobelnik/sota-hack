@@ -323,7 +323,7 @@ logged and never fails the run.
   keys: `no_source`, `value_found_unclear`, `source_found`, `excluded`,
   and a `limits` string. What the check establishes, word for word:
 
-  > A "no source" number means nothing the tools measured in this run has this value: treat it as unsupported until shown otherwise. "Source found" means a machine-produced source in this run holds this value in this unit. It does not establish which design, stage or quantity the sentence gives the value to, nor relations between numbers, nor negations. The check reads only the run folder.
+  > A "no source" number means nothing the tools measured in this run has this value: treat it as unsupported until shown otherwise. "Source found" means a machine-produced source in this run holds this value in this unit. It does not establish which design or stage the sentence gives the value to, which of several quantities sharing that unit it means, nor relations between numbers, nor negations, nor the direction of a margin. The check reads only the run folder.
 
   Sources are `metric` events, the stored weight count of each model
   file, and the numeric fields of files the chip lab wrote. The value
@@ -382,7 +382,7 @@ backend/
     runs.py                  run folders: run.json, events.jsonl, workspace/
     orchestrate.py           run_agent(spec, config): one run end to end
     cli.py                   chipin-backend run / ask / serve / evidence
-    evidence.py              run evidence: number tracing, weights, timings
+    evidence.py              run evidence: number check, weights, timings
     chiplab.py               the optional chip lab: agent PATH and settings
     api/                     the local API server for the dashboards
     llm/                     OpenRouter client, key, retry, presets, summaries

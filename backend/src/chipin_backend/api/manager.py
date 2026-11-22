@@ -7,7 +7,7 @@ started through the backend's own runner, plus:
     events.jsonl        # contract events (seq from 1), replayable
     agent_events.jsonl  # the backend's raw AgentEvents
     progress.jsonl      # what the agent reported through ./progress
-    evidence.json/.md   # number tracing, weight bytes, stage timings (see evidence.py)
+    evidence.json/.md   # number check, weight bytes, stage timings (see evidence.py)
     workspace/brief.md  # the user's brief, answers and attached-file list
     workspace/progress  # the progress helper
 
