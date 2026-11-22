@@ -1195,7 +1195,7 @@
   }
   function liveOpen() { return !!(V && V.id && owns()); }
   function connChip() {
-    var s = C.state, t = C.pub && s !== "checking" ? (s === "on" ? "Live: real runs" : "Live runs offline: examples only") : s === "on" ? "Connected to local backend" + (C.defaults && C.defaults.agent ? ", " + (AGN[C.defaults.agent] || C.defaults.agent) + " agent" : "") : s === "checking" ? "Checking the backend…" : s === "found" ? "Backend found on this page's address: add its token" : s === "bad" ? (liveOpen() || C.lost ? "Not connected to the backend" : "Not connected: runs are examples") : "Not connected: runs are examples";
+    var s = C.state, t = C.pub && s !== "checking" ? (s === "on" ? "Live" : "Live runs offline: examples only") : s === "on" ? "Connected to local backend" + (C.defaults && C.defaults.agent ? ", " + (AGN[C.defaults.agent] || C.defaults.agent) + " agent" : "") : s === "checking" ? "Checking the backend…" : s === "found" ? "Backend found on this page's address: add its token" : s === "bad" ? (liveOpen() || C.lost ? "Not connected to the backend" : "Not connected: runs are examples") : "Not connected: runs are examples";
     return '<span class="lv-cs" data-s="' + s + '"><i></i><b>' + esc(t) + "</b></span>" + (C.msg && s !== "on" ? '<span class="lv-cm2">' + esc(C.msg) + "</span>" : "");
   }
 
@@ -1207,7 +1207,7 @@
     var cur = parse(), s = C.state, recId = (location.hash.match(/^#\/rec\/mac\/([^/?]+)/) || [])[1];
     var kt = s !== "on" && s !== "checking" && C.kind === "expired" ? "Backend link expired" : s !== "on" && s !== "checking" && C.kind === "unreachable" ? "Backend not reachable" : "";
     var host = ""; try { host = C.base && !C.pub ? new URL(C.base).hostname : ""; } catch (e) { /* no host to show */ }
-    var txt = kt ? kt : C.pub && s === "on" ? "Live: real runs" : C.pub && s !== "checking" && !((liveOpen() || C.lost) && s === "bad") ? "Live runs offline: examples only" : s === "on" ? "Connected to local backend" : s === "checking" ? "Checking the backend" : s === "found" ? "Backend found: add its token" : (liveOpen() || C.lost) && C.base ? "Not connected to the backend" : "Not connected to a backend";
+    var txt = kt ? kt : C.pub && s === "on" ? "Live" : C.pub && s !== "checking" && !((liveOpen() || C.lost) && s === "bad") ? "Live runs offline: examples only" : s === "on" ? "Connected to local backend" : s === "checking" ? "Checking the backend" : s === "found" ? "Backend found: add its token" : (liveOpen() || C.lost) && C.base ? "Not connected to the backend" : "Not connected to a backend";
     var rows = shownRuns().slice(0, 8).map(function (r) {
       var g = r.status === "running" ? '<span class="spin"></span>' : r.status === "succeeded" ? I("check", "s12 ok") : r.status === "failed" ? I("x", "s12 lv-bad") : r.status === "stopped" ? I("minus", "s12") : "";
       var on = (cur && cur.id === r.id) || (recId && decodeURIComponent(recId) === r.id);
