@@ -456,3 +456,22 @@ bash m3/folded/proto/run_prove.sh 300                                         # 
 bash m3/folded/run.sh estimate.py                                             # section 5 tables
 bash m3/folded/run.sh pytest m3/folded -q                                     # tests
 ```
+
+### Test results on 22 Nov 2026
+
+These runs started from an empty lab cache.
+
+- **`m3/folded` tests: 15 passed.** They cover the weight statistics, ROM packing, the cycle count and the
+  line fit. They also synthesise a 1 kbit ROM, check it exhaustively and catch a flipped constant. Other
+  tests confirm that Liberty sums match the mapped area, and that the folded neuron matches the integer
+  model for both weight types at P = 1 and 4. Finally, a BMC proof passes at n = 8 and a mutated ROM
+  weight fails.
+- **The lab's fast selection** (`pytest -m "not docker and not slow and not data"` in `chiplab/`, run on
+  this branch's base `3a49ed5`): 101 passed, 5 failed, 3 skipped, 8 deselected. This branch changes
+  nothing in `chiplab/`, so all 5 failures are in the base or its environment:
+  - `test_agent_examples[layout]`, `[timing_power]` and `[submit_verilog]` call Docker, which was
+    stopped tonight. They carry no `docker` marker.
+  - `test_chipin_integration::test_lab_reports_through_the_real_progress_helper` expects no `CHIPLAB_*`
+    variables, but this run set them on purpose to use the existing lab install.
+  - `test_regressions::test_failed_check_is_rc2` returned exit code 1 where the test expects 2; the
+    cause was not investigated.
