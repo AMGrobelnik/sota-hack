@@ -1,0 +1,850 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ChipIn: how it works</title>
+<meta name="description" content="How ChipIn designs, compiles and checks the small chip at the core of a medical sensing device.">
+<meta name="theme-color" content="#0f1a2a">
+<link rel="icon" type="image/svg+xml" href="../../assets/brand/favicon.svg">
+<script>
+/* =====================================================================
+   ALL VISIBLE COPY LIVES IN THIS ONE OBJECT.
+   Change wording here only; the page is drawn from it.
+   ===================================================================== */
+window.COPY = {
+  docTitle: 'ChipIn: how it works',
+  brand: 'ChipIn',
+  pageName: 'How it works',
+  nav: { home: 'Home', homeHref: '../../', dash: 'Open the dashboard', dashHref: '../../dashboard/' },
+  indicator: { step: 'Step', of: 'of', aria: 'Where you are' },
+  stripAria: 'The seven stages. The highlighted stage is shown below.',
+  stageWord: 'Stage',
+  footer: 'Built at the SoTA Scientific Parallelism Hackathon, London, November 2026.',
+
+  /* Step 1 */
+  idea: {
+    nav: 'From idea to spec',
+    title: 'From a rough idea to a spec',
+    intro: 'ChipIn designs the small chip at the core of a medical sensing device.',
+    lines: ['You give a rough idea in a sentence or two.', 'The product then asks about eight questions. Each one has a default you can keep. It ends in a spec you can edit.'],
+    flow: [
+      { h: 'Rough idea', t: '“A chest patch that warns when the heart rhythm turns irregular.”' },
+      { h: 'Eight questions', t: 'Each with a default.' },
+      { h: 'Editable spec', t: 'Device, signal, targets, constraints, data.' }
+    ],
+    qHead: ['', 'Question', 'What it sets, and its default'],
+    questions: [
+      ['Who is the device for?', 'The patient group the data must match. Suggested from your idea.'],
+      ['What must it detect?', 'The event, condition or grade. This sets the task type.'],
+      ['Where is it used, and who responds to an alert?', 'The false-alarm unit: per hour or per day.'],
+      ['What performance must it reach?', 'Metric and threshold. Defaulted by task type (right).'],
+      ['How many electrodes or sensors, and where?', 'A number and placement, or let the platform search.'],
+      ['Battery life, disposable or reusable?', 'The power budget the chip must fit.'],
+      ['Which data?', 'Your own recordings, an open dataset, or simulated data labelled as simulated.'],
+      ['Fixed assumptions', 'Patients are split so no patient is in both training and test. Every design is judged on its worst unseen patient.']
+    ],
+    targetsTitle: 'Default targets by task type',
+    targetsHead: ['Task type', 'Metric'],
+    targets: [
+      ['Event monitoring', 'Sensitivity, and false alarms per hour or per day'],
+      ['Screening', 'Sensitivity and specificity'],
+      ['Grading', 'Agreement with experts']
+    ],
+    cardTitle: 'Open dataset card',
+    card: [['Population', 'who was recorded'], ['Channels', 'which signals, where'], ['Labels', 'what was annotated'], ['Licence', 'terms of use']],
+    cardWarn: 'A warning is shown when the dataset does not fit the device, for example different channels.'
+  },
+
+  /* Step 2 */
+  models: {
+    nav: 'Models and run size',
+    title: 'You choose the models and the size of the run',
+    lines: ['Pick which language models drive the agents, and how much work the run does.'],
+    llmTitle: 'Language models',
+    llm: [
+      { on: true, h: 'Automatic (default)', t: 'Claude drives the agents.' },
+      { on: false, h: 'Choose yourself', t: 'Pick a backend and a model, including smaller, cheaper models such as Inkling 2 through OpenRouter.' }
+    ],
+    sizeTitle: 'Size of the run',
+    sizeRows: [
+      ['Subagents per stage', 'How many agents work on each stage in parallel.'],
+      ['Candidate designs', 'How many designs are tried in total.']
+    ],
+    smaller: 'Smaller run', larger: 'Larger run',
+    sizeNote: 'Boxes are subagents; small squares are candidate designs. A larger run tries more designs and costs more.'
+  },
+
+  /* Step 3 */
+  pipe: {
+    nav: 'The pipeline',
+    title: 'The pipeline at a glance',
+    lines: ['Seven stages run in order. One orchestrator agent briefs each stage and picks what passes on.', 'Under each stage, a fan of subagents tries different designs in parallel.'],
+    orch: 'Orchestrator agent',
+    orchSub: 'briefs each stage, compares the results, passes the best on',
+    fanLabel: 'subagents',
+    outs: [['spec,', 'patient split'], ['scores to', 'compare against'], ['candidate', 'designs'], ['trained', 'integer models'], ['netlists', 'per design'], ['checked', 'designs'], ['the chip,', 'figures, files']]
+  },
+
+  /* Steps 4 to 10: one per stage, same layout */
+  zoomLabels: { tries: 'Subagents try', skills: 'Skills they call', back: 'What comes back', orch: 'Orchestrator', orchSub: 'brief for this stage', sub: 'Subagent', picks: 'Orchestrator picks' },
+  stages: [
+    { key: 'spec', name: 'Spec',
+      does: 'Pins down the device, the signal, the targets and the constraints from your answers.',
+      tries: 'Alternative readings of the brief and of the constraints. Candidate open datasets, each checked for fit.',
+      subs: [['Reading of', 'the brief'], ['Reading of the', 'constraints'], ['Open dataset A,', 'checked for fit'], ['Open dataset B,', 'checked for fit']],
+      res: [['Draft spec'], ['Constraint set'], ['Fit card'], ['Fit card']],
+      pick: ['Merges the readings into one spec for you to edit,', 'and keeps the dataset that fits the device.'],
+      skills: ['define-task', 'load-data'],
+      out: 'The spec, and the data split by patient.',
+      next: 'Next: Reference' },
+    { key: 'reference', name: 'Reference',
+      does: 'Trains a full-precision model on the same data: the accuracy to beat. It is never put on a chip. It separates “the data does not allow more” from “shrinking cost this much”.',
+      tries: 'Different reference model families.',
+      subs: [['Reference', 'family A'], ['Reference', 'family B'], ['Reference', 'family C'], ['Reference', 'family D']],
+      res: [['Scores', 'per patient'], ['Scores', 'per patient'], ['Scores', 'per patient'], ['Scores', 'per patient']],
+      pick: ['Keeps the strongest reference, judged on its worst unseen', 'patient. Its scores are the accuracy to beat.'],
+      skills: ['load-data', 'train-batch', 'evaluate-clinical'],
+      out: 'The reference scores per patient.',
+      next: 'Next: Propose' },
+    { key: 'propose', name: 'Propose',
+      does: 'Proposes candidate small-model designs and estimates their size before any training.',
+      tries: 'Each subagent explores a different family: feature sets, channel or sensor budgets, network shapes, bit widths.',
+      subs: [['Feature', 'sets'], ['Channel or', 'sensor budgets'], ['Network', 'shapes'], ['Bit', 'widths']],
+      res: [['Designs with', 'estimated sizes'], ['Designs with', 'estimated sizes'], ['Designs with', 'estimated sizes'], ['Designs with', 'estimated sizes']],
+      pick: ['Pools the designs, ranks them by estimated size, and passes', 'the ones that fit the device on to training.'],
+      skills: ['propose-designs', 'estimate-batch'],
+      out: 'A pool of candidate designs with estimated sizes.',
+      next: 'Next: Finetune' },
+    { key: 'finetune', name: 'Finetune',
+      does: 'Trains the candidates many at once, as one batch on a GPU.',
+      tries: 'One subagent per design family or channel budget. Each runs its candidates as one batch.',
+      subs: [['Design family A,', 'one batch'], ['Design family B,', 'one batch'], ['Channel budget 1,', 'one batch'], ['Channel budget 2,', 'one batch']],
+      res: [['Integer models', 'and scores'], ['Integer models', 'and scores'], ['Integer models', 'and scores'], ['Integer models', 'and scores']],
+      pick: ['Reads the leaderboard and keeps the smallest designs', 'that clear the bar on the worst unseen patient.'],
+      skills: ['train-batch', 'evaluate-clinical', 'leaderboard'],
+      out: 'Trained integer models with scores on unseen patients.',
+      next: 'Next: Compile' },
+    { key: 'compile', name: 'Compile',
+      does: 'Turns each design into logic gates with the weights wired in as constants, so the chip has no weight memory to read.',
+      tries: 'One subagent per design, trying compile and optimiser options.',
+      subs: [['Design 1,', 'options'], ['Design 2,', 'options'], ['Design 3,', 'options'], ['Design 4,', 'options']],
+      res: [['Gates, depth,', 'netlist'], ['Gates, depth,', 'netlist'], ['Gates, depth,', 'netlist'], ['Gates, depth,', 'netlist']],
+      pick: ['Collects gate count and logic depth per design and passes', 'every compiled design on to checking.'],
+      skills: ['ingest-model', 'compile-ir', 'synthesize', 'count-luts', 'map-to-process', 'ingest-batch', 'synthesize-batch'],
+      out: 'Gate count, logic depth and a netlist per design.',
+      next: 'Next: Verify' },
+    { key: 'verify', name: 'Verify',
+      does: 'Runs the gates on test vectors and compares them bit for bit with the model, then proves formally that they always agree.',
+      tries: 'One subagent per design.',
+      subs: [['Design 1', ''], ['Design 2', ''], ['Design 3', ''], ['Design 4', '']],
+      res: [['Mismatches,', 'level'], ['Mismatches,', 'level'], ['Mismatches,', 'level'], ['Mismatches,', 'level']],
+      pick: ['Drops any design with a mismatch and passes on', 'the rest with their verification level.'],
+      skills: ['simulate', 'rtl-simulate', 'prove-equivalence', 'prove-sequential', 'verification-level', 'simulate-batch'],
+      out: 'Mismatches (zero, or the design is dropped) and a verification level per design.',
+      next: 'Next: Report' },
+    { key: 'report', name: 'Report',
+      does: 'Lays out the chosen chip in an open 130 nm process, estimates timing, power and area, and assembles the chip’s figures and files.',
+      tries: 'Layout and timing for each finalist. Cost and comparison.',
+      subs: [['Layout, timing:', 'finalist 1'], ['Layout, timing:', 'finalist 2'], ['Layout, timing:', 'finalist 3'], ['Cost and', 'comparison']],
+      res: [['Area, timing,', 'power (estimates)'], ['Area, timing,', 'power (estimates)'], ['Area, timing,', 'power (estimates)'], ['Cost (estimate),', 'published chips']],
+      pick: ['Picks the smallest chip that clears the bar', 'and returns its figures and files to you.'],
+      skills: ['layout', 'timing-power', 'estimate-cost', 'compare-hw-baseline', 'gate-activity', 'chip-report', 'bitstream', 'tt-package'],
+      out: 'The smallest chip that clears the bar, its figures (estimates marked as estimates) and its files.',
+      next: 'Back to you' }
+  ],
+
+  /* Step 11 */
+  agent: {
+    nav: 'What an agent is',
+    title: 'What an agent is',
+    lines: ['The orchestrator and every subagent are built from the same four layers.'],
+    cols: [
+      { h: 'Orchestrator', layers: [
+        ['Language model', 'Can run on a large model, served by Claude.'],
+        ['Agentic harness', 'Claude Code or OpenHands.'],
+        ['Prompts', 'Standing instructions for the seven stages, and the rules: never invent a measurement; every number comes from a tool.'],
+        ['Skills', 'The chip lab, and a progress reporter that sends every stage, number and file to the dashboard as it happens.']
+      ] },
+      { h: 'Each subagent', layers: [
+        ['Language model', 'Can run on a small, cheap model, such as Inkling 2 Mini or Small through OpenRouter.'],
+        ['Agentic harness', 'Claude Code or OpenHands.'],
+        ['Prompts', 'The same rules, plus the brief for its stage.'],
+        ['Skills', 'The same chip lab and progress reporter.']
+      ] }
+    ],
+    layerTags: ['a', 'b', 'c', 'd'],
+    brief: 'brief', result: 'result',
+    key: 'Agents do not write chip code from scratch. They call tools, and every number on the dashboard comes from a tool’s answer, not from the model’s text.'
+  },
+
+  /* Step 12: tool count is the number of tools listed below; it is computed, not typed */
+  skills: {
+    nav: 'The skills',
+    title: 'The skills: the chip lab',
+    linePre: 'Command-line tools in one program: ',
+    linePost: ' tools, in six groups.',
+    head: ['Group', 'Tool', 'What it does', 'Stage'],
+    groups: [
+      { g: 'Model to gates', tools: [
+        ['ingest-model', 'Bring a trained model in and compile it', 'compile'],
+        ['compile-ir', 'Compile a chipir/1 document: Verilog, lint', 'compile'],
+        ['compile-verilog', 'Candidate to Verilog, weights wired in', 'compile'],
+        ['compile-stream', 'Wrap a design for streaming hardware', 'verify, report'],
+        ['compose-chip', 'One chip from several model heads, with fusion', 'compile'],
+        ['submit-verilog', 'Screen and check submitted Verilog', 'compile'],
+        ['synthesize', 'Gate count by type, logic depth, gate netlist', 'compile'],
+        ['count-luts', 'Lookup-table count for an FPGA family', 'compile'],
+        ['map-to-process', 'Standard cells of a real process: area, cells', 'compile']
+      ] },
+      { g: 'Checking the chip is the model', tools: [
+        ['simulate', 'Level 1: gates against the model, bit for bit', 'verify'],
+        ['rtl-simulate', 'Level 3: streaming wrapper simulation and lint', 'verify'],
+        ['prove-equivalence', 'Level 2: gates equal the model for every input', 'verify'],
+        ['prove-sequential', 'Level 2 for the clocked streaming wrapper', 'verify'],
+        ['verification-level', 'The level, its evidence, what to run next', 'verify']
+      ] },
+      { g: 'Physical chip', tools: [
+        ['layout', 'Place and route: area, timing slack, power', 'report'],
+        ['timing-power', 'Timing and power of the laid-out chip', 'report'],
+        ['bitstream', 'iCE40 FPGA bitstream: LUTs, pins, clock', 'report'],
+        ['tt-package', 'Tiny Tapeout project for the chip, with a test', 'report'],
+        ['tt-readiness', 'Tiny Tapeout readiness check; never submits', 'report'],
+        ['tt-export', 'Export the Tiny Tapeout project for a human', 'report']
+      ] },
+      { g: 'Cost and comparison', tools: [
+        ['estimate-cost', 'Manufacturing routes: fit, cost, basis of each', 'report'],
+        ['compare-hw-baseline', 'Compare with published hardware, like for like', 'report'],
+        ['gate-activity', 'How often each net switches; data for power', 'report'],
+        ['chip-report', 'One-page chip report and the chip’s figures', 'report']
+      ] },
+      { g: 'Batches and jobs', tools: [
+        ['synthesize-batch', 'Synthesize many designs at once', 'compile'],
+        ['ingest-batch', 'Ingest many models at once, in parallel', 'compile'],
+        ['simulate-batch', 'Bit-exact check of many designs, on the GPU', 'verify'],
+        ['estimate-batch', 'Fast gate estimates for many designs', 'propose'],
+        ['submit-job', 'Run any tool asynchronously on its lane', 'any'],
+        ['submit-batch', 'Many jobs of one tool at once', 'any'],
+        ['job-status', 'State of a job, with timings', 'any'],
+        ['job-result', 'Result of a finished job', 'any'],
+        ['cancel-job', 'Cancel a queued job', 'any'],
+        ['list-jobs', 'Recent jobs and the load on each lane', 'any'],
+        ['cache-stats', 'Cache entries, hits, misses, bytes', 'any']
+      ] },
+      { g: 'Data and training', tools: [
+        ['define-task', 'Define the task; lock a split by subject', 'spec'],
+        ['load-data', 'Recordings into windows, with a front-end', 'spec, reference'],
+        ['propose-designs', 'Propose a batch of candidate designs', 'propose'],
+        ['train-batch', 'Train every candidate at once on the GPU', 'reference, finetune'],
+        ['evaluate-clinical', 'Score decisions per window, recording, subject', 'reference, finetune'],
+        ['leaderboard', 'Designs: gates, depth, bit-exact, metrics', 'finetune'],
+        ['events', 'Stage changes and results for the dashboard', 'every stage'],
+        ['plugins', 'Available datasets, front-ends, families, targets', 'spec']
+      ] }
+    ]
+  },
+
+  /* Step 13 */
+  checks: {
+    nav: 'What is checked',
+    title: 'What is checked, and how numbers are marked',
+    lines: ['Every design gets a verification level. Every number says whether it was measured or estimated.'],
+    levelsTitle: 'Verification level per design',
+    levelsHead: ['Level', 'Check', 'Tool'],
+    levels: [
+      ['1', 'Bit-exact simulation against the model', 'simulate'],
+      ['2', 'Formal proof of equivalence, for every input', 'prove-equivalence'],
+      ['3', 'Streaming hardware simulation, plus lint', 'rtl-simulate'],
+      ['4', 'Tiny Tapeout gate-level test', 'tt-package'],
+      ['5', 'Running on hardware', '']
+    ],
+    levelsNote: 'A design with any mismatch is dropped.',
+    marksTitle: 'How numbers are marked',
+    marks: [
+      { k: 'plain', tag: '', h: 'Measured', t: 'Shown plain, with its scope.', ex: '2,330 gates' },
+      { k: 'est', tag: 'Estimate', h: 'Estimated', t: 'Marked, with its assumption. Power, area and cost are estimates from layout tools in one open 130 nm process.', ex: 'Power' },
+      { k: 'sim', tag: 'Simulated', h: 'Simulated', t: 'Demo data that is simulated is labelled as simulated.', ex: 'Demo run' }
+    ]
+  },
+
+  /* Step 14: only these figures are stated as measured */
+  measured: {
+    nav: 'Measured so far',
+    title: 'Measured so far',
+    lines: ['Only these figures are measured. Each one holds only within its scope.'],
+    head: ['Figure', 'What was measured', 'Scope'],
+    rows: [
+      ['2,330 gates', 'An atrial-fibrillation feasibility circuit.', 'Early feasibility test. Accuracy is not yet at clinical level.'],
+      ['3,880 of 3,880', 'Test windows on which that circuit’s outputs matched the model.', 'The same feasibility circuit and its test windows.'],
+      ['256 at a time', 'Candidate models trained together, in one GPU batch, not one after another.', 'No fair one-at-a-time baseline has been measured yet, so no speed-up figure is given.'],
+      ['17 min 50 s', 'One full agent run through the real chip-lab tools: three classifier designs and a front-end compiled, each bit-exact on 100,000 random vectors and formally proved.', 'That run used placeholder weights, so it has no detection figures.'],
+      ['about $0.10 per run', 'The same task driven by Inkling 2 Small and Mini through OpenRouter reached compiled, bit-exact, proved designs. The Claude run cost $1.42.', 'One run each. The designs differ, so sizes and times are not compared.']
+    ]
+  },
+
+  /* Step 15 */
+  limits: {
+    nav: 'Limits',
+    title: 'Limits',
+    items: [
+      'ChipIn is a feasibility tool, not clinical evidence.',
+      'The device maker keeps clinical validation and regulatory responsibility.',
+      'Power, area and cost are estimates from one open process.',
+      'Demo runs on the dashboard are simulated unless marked measured.'
+    ]
+  }
+};
+</script>
+<style>
+:root {
+  --night: #0f1a2a;
+  --deep: #16263c;
+  --panel: #132236;
+  --paper: #eef1f2;
+  --signal: #5be49b;
+  --amber: #ffb86b;
+  --dusk: #c9a3c4;
+  --mute: #9aabc0;
+  --soft: #c4d1df;
+  --text: #e8eef5;
+  --rule: rgba(214, 228, 242, .15);
+  --line: rgba(214, 228, 242, .34);
+  --f: "Avenir Next", "Avenir", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --code: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --topH: 56px;
+  --indH: 46px;
+  --stripH: 112px;
+  --padX: clamp(16px, 3.4vw, 56px);
+}
+* { box-sizing: border-box; }
+html { background: var(--night); -webkit-text-size-adjust: 100%; }
+body { margin: 0; color: var(--text); font: 400 17px/1.5 var(--f); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; border-radius: 6px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+code, .tool { font-family: var(--code); font-size: .84em; color: #bfe9d2; }
+
+/* top bar */
+.top { position: fixed; top: 0; left: 0; right: 0; height: var(--topH); z-index: 40; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 var(--padX); background: var(--night); border-bottom: 1px solid var(--rule); }
+.brand { display: inline-flex; align-items: baseline; gap: 12px; text-decoration: none; white-space: nowrap; }
+.brand b { font-weight: 650; font-size: 18px; letter-spacing: -.01em; color: #fff; }
+.brand span { font-size: 15px; color: var(--mute); }
+.nav { display: flex; align-items: center; gap: clamp(12px, 2vw, 24px); }
+.nav a { font-size: 15px; font-weight: 600; text-decoration: none; color: #dbe5ef; white-space: nowrap; }
+.nav a:hover { color: #fff; text-decoration: underline; text-underline-offset: 4px; }
+.nav .btn { background: var(--signal); color: #062418; border-radius: 10px; padding: 8px 15px; }
+.nav .btn:hover { background: #86f2b9; color: #062418; text-decoration: none; }
+
+/* pinned area: step indicator, or the stage strip */
+.pin { position: fixed; top: var(--topH); left: 0; right: 0; z-index: 30; background: var(--night); border-bottom: 1px solid var(--rule); }
+.pin-in { max-width: calc(1360px + 2 * var(--padX)); margin: 0 auto; padding: 0 var(--padX); }
+.ind { height: var(--indH); display: flex; align-items: center; gap: 18px; }
+.ind-t { font-size: 14px; color: var(--mute); white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ind-t b { color: #fff; font-weight: 600; }
+.ticks { display: flex; gap: 4px; margin: 0 0 0 auto; padding: 0; list-style: none; flex: none; }
+.ticks a { display: block; width: 18px; height: 18px; position: relative; }
+.ticks a::before { content: ""; position: absolute; left: 2px; right: 2px; top: 8px; height: 3px; border-radius: 2px; background: rgba(214, 228, 242, .22); }
+.ticks a.st::before { background: rgba(91, 228, 155, .28); }
+.ticks a[aria-current="step"]::before { background: var(--signal); top: 6px; height: 7px; }
+.pin .strip { display: none; }
+.pin.is-strip .ind { display: none; }
+.pin.is-strip .strip { display: block; }
+
+.strip { padding: 8px 0 8px; }
+.s-orch { display: flex; align-items: center; gap: 10px; height: 22px; font-size: 12.5px; color: var(--mute); }
+.s-orch i { flex: 1; height: 1px; background: var(--line); }
+.s-orch b { color: #dbe5ef; font-weight: 600; }
+.s-row { position: relative; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); margin-top: 6px; }
+.s-hl { position: absolute; top: 0; left: 0; width: calc(100% / 7); height: 34px; padding: 0 9px; pointer-events: none; transition: transform .35s ease; }
+.s-hl::before { content: ""; display: block; height: 100%; border-radius: 8px; background: #133a2b; border: 1.5px solid var(--signal); }
+.s-chip { position: relative; display: block; text-decoration: none; padding: 0 9px; }
+.s-chip .bx { position: relative; height: 34px; display: flex; align-items: center; justify-content: center; gap: 7px; border-radius: 8px; border: 1px solid rgba(214, 228, 242, .24); font-size: 14px; font-weight: 600; color: #c9d5e2; white-space: nowrap; }
+.s-chip .bx em { font-style: normal; font-size: 12px; color: var(--mute); font-weight: 600; }
+.s-chip[aria-current="step"] .bx { border-color: transparent; color: #fff; }
+.s-chip[aria-current="step"] .bx em { color: var(--signal); }
+.s-chip:not(:last-child)::after { content: ""; position: absolute; right: -5px; top: 16px; width: 10px; height: 1.5px; background: var(--line); }
+.s-chip::before { content: ""; position: absolute; left: 50%; top: -6px; width: 1px; height: 6px; background: var(--line); }
+.s-fan { display: block; width: 64px; height: 18px; margin: 3px auto 0; overflow: visible; }
+.s-fan path { fill: none; stroke: rgba(214, 228, 242, .3); stroke-width: 1.2; }
+.s-fan rect { fill: rgba(214, 228, 242, .3); }
+.s-chip[aria-current="step"] .s-fan path { stroke: var(--signal); }
+.s-chip[aria-current="step"] .s-fan rect { fill: var(--signal); }
+
+/* steps */
+.step { position: relative; min-height: 100vh; padding: calc(var(--topH) + var(--indH) + 30px) var(--padX) 40px; border-bottom: 1px solid var(--rule); }
+.step.st { padding-top: calc(var(--topH) + var(--stripH) + 22px); }
+.wrap { max-width: 1360px; margin: 0 auto; }
+.hd { display: flex; align-items: center; gap: 14px; margin: 0 0 10px; }
+.num { display: inline-grid; place-items: center; min-width: 32px; height: 32px; padding: 0 8px; border-radius: 16px; background: rgba(91, 228, 155, .15); color: var(--signal); font-size: 14px; font-weight: 700; flex: none; font-variant-numeric: tabular-nums; }
+h1, h2 { margin: 0; font-weight: 650; letter-spacing: -.03em; line-height: 1.06; color: #fff; text-wrap: balance; }
+h2 { font-size: clamp(28px, 2.9vw, 42px); }
+.intro { margin: 0 0 18px; font-size: 15px; color: var(--mute); }
+.lines { margin: 0 0 24px; max-width: 92ch; }
+.lines p { margin: 0 0 4px; font-size: clamp(16px, 1.25vw, 19px); color: var(--soft); line-height: 1.45; }
+h3 { margin: 0 0 10px; font-size: 16px; font-weight: 650; color: #fff; letter-spacing: -.01em; }
+
+table { border-collapse: collapse; width: 100%; }
+th { text-align: left; font-size: 13px; font-weight: 600; color: var(--mute); padding: 0 12px 8px 0; border-bottom: 1px solid var(--line); vertical-align: bottom; }
+td { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--rule); vertical-align: top; font-size: 15px; color: var(--soft); line-height: 1.4; }
+td.k { color: #fff; font-weight: 600; }
+td.n { color: var(--mute); font-variant-numeric: tabular-nums; width: 28px; font-weight: 600; }
+
+/* step 1 */
+.flow { display: grid; grid-template-columns: 1.5fr auto 1fr auto 1fr; align-items: stretch; gap: 0; margin: 0 0 26px; }
+.fbox { border: 1px solid rgba(214, 228, 242, .24); border-radius: 12px; padding: 12px 16px; background: var(--panel); }
+.fbox b { display: block; color: #fff; font-weight: 650; font-size: 15.5px; }
+.fbox span { display: block; font-size: 14.5px; color: var(--soft); }
+.fbox.end { border-color: var(--signal); }
+.farr { width: 44px; align-self: center; }
+.farr svg { display: block; width: 44px; height: 14px; }
+.farr path { fill: none; stroke: var(--line); stroke-width: 1.5; }
+.g2 { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: clamp(24px, 3.4vw, 56px); align-items: start; }
+.g2.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.g2.chk { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
+.qs td { padding: 7px 14px 7px 0; font-size: 14.5px; }
+.card { margin-top: 26px; border: 1px solid rgba(214, 228, 242, .24); border-radius: 12px; padding: 14px 16px; background: var(--panel); }
+.card dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-size: 14.5px; }
+.card dt { color: #fff; font-weight: 600; }
+.card dd { margin: 0; color: var(--mute); }
+.warn { display: flex; gap: 10px; margin: 12px 0 0; padding: 9px 12px; border-radius: 8px; border: 1px solid rgba(255, 184, 107, .45); font-size: 14px; color: #f3dcc0; line-height: 1.4; }
+.warn svg { flex: none; width: 18px; height: 18px; margin-top: 1px; }
+
+/* step 2 */
+.panel { border: 1px solid rgba(214, 228, 242, .24); border-radius: 14px; padding: 18px 20px; background: var(--panel); }
+.opt { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--rule); }
+.opt:first-of-type { border-top: 0; }
+.radio { flex: none; width: 18px; height: 18px; margin-top: 3px; border-radius: 50%; border: 1.5px solid var(--mute); position: relative; }
+.radio.on { border-color: var(--signal); }
+.radio.on::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--signal); }
+.opt b { display: block; color: #fff; font-weight: 600; }
+.opt span { color: var(--soft); font-size: 15px; }
+.sizes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px; }
+.sizes figure { margin: 0; border: 1px solid var(--rule); border-radius: 10px; padding: 10px 10px 8px; }
+.sizes figcaption { font-size: 14px; color: #fff; font-weight: 600; margin-bottom: 4px; }
+.sizes svg { display: block; width: 100%; height: auto; }
+.note { font-size: 14px; color: var(--mute); margin: 12px 0 0; }
+
+/* diagrams (svg) */
+.dg { display: block; width: 100%; height: auto; overflow: visible; }
+.dg text { font-family: var(--f); fill: #dbe5ef; }
+.dg .t-b { font-weight: 650; fill: #fff; }
+.dg .t-m { fill: var(--mute); }
+.dg .t-g { fill: var(--signal); font-weight: 650; }
+.dg .bx { fill: var(--panel); stroke: rgba(214, 228, 242, .3); stroke-width: 1.2; }
+.dg .bx-o { fill: #1a2c45; stroke: rgba(214, 228, 242, .45); stroke-width: 1.2; }
+.dg .bx-g { fill: #133a2b; stroke: var(--signal); stroke-width: 1.5; }
+.dg .pill { fill: none; stroke: rgba(214, 228, 242, .3); stroke-width: 1; stroke-dasharray: 3 3; }
+.dg .ln { fill: none; stroke: var(--line); stroke-width: 1.4; }
+.dg .ln-g { fill: none; stroke: var(--signal); stroke-width: 1.5; }
+.dg .sq { fill: rgba(214, 228, 242, .35); }
+.dg .ah { fill: var(--line); }
+.dg .ah-g { fill: var(--signal); }
+.pipe-n { display: none; }
+
+/* stage zoom */
+.zoom { position: relative; border: 1px solid var(--line); border-radius: 16px; padding: 18px 22px 20px; margin-top: 6px; }
+.zoom::before { content: ""; position: absolute; top: -8px; left: calc((var(--i) + .5) / 7 * 100% - 8px); width: 14px; height: 14px; background: var(--night); border-left: 1px solid var(--line); border-top: 1px solid var(--line); transform: rotate(45deg); }
+.zhd { display: flex; align-items: baseline; gap: 14px; margin: 0 0 4px; }
+.zhd .of { font-size: 14px; color: var(--signal); font-weight: 650; white-space: nowrap; }
+.does { margin: 0 0 14px; min-height: 2.84em; font-size: clamp(16px, 1.25vw, 18.5px); color: var(--soft); max-width: 82ch; line-height: 1.42; }
+.zg { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: clamp(22px, 3vw, 48px); align-items: start; }
+.fan-n { display: none; }
+.zr h3 { font-size: 14.5px; color: var(--mute); font-weight: 600; margin: 0 0 6px; }
+.zr p { margin: 0 0 16px; font-size: 15.5px; color: var(--soft); line-height: 1.42; }
+.zr .outp { color: #fff; font-weight: 600; }
+.sk { list-style: none; margin: 0 0 16px; padding: 0; }
+.sk li { display: grid; grid-template-columns: 11.5em minmax(0, 1fr); gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--rule); font-size: 14.5px; color: var(--soft); line-height: 1.35; }
+.sk li:first-child { border-top: 1px solid var(--rule); }
+
+/* step 11 */
+.agents { display: grid; grid-template-columns: minmax(0, 1fr) 120px minmax(0, 1fr); gap: 0; align-items: stretch; }
+.stack h3 { font-size: 17px; margin-bottom: 10px; }
+.layer { display: grid; grid-template-columns: 28px 9.5em minmax(0, 1fr); gap: 10px; align-items: start; padding: 12px 14px; border: 1px solid rgba(214, 228, 242, .24); background: var(--panel); border-radius: 10px; margin-bottom: 8px; font-size: 15px; color: var(--soft); line-height: 1.4; }
+.layer .lt { color: var(--signal); font-weight: 700; }
+.layer b { color: #fff; font-weight: 600; }
+.mid { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 22px; padding-top: 30px; }
+.mid svg { width: 96px; height: 34px; display: block; overflow: visible; }
+.mid span { display: block; text-align: center; font-size: 13px; color: var(--mute); }
+.keyline { margin: 18px 0 0; padding: 14px 18px; border-left: 3px solid var(--signal); background: var(--panel); border-radius: 0 10px 10px 0; font-size: clamp(16px, 1.3vw, 19px); color: #fff; font-weight: 600; max-width: 90ch; line-height: 1.42; }
+
+/* step 12 */
+.tt { display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; align-items: start; }
+.tt table { table-layout: fixed; }
+.tt th, .tt td { padding: 3px 10px 3px 0; font-size: 13.5px; line-height: 1.3; }
+.tt th { padding-bottom: 6px; }
+.tt td.grp { color: #fff; font-weight: 600; font-size: 13px; border-right: 1px solid var(--rule); padding-top: 5px; }
+.tt td.tl { padding-left: 10px; }
+.tt td.stg { color: var(--mute); font-size: 12.5px; }
+.tt tr.gs td { border-top: 1px solid var(--line); }
+.tt .c-g { width: 86px; } .tt .c-t { width: 166px; } .tt .c-s { width: 100px; }
+
+/* step 13 */
+.mk { list-style: none; margin: 0; padding: 0; }
+.mk li { display: grid; grid-template-columns: 9.5em minmax(0, 1fr); gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--rule); align-items: start; }
+.mk li:first-child { border-top: 1px solid var(--rule); }
+.mk .ex { font-size: 20px; font-weight: 650; color: #fff; letter-spacing: -.02em; }
+.mk .tag { display: inline-block; font-size: 12px; font-weight: 650; border-radius: 999px; padding: 1px 8px; margin: 0 0 4px; }
+.mk .tag.est { color: var(--amber); border: 1px solid rgba(255, 184, 107, .55); }
+.mk .tag.sim { color: var(--dusk); border: 1px solid rgba(201, 163, 196, .55); }
+.mk b { display: block; color: #fff; font-weight: 600; }
+.mk span.d { color: var(--soft); font-size: 15px; }
+
+/* step 14 */
+.ms td { font-size: 15.5px; padding: 13px 18px 13px 0; }
+.ms td.fig { color: #fff; font-weight: 650; font-size: clamp(20px, 1.8vw, 26px); letter-spacing: -.02em; white-space: nowrap; font-variant-numeric: tabular-nums; width: 1%; }
+.ms td.sc { color: var(--mute); width: 30%; }
+
+/* step 15 */
+.lim { list-style: none; margin: 0 0 40px; padding: 0; max-width: 70ch; counter-reset: l; }
+.lim li { display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--rule); font-size: clamp(17px, 1.4vw, 21px); color: #fff; }
+.lim li:first-child { border-top: 1px solid var(--rule); }
+.lim li::before { counter-increment: l; content: counter(l); color: var(--mute); font-weight: 600; min-width: 1.2em; }
+.endl { display: flex; flex-wrap: wrap; gap: 14px 26px; align-items: center; margin: 0 0 40px; }
+.endl a { font-weight: 650; text-underline-offset: 5px; }
+.endl a.btn { background: var(--signal); color: #062418; border-radius: 10px; padding: 12px 22px; text-decoration: none; }
+.foot { margin: 0; font-size: 14px; color: var(--mute); }
+
+@media (max-height: 820px) and (min-width: 900px) {
+  :root { --stripH: 104px; }
+  .lines { margin-bottom: 16px; }
+  .flow { margin-bottom: 16px; }
+}
+@media (max-width: 1080px) {
+  .g2, .g2.even, .g2.chk, .zg { grid-template-columns: minmax(0, 1fr); }
+  .agents { grid-template-columns: minmax(0, 1fr); }
+  .mid { flex-direction: row; padding: 4px 0 12px; }
+  .tt { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+  :root { --topH: 52px; --indH: 40px; --stripH: 88px; }
+  body { font-size: 16px; }
+  .brand span { display: none; }
+  .nav .btn { padding: 7px 11px; font-size: 14px; }
+  .nav a { font-size: 14px; }
+  .ticks { display: none; }
+  .s-chip { padding: 0 2px; }
+  .s-hl { padding: 0 2px; }
+  .s-chip .bx { font-size: 0; height: 30px; }
+  .s-hl { height: 30px; }
+  .s-chip .bx em { font-size: 13px; }
+  .s-chip:not(:last-child)::after { display: none; }
+  .s-cur { display: block !important; }
+  .s-fan { width: 40px; height: 12px; }
+  .flow { grid-template-columns: minmax(0, 1fr); }
+  .farr { width: auto; justify-self: center; transform: rotate(90deg); height: 30px; display: grid; place-items: center; }
+  .pipe-w, .fan-w { display: none; }
+  .pipe-n, .fan-n { display: block; }
+  .sizes { grid-template-columns: minmax(0, 1fr); }
+  .layer { grid-template-columns: 22px minmax(0, 1fr); }
+  .layer .ld { grid-column: 2; }
+  .sk li { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .tt .c-g { width: 70px; } .tt .c-t { width: 118px; } .tt .c-s { width: 64px; }
+  .tt th, .tt td { font-size: 12px; }
+  .tt td.grp { font-size: 11.5px; }
+  .mk li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .ms tr { display: grid; grid-template-columns: minmax(0, 1fr); padding: 10px 0; border-bottom: 1px solid var(--rule); }
+  .ms thead { display: none; }
+  .ms td, .ms td.sc, .ms td.fig { width: auto; border: 0; padding: 2px 0; white-space: normal; }
+  .zoom { padding: 14px 12px 16px; }
+}
+.s-cur { display: none; font-size: 13px; color: #fff; font-weight: 600; text-align: center; margin-top: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .s-hl { transition: none; }
+  html { scroll-behavior: auto; }
+}
+@media (min-width: 900px) and (min-height: 700px) {
+  html { scroll-snap-type: y proximity; }
+  .step { scroll-snap-align: start; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" id="brand" href="../../"><b></b><span></span></a>
+  <nav class="nav" id="nav"></nav>
+</header>
+<div class="pin" id="pin">
+  <div class="pin-in">
+    <nav class="ind" id="ind"><p class="ind-t" id="ind-t" aria-live="polite"></p><ol class="ticks" id="ticks"></ol></nav>
+    <nav class="strip" id="strip"></nav>
+  </div>
+</div>
+<main id="steps"></main>
+<noscript><p style="padding:120px 24px">This page needs JavaScript to draw its diagrams.</p></noscript>
+<script>
+(function () {
+  'use strict';
+  var C = window.COPY;
+  var NS = 'http://www.w3.org/2000/svg';
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)');
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function txt(x, y, lines, cls, size, anchor, lh) {
+    lines = (Array.isArray(lines) ? lines : [lines]).filter(function (l) { return l !== ''; });
+    lh = lh || size * 1.3;
+    var y0 = y - (lines.length - 1) * lh / 2;
+    return lines.map(function (l, i) {
+      return '<text x="' + x + '" y="' + (y0 + i * lh) + '" dominant-baseline="middle" text-anchor="' + (anchor || 'middle') + '" font-size="' + size + '"' + (cls ? ' class="' + cls + '"' : '') + '>' + esc(l) + '</text>';
+    }).join('');
+  }
+  function wrap(s, max) { var out = [], line = ''; s.split(' ').forEach(function (w) { if (line && (line + ' ' + w).length > max) { out.push(line); line = w; } else line = line ? line + ' ' + w : w; }); if (line) out.push(line); return out; }
+  function arrowDown(x, y, cls) { return '<path class="' + (cls || 'ah') + '" d="M' + (x - 4.5) + ' ' + (y - 7) + 'L' + (x + 4.5) + ' ' + (y - 7) + 'L' + x + ' ' + y + 'Z"/>'; }
+  function arrowRight(x, y) { return '<path class="ah" d="M' + (x - 7) + ' ' + (y - 4.5) + 'L' + (x - 7) + ' ' + (y + 4.5) + 'L' + x + ' ' + y + 'Z"/>'; }
+
+  // tool lookup, from the single table in COPY.skills
+  var TOOLS = {}, toolCount = 0;
+  C.skills.groups.forEach(function (g) { g.tools.forEach(function (t) { TOOLS[t[0]] = t[1]; toolCount++; }); });
+
+  // the step list: 1-3, seven stage zooms, 11-15
+  var steps = [
+    { id: 'idea', nav: C.idea.nav, draw: drawIdea },
+    { id: 'models', nav: C.models.nav, draw: drawModels },
+    { id: 'pipeline', nav: C.pipe.nav, draw: drawPipe }
+  ];
+  C.stages.forEach(function (s, i) { steps.push({ id: 'stage-' + s.key, nav: C.stageWord + ': ' + s.name, stage: i, draw: function () { return drawZoom(s, i); } }); });
+  steps.push({ id: 'agent', nav: C.agent.nav, draw: drawAgent }, { id: 'skills', nav: C.skills.nav, draw: drawSkills }, { id: 'checks', nav: C.checks.nav, draw: drawChecks }, { id: 'measured', nav: C.measured.nav, draw: drawMeasured }, { id: 'limits', nav: C.limits.nav, draw: drawLimits });
+  var N = steps.length;
+
+  function head(n, title, tag) {
+    return '<div class="hd"><span class="num" aria-hidden="true">' + n + '</span><' + (tag || 'h2') + ' id="h-' + n + '">' + esc(title) + '</' + (tag || 'h2') + '></div>';
+  }
+  function lines(arr) { return '<div class="lines">' + arr.map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('') + '</div>'; }
+
+  /* ---------- step 1 ---------- */
+  function drawIdea(n) {
+    var I = C.idea, arr = '<div class="farr" aria-hidden="true"><svg viewBox="0 0 44 14"><path d="M4 7h32"/><path class="ah" style="fill:rgba(214,228,242,.34);stroke:none" d="M34 2.5L41 7L34 11.5Z"/></svg></div>';
+    var flow = '<div class="flow">' + I.flow.map(function (f, i) { return (i ? arr : '') + '<div class="fbox' + (i === 2 ? ' end' : '') + '"><b>' + esc(f.h) + '</b><span>' + esc(f.t) + '</span></div>'; }).join('') + '</div>';
+    var q = '<table class="qs"><thead><tr>' + I.qHead.map(function (h) { return '<th scope="col">' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      I.questions.map(function (r, i) { return '<tr><td class="n">' + (i + 1) + '</td><td class="k">' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td></tr>'; }).join('') + '</tbody></table>';
+    var t = '<h3>' + esc(I.targetsTitle) + '</h3><table><thead><tr>' + I.targetsHead.map(function (h) { return '<th scope="col">' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      I.targets.map(function (r) { return '<tr><td class="k">' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td></tr>'; }).join('') + '</tbody></table>';
+    var card = '<div class="card"><h3>' + esc(I.cardTitle) + '</h3><dl>' + I.card.map(function (c) { return '<dt>' + esc(c[0]) + '</dt><dd>' + esc(c[1]) + '</dd>'; }).join('') + '</dl>' +
+      '<p class="warn"><svg viewBox="0 0 18 18" aria-hidden="true"><path d="M9 2 17 16H1Z" fill="none" stroke="#ffb86b" stroke-width="1.5" stroke-linejoin="round"/><path d="M9 7v4M9 13v.5" stroke="#ffb86b" stroke-width="1.6" stroke-linecap="round"/></svg><span>' + esc(I.cardWarn) + '</span></p></div>';
+    return '<p class="intro">' + esc(I.intro) + '</p>' + head(n, I.title, 'h1') + lines(I.lines) + flow + '<div class="g2"><div>' + q + '</div><div>' + t + card + '</div></div>';
+  }
+
+  /* ---------- step 2 ---------- */
+  function miniFan(k) {
+    // one stage with k subagents and k*3 candidate squares
+    var W = 260, H = 110, cx = W / 2, s = '<svg class="dg" viewBox="0 0 ' + W + ' ' + H + '" aria-hidden="true">';
+    s += '<rect class="bx-o" x="' + (cx - 40) + '" y="2" width="80" height="24" rx="6"/>';
+    var gap = (W - 20) / k;
+    for (var i = 0; i < k; i++) {
+      var x = 10 + gap * i + gap / 2;
+      s += '<path class="ln" d="M' + cx + ' 26L' + x + ' 52"/>';
+      s += '<rect class="bx" x="' + (x - Math.min(14, gap / 2 - 3)) + '" y="52" width="' + Math.min(28, gap - 6) + '" height="16" rx="3"/>';
+      for (var j = 0; j < 3; j++) s += '<rect class="sq" x="' + (x - 3) + '" y="' + (76 + j * 10) + '" width="6" height="6" rx="1"/>';
+    }
+    return s + '</svg>';
+  }
+  function drawModels(n) {
+    var M = C.models;
+    var a = '<div class="panel"><h3>' + esc(M.llmTitle) + '</h3>' + M.llm.map(function (o) { return '<div class="opt"><span class="radio' + (o.on ? ' on' : '') + '" aria-hidden="true"></span><div><b>' + esc(o.h) + '</b><span>' + esc(o.t) + '</span></div></div>'; }).join('') + '</div>';
+    var b = '<div class="panel"><h3>' + esc(M.sizeTitle) + '</h3><table><tbody>' + M.sizeRows.map(function (r) { return '<tr><td class="k">' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td></tr>'; }).join('') + '</tbody></table>' +
+      '<div class="sizes"><figure><figcaption>' + esc(M.smaller) + '</figcaption>' + miniFan(2) + '</figure><figure><figcaption>' + esc(M.larger) + '</figcaption>' + miniFan(8) + '</figure></div><p class="note">' + esc(M.sizeNote) + '</p></div>';
+    return head(n, M.title) + lines(M.lines) + '<div class="g2 even">' + a + b + '</div>';
+  }
+
+  /* ---------- step 3 ---------- */
+  function pipeWide() {
+    var P = C.pipe, W = 1200, bw = 140, g = (W - 7 * bw) / 6, s = '<svg class="dg pipe-w" viewBox="0 0 ' + W + ' 380" role="img" aria-label="' + esc(P.title) + '">';
+    s += '<rect class="bx-o" x="0" y="0" width="' + W + '" height="56" rx="10"/>' + txt(W / 2, 20, P.orch, 't-b', 18) + txt(W / 2, 40, P.orchSub, 't-m', 14);
+    C.stages.forEach(function (st, i) {
+      var x = i * (bw + g), cx = x + bw / 2;
+      s += '<path class="ln" d="M' + cx + ' 56V118"/>' + arrowDown(cx, 126);
+      s += '<rect class="bx" x="' + x + '" y="126" width="' + bw + '" height="58" rx="9"/>' + txt(cx, 146, String(i + 1), 't-g', 13) + txt(cx, 166, st.name, 't-b', 17);
+      if (i < 6) s += '<path class="ln" d="M' + (x + bw) + ' 155H' + (x + bw + g - 2) + '"/>' + arrowRight(x + bw + g, 155);
+      [-48, -16, 16, 48].forEach(function (o) { s += '<path class="ln" d="M' + cx + ' 184L' + (cx + o) + ' 232"/><rect class="sq" x="' + (cx + o - 12) + '" y="232" width="24" height="16" rx="3"/>'; });
+      s += txt(cx, 266, P.fanLabel, 't-m', 13) + txt(cx, 316, P.outs[i], '', 15, 'middle', 19);
+      s += '<path class="ln" d="M' + (x + 8) + ' 290H' + (x + bw - 8) + '" style="stroke-dasharray:3 4"/>';
+    });
+    return s + '</svg>';
+  }
+  function pipeNarrow() {
+    var P = C.pipe, W = 360, rh = 74, top = 58, H = top + 7 * rh, s = '<svg class="dg pipe-n" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(P.title) + '">';
+    s += '<rect class="bx-o" x="0" y="0" width="' + W + '" height="46" rx="9"/>' + txt(W / 2, 23, P.orch, 't-b', 16);
+    s += '<path class="ln" d="M14 46V' + (H - 30) + '"/>';
+    C.stages.forEach(function (st, i) {
+      var y = top + i * rh;
+      s += '<path class="ln" d="M14 ' + (y + 22) + 'H34"/>' + '<rect class="bx" x="36" y="' + y + '" width="130" height="44" rx="8"/>' + txt(52, y + 22, String(i + 1), 't-g', 13, 'middle') + txt(66, y + 22, st.name, 't-b', 15, 'start');
+      [-14, -5, 5, 14].forEach(function (o) { s += '<path class="ln" d="M166 ' + (y + 22) + 'L190 ' + (y + 22 + o) + '"/><rect class="sq" x="190" y="' + (y + 19 + o) + '" width="10" height="6" rx="1"/>'; });
+      s += txt(212, y + 22, P.outs[i], '', 13, 'start', 16);
+      if (i < 6) s += '<path class="ln" d="M101 ' + (y + 44) + 'V' + (y + rh - 2) + '"/>' + arrowDown(101, y + rh);
+    });
+    return s + '</svg>';
+  }
+  function drawPipe(n) { return head(n, C.pipe.title) + lines(C.pipe.lines) + pipeWide() + pipeNarrow(); }
+
+  /* ---------- steps 4 to 10: the stage zoom, one layout ---------- */
+  function fanSVG(st, cols, cls) {
+    var L = C.zoomLabels, bw = cols === 4 ? 140 : 156, gap = cols === 4 ? 20 : 24, W = cols * bw + (cols - 1) * gap, rows = Math.ceil(st.subs.length / cols);
+    var oy = 0, oh = 50, busY = 74, rowH = 132, y0 = 92;
+    var pickY = y0 + rows * rowH + 22, pickLines = cols === 4 ? st.pick : wrap(st.pick.join(' '), 44), pickH = 34 + pickLines.length * 16, nextY = pickY + pickH + 30, H = nextY + 34, cx = W / 2;
+    var s = '<svg class="dg ' + cls + '" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(st.name + ': ' + st.tries) + '">';
+    s += '<rect class="bx-o" x="' + (cx - 120) + '" y="' + oy + '" width="240" height="' + oh + '" rx="9"/>' + txt(cx, 17, L.orch, 't-b', 15) + txt(cx, 35, L.orchSub, 't-m', 13);
+    var xs = [];
+    st.subs.forEach(function (sub, i) {
+      var c = i % cols, r = Math.floor(i / cols), x = c * (bw + gap), y = y0 + r * rowH, bx = x + bw / 2;
+      xs.push({ x: bx, y: y, c: c, r: r, x0: x });
+      s += '<rect class="bx" x="' + x + '" y="' + y + '" width="' + bw + '" height="58" rx="8"/>' + txt(bx, y + 29, sub, '', 14, 'middle', 18);
+      s += '<path class="ln" d="M' + bx + ' ' + (y + 58) + 'V' + (y + 74) + '"/>' + arrowDown(bx, y + 80);
+      s += '<rect class="pill" x="' + (x + 6) + '" y="' + (y + 80) + '" width="' + (bw - 12) + '" height="40" rx="6"/>' + txt(bx, y + 100, st.res[i], 't-m', 12.5, 'middle', 15.5);
+    });
+    if (cols === 4) {
+      s += '<path class="ln" d="M' + cx + ' ' + oh + 'V' + busY + 'M' + xs[0].x + ' ' + busY + 'H' + xs[xs.length - 1].x + '"/>';
+      xs.forEach(function (p) { s += '<path class="ln" d="M' + p.x + ' ' + busY + 'V' + (p.y - 8) + '"/>' + arrowDown(p.x, p.y); });
+      var by = y0 + rowH + 4;
+      s += '<path class="ln" d="M' + xs[0].x + ' ' + (by - 4) + 'V' + by + 'H' + xs[xs.length - 1].x + 'V' + (by - 4) + '"/>';
+      xs.forEach(function (p) { s += '<path class="ln" d="M' + p.x + ' ' + (p.y + 120) + 'V' + by + '"/>'; });
+      s += '<path class="ln-g" d="M' + cx + ' ' + by + 'V' + (pickY - 8) + '"/>' + arrowDown(cx, pickY, 'ah-g');
+    } else {
+      // two columns: a trunk runs down the middle gap
+      s += '<path class="ln" d="M' + cx + ' ' + oh + 'V' + (pickY - 8) + '"/>' + arrowDown(cx, pickY, 'ah-g');
+      xs.forEach(function (p) {
+        var edge = p.c === 0 ? p.x0 + bw : p.x0;
+        s += '<path class="ln" d="M' + cx + ' ' + (p.y + 29) + 'H' + edge + '"/>';
+        s += '<path class="ln" d="M' + cx + ' ' + (p.y + 100) + 'H' + (p.c === 0 ? p.x0 + bw - 6 : p.x0 + 6) + '"/>';
+      });
+    }
+    s += '<rect class="bx-g" x="0" y="' + pickY + '" width="' + W + '" height="' + pickH + '" rx="9"/>' + txt(16, pickY + 18, L.picks, 't-g', 13, 'start');
+    s += txt(16, pickY + 26 + pickLines.length * 8.5 + 4, pickLines, '', cols === 4 ? 14.5 : 12.5, 'start', 17);
+    s += '<path class="ln" d="M' + cx + ' ' + (pickY + pickH) + 'V' + (nextY - 8) + '"/>' + arrowDown(cx, nextY);
+    s += '<rect class="bx" x="' + (cx - 90) + '" y="' + nextY + '" width="180" height="32" rx="8"/>' + txt(cx, nextY + 16, st.next, 't-b', 14);
+    return s + '</svg>';
+  }
+  function drawZoom(st, i) {
+    var L = C.zoomLabels;
+    var sk = '<ul class="sk">' + st.skills.map(function (t) { return '<li><span class="tool">' + esc(t) + '</span><span>' + esc(TOOLS[t] || '') + '</span></li>'; }).join('') + '</ul>';
+    return '<div class="zoom" style="--i:' + i + '">' +
+      '<div class="zhd"><span class="of">' + esc(C.stageWord + ' ' + (i + 1) + ' ' + C.indicator.of + ' 7') + '</span><h2 id="h-st-' + i + '">' + esc(st.name) + '</h2></div>' +
+      '<p class="does">' + esc(st.does) + '</p>' +
+      '<div class="zg"><div>' + fanSVG(st, 4, 'fan-w') + fanSVG(st, 2, 'fan-n') + '</div>' +
+      '<div class="zr"><h3>' + esc(L.tries) + '</h3><p>' + esc(st.tries) + '</p><h3>' + esc(L.skills) + '</h3>' + sk + '<h3>' + esc(L.back) + '</h3><p class="outp">' + esc(st.out) + '</p></div></div></div>';
+  }
+
+  /* ---------- step 11 ---------- */
+  function drawAgent(n) {
+    var A = C.agent;
+    function stack(c) { return '<div class="stack"><h3>' + esc(c.h) + '</h3>' + c.layers.map(function (l, i) { return '<div class="layer"><span class="lt">' + A.layerTags[i] + '</span><b>' + esc(l[0]) + '</b><span class="ld">' + esc(l[1]) + '</span></div>'; }).join('') + '</div>'; }
+    var mid = '<div class="mid" aria-hidden="true"><div><svg viewBox="0 0 96 34"><path class="ln" d="M6 17H84" style="fill:none;stroke:rgba(214,228,242,.5);stroke-width:1.4"/><path d="M83 12L92 17L83 22Z" fill="rgba(214,228,242,.5)"/></svg><span>' + esc(A.brief) + '</span></div>' +
+      '<div><svg viewBox="0 0 96 34"><path d="M12 17H90" style="fill:none;stroke:#5be49b;stroke-width:1.4"/><path d="M13 12L4 17L13 22Z" fill="#5be49b"/></svg><span>' + esc(A.result) + '</span></div></div>';
+    return head(n, A.title) + lines(A.lines) + '<div class="agents">' + stack(A.cols[0]) + mid + stack(A.cols[1]) + '</div><p class="keyline">' + esc(A.key) + '</p>';
+  }
+
+  /* ---------- step 12 ---------- */
+  function drawSkills(n) {
+    var S = C.skills, halves = [S.groups.slice(0, 3), S.groups.slice(3)];
+    function tbl(groups) {
+      var h = '<table><colgroup><col class="c-g"><col class="c-t"><col><col class="c-s"></colgroup><thead><tr>' + S.head.map(function (x) { return '<th scope="col">' + esc(x) + '</th>'; }).join('') + '</tr></thead><tbody>';
+      groups.forEach(function (g) {
+        g.tools.forEach(function (t, i) {
+          h += '<tr' + (i === 0 ? ' class="gs"' : '') + '>' + (i === 0 ? '<td class="grp" rowspan="' + g.tools.length + '">' + esc(g.g) + '</td>' : '') +
+            '<td class="tl"><span class="tool">' + esc(t[0]) + '</span></td><td>' + esc(t[1]) + '</td><td class="stg">' + esc(t[2]) + '</td></tr>';
+        });
+      });
+      return h + '</tbody></table>';
+    }
+    return head(n, S.title) + lines([S.linePre + toolCount + S.linePost]) + '<div class="tt">' + tbl(halves[0]) + tbl(halves[1]) + '</div>';
+  }
+
+  /* ---------- step 13 ---------- */
+  function drawChecks(n) {
+    var K = C.checks;
+    var lv = '<h3>' + esc(K.levelsTitle) + '</h3><table><thead><tr>' + K.levelsHead.map(function (x) { return '<th scope="col">' + esc(x) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      K.levels.map(function (r) { return '<tr><td class="n">' + r[0] + '</td><td class="k">' + esc(r[1]) + '</td><td>' + (r[2] ? '<span class="tool">' + esc(r[2]) + '</span>' : '') + '</td></tr>'; }).join('') + '</tbody></table><p class="note">' + esc(K.levelsNote) + '</p>';
+    var mk = '<h3>' + esc(K.marksTitle) + '</h3><ul class="mk">' + K.marks.map(function (m) {
+      return '<li><div>' + (m.tag ? '<span class="tag ' + m.k + '">' + esc(m.tag) + '</span>' : '') + '<div class="ex">' + esc(m.ex) + '</div></div><div><b>' + esc(m.h) + '</b><span class="d">' + esc(m.t) + '</span></div></li>';
+    }).join('') + '</ul>';
+    return head(n, K.title) + lines(K.lines) + '<div class="g2 chk"><div>' + lv + '</div><div>' + mk + '</div></div>';
+  }
+
+  /* ---------- step 14 ---------- */
+  function drawMeasured(n) {
+    var M = C.measured;
+    return head(n, M.title) + lines(M.lines) + '<table class="ms"><thead><tr>' + M.head.map(function (x) { return '<th scope="col">' + esc(x) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      M.rows.map(function (r) { return '<tr><td class="fig">' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td><td class="sc">' + esc(r[2]) + '</td></tr>'; }).join('') + '</tbody></table>';
+  }
+
+  /* ---------- step 15 ---------- */
+  function drawLimits(n) {
+    var L = C.limits;
+    return head(n, L.title) + '<ul class="lim">' + L.items.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' +
+      '<p class="endl"><a class="btn" href="' + esc(C.nav.dashHref) + '">' + esc(C.nav.dash) + '</a><a href="' + esc(C.nav.homeHref) + '">' + esc(C.nav.home) + '</a></p><p class="foot">' + esc(C.footer) + '</p>';
+  }
+
+  /* ---------- build ---------- */
+  document.title = C.docTitle;
+  var brand = document.getElementById('brand');
+  brand.href = C.nav.homeHref; brand.querySelector('b').textContent = C.brand; brand.querySelector('span').textContent = C.pageName;
+  document.getElementById('nav').innerHTML = '<a href="' + esc(C.nav.homeHref) + '">' + esc(C.nav.home) + '</a><a class="btn" href="' + esc(C.nav.dashHref) + '">' + esc(C.nav.dash) + '</a>';
+  document.getElementById('ind').setAttribute('aria-label', C.indicator.aria);
+
+  var main = document.getElementById('steps');
+  main.innerHTML = steps.map(function (s, i) {
+    return '<section class="step' + (s.stage !== undefined ? ' st' : '') + '" id="' + s.id + '" aria-label="' + esc(s.nav) + '"><div class="wrap">' + s.draw(i + 1) + '</div></section>';
+  }).join('');
+  // stage zooms carry the step number in their header line too
+  document.getElementById('ticks').innerHTML = steps.map(function (s, i) {
+    return '<li><a href="#' + s.id + '"' + (s.stage !== undefined ? ' class="st"' : '') + ' aria-label="' + esc(C.indicator.step + ' ' + (i + 1) + ': ' + s.nav) + '"></a></li>';
+  }).join('');
+  var strip = document.getElementById('strip');
+  strip.setAttribute('aria-label', C.stripAria);
+  strip.innerHTML = '<div class="s-orch"><b>' + esc(C.pipe.orch) + '</b><i></i></div><div class="s-row"><span class="s-hl" id="s-hl"></span>' +
+    C.stages.map(function (st, i) {
+      return '<a class="s-chip" href="#stage-' + st.key + '"><span class="bx"><em>' + (i + 1) + '</em>' + esc(st.name) + '</span><svg class="s-fan" viewBox="0 0 64 18" aria-hidden="true"><path d="M32 0L8 12M32 0L24 12M32 0L40 12M32 0L56 12"/><rect x="4" y="12" width="8" height="5" rx="1"/><rect x="20" y="12" width="8" height="5" rx="1"/><rect x="36" y="12" width="8" height="5" rx="1"/><rect x="52" y="12" width="8" height="5" rx="1"/></svg></a>';
+    }).join('') + '</div><p class="s-cur" id="s-cur"></p>';
+
+  /* ---------- where you are ---------- */
+  var secs = Array.prototype.slice.call(main.children), pin = document.getElementById('pin'), indT = document.getElementById('ind-t');
+  var ticks = Array.prototype.slice.call(document.querySelectorAll('#ticks a')), chips = Array.prototype.slice.call(strip.querySelectorAll('.s-chip'));
+  var hl = document.getElementById('s-hl'), sCur = document.getElementById('s-cur'), cur = -1;
+  function currentIndex(frac) {
+    var y = window.scrollY + window.innerHeight * frac + 2, k = 0;
+    for (var i = 0; i < secs.length; i++) if (secs[i].offsetTop <= y) k = i;
+    return k;
+  }
+  function update() {
+    var k = currentIndex(0.4);
+    if (k === cur) return;
+    cur = k;
+    var s = steps[k];
+    ticks.forEach(function (t, i) { if (i === k) t.setAttribute('aria-current', 'step'); else t.removeAttribute('aria-current'); });
+    indT.innerHTML = esc(C.indicator.step + ' ' + (k + 1) + ' ' + C.indicator.of + ' ' + N) + '&ensp;<b>' + esc(s.nav) + '</b>';
+    var isStage = s.stage !== undefined;
+    pin.classList.toggle('is-strip', isStage);
+    if (isStage) {
+      chips.forEach(function (c, i) { if (i === s.stage) c.setAttribute('aria-current', 'step'); else c.removeAttribute('aria-current'); });
+      hl.style.transform = 'translateX(' + (s.stage * 100) + '%)';
+      sCur.textContent = C.stages[s.stage].name;
+    }
+  }
+  var raf = 0;
+  window.addEventListener('scroll', function () { if (!raf) raf = requestAnimationFrame(function () { raf = 0; update(); }); }, { passive: true });
+  window.addEventListener('resize', function () { cur = -1; update(); });
+  update();
+
+  /* ---------- keyboard: one step per key press ---------- */
+  function go(k) {
+    k = Math.max(0, Math.min(N - 1, k));
+    window.scrollTo({ top: secs[k].offsetTop, behavior: reduce.matches ? 'auto' : 'smooth' });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+    var t = e.target, tag = t && t.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+    var fwd = e.key === 'PageDown' || e.key === 'ArrowDown' || (e.key === ' ' && !e.shiftKey);
+    var back = e.key === 'PageUp' || e.key === 'ArrowUp' || (e.key === ' ' && e.shiftKey);
+    if (e.key === ' ' && (tag === 'A' || tag === 'BUTTON' || tag === 'SUMMARY')) return;
+    if (e.key === 'Home') { e.preventDefault(); go(0); return; }
+    if (e.key === 'End') { e.preventDefault(); go(N - 1); return; }
+    if (!fwd && !back) return;
+    var k = currentIndex(0) , y = window.scrollY, vh = window.innerHeight, sec = secs[k];
+    // a step taller than the screen (small screens) is read in screen-sized moves
+    if (fwd && sec.offsetTop + sec.offsetHeight > y + vh + 8 && (k === N - 1 || secs[k + 1].offsetTop > y + vh * 0.9)) { e.preventDefault(); window.scrollBy({ top: vh * 0.85, behavior: reduce.matches ? 'auto' : 'smooth' }); return; }
+    if (back && y > sec.offsetTop + 8) { e.preventDefault(); go(k); return; }
+    e.preventDefault();
+    go(fwd ? k + 1 : k - 1);
+  });
+})();
+</script>
+</body>
+</html>
