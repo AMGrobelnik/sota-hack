@@ -45,6 +45,7 @@ from chipin_backend.api.scripted import NAME as SCRIPTED
 from chipin_backend.api.scripted import STEP_ENV, register
 from chipin_backend.api.steer import SteerError, Steering, send_message, watch
 from chipin_backend.api.steer import shutdown as close_steering
+from chipin_backend.api.summaries import RunSummaries, attach, load_level_settings
 from chipin_backend.api.translate import Translator, clip
 from chipin_backend.chiplab import chiplab_available, chiplab_instructions
 from chipin_backend.compute.base import Runner
@@ -122,6 +123,7 @@ class ApiRun:
     steer: Steering | None = None  # messages to the agent (api/steer.py)
     #: The run's subagents when fan-out is on.
     fanout: Fanout | None = None
+    levels: RunSummaries | None = None  # levels of summaries (api/summaries.py)
 
     @property
     def id(self) -> str:
@@ -176,6 +178,8 @@ class RunManager:
         self.summary = summary
         self.instructions = standing_instructions()
         self.subagent_instructions = subagent_standing_instructions()
+        self.levels = load_level_settings()
+        self.closing = False
 
     @property
     def runs_dir(self) -> Path:
@@ -285,6 +289,7 @@ class RunManager:
             timeout_s=self.api.run_timeout_s,
             env=stub_env if self.agent == "stub" else {},
         )
+        item.levels = attach(log, run.path, self.levels) if self.summary else None
         log.append("run.started", prompt=prompt, agent=self.agent, runner=self.runner)
         self.runs[item.id] = item
         steering.attach(item, spec)
@@ -409,6 +414,11 @@ class RunManager:
                 if requests is not None:
                     requests.cancel()
                 cost = await self._close_fanout(item, cost)
+            if item.levels is not None:
+                try:
+                    await item.levels.finish(status, timeout=0 if self.closing else None)
+                except Exception:  # summaries never fail a run
+                    logger.exception("run {}: closing summaries failed", item.id)
             emit_evidence(item.run.path, item.log.append)
             item.log.append("run.finished", status=status, summary=summary, bullets=bullets)
             item.record.update(
@@ -462,6 +472,7 @@ class RunManager:
 
     async def shutdown(self) -> None:
         """Stop every running agent and wait for its ``run.finished``."""
+        self.closing = True
         live = self.running()
         for item in live:
             await self.stop(item.id, "stopped because the server on this Mac was shut down")

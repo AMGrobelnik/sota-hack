@@ -12,6 +12,7 @@ import asyncio
 import json
 import re
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -54,6 +55,8 @@ class EventLog:
         self._events: list[dict[str, Any]] = []
         self._changed = asyncio.Event()
         self._reopened = False
+        #: Called with each new event, under the lock and in seq order; a listener only schedules work.
+        self.listeners: list[Callable[[dict[str, Any]], None]] = []
         if path.is_file():
             self._events = _read_jsonl(path)
 
@@ -98,6 +101,11 @@ class EventLog:
             self._events.append(event)
             if type_ == FINISHED:
                 self._reopened = False
+            for listener in self.listeners:
+                try:
+                    listener(event)
+                except Exception:
+                    logger.exception("run {}: an event listener failed", self.run_id)
         self._wake()
         return event
 

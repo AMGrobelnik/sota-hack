@@ -1,0 +1,29 @@
+# Levels of summaries over a run's event stream (api/summaries.py).
+# The small model and its provider walk are in llm/summaries.yaml; the key is
+# read by the name OPENROUTER_API_KEY. Unknown keys are an error.
+
+enabled: true
+model: null                 # null: the model in llm/summaries.yaml
+max_usd_per_run: 0.05       # model spend per run; past it every line is the text's own first line
+max_calls_per_minute: 30    # model calls per run per rolling minute; more wait their turn
+max_failures: 3             # failed calls in a row before the model is left alone for the run
+finish_timeout_s: 90        # at the run's end, time left for summaries before run.finished
+
+# Level 1, a line per item: items waiting for a line go to the model together.
+item_batch_max: 20          # items per call
+item_batch_wait_s: 3        # a lone batch waits this long for company
+verbatim_max_chars: 100     # a one-line message this short is its own line, no call
+item_input_chars: 1500      # longest text one item sends to the model
+item_max_chars: 135         # longest item line (the model is asked for two thirds of each cap)
+
+# Level 2, a line per group of consecutive items of one agent in one stage.
+group_max_items: 12         # a group closes at this many items
+group_min_items: 4          # an agent message opens a new group once the open one has this many
+group_idle_s: 120           # a gap this long between two items (by event time) closes the group
+group_batch_max: 8          # groups per call
+group_max_chars: 150        # longest group line
+
+# Levels 3 and 4: subagent, batch, stage, run.
+stage_interim_every: 4      # a running stage is re-summarised after this many new groups or subagents
+upper_max_chars: 360        # longest subagent, batch or stage summary
+run_max_chars: 480          # longest run summary

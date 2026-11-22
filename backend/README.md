@@ -163,6 +163,92 @@ added to the record's `llm_cost_usd`. With no OpenRouter key the summary is
 skipped with one log line and the run is unaffected. `run --no-summary`
 skips it too.
 
+## Levels of summaries
+
+Every dashboard run (`serve`, `run --preset`) also gets a short line for
+everything that happens, and lines for those lines, so a long run with many
+subagents stays readable: the reader sees one line per level and opens any
+line down to the full message or tool call. `api/summaries.py`, settings in
+`src/chipin_backend/api/summaries.yaml`.
+
+| Level   | One per                       | Built from          |
+| ------- | ----------------------------- | ------------------- |
+| `item`  | message, tool call, metric... | the event's text    |
+| `group` | run of one agent's items      | its item lines      |
+| `agent` | subagent, when it finishes    | its group lines     |
+| `batch` | fan-out batch of a stage      | its subagent lines  |
+| `stage` | stage, when it closes         | its groups, batches |
+| `run`   | the run                       | the stage lines     |
+
+- An item is an agent message, a tool call with its result (one item for
+  both), a metric, an artifact, a chosen chip or an error. A one-line
+  message of up to 100 characters, and a tool whose own line says it all
+  (`Read brief.md`), keep their own words; the rest go to the model.
+- A group is a run of consecutive items of one agent in one stage. It
+  closes when the stage changes, the agent starts subagents, a user message
+  arrives, it reaches 12 items, an item comes more than 120 s after the
+  last one (event time), the agent writes a message once the group has 4
+  items, its subagent finishes, or the run ends. These rules read only the
+  event sequence, so a replay gives the same summaries as the live run.
+- `agent` and `batch` exist only with the fan-out events
+  (`subagent.started`, `subagent.finished`, `stage.merged`); without them
+  a stage is built from the orchestrator's groups alone. A batch with no
+  merge event is summarised when its stage closes.
+- A stage gets interim summaries (`final: false`) every 4 new groups or
+  subagents while it runs; the run gets one each time a stage closes. The
+  final ones come when the stage closes and when the run ends, before
+  `run.finished`. The newest summary with an id replaces older ones.
+
+Each is one `summary` event on the stream and in `events.jsonl`, and one
+line in `summaries.jsonl`:
+
+```json
+{"type": "summary", "id": "g3", "level": "group", "covers": ["i12", "i14"],
+ "parent": "stage:propose", "agent": "a2", "stage": "propose",
+ "text": "Fitted thresholds, 100% on held-out windows",
+ "model": "openai/gpt-oss-120b", "final": true, "source": "model"}
+```
+
+- Ids: `e<seq>` a stream event, `i<seq>` an item (the seq of the event
+  that completes it), `g<n>` a group, `agent:<id>`, `batch:<stage>:<k>`,
+  `stage:<name>`, `run`. `covers` lists the ids one level down; `parent`
+  is the id that will cover this one. `agent` and `parent` are left out for
+  the orchestrator and the run.
+- `source`: `model`; `verbatim` (its own words, or a single child's line);
+  `fallback` (no model answer: the text's own first line). `model` names
+  what wrote a `model` line.
+- `GET /api/runs/{id}/summaries` returns `summaries.jsonl`; the event
+  stream replays the live ones on reconnect.
+
+Limits, per run:
+
+- One model call at a time. Waiting items go together, up to 20 a call
+  (a lone batch waits 3 s for company); closed groups up to 8 a call. So
+  a wide run makes bigger calls, not more of them.
+- At most 30 calls a minute, and at most `max_usd_per_run` ($0.05) of
+  model spend. Past the limit one `summary.limit` event (`reason`,
+  `text`, `spent_usd`, `limit_usd`) is written and every later line is the
+  text's own first line. Three failed calls in a row (`model failing`), no
+  key (`no key`) or the 90 s left at the run's end running out (`time`) do
+  the same. A summary never blocks or fails a run.
+- The model reads the run's text as quoted JSON, told never to follow
+  instructions in it; values of secret-named environment variables and
+  key-shaped strings are replaced by `[redacted]` first.
+- The model is the summary model above (`openai/gpt-oss-120b` on the fast
+  tiers), or `model` in `summaries.yaml`; the key is `OPENROUTER_API_KEY`.
+- Off: `enabled: false`, or `run --preset ... --no-summary`; the run is
+  then exactly as without this feature.
+
+A recorded run, old or new:
+
+```bash
+chipin-backend summarise <run id or folder> [--items] [--no-model] --env-file <keys>
+```
+
+It builds every level from the folder's `events.jsonl`, rewrites
+`summaries.jsonl`, prints the outline (items with `--items`) and the
+calls, seconds and cost per level. `--no-model` makes no calls.
+
 ## Local API for the dashboards
 
 `serve` starts a local HTTP server that lets a dashboard page start a real
@@ -204,6 +290,7 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 | `POST /api/runs/{id}/messages` | `text` to the agent          |
 | `POST /api/runs/{id}/stop`     | stop the run                 |
 | `GET /api/runs/{id}/evidence`  | run evidence, once finished  |
+| `GET /api/runs/{id}/summaries` | levels of summaries so far   |
 | `GET /api/runs/{id}/files`     | `path`, `size` per file      |
 | `GET /api/runs/{id}/file`      | `?path=`: one file as text   |
 | `GET /api/history`             | runs with picker facts       |
@@ -221,6 +308,8 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 | `cost`                         | agent cost and tokens        |
 | `error`                        | what went wrong              |
 | `evidence`                     | the three evidence summaries |
+| `summary`                      | one summary, see "Levels"    |
+| `summary.limit`                | summaries hit a limit        |
 | `run.finished`                 | status, summary, `bullets`   |
 
 Stages, in order: `spec`, `reference`, `propose`, `finetune`, `compile`,
@@ -741,7 +830,7 @@ backend/
     log.py                   loguru: stderr plus logs/backend.log
     runs.py                  run folders: run.json, events.jsonl, workspace/
     orchestrate.py           run_agent(spec, config): one run end to end
-    cli.py                   chipin-backend run / ask / serve / config / evidence / skill
+    cli.py                   chipin-backend run / ask / serve / config / evidence / summarise / skill
     evidence.py              run evidence: number check, weights, timings
     export.py                a recorded run as one scrubbed static file
     chiplab.py               the optional chip lab: agent PATH, settings, skill
