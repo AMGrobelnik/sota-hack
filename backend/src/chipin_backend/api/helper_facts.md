@@ -50,18 +50,17 @@ text.
 
 ## tabs
 
-A run page has six tabs:
+An example case or a live run has four tabs:
 - Overview: the run's targets, the trade-off chart of chip size against one
   metric, the designs, the selected design, the stages and the run clock.
-- Where it fails: the selected design's results per patient (or per
-  recording), worst first, judged against the targets.
-- Signal: an illustration of the signals named in the brief and the event the
-  chip must detect.
 - Chip: the chip of the selected design, once the first designs are checked.
   Power figures are not estimated in this version.
 - Chat: the run's messages; on a live run the user can write to the running
   agent here.
 - Sources: where the run's data and figures come from.
+
+A recorded run has Overview, Chip, Log and Files. Recorded runs are opened
+from the Recents list in the sidebar; there is no Past runs dialog.
 
 ## flow
 
