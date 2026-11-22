@@ -58,6 +58,8 @@ Rules:
   most useful thing you can without it, and say what that is.
 - The user may send you messages while you work. Read them, answer briefly,
   and adjust the plan when they ask you to.
+- A message from the user during the run takes priority over the plan where
+  they conflict. Answer it briefly, say what you will change, then carry on.
 - Keep your messages short and plain: what you are doing, what you found.
 - Stay inside your working folder. Do not touch files outside it.
 - When you are done, call `./progress stage report done` and end with a

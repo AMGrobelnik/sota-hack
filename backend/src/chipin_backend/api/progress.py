@@ -153,6 +153,10 @@ class ProgressTailer:
         self._offset = 0
         self.artifacts: set[str] = set()
 
+    def skip_to_end(self) -> None:
+        """Start after the lines already in the file (a follow-up of a finished run)."""
+        self._offset = self.path.stat().st_size if self.path.is_file() else 0
+
     async def follow(self, poll_s: float) -> None:
         """Read new lines every ``poll_s`` until cancelled."""
         while True:

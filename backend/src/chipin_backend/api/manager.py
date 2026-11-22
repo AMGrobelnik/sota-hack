@@ -31,10 +31,12 @@ from loguru import logger
 
 from chipin_backend.agents.types import AgentResult, AgentSpec, EventSink, utc_now
 from chipin_backend.api.config import ApiConfig, Preset
-from chipin_backend.api.events import API_EVENTS_FILE, EventLog
+from chipin_backend.api.events import API_EVENTS_FILE, EventLog, public_text
 from chipin_backend.api.progress import PROGRESS_FILE, ProgressTailer, write_helper
 from chipin_backend.api.scripted import NAME as SCRIPTED
 from chipin_backend.api.scripted import STEP_ENV, register
+from chipin_backend.api.steer import SteerError, Steering, send_message, watch
+from chipin_backend.api.steer import shutdown as close_steering
 from chipin_backend.api.translate import Translator, clip
 from chipin_backend.chiplab import chiplab_available, chiplab_instructions
 from chipin_backend.compute.base import Runner
@@ -62,13 +64,6 @@ RUNNER_MODES: dict[str, RunMode] = {"local": "flex"}
 LOCAL_MACHINES = frozenset({"", "local", "flex", "mac", "this-mac"})
 #: ``machine`` values that mean a rented pod, which this server never starts.
 REMOTE_MACHINES = frozenset({"on_demand", "on-demand", "ondemand", "runpod", "cloud", "gpu"})
-#: How a user's message reaches the Claude agent: without the last line the
-#: resumed session answers the message and ends its turn, ending the run.
-USER_MESSAGE_PROMPT = (
-    "A message from the user arrived while you work:\n\n{text}\n\n"
-    "Answer it in one or two sentences and adjust the plan if it asks you to. Then carry on "
-    "with the remaining stages, reporting each with ./progress, until report.md is written."
-)
 
 
 class RequestError(ValueError):
@@ -111,6 +106,7 @@ class ApiRun:
     inner: asyncio.Task[AgentResult] | None = None
     stopping: bool = False
     stop_reason: str = "stopped by the user"
+    steer: Steering | None = None  # messages to the agent (api/steer.py)
 
     @property
     def id(self) -> str:
@@ -131,7 +127,9 @@ class ApiRun:
         return view
 
     def save(self) -> None:
-        """Write ``api.json`` atomically."""
+        """Write ``api.json`` atomically; its summary names paths relative to the run folder."""
+        if isinstance(self.record.get("summary"), str):
+            self.record["summary"] = public_text(self.record["summary"], self.run.path)
         path = self.run.path / API_RECORD_FILE
         tmp = path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(self.record, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -215,7 +213,8 @@ class RunManager:
         loop = asyncio.get_running_loop()
         log = EventLog(run.path / API_EVENTS_FILE, run.run_id, loop)
         translator = Translator(log, JsonlEventSink(run.events_path), run.workspace)
-        run = replace(run, sink=translator)
+        steering = Steering()
+        run = replace(run, sink=steering.sink(translator, log))
         write_helper(run.workspace, run.path / PROGRESS_FILE)
         (run.workspace / "brief.md").write_text(_brief(prompt, answers, files), encoding="utf-8")
         record: dict[str, Any] = {
@@ -246,7 +245,9 @@ class RunManager:
         )
         log.append("run.started", prompt=prompt, agent=self.agent, runner=self.runner)
         self.runs[item.id] = item
+        steering.attach(item, spec)
         item.task = asyncio.create_task(self._drive(item, spec, translator), name=f"run-{item.id}")
+        watch(self, item)
         logger.info("run {} started: agent={} runner={} preset={}", item.id, self.agent, self.runner, preset)
         return item
 
@@ -340,23 +341,12 @@ class RunManager:
 
     # ---- control ----
 
-    async def message(self, run_id: str, text: str) -> None:
-        """Deliver a user message to the running agent's mailbox."""
-        item = self.get(run_id)
-        if not isinstance(text, str) or not text.strip():
-            raise RequestError("text must be a non-empty string")
-        if item.task is None or item.task.done() or item.runner is None:
-            raise RequestError("the run is not in progress", status=409)
-        inject = getattr(item.runner, "inject", None)
-        if inject is None:
-            raise RequestError("this runner cannot pass messages to the agent", status=501)
+    async def message(self, run_id: str, text: str) -> dict[str, Any]:
+        """A user message to the run's agent: live while it runs, a follow-up after (api/steer.py)."""
         try:
-            await inject(USER_MESSAGE_PROMPT.format(text=text.strip()) if self.agent == "claude" else text)
-        except NotImplementedError as exc:
-            raise RequestError(str(exc), status=501) from None
-        except RuntimeError as exc:
-            raise RequestError(f"the agent cannot take a message right now: {exc}", status=409) from None
-        item.log.append("message", role="user", author="you", text=text)
+            return await send_message(self, run_id, text)
+        except SteerError as exc:
+            raise RequestError(str(exc), exc.status) from None
 
     async def stop(self, run_id: str, reason: str = "stopped by the user") -> ApiRun:
         """Ask a running agent to stop; a finished run is left as it is."""
@@ -376,6 +366,7 @@ class RunManager:
             await self.stop(item.id, "stopped because the server on this Mac was shut down")
         if live:
             await asyncio.gather(*(i.task for i in live if i.task), return_exceptions=True)
+        close_steering()
         for item in self.runs.values():
             item.log.wake()
 
