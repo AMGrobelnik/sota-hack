@@ -255,22 +255,63 @@ def _cmp_width(vw: int, signed: bool, *consts: int) -> int:
 class Extension:
     """The RTL of the post-processing and channel-serial blocks, for emit_stream to splice into the wrapper."""
 
-    def __init__(self, info: dict, postproc: dict | None, channel_serial: dict | None):
+    def __init__(self, info: dict, postproc: dict | None, channel_serial: dict | None, tt: bool = True):
         self.info = info
         self.cs = normalize_channel_serial(channel_serial, info)
         self.pp = normalize_postproc(postproc, info, self.cs)
         self.fields = out_fields(info, self.pp, self.cs)
         self.out_bits = sum(w for _, w in self.fields)
+        self.visible = min(self.out_bits, 7) if tt else self.out_bits     # bits held in the output register
 
-    def _src(self, output: str, lane: int) -> str:
-        """The bits of one output lane inside the packed core output vector `cout`."""
+    def _lane_offset(self, output: str, lane: int) -> tuple[int, int]:
         off = 0
         for o in self.info["outputs"]:
             if o["name"] == output:
-                lo, w = off + lane * o["bits"], o["bits"]
-                return f"cout[{lo + w - 1}:{lo}]" if w > 1 else f"cout[{lo}]"
+                return off + lane * o["bits"], o["bits"]
             off += o["lanes"] * o["bits"]
         raise PostprocError(f"unknown output {output!r}")
+
+    def _src(self, output: str, lane: int) -> str:
+        """The bits of one output lane inside the packed core output vector `cout`."""
+        lo, w = self._lane_offset(output, lane)
+        return f"cout[{lo + w - 1}:{lo}]" if w > 1 else f"cout[{lo}]"
+
+    def _field_offset(self, name: str) -> int:
+        off = 0
+        for n, w in self.fields:
+            if n == name:
+                return off
+            off += w
+        raise PostprocError(name)
+
+    def _history(self):
+        """The smoothing window's history entries (the previous n-1 events), newest first.
+
+        The newest entry is what the output register captured at the last event wherever it holds that bit (the
+        decision, the score, the 1-bit core output): one flip-flop per value, never two holding the same bit, which
+        synthesis would merge anyway and which a register-matching equivalence proof cannot pair. Returns
+        (entry width, [(source bit, output-register bit or None)] for the newest entry) or None without a window.
+        """
+        sm = self.pp["smooth"] if self.pp else None
+        if not sm or sm["n"] == 1:
+            return None
+        avg = sm["mode"] == "average"
+        if self.cs:
+            w = self.cs["acc_bits"] if avg else 1
+            base = self._field_offset("acc" if avg else "decision")
+            name = "cs_new" if avg else "cs_dec"
+        else:
+            w = self.pp["value_bits"] if avg else 1
+            lo, _ = self._lane_offset(self.pp["output"], self.pp["lane"])
+            stored = avg or (self.pp["threshold"] is None and self.pp["value_bits"] == 1)   # pp_b = |pp_v = pp_v
+            base = self._field_offset("core") + lo if stored else None
+            name = "pp_v" if avg else "pp_b"
+        bits = []
+        for i in range(w):
+            src = f"{name}[{i}]" if w > 1 else name
+            idx = base + i if base is not None and base + i < self.visible else None
+            bits.append((src, idx))
+        return w, bits
 
     def decls(self) -> list[str]:
         """Wires and registers, after `cout` is declared; defines ev (decision event) and xout (output bits)."""
@@ -310,20 +351,33 @@ class Extension:
                 bname = "pp_b"
             sm = pp["smooth"]
             n = sm["n"] if sm else 1
+            hist = self._history()
+            if hist:   # pp_w0 = newest history entry (output-register bits + pp_h0), pp_w1.. = older entries
+                w, bits = hist
+                own = [src for src, idx in bits if idx is None]
+                if own:
+                    L.append(f"  reg [{len(own) - 1}:0] pp_h0;")
+                k, parts = len(own), []
+                for src, idx in reversed(bits):          # MSB first
+                    if idx is None:
+                        k -= 1
+                        parts.append(f"pp_h0[{k}]")
+                    else:
+                        parts.append(f"oreg[{idx}]")
+                L.append(f"  wire [{w - 1}:0] pp_w0 = {{{', '.join(parts)}}};" if len(parts) > 1 else
+                         f"  wire [{w - 1}:0] pp_w0 = {parts[0]};")
+                L += [f"  reg [{w - 1}:0] pp_w{i};" for i in range(1, n - 1)]
             if sm is None or n == 1 and sm["mode"] != "average":
                 L.append(f"  wire pp_sb = {bname};" if sm is None or sm["k"] == 1 else "  wire pp_sb = 1'b0;")
             elif sm["mode"] == "average":
                 W = _cmp_width(vw2, vsg, sm["threshold"] * n) + _clog2(n)
-                terms = [_sx(vname, vw2, vsg, W)]
-                for i in range(n - 1):
-                    L.append(f"  reg [{vw2 - 1}:0] pp_w{i};")
-                    terms.append(_sx(f"pp_w{i}", vw2, vsg, W))
+                terms = [_sx(vname, vw2, vsg, W)] + [_sx(f"pp_w{i}", vw2, vsg, W) for i in range(n - 1)]
                 L += [f"  wire signed [{W - 1}:0] pp_sum = {' + '.join(terms)};",
                       f"  wire pp_sb = pp_sum >= {_lit(sm['threshold'] * n, W)};"]
             else:
                 PW = _ubits(n)
-                terms = [_zx(bname, 1, PW)] + [_zx(f"pp_win[{i}]", 1, PW) for i in range(n - 1)]
-                L += [f"  reg [{n - 2}:0] pp_win;", f"  wire [{PW - 1}:0] pp_cnt = {' + '.join(terms)};",
+                terms = [_zx(bname, 1, PW)] + [_zx(f"pp_w{i}", 1, PW) for i in range(n - 1)]
+                L += [f"  wire [{PW - 1}:0] pp_cnt = {' + '.join(terms)};",
                       f"  wire pp_sb = pp_cnt >= {PW}'d{sm['k']};"]
             M, H = pp["min_duration"], pp["hold"]
             if M > 1:
@@ -344,18 +398,25 @@ class Extension:
                  f"  wire [{self.out_bits - 1}:0] xout = {cat[0]};")
         return L
 
+    def wires(self) -> list[str]:
+        """Names of the combinational wires these blocks add (registers excluded). Sequential equivalence must not
+        cut the proof at them: synthesis may compute one from another in the opposite direction (e.g. the timer's
+        next state from `alarm`), and a cut there loses the relation between the two."""
+        import re
+        return [m.group(1) for line in self.decls()
+                if (m := re.match(r"\s*wire (?:signed )?(?:\[[^\]]+\] )?(\w+)", line))]
+
     def reset(self) -> str:
         r = []
         if self.cs:
             r += [f"cs_ch <= {_clog2(self.cs['channels'])}'d0;", f"cs_acc <= {self.cs['acc_bits']}'d0;"]
         pp = self.pp
         if pp:
-            sm = pp["smooth"]
-            if sm and sm["n"] > 1:
-                if sm["mode"] == "average":
-                    r += [f"pp_w{i} <= {pp['value_bits']}'d0;" for i in range(sm["n"] - 1)]
-                else:
-                    r.append(f"pp_win <= {sm['n'] - 1}'d0;")
+            hist = self._history()
+            if hist:
+                w, bits = hist
+                own = sum(1 for _, idx in bits if idx is None)
+                r += ([f"pp_h0 <= {own}'d0;"] if own else []) + [f"pp_w{i} <= {w}'d0;" for i in range(1, pp["smooth"]["n"] - 1)]
             if pp["min_duration"] > 1:
                 r.append(f"pp_dc <= {_ubits(pp['min_duration'])}'d0;")
             if pp["hold"] > 0:
@@ -374,16 +435,14 @@ class Extension:
         L += ["      if (ev) begin", f"        oreg <= xout[{obt - 1}:0]; valid <= 1'b1;"]
         pp = self.pp
         if pp:
-            sm = pp["smooth"]
-            n = sm["n"] if sm else 1
-            if sm and n > 1:
-                if sm["mode"] == "average":
-                    vname = "cs_new" if self.cs else "pp_v"
-                    sh = ["pp_w0 <= " + vname + ";"] + [f"pp_w{i} <= pp_w{i - 1};" for i in range(1, n - 1)]
+            hist = self._history()
+            if hist:
+                n = pp["smooth"]["n"]
+                own = [src for src, idx in hist[1] if idx is None]
+                sh = ([f"pp_h0 <= {{{', '.join(reversed(own))}}};" if len(own) > 1 else f"pp_h0 <= {own[0]};"] if own else [])
+                sh += [f"pp_w{i} <= pp_w{i - 1};" for i in range(1, n - 1)]
+                if sh:
                     L.append("        " + " ".join(sh))
-                else:
-                    bname = "cs_dec" if self.cs else "pp_b"
-                    L.append(f"        pp_win <= {{pp_win[{n - 3}:0], {bname}}};" if n > 2 else f"        pp_win <= {bname};")
             if pp["min_duration"] > 1:
                 L.append("        pp_dc <= pp_dn;")
             if pp["hold"] > 0:
@@ -456,7 +515,7 @@ def area_compare(core_ir: dict, channel_serial: dict | None, workdir, postproc: 
     from pathlib import Path
     from chiplab.emit.stream import emit_stream
     from chiplab.hw.yosys import synth_generic
-    wd = Path(workdir); wd.mkdir(parents=True, exist_ok=True)
+    wd = Path(workdir).resolve(); wd.mkdir(parents=True, exist_ok=True)
 
     def one(tag, ir, **kw):
         text, sinfo = emit_stream(ir, tt=True, **kw)

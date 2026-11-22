@@ -514,12 +514,15 @@ chiplab compose-chip --json '{"heads": {"a": "765fa47586bd", "b": "ed8e52cb7a11"
 
 ### `compile-stream`
 
-Wrap a design for streaming hardware: inputs arrive one 15-bit word per strobe (ui_in[7]); outputs on uo_out[6:0] with valid on uo_out[7]. tt=true gives the Tiny Tapeout top (tt_um_chipin_<id>), else a generic top for FPGA boards.
+Wrap a design for streaming hardware: inputs arrive one 15-bit word per strobe (ui_in[7]); outputs on uo_out[6:0] with valid on uo_out[7]. tt=true gives the Tiny Tapeout top (tt_um_chipin_<id>), else a generic top for FPGA boards. Optional postproc (smoothing, k-of-N, duration timer, alarm hold) and channel_serial (max or sum over C channels with one model copy) blocks; area=true also reports flip-flops and gates (and, with channel_serial, the parallel version with C copies of the core).
 
-- Python: `lab.compile_stream(design_id: str, tt: bool = True) -> dict`
+- Python: `lab.compile_stream(design_id: str, tt: bool = True, postproc: dict | None = None, channel_serial: dict | None = None, area: bool = False) -> dict`
 - Lane: cpu; cached: True
   - `design_id`: str
   - `tt`: bool (true)
+  - `postproc`: dict — optional on-chip post-processing of the per-frame decision: {output?, lane?, threshold? (frame bit = value >= threshold), smooth?: {mode: majority|kofn|average, n, k?, threshold?}, min_duration? (frames the condition must last), hold? (frames the alarm stays on)}; alarm on bit 0
+  - `channel_serial`: dict — optional {channels: C, reduce: max|sum, threshold: T, output?, lane?}: each frame is ONE channel's input to ONE per-channel model; decision = reduce(score over C frames) >= T, valid every C frames; outputs decision then acc (one model copy instead of C)
+  - `area`: bool — synthesise and report flip-flops and gates (false)
 
 <details><summary>JSON schema</summary>
 
@@ -533,6 +536,18 @@ Wrap a design for streaming hardware: inputs arrive one 15-bit word per strobe (
   "tt": {
    "type": "boolean",
    "default": true
+  },
+  "postproc": {
+   "type": "object",
+   "default": null
+  },
+  "channel_serial": {
+   "type": "object",
+   "default": null
+  },
+  "area": {
+   "type": "boolean",
+   "default": false
   },
   "run_id": {
    "type": "string"
@@ -564,13 +579,15 @@ chiplab compile-stream --json '{"design_id": "765fa47586bd", "tt": true}'
 
 Verification level 3: cocotb + Icarus simulation of the streaming wrapper (frames streamed in, outputs compared with the integer model or with the scientist's expected outputs) plus a Verilator lint.
 
-- Python: `lab.rtl_simulate(design_id: str, n: int = 1000, vectors: dict | None = None, expected: dict | None = None, tt: bool = True) -> dict`
+- Python: `lab.rtl_simulate(design_id: str, n: int = 1000, vectors: dict | None = None, expected: dict | None = None, tt: bool = True, postproc: dict | None = None, channel_serial: dict | None = None) -> dict`
 - Lane: cpu; cached: True
   - `design_id`: str
   - `n`: int — random frames if no vectors (1000)
   - `vectors`: dict — port -> [[lane ints]] (optional)
   - `expected`: dict — output -> [[lane ints]] (optional)
   - `tt`: bool (true)
+  - `postproc`: dict — optional on-chip post-processing of the per-frame decision: {output?, lane?, threshold? (frame bit = value >= threshold), smooth?: {mode: majority|kofn|average, n, k?, threshold?}, min_duration? (frames the condition must last), hold? (frames the alarm stays on)}; alarm on bit 0
+  - `channel_serial`: dict — optional {channels: C, reduce: max|sum, threshold: T, output?, lane?}: each frame is ONE channel's input to ONE per-channel model; decision = reduce(score over C frames) >= T, valid every C frames; outputs decision then acc (one model copy instead of C)
 
 <details><summary>JSON schema</summary>
 
@@ -596,6 +613,14 @@ Verification level 3: cocotb + Icarus simulation of the streaming wrapper (frame
   "tt": {
    "type": "boolean",
    "default": true
+  },
+  "postproc": {
+   "type": "object",
+   "default": null
+  },
+  "channel_serial": {
+   "type": "object",
+   "default": null
   },
   "run_id": {
    "type": "string"
@@ -1188,11 +1213,13 @@ chiplab tt-package --json '{"design_id": "ed8e52cb7a11", "harden": false}'
 
 Sequential equivalence (eqy) of the streaming wrapper against its synthesised netlist: verification level 2 for clocked designs. Compositional by default: the combinational core is a black box here (prove it with prove_equivalence), so the proof covers only the clocked wrapper and takes seconds at any model size (spike: 3 s). whole=true proves the flattened design instead (small chips only, a few hundred gates).
 
-- Python: `lab.prove_sequential(design_id: str, timeout: int = 600, whole: bool = False) -> dict`
+- Python: `lab.prove_sequential(design_id: str, timeout: int = 600, whole: bool = False, postproc: dict | None = None, channel_serial: dict | None = None) -> dict`
 - Lane: cpu; cached: True
   - `design_id`: str
   - `timeout`: int seconds (600)
   - `whole`: bool — prove the whole flattened design (false)
+  - `postproc`: dict — optional on-chip post-processing of the per-frame decision: {output?, lane?, threshold? (frame bit = value >= threshold), smooth?: {mode: majority|kofn|average, n, k?, threshold?}, min_duration? (frames the condition must last), hold? (frames the alarm stays on)}; alarm on bit 0
+  - `channel_serial`: dict — optional {channels: C, reduce: max|sum, threshold: T, output?, lane?}: each frame is ONE channel's input to ONE per-channel model; decision = reduce(score over C frames) >= T, valid every C frames; outputs decision then acc (one model copy instead of C)
 
 <details><summary>JSON schema</summary>
 
@@ -1210,6 +1237,14 @@ Sequential equivalence (eqy) of the streaming wrapper against its synthesised ne
   "whole": {
    "type": "boolean",
    "default": false
+  },
+  "postproc": {
+   "type": "object",
+   "default": null
+  },
+  "channel_serial": {
+   "type": "object",
+   "default": null
   },
   "run_id": {
    "type": "string"

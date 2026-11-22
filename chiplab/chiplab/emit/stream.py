@@ -65,7 +65,7 @@ def emit_stream(core_ir: dict, core_info: dict | None = None, tt: bool = True, c
     ext = None
     if postproc or channel_serial:
         from chiplab.emit.postproc import Extension
-        ext = Extension(info, postproc, channel_serial)
+        ext = Extension(info, postproc, channel_serial, tt=tt)
     xb = ext.out_bits if ext else ob          # bits the wrapper outputs (the core's, unless a block is added)
     obt = min(xb, 7) if tt else xb
     idx = {}

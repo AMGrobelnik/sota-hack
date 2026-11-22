@@ -639,8 +639,12 @@ def prove_sequential(design_id: str, timeout: int = 600, whole: bool = False, po
     ports = [f"input wire [{p['lanes'] * p['bits'] - 1}:0] {p['name']}" for p in pinfo["inputs"]] + \
             [f"output wire [{o['lanes'] * o['bits'] - 1}:0] {o['name']}" for o in pinfo["outputs"]]
     stub.write_text(f"(* blackbox *)\nmodule {core} ({', '.join(ports)});\nendmodule\n")
+    nm = {}
+    if ext:   # the blocks' combinational wires are not cut points (registers and core outputs stay matched)
+        from chiplab.emit.postproc import Extension
+        nm = {"nomatch": Extension(pinfo, postproc, channel_serial).wires()}
     r = _ps([d / "stream_tt.v"], s["top"], d / ("eqy_whole" if whole else "eqy"), timeout=timeout,
-            blackbox=None if whole else [core], blackbox_sources=None if whole else [stub])
+            blackbox=None if whole else [core], blackbox_sources=None if whole else [stub], **nm)
     if ext:
         r = {**r, **{k: s.get(k) for k in ("postproc", "channel_serial", "frames_per_decision")}}
     (d / "eqy.json").write_text(json.dumps(r, default=str))

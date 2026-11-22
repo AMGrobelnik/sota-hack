@@ -61,9 +61,23 @@ def test_prove_sequential_extended_wrappers(tmp_path):
     rc, r = cli("prove-sequential", {"design_id": d["design_id"], "timeout": 300, "postproc": PP, "channel_serial": CS},
                 tmp_path)
     assert rc == 0 and r["proved"] is True and r["frames_per_decision"] == 4, r
-    rc, d = cli("ingest-model", {"format": "chipir", "model": score_ir()}, tmp_path)
-    pp = {"output": "s", "smooth": {"mode": "average", "n": 3, "threshold": 2}, "hold": 2}
-    rc, r = cli("prove-sequential", {"design_id": d["design_id"], "timeout": 300, "whole": True, "postproc": pp}, tmp_path)
+    pp = {"output": "score", "smooth": {"mode": "average", "n": 3, "threshold": 2}, "hold": 2}
+    rc, r = cli("prove-sequential", {"design_id": d["design_id"], "timeout": 300, "postproc": pp}, tmp_path)
+    assert rc == 0 and r["proved"] is True, r
+    # window over acc, part of it shown on uo_out (taken from the output register) and part not (own flip-flops)
+    rc, r = cli("prove-sequential", {"design_id": d["design_id"], "timeout": 300,
+                                     "postproc": {"smooth": {"mode": "average", "n": 3, "threshold": 1}},
+                                     "channel_serial": {**CS, "reduce": "sum"}}, tmp_path)
+    assert rc == 0 and r["proved"] is True, r
+    # whole design (core included) on a two-word toy: a single-word frame cannot be proven by eqy even without the
+    # blocks (its 1-bit word counter is optimised away), so the toy streams two words
+    toy = json.loads(json.dumps(score_ir()))
+    toy["inputs"][0]["lanes"] = 2
+    toy["nodes"][0]["W"] = [[1, -1]]
+    rc, d = cli("ingest-model", {"format": "chipir", "model": toy}, tmp_path)
+    pp = {"output": "s", "threshold": 3, "smooth": {"mode": "majority", "n": 4}, "min_duration": 2, "hold": 3}
+    rc, r = cli("prove-sequential", {"design_id": d["design_id"], "timeout": 300, "whole": True, "postproc": pp,
+                                     "channel_serial": None}, tmp_path)
     assert rc == 0 and r["proved"] is True and r["scope"] == "whole design", r
 
 
