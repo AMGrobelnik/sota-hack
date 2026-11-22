@@ -1,5 +1,7 @@
 """Runs alkaid in its own process: its native CMVM solver and PyTorch each bring an OpenMP runtime, and on macOS a
-process that loads both can abort ("Fatal Python error: Aborted"). emit.optimized.emit_optimized calls this.
+process that loads both can abort ("Fatal Python error: Aborted"). emit.optimized.emit_optimized calls this, with a
+timeout (alkaid's solver can hang on some constants). alkaid only solves the adder graphs; the Verilog for them is
+written by chiplab (emit.optimized.graph_rtl), so the output holds no alkaid (LGPL-3.0) code.
 
     echo '{"ir": {...chipir/1...}, "top": null}' | python -m chiplab.emit.alkaid_worker   -> {"text", "info"} on stdout
 """
