@@ -488,7 +488,7 @@ def main():
     if a.out.exists():                                            # the fit being replaced, on the same designs
         old = json.loads(a.out.read_text())
         old.setdefault("features", ["adder_bits", "cmp_bits", "mux_bits", "lut_entries"])
-        before = report({k: old[k] for k in ("features", "coef")}, fams, F, y, held, sizes)
+        before = report({k: old[k] for k in ("features", "coef", "families") if k in old}, fams, F, y, held, sizes)
     per_kind = {}
     for k in sorted(set(kinds)):
         m = np.array([kk == k for kk in kinds]) & held
