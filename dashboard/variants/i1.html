@@ -665,6 +665,9 @@ select.gfin{padding:0 10px}
 <div class="demo" id="demo">Simulated run, demo data</div>
 <script src="../chipin-models.js"></script>
 <script src="../i1-panels.js"></script>
+<!-- LIVE HOOK: live mode (real runs from a local backend) lives in ../i1-live.js, on top of the ../live.js stream reader -->
+<script src="../live.js"></script>
+<script src="../i1-live.js"></script>
 <script type="module">
 "use strict";
 /* =====================================================================
@@ -1477,7 +1480,7 @@ function glyph(run) {
   return '<span class="g"></span>';
 }
 function renderSidebar(force) {
-  const sig = route.page + (route.id || "") + "|" + runs.map(r => r.id + r.title + glyph(r)).join(",") + document.body.className;
+  const sig = route.page + (route.id || "") + "|" + runs.map(r => r.id + r.title + glyph(r)).join(",") + document.body.className + (window.ChipInLive?.i1?.sig() || ""); /* LIVE HOOK */
   if (!force && sig === sbSig) return; sbSig = sig;
   const rows = runs.map(r => `<a class="rrow${route.id === r.id ? " on" : ""}" href="#/run/${r.id}/${route.page === "run" ? route.view : "overview"}" title="${esc(r.title)}">${glyph(r)}<span class="t">${esc(r.title)}</span></a>`).join("");
   $("#sb").innerHTML = `
@@ -1489,7 +1492,7 @@ function renderSidebar(force) {
       <a href="../../how-it-works/">${I("bulb")}<span class="hc">How it works</span></a>
     </nav>
     <div class="sb-div"></div>
-    <div class="runs"><div class="cap"><span>Recents</span></div>${rows}</div>
+    <div class="runs"><div class="cap"><span>Recents</span></div>${window.ChipInLive?.i1?.recents() || "" /* LIVE HOOK: backend chip and live runs */}${rows}</div>
     <div class="acct"><button id="acctBtn"><span class="av">LB</span><span class="hc" style="min-width:0;text-align:left"><span class="nm">Lab workspace</span><br><span class="em">Demo</span></span></button></div>`;
 }
 $("#sb").addEventListener("click", e => {
@@ -1890,6 +1893,7 @@ function flowAct(s, a, el) {
 }
 // Run: the answers go onto the run. The AF brief opens the measured AF run with them.
 function startFromSpec() {
+  if (window.ChipInLive?.i1?.start(SPEC, () => { SPEC = null; flowSave(); startState.text = ""; })) return; /* LIVE HOOK: a connected backend runs it for real */
   const s = SPEC;
   let targets = s.targets.filter(t => t.value != null).map(t => ({ metric: t.metric, op: t.op, value: t.value }));
   const dropped = s.case === "neonatal-eeg" && MEASURED.eeg ? targets.filter(t => !inMeasured(t.metric)) : [];
@@ -2917,6 +2921,7 @@ function renderConfigure() {
   $("#pAg").onclick = e => agentPopover(e.currentTarget, cfg.agent, v => { cfg.agent = ensureModel(v); saveCfg(); renderConfigure(); });
   $("#swJ").onclick = () => { cfg.judge = cfg.judge === "worst" ? "pooled" : "worst"; saveCfg(); renderConfigure(); };
   $("#gb").onchange = e => { cfg.gateBudget = +e.target.value; saveCfg(); };
+  window.ChipInLive?.i1?.configure($("#main .cpanel")); /* LIVE HOOK: the Backend section */
 }
 
 /* ---------------- 12. PANELS AND SUBAGENT BATCHES (dash6 third pass) ----------------
@@ -3263,11 +3268,13 @@ function go(h) { if (location.hash === h) render(); else location.hash = h; }
 function render() {
   closePop(); closeModal(); closeDrawer();
   route = parseRoute();
+  if (window.ChipInLive?.i1?.owns()) route = { page: "live" }; /* LIVE HOOK */
   faUse(route.page === "run" ? findRun(route.id) : SPEC);
   document.body.classList.remove("drawer"); $(".scrim")?.remove();
   document.body.classList.toggle("inrun", route.page === "run");
   renderSidebar(true);
   if (route.page !== "run") { teardown(); cur = { id: null, view: null, sig: "" }; }
+  if (route.page === "live") { window.ChipInLive.i1.render(); return; } /* LIVE HOOK: a live run's view, drawn by ../i1-live.js */
   if (route.page === "start") { setBadge(null); renderStart(); }
   else if (route.page === "new") { setBadge(null); renderSpec(); }
   else if (route.page === "configure") renderConfigure();
