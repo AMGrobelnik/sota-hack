@@ -265,6 +265,98 @@ Example:
 chiplab simulate --json '{"design_id": "765fa47586bd", "inputs": "random", "n": 100000}'
 ```
 
+### `score-events`
+
+Fair event-level referee (timescoring 0.0.7): your detections vs reference labels per recording. Returns per-recording tp/fp/refTrue/numSamples, per-patient sums, SzCORE per-patient averages and pooled figures, false alarms per hour and per 24 h, sensitivity at fixed FA/h (0.1, 0.36, 1) from a threshold sweep over scores, worst case, 1 s ROC AUC, patient bootstrap 95% CIs and provenance. profile=szcore (tolerance 30/60 s, merge <90 s, split >300 s; SzCORE-comparable) or neonatal (any overlap, no merge, no split).
+
+- Python: `lab.score_events(recordings: list | None = None, path: str | None = None, profile: str = szcore, params: dict | None = None, nan_policy: str = omit, score_threshold: float = 0.5, fa_targets: list | None = None, thresholds: dict | None = None, n_thresholds: int = 200, n_bootstrap: int = 2000, seed: int = 0, progress_metrics: bool = False) -> dict`
+- Lane: cpu; cached: False
+  - `recordings`: list — [{patient_id, recording_id, fs, labels (0/1 per sample), decisions (0/1) and/or scores (float), timestamps (s, optional: gaps split the recording)}] (or give path)
+  - `path`: str — JSON file with that list (or {recordings: [...]})
+  - `profile`: str — szcore|neonatal (szcore)
+  - `params`: dict — overrides: tolerance_start_s, tolerance_end_s, min_overlap, merge_s (null: never), split_s (null: never), collar_s
+  - `nan_policy`: str — omit|zero: undefined per-patient values left out (SzCORE) or counted as 0 (omit)
+  - `score_threshold`: float — decisions = scores >= this where decisions are missing (0.5)
+  - `fa_targets`: list[float] — FA/h targets for the sweep (0.1, 0.36, 1.0)
+  - `thresholds`: dict — {target: threshold} chosen on other data; skips the same-data sweep
+  - `n_thresholds`: int — score quantiles in the sweep, at most 200; each one rescores every recording, so lower it for many long recordings with noisy scores (200)
+  - `n_bootstrap`: int — patient-level bootstrap resamples (2000)
+  - `seed`: int — bootstrap seed (0)
+  - `progress_metrics`: bool — send event_sensitivity, fa_per_hour, worst_patient_sensitivity, auc to ./progress (false)
+
+<details><summary>JSON schema</summary>
+
+```json
+{
+ "type": "object",
+ "properties": {
+  "recordings": {
+   "type": "array",
+   "default": null
+  },
+  "path": {
+   "type": "string",
+   "default": null
+  },
+  "profile": {
+   "type": "string",
+   "default": "szcore"
+  },
+  "params": {
+   "type": "object",
+   "default": null
+  },
+  "nan_policy": {
+   "type": "string",
+   "default": "omit"
+  },
+  "score_threshold": {
+   "type": "number",
+   "default": 0.5
+  },
+  "fa_targets": {
+   "type": "array",
+   "default": null
+  },
+  "thresholds": {
+   "type": "object",
+   "default": null
+  },
+  "n_thresholds": {
+   "type": "integer",
+   "default": 200
+  },
+  "n_bootstrap": {
+   "type": "integer",
+   "default": 2000
+  },
+  "seed": {
+   "type": "integer",
+   "default": 0
+  },
+  "progress_metrics": {
+   "type": "boolean",
+   "default": false
+  },
+  "run_id": {
+   "type": "string"
+  },
+  "session_id": {
+   "type": "string"
+  },
+  "round": {
+   "type": "integer"
+  },
+  "force": {
+   "type": "boolean",
+   "default": false
+  }
+ },
+ "required": []
+}
+```
+</details>
+
 ### `prove-equivalence`
 
 Verification level 2: prove the gate netlist equals the model for every possible input (ABC equivalence check against an independent golden model of the IR; falls back to proving synthesis if inconclusive).
@@ -456,12 +548,12 @@ chiplab ingest-model --json "{\"format\": \"intnn\", \"model\": $(cat fixtures/s
 
 ### `compose-chip`
 
-Build ONE chip from several model heads (multi-output, multi-input) with fusion logic between their decision outputs: and | or | kofn (k-of-n vote). Heads are design_ids or chipir/1 documents.
+Build ONE chip from several model heads (multi-output, multi-input) with fusion logic between their decision outputs: and | or | kofn (k-of-n vote), or score-level fusion of multi-bit head scores: max | sum then a threshold compare (1-bit decision; e.g. one per-channel model on several channel ports, shared_inputs=false). Heads are design_ids or chipir/1 documents.
 
 - Python: `lab.compose_chip(heads: dict, fusion: list | None = None, shared_inputs: bool = True, name: str = composed) -> dict`
 - Lane: cpu; cached: True
   - `heads`: dict — head name -> design_id or chipir/1
-  - `fusion`: list — [{name, op: and|or|kofn, k?, inputs: [<head>_<output>]}]
+  - `fusion`: list — [{name, op: and|or|kofn, k?, inputs: [<head>_<output>]}] or [{name, op: max|sum, t, rel? (ge), score? (false: also output <name>_score), inputs}]
   - `shared_inputs`: bool — heads read the same input port (true) or each keeps its own port (false)
   - `name`: str
 
@@ -650,7 +742,7 @@ chiplab rtl-simulate --json '{"design_id": "765fa47586bd", "n": 300}'
 
 ### `estimate-cost`
 
-Manufacturing routes for a design (iCE40 FPGA, Tiny Tapeout sky130/GF180, wafer.space GF180, Pragmatic FlexIC): fits or not, cost, deadline, and the basis of each number.
+Manufacturing routes for a design (iCE40 FPGA, Tiny Tapeout sky130/GF180/IHP, wafer.space GF180 slots, ChipFoundry chipIgnite, EUROPRACTICE GF180/IHP, Pragmatic FlexIC): fits or not, cost, deadline, the basis of each number, and per figure whether it was read on the vendor's page or is unverified.
 
 - Python: `lab.estimate_cost(design_id: str) -> dict`
 - Lane: inline; cached: False

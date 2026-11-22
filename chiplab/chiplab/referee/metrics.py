@@ -74,6 +74,7 @@ def summary(view_part, p, with_rows: bool = False) -> dict:
     return out
 
 
-def events(*args, **kwargs):
-    """TODO (Phase 1): event-level scoring — events caught (any overlap), detection delay, false alarms per hour."""
-    raise NotImplementedError("event-level metrics arrive in Phase 1")
+def events(recordings, **kwargs) -> dict:
+    """Event-level scoring (timescoring 0.0.7, SzCORE or neonatal profile): see chiplab.referee.events.score."""
+    from chiplab.referee.events import score
+    return score(recordings, **kwargs)

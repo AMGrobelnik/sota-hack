@@ -60,13 +60,16 @@ Optional generators the AI scientist may use: alkaid (fixed multiplications as s
   - A Cortex-M4 microcontroller model: 3,532 µJ and 143 ms per decision.
 - **Rules:** never touch the locked test set during search, always label simulated vs measured numbers, and every claim must reproduce from a fresh seed.
 
-## 7. What can be made (makeable outputs, prices checked 21 Nov 2026)
+## 7. What can be made (makeable outputs, prices checked 22 Nov 2026)
 | Route | What the lab outputs | Cost and time |
 |---|---|---|
 | **FPGA (today)** | Bitstream for an iCE40UP5K | $36 UPduino board; days |
 | **Tiny Tapeout, SkyWater 130** | Verilog repo; the GDS is built by their CI | €70 a tile (about 1,000 gates each), plus a €300 devkit; submissions close 30 Nov 2026, chips about June 2027 |
-| Tiny Tapeout, GF180 / IHP | Same | Same pricing; GF180 closes 7 Dec 2026 |
-| **wafer.space, GF180** | GDS with pin ring | $3,000 for 1,000 chips; GDS by 16 Dec, ships Q2 2027 |
+| Tiny Tapeout, GF180 (TTGF26c) | Same; 346.64 × 160.72 µm tiles, up to 4×8 | Closes 7 Dec 2026; about €70 a tile (unverified for GF180); design must be public |
+| Tiny Tapeout, IHP | Same; 202.08 × 154.98 µm tiles | No shuttle open on 22 Nov 2026 |
+| **wafer.space, GF180 (Run 3)** | GDS with pin ring | 1,000 dies a slot: quarter $3,000, half $5,000, full $8,000; buy by 9 Dec, GDS by 16 Dec, ships Q2 2027 |
+| ChipFoundry chipIgnite (sky130) | GDS in their harness | $14,950 for 100 QFN parts, up to 15 mm² |
+| EUROPRACTICE GF180 / IHP | GDS with pad ring | €913/mm² GF180 (6 mm² min); €7,300/mm² SG13G2; €4,500/mm² SG13CMOS |
 | **Pragmatic FlexIC (flexible)** | GDS via Pragmatic's design kit (needs commercial tools) | €900/mm², 3×3 mm minimum ≈ €8,100 for 50; next deadline 16 Mar 2027 |
 
 **Constraints the lab enforces:**

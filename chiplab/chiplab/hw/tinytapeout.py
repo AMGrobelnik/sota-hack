@@ -45,8 +45,39 @@ def tt_python() -> str:
         if cand.exists():
             return str(cand)
     return sys.executable
-TILE_UM = {"1x1": (161.0, 111.52), "1x2": (161.0, 225.76), "2x2": (334.88, 225.76), "3x2": (508.76, 225.76),
-           "4x2": (682.64, 225.76), "6x2": (1030.4, 225.76), "8x2": (1378.16, 225.76)}
+
+
+#: Tile outlines (width, height in um) per PDK, from tt-support-tools tech/<pdk>/tile_sizes.yaml at the commit
+#: scripts/install.sh pins (TT_COMMIT 0922544e). sky130 keeps the shapes the lab always offered (up to 8x2, the
+#: 16 tiles TTSKY sells); GF180 goes up to 4x8 and IHP up to 8x4, as their yaml files list.
+TILE_SIZES: dict[str, dict[str, tuple[float, float]]] = {
+    "sky130A": {"1x1": (161.0, 111.52), "1x2": (161.0, 225.76), "2x2": (334.88, 225.76), "3x2": (508.76, 225.76),
+                "4x2": (682.64, 225.76), "6x2": (1030.4, 225.76), "8x2": (1378.16, 225.76)},
+    "gf180mcuD": {"1x1": (346.64, 160.72), "2x1": (711.2, 160.72), "1x2": (346.64, 325.36), "2x2": (711.2, 325.36),
+                  "3x2": (1075.76, 325.36), "3x4": (1075.76, 736.96), "4x2": (1440.32, 325.36),
+                  "4x4": (1440.32, 736.96), "4x6": (1440.32, 1148.56), "4x8": (1440.32, 1560.16)},
+    "ihp-sg13g2": {"1x1": (202.08, 154.98), "1x2": (202.08, 313.74), "2x1": (419.52, 154.98), "2x2": (419.52, 313.74),
+                   "3x1": (636.96, 154.98), "3x2": (636.96, 313.74), "3x4": (636.96, 710.64), "4x1": (854.4, 154.98),
+                   "4x2": (854.4, 313.74), "4x4": (854.4, 710.64), "5x4": (1071.84, 710.64), "6x1": (1289.28, 154.98),
+                   "6x2": (1289.28, 313.74), "6x4": (1289.28, 710.64), "8x1": (1724.16, 154.98),
+                   "8x2": (1724.16, 313.74), "8x4": (1724.16, 710.64)},
+}
+TILE_UM = TILE_SIZES["sky130A"]   # backward-compatible name: the sky130 table
+
+
+def tile_sizes(pdk: str = "sky130A") -> dict[str, tuple[float, float]]:
+    """Tile shapes of one PDK, ordered by number of tiles (the price) and then area."""
+    if pdk not in TILE_SIZES:
+        raise ValueError(f"pdk must be one of {list(TILE_SIZES)}")
+    def order(kv: tuple[str, tuple[float, float]]) -> tuple[int, float]:
+        a, b = kv[0].split("x")
+        return int(a) * int(b), kv[1][0] * kv[1][1]
+    return dict(sorted(TILE_SIZES[pdk].items(), key=order))
+
+
+def smallest_tile(area_um2: float, pdk: str = "sky130A", density: float = 0.55) -> str | None:
+    """Smallest tile shape of `pdk` whose area at `density` holds `area_um2` of cells; None if none does."""
+    return next((t for t, (w, h) in tile_sizes(pdk).items() if area_um2 <= w * h * density), None)
 
 
 def minimal_stream_wrapper(core_top: str, lanes: int, bits: int, out_bits: int, top: str | None = None) -> tuple[str, str]:
@@ -179,18 +210,20 @@ def _env() -> dict:
 
 
 def pick_tiles(rtl_files: list[Path], top_module: str, workdir: Path, pdk: str = "sky130A", density: float = 0.55) -> dict:
-    """Smallest TT tile size whose area fits the design's Liberty-mapped cell area at the target density."""
+    """Smallest TT tile size of this PDK whose area fits the design's Liberty-mapped cell area at the target
+    density (tile outlines per PDK from tt-support-tools, see TILE_SIZES)."""
     from chiplab.hw.pdk import map_to_process
     key = {"sky130A": "sky130", "gf180mcuD": "gf180", "ihp-sg13g2": "ihp"}[pdk]
     merged = Path(workdir) / "tiles_estimate.v"
     merged.parent.mkdir(parents=True, exist_ok=True)
     merged.write_text("\n".join(Path(f).read_text() for f in rtl_files))
     m = map_to_process(merged, top_module, Path(workdir) / "tiles_estimate", key)
-    need = (m["area_um2"] or 0) / density
-    for t, (w, h) in TILE_UM.items():
-        if w * h >= need:
-            return {"tiles": t, "cell_area_um2": m["area_um2"], "density": density, "tile_area_um2": round(w * h, 1)}
-    return {"tiles": None, "cell_area_um2": m["area_um2"], "density": density, "error": "larger than 8x2 tiles"}
+    t = smallest_tile(m["area_um2"] or 0, pdk, density)
+    if t:
+        w, h = TILE_SIZES[pdk][t]
+        return {"tiles": t, "cell_area_um2": m["area_um2"], "density": density, "tile_area_um2": round(w * h, 1)}
+    return {"tiles": None, "cell_area_um2": m["area_um2"], "density": density,
+            "error": f"larger than {list(tile_sizes(pdk))[-1]} tiles"}
 
 
 def tt_package(rtl_files: list[Path], top_module: str, workdir: Path, design_meta: dict, tiles: str = "auto",
@@ -206,8 +239,9 @@ def tt_package(rtl_files: list[Path], top_module: str, workdir: Path, design_met
         if not tile_choice["tiles"]:
             raise ValueError(f"design too large for Tiny Tapeout: {tile_choice}")
         tiles = tile_choice["tiles"]
-    if tiles not in TILE_UM:
-        raise ValueError(f"tiles must be 'auto' or one of {list(TILE_UM)}")
+    sizes = TILE_SIZES.get(pdk, TILE_UM)
+    if tiles not in sizes:
+        raise ValueError(f"tiles must be 'auto' or one of {list(sizes)} for {pdk}")
     proj = Path(workdir) / f"tt_{top_module}"
     if proj.exists():
         shutil.rmtree(proj)
@@ -251,7 +285,7 @@ def tt_package(rtl_files: list[Path], top_module: str, workdir: Path, design_met
     tt = lambda *a, t=timeout: subprocess.run([tt_python(), "tt/tt_tool.py", "--pdk", pdk, *a], cwd=proj, env=env,
                                               capture_output=True, text=True, timeout=t)
     r = tt("--create-user-config", t=600)
-    out = {"folder": str(proj), "top": top_module, "tiles": tiles, "tile_um": TILE_UM[tiles], "pdk": pdk, "tile_choice": tile_choice,
+    out = {"folder": str(proj), "top": top_module, "tiles": tiles, "tile_um": sizes[tiles], "pdk": pdk, "tile_choice": tile_choice,
            "user_config_ok": r.returncode == 0, "harden_ok": None, "gds": None, "png": None, "gl_test_passed": None}
     if r.returncode != 0:
         out["error"] = (r.stdout + r.stderr)[-1500:]
