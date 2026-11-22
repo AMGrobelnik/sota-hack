@@ -5,7 +5,11 @@ import json
 import numpy as np
 import pytest
 
-pytest.importorskip("alkaid")
+from chiplab.emit.optimized import available as _alkaid_installed  # noqa: E402  (checks without importing alkaid)
+
+if not _alkaid_installed():
+    pytest.skip("alkaid not installed", allow_module_level=True)
+# never `import alkaid` here: its native solver in the pytest process crashes later torch tests on macOS
 
 from chiplab.config import find_bin  # noqa: E402
 from chiplab.emit.optimized import emit_optimized  # noqa: E402
@@ -116,3 +120,11 @@ def test_worker_matches_in_process():
     p = subprocess.run([sys.executable, "-c", code, json.dumps(TINY)], capture_output=True, text=True, timeout=600)
     assert p.returncode == 0, p.stderr[-800:]
     assert json.loads(p.stdout) == json.loads(json.dumps(list(via_worker), default=str))
+
+
+def test_alkaid_never_loaded_into_this_process():
+    """macOS CI (ec334aa): with alkaid's native solver imported into the pytest process (importorskip at collection),
+    a later torch test segfaulted. alkaid must only ever run in its worker process."""
+    import sys
+    emit_optimized(TINY, "alkaid")
+    assert not [m for m in sys.modules if m == "alkaid" or m.startswith("alkaid.")]

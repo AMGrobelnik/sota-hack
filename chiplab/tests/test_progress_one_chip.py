@@ -19,7 +19,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-pytest.importorskip("alkaid")
+from chiplab.emit.optimized import available as _alkaid_installed  # noqa: E402  (checks without importing alkaid)
+
+if not _alkaid_installed():
+    pytest.skip("alkaid not installed", allow_module_level=True)
+# never `import alkaid` here: its native solver in the pytest process crashes later torch tests on macOS
 
 import chiplab.api as lab  # noqa: E402
 import chiplab.hw.librelane as librelane  # noqa: E402
@@ -215,6 +219,7 @@ def test_m3_run_replay_panel_shows_one_chip(ws):
     # a later synthesis of another chip stays out of the panel (status line only) until the next report
     ok(lab.synthesize(design_id=IDS["A"], force=True))
     assert panel(_lines(ws)) == after
+    assert not [m for m in sys.modules if m == "alkaid" or m.startswith("alkaid.")]   # alkaid ran in its worker only
     if os.environ.get("CHIPLAB_TEST_VERBOSE"):
         print("\nBEFORE (M3 run, 5b15d6c):", json.dumps(BEFORE_M3))
         print("AFTER, exploring:", json.dumps(before))
