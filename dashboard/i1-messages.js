@@ -83,6 +83,7 @@
     if (!ev || typeof ev !== "object" || !ev.type) return;
     var S = store(runId != null ? runId : ev.run_id);
     var seq = typeof ev.seq === "number" ? ev.seq : null;
+    if (ev.type === "summary" && !ev.level && (ev.covers || ev.ref || ev.message != null)) ev = Object.assign({}, ev, { level: "item" }); // MSGROW HOOK: a per-message summary that names its message
     if (ev.type === "summary") {
       if (typeof ev.id !== "string" || !ev.level) return;
       if (!newer(S.sums[ev.id] && S.sums[ev.id].s, ev)) return;
@@ -334,6 +335,7 @@
       if (a === "toggle") { var id = t.closest(".cm-n").getAttribute("data-id"); ui.over[id] = t.getAttribute("aria-expanded") !== "true"; M.keepFocus = id; paint(); }
       else if (a === "level") { var lv = t.getAttribute("data-level"); ui.level = ui.level === lv ? null : lv; ui.over = {}; paint(); }
       else if (a === "more") { ui.more = !ui.more; paint(); }
+      else if (window.ChipInMsgRow && window.ChipInMsgRow.act(M, a, t)) paint(); // MSGROW HOOK
       else if (a === "raw") { var p = t.parentNode.querySelector(".cm-raw"); var open = t.getAttribute("aria-expanded") === "true"; t.setAttribute("aria-expanded", String(!open)); t.textContent = open ? "Show the raw events" : "Hide the raw events"; if (p) p.hidden = open; }
     });
     root.querySelector(".cm-fs").addEventListener("change", function (e) { M.S.ui.stage = e.target.value; M.S.ui.level = null; M.S.ui.over = {}; paint(); });
@@ -406,6 +408,9 @@
     var lad = '<span class="cm-lt">Open to</span>' + LADDER.filter(function (l) { return T.counts[l[0]] || l[0] === "stage" || l[0] === "item"; }).map(function (l) {
       return '<button type="button" class="cm-lv' + (ui.level === l[0] ? " on" : "") + '" data-act="level" data-level="' + l[0] + '" aria-pressed="' + (ui.level === l[0]) + '" title="Open every row down to the ' + l[2] + '"><b>' + T.counts[l[0]] + "</b> " + l[1] + "</button>";
     }).join("") + (M.opts.more ? '<a class="cm-all-l" href="' + esc(M.opts.more) + '">Open in full</a>' : "");
+    var MR = window.ChipInMsgRow, flat = MR && ui.view !== "tree", nRows = null; // MSGROW HOOK: one row per message (../i1-msgrow.js) unless By stage is picked
+    if (flat) nRows = MR.paint(M, H);
+    if (MR) lad = MR.controls(M, nRows) + (flat ? (M.opts.more ? '<a class="cm-all-l" href="' + esc(M.opts.more) + '">Open in full</a>' : "") : '<span class="cm-mr-gap"></span>' + lad);
     setHTML(M, "lad", M.root.querySelector(".cm-ladder"), lad);
     // the run summary, pinned
     var rs = T.N.run.sum, sumHTML;
@@ -416,10 +421,10 @@
     setHTML(M, "sum", M.root.querySelector(".cm-sum"), sumHTML);
     M.root.querySelector(".cm-sum").hidden = !sumHTML;
     // the tree
-    reconcile(M, M.list, (T.N.run.kids || []).map(function (id) { return T.N[id]; }).filter(function (n) { return shown(S, T, n); }), 0);
+    if (!flat) { if (M.list.querySelector(".cm-n-mr,.cm-mr-div")) M.list.innerHTML = ""; M.list.setAttribute("role", "tree"); reconcile(M, M.list, (T.N.run.kids || []).map(function (id) { return T.N[id]; }).filter(function (n) { return shown(S, T, n); }), 0); }
     // empty state
     var empty = M.root.querySelector(".cm-empty"), et = "";
-    if (!T.N.run.kids || !T.N.run.kids.length) {
+    if (!T.N.run.kids || !T.N.run.kids.length || (flat && !S.rawOrder.length)) {
       var L = window.ChipInLive;
       et = S.finished ? "This run logged no messages or tool calls." : /^rec:/.test(S.id) && !S.t0 ? "Nothing yet at this point in the run." : S.t0 ?"Waiting for the agent's first message." :
         L && (L.status === "connected" || L.token) ? "Waiting for the run's stream." :
@@ -693,5 +698,7 @@
   ].join("\n");
   document.head.appendChild(css);
 
+  // MSGROW HOOK: what ../i1-msgrow.js borrows to draw one row per message from this store
+  var H = { esc: esc, ico: ico, firstLine: firstLine, itemFirst: itemFirst, sumText: sumText, rel: rel };
   window.ChipInMessages = { mount: mount, feed: feed, reset: reset, state: state, version: 1 };
 })();

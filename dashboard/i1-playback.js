@@ -648,7 +648,8 @@
         var line = (j.runs || []).find(function (r) { return r.id === id; });
         if (!line) throw new Error("This recorded run is not on the site.");
         rec.line = line;
-        return fetch(siteBase() + line.file, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("The run's file could not be read."); return r.json(); });
+        return fetch(siteBase() + line.file, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("The run's file could not be read."); return r.json(); })
+          .then(function (doc) { return window.ChipInMsgRow ? window.ChipInMsgRow.withRecorded(siteBase(), line, doc) : doc; }); // MSGROW HOOK: per-message summaries written for this recorded run
       }).then(function (doc) {
         rec.facts = doc.run || {}; rec.summary = doc.summary || ""; rec.bullets = doc.bullets || ""; rec.files = doc.files || [];
         prepare(rec, doc.events || []);
