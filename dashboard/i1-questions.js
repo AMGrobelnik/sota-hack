@@ -108,7 +108,7 @@
       .then(function (j) {
         clearTimeout(timer);
         if (my !== seq || !s.fq || s.fq.sig !== sig) { fin(); return; }
-        var qs = j && Array.isArray(j.questions) ? j.questions.filter(valid).slice(0, 3) : [];
+        var qs = j && Array.isArray(j.questions) ? j.questions.filter(valid).slice(0, 3).map(withUnit) : [];
         if (!qs.length) { s.fq = { sig: sig, state: "empty" }; save(); toSpec(); fin(); return; }
         var answers = {};
         qs.forEach(function (q) { if (Object.prototype.hasOwnProperty.call(keep, q.id)) answers[q.id] = keep[q.id]; });
@@ -117,6 +117,14 @@
         if (onMore() && $("#gfBody")) paintBody(s);
         fin();
       });
+  }
+  // a bare number as a text default ("10") takes the unit its question or id names ("10 seconds"); "per hour" is a rate, not a unit
+  function withUnit(q) {
+    var d = q.kind === "text" ? String(q["default"]).trim() : "", m;
+    if (!/^\d+(?:\.\d+)?$/.test(d) || !(m = (q.question + " " + q.id.replace(/_/g, " ")).match(/(?<!\b(?:per|a|an|each|every)\s)\b(milliseconds?|seconds?|minutes?|hours?|days?|nights?|weeks?)\b/i))) return q;
+    var u = m[1].toLowerCase().replace(/s$/, "");
+    q["default"] = d + " " + u + (+d === 1 ? "" : "s");
+    return q;
   }
   function valid(q) {
     if (!q || typeof q.id !== "string" || typeof q.question !== "string" || !q.question || typeof q.why !== "string") return false;

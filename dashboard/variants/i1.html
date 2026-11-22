@@ -344,7 +344,7 @@ select.fin2{padding:0 8px}
 .fun .fs.sep::before{display:none}
 .topbadge{flex:none}
 @media (min-width:768px){body.inrun .demo{display:none}}
-@media (max-width:767px){.topbadge{display:none}}
+@media (max-width:767px){.topbadge{display:none}.top .tright{position:sticky;right:0;z-index:1;background:#fff;padding-left:6px;box-shadow:-10px 0 8px -2px #fff}}
 .ovf{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--i600);padding:2px 2px 0}
 .ovf button{font-size:12.5px;font-weight:600;color:var(--blue7);display:inline-flex;align-items:center;gap:6px}
 
@@ -749,7 +749,7 @@ select.gfin{padding:0 10px}
 <!-- CHIPPY HOOK: the helper panel (corner button, side panel, example prompts, page actions) lives in ../i1-chippy.js -->
 <script src="../i1-chippy.js?v=fx4"></script>
 <script src="../i1-designs.js?v=dn1c"></script><!-- DESIGNS HOOK: the designs a run tried, in the Chip view (window.ChipInDesigns) -->
-<script src="../i1-questions.js?v=ik2"></script>
+<script src="../i1-questions.js?v=ik3"></script>
 <script src="../i1-search.js"></script><!-- SEARCH HOOK: the five search steps between Run and the run view, replayed on examples (window.ChipInSearch) --><!-- QUESTIONS HOOK: follow-up questions from a connected backend, one extra step before the spec card (window.ChipInQuestions) -->
 <script src="../i1-summary.js?v=fb2bc"></script><!-- SUMMARY HOOK: the result page's summary card, trade-off sentence and the chart's default view (window.ChipInSummary) -->
 <script src="../i1-whysize.js?v=fx4"></script><!-- WHY SIZE HOOK: the Why this size panel under the chart: cost along the curve, battery, what changes, to check (window.ChipInWhySize) -->
@@ -759,7 +759,7 @@ select.gfin{padding:0 10px}
 <script src="../i1-whychip.js?v=wc1"></script><!-- WHY CHIP HOOK: the Why this chip card on a finished run's Chip tab, called from ChipInFold.chipHTML (window.ChipInWhyChip) -->
 <script src="../i1-colour.js"></script><!-- COLOUR HOOK: pass, fail, estimated and chosen colours in one place -->
 <script src="../i1-stage.js"></script><!-- STAGE HOOK: the loading stage every forward step of a new design passes through (window.ChipInStage) -->
-<script src="../i1-intake.js?v=ik2"></script><!-- INTAKE HOOK: the stage between steps and the scripted questions with no backend, #/new/ask (window.ChipInIntake) -->
+<script src="../i1-intake.js?v=ik3"></script><!-- INTAKE HOOK: the stage between steps and the scripted questions with no backend, #/new/ask (window.ChipInIntake) -->
 <script src="../i1-sources.js?v=1c"></script><!-- SOURCES HOOK: the Sources tab as one list of evidence links (window.ChipInSources) -->
 <script type="module">
 "use strict";
@@ -1192,9 +1192,12 @@ function parseBrief(text) {
   const grade = /grad(?:e|es|ing)\b|severity|agreement with/i.test(s) || has("expert_agreement");
   const cont = has("false_alarms_per_hour") || /alarm|continuous|incubator|seizure|apno|bradycard|monitor/i.test(s);
   const screen = (has("specificity") && !has("false_alarms_per_hour")) || /screen|spot[- ]check|one-off|atrial fibrillation|\ba-?fib\b/i.test(s);
-  out.task = grade && cont ? "monitor_grade" : grade ? "grading" : (has("specificity") && !has("false_alarms_per_hour")) ? "screening" : cont ? "continuous" : screen ? "screening" : "";
+  // a device worn over time monitors; screening only for a single spot check
+  out.task = grade && cont ? "monitor_grade" : grade ? "grading" : SPOT_RE.test(s) ? "screening" : cont || WORN_RE.test(s) ? "continuous" : screen ? "screening" : "";
   return out;
 }
+const WORN_RE = /\bpatch\b|\bband\b|wristband|\bworn\b|day and night|continuous|monitor|overnight|24\/7|around the clock/i;
+const SPOT_RE = /spot[- ]check|one-off|single (?:reading|recording|measurement|test|check)|one-time|in (?:the )?clinic visit/i;
 // which demo case a set of fields matches (custom if none)
 function caseFor(f, brief) {
   const sig = (f.signal || "").toLowerCase(), det = (f.detect || "").toLowerCase(), all = (brief + " " + f.device + " " + f.signal + " " + f.detect).toLowerCase();
@@ -1841,7 +1844,8 @@ function specLines(s) {
   const p = PLACES[s.place] || PLACES.ward, b = flowBudgets(s), k = s.cons, tk = [...taskSet(s.task)].map(x => ({ continuous: "continuous event monitoring", screening: "one-off screening", grading: "grading" }[x]));
   const tg = s.targets.map(t => `${MET[t.metric].short || MET[t.metric].name} ${fmtTgtIn(t, p)}${t.metric === s.primary ? " (on the chart)" : ""}`).join("; ");
   const ch = k.findBest ? (b.length > 1 ? `Best spots found for you, comparing ${andList(b.map(x => x.label.toLowerCase()))}` : (!CASES[s.case] && !s.chans && loneSensor(s.parsed && s.parsed.sigs) ? `One ${s.parsed.sigs[0].name} sensor; channel budgets not modelled for it` : `${b[0].label}, the only budget`)) : (b.find(x => x.ch === k.channels) || b[0]).label;
-  const data = s.data === "own" ? `Own recordings${s.files.length ? `, ${s.files.length} file${s.files.length === 1 ? "" : "s"}` : ", none attached yet"}` : s.data === "public" ? (s.ds ? `Public: ${DSF[s.ds].name}` : "Public: no matching set picked") : "Synthetic data, simulated from a small stated model";
+  // the server reads no uploads yet and lists no datasets, so the row says when a run falls back to synthetic data
+  const data = s.data === "own" ? (s.files.length ? `Own recordings, ${s.files.length} file${s.files.length === 1 ? "" : "s"}: the server cannot read uploads yet, this run will use synthetic data` : "Own recordings: none attached, this run will use synthetic data") : s.data === "public" ? (s.ds ? `Public: ${DSF[s.ds].name}; will use synthetic data unless the dataset is set up on the server` : "Public: no matching set picked, this run will use synthetic data") : "Synthetic data, simulated from a small stated model";
   return [
     { k: "Device", v: `${s.device || "Device not given"}; ${s.signal || "signal not given"}. Detects ${s.detect ? s.detect.charAt(0).toLowerCase() + s.detect.slice(1) : "(not given)"}; ${tk.length ? andList(tk) : "task type not given"}.`, go: 1 },
     { k: "Who and where", v: `${s.group ? GROUPS[s.group].n : "Patient group not given"}; ${p.n.toLowerCase()}, ${p.r}. ${screenOnly(s) ? "One-off screening: judged by specificity, not by false alarms over time." : `False alarms counted per ${p.per}.`}`, go: 2 },

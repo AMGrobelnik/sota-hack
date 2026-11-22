@@ -85,6 +85,12 @@
       apply: function (s, ctx, v, text) {
         var g = v ? v.split("|")[0] : ctx.parseGroup(text || ""), p = v ? v.split("|")[1] : ctx.parsePlace(text || "");
         if (!g && !p) return false;
+        // the answer overrides the brief's guess: worn over time monitors, a single spot check screens
+        var words = v ? (this.opts().filter(function (o) { return o[1] === v; })[0] || [""])[0] : String(text || "");
+        var spot = /spot[- ]check|one-off|single (?:reading|recording|measurement|test|check)|one-time/i.test(words);
+        var worn = /\bpatch\b|\bband\b|\bworn\b|day and night|continuous|monitor|overnight|24\/7|around the clock/i.test(words);
+        if (spot && s.task !== "screening") { s.task = "screening"; s.touched.task = true; }
+        else if (worn && !spot && (s.task === "screening" || !s.task)) { s.task = "continuous"; s.touched.task = true; }
         if (g) { s.group = g; s.touched.group = true; }
         if (p) { s.place = p; s.touched.place = true; s.targets.forEach(function (t) { if (t.metric === "false_alarms_per_hour" && t.src === "default") t.value = ctx.places[p].fa; }); }
         return true;
