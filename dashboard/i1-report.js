@@ -150,7 +150,7 @@
   function limits() {
     if (!get) return;
     var g = get(); css();
-    var bg = g.openModal('<h3>Assumptions and limits</h3>' + factsHTML(facts(g.run, g.v, g.P)) +
+    var bg = g.openModal('<h3>Assumptions and limits</h3>' + factsHTML(facts(g.run, g.v, g.P)) + (g.P.srcMoved ? g.P.srcMoved(g.run) : "") /* SOURCES HOOK: the notes moved from the Sources tab */ +
       '<div class="rp-acts"><button class="btn s" data-rp-report>Design report</button><button class="btn p" data-close>Close</button></div>',
       function (e) { if (e.target.closest("[data-rp-report]")) { g.closeModal(); report(); } });
     bg.querySelector(".modal").classList.add("rp-m");

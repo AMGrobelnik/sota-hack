@@ -741,7 +741,7 @@ select.gfin{padding:0 10px}
 <script src="../live.js"></script>
 <script src="../i1-messages.js"></script><!-- MESSAGES HOOK: messages and levels of summaries for live runs (window.ChipInMessages) -->
 <script src="../i1-connect.js?v=1"></script><!-- CONNECT HOOK: #backend=...&token=... link stores a local backend for this browser, before i1-live.js reads it -->
-<script src="../i1-live.js?v=pb1"></script>
+<script src="../i1-live.js?v=pb2"></script>
 <!-- PLAYBACK HOOK: one clock and one playback bar for example and recorded runs, in ../i1-playback.js -->
 <script src="../i1-playback.js?v=tc2"></script>
 <!-- CHIPPY HOOK: the helper panel (corner button, side panel, example prompts, page actions) lives in ../i1-chippy.js -->
@@ -751,12 +751,13 @@ select.gfin{padding:0 10px}
 <script src="../i1-search.js"></script><!-- SEARCH HOOK: the five search steps between Run and the run view, replayed on examples (window.ChipInSearch) --><!-- QUESTIONS HOOK: follow-up questions from a connected backend, one extra step before the spec card (window.ChipInQuestions) -->
 <script src="../i1-summary.js"></script><!-- SUMMARY HOOK: the result page's summary card, trade-off sentence and the chart's default view (window.ChipInSummary) -->
 <script src="../i1-whysize.js"></script><!-- WHY SIZE HOOK: the Why this size panel under the chart: cost along the curve, battery, what changes, to check (window.ChipInWhySize) -->
-<script src="../i1-regulation.js"></script><!-- REGULATION HOOK: the Regulation panel beside Why this size (window.ChipInRegulation) -->
-<script src="../i1-report.js"></script><!-- REPORT HOOK: Assumptions and limits link, one-page design report, compare two designs (window.ChipInReport) -->
+<script src="../i1-regulation.js?v=2"></script><!-- REGULATION HOOK: the Regulation panel beside Why this size (window.ChipInRegulation) -->
+<script src="../i1-report.js?v=2"></script><!-- REPORT HOOK: Assumptions and limits link, one-page design report, compare two designs (window.ChipInReport) -->
 <script src="../i1-sizecost.js"></script><!-- SIZE COST HOOK: unit cost against chip size, stepped, at the top of Why this size (window.ChipInSizeCost) -->
 <script src="../i1-colour.js"></script><!-- COLOUR HOOK: pass, fail, estimated and chosen colours in one place -->
 <script src="../i1-stage.js"></script><!-- STAGE HOOK: the loading stage every forward step of a new design passes through (window.ChipInStage) -->
 <script src="../i1-intake.js"></script><!-- INTAKE HOOK: the stage between steps and the scripted questions with no backend, #/new/ask (window.ChipInIntake) -->
+<script src="../i1-sources.js?v=1"></script><!-- SOURCES HOOK: the Sources tab as one list of evidence links (window.ChipInSources) -->
 <script type="module">
 "use strict";
 /* =====================================================================
@@ -2370,7 +2371,7 @@ function updOverview(run) {
 const SUM = () => window.ChipInSummary && window.ChipInModels ? window.ChipInSummary : null;
 let SUMP = null;
 const sumP = () => SUMP || (SUMP = { metricOf, targetState, frontier, MET, fmt, fmtVal, fmtTarget, esc, caseOf, budgetLabel, isSim, isMea, mFile, panelKind, AF_DESIGN, MEASURED, afFinal, afScopeWord, about, sizeTip });
-const rpP = () => Object.assign({}, sumP(), { scopeText, noFileRefs, selDesign, afSize, badgeText, afFile }); /* REPORT HOOK: helpers for ../i1-report.js */
+const rpP = () => Object.assign({}, sumP(), { scopeText, noFileRefs, selDesign, afSize, badgeText, afFile, srcMoved: sourcesMovedHTML }); /* REPORT HOOK: helpers for ../i1-report.js; srcMoved: SOURCES HOOK */
 // target editing on the overview: value, comparison, which one the chart plots, remove
 function editTarget(run, anchor, i) {
   const t = run.targets[i]; if (!t) return;
@@ -2963,40 +2964,39 @@ const noFileRefs = t => String(t || "").replace(/\s*\(([^()]*)\)/g, (m, inner) =
   return keep.length === inner.split(/[;,]\s+/).length ? m : keep.length ? ` (${keep.join(", ")})` : "";
 });
 const sentences = t => String(t || "").split(/(?<=\.)\s+(?=[A-Z])/).filter(Boolean);
-function sourcesHTML(run) {
-  const c = caseOf(run), file = run.case === "neonatal-eeg" && MEASURED.eeg, F = afFile(run) && MEASURED.af;
-  const afDs = F && F.dataset ? [Object.assign({}, F.dataset, { subjects: [Number.isFinite(F.dataset.recordings) && `${fmt(F.dataset.recordings)} recordings`, Number.isFinite(F.dataset.test_recordings) && `${fmt(F.dataset.test_recordings)} held out for testing${Number.isFinite(F.dataset.test_positive) ? `, ${fmt(F.dataset.test_positive)} of them with AF` : ""}`].filter(Boolean).join("; ") })] : null;
-  const dsl = afDs || (file && Array.isArray(file.datasets) ? file.datasets : (run.case === "custom" ? [] : CASES[run.case].datasets.map(k => DS[k])));
-  const split = noFileRefs(F && F.split ? F.split : file && file.split ? file.split : run.case === "custom" ? "Split by patient: 12 simulated patients are held out; no design trains on them." : CASES[run.case].split);
-  const sk = split.match(/split by (\w+)/i), splitShort = split.length <= 120 ? split : sk ? `Split by ${sk[1]}; the full split is below.` : "The split is below.";
-  const sizeLine = x => [x.subjects ? (typeof x.subjects === "number" ? `${x.subjects} ${c.whoP}` : x.subjects) : ""].filter(Boolean).join("");
-  const dsH = dsl.length ? dsl.map(x => `<div class="src"><div class="sn">${linkOr(x.url, x.name)}<span class="mk no">${licHTML(x.licence || "", x.licence_url)}</span></div>${sizeLine(x) ? `<div class="sw2">${esc(sizeLine(x))}</div>` : ""}<p class="sk">${linkUrls(x.credit || "")}${x.credit_url ? ` ${extLink(x.credit_url, x.credit_url.replace(/^https:\/\//, ""))}` : ""}</p></div>`).join("") : `<p class="sk">No dataset: this run is simulated from the fields of your brief.</p>`;
+// SOURCES HOOK: the tab is one list of the run's sources (../i1-sources.js); the notes it used to carry
+// (how the numbers are made, how sizes are estimated, the run's notes in full) are sections of Assumptions and limits
+function sourcesHTML(run, bare) {
+  const F = afFile(run) ? MEASURED.af : null, file = run.case === "neonatal-eeg" && MEASURED.eeg ? MEASURED.eeg : null;
+  const o = { run, bare, ctx: panelCtx(run, viewAt(run)), af: F, eeg: file, ds: run.case === "af" && !F ? [DS.cinc17] : [] };
+  return window.ChipInSources ? window.ChipInSources.html(o, () => { if ($("#body .srcpage")) renderSourcesTab(run, true); }) : "";
+}
+function sourcesMovedHTML(run) {
+  const file = run.case === "neonatal-eeg" && MEASURED.eeg, F = afFile(run) && MEASURED.af;
   const marks = `Measured values are plain text; ${estSpan("estimates", "An example of the estimate style")} are italic with a dotted underline (hover one for its assumption); simulated runs carry the badge “Simulated run, demo data” and a small <span class="mk sim">simulated</span> mark.`;
   const se = F && F.size_estimate || {};
   const how = F ? [...sentences(noFileRefs(F.basis)).map(esc), `Sizes: only synthesised designs carry a measured gate count; every other size is ${estSpan("estimated", sizeTip())} from the design's configuration.`]
     : run.case === "af" ? sentences(`Measured. One circuit was compiled from a model trained on the training recordings and run on the ${fmt(800)} held-out test recordings. The full-precision model's figures are shown as a reference line, not as a chip. Funnel counts were not recorded in this run, so none are shown.`).map(esc)
     : file ? ["Measured on open data: every figure below the chart comes from the results file for this case."] : simModelLines().map(esc);
   const sizeRows = [["Rule", se.rule], ["Calibration", se.calibration], ["Known error", se.error]].filter(([, v]) => v);
-  const sizes = sizeRows.length ? `<details class="sdet"><summary>How sizes are estimated</summary>${sizeRows.map(([k, v]) => `<p class="sk"><b>${k}.</b> ${esc(noFileRefs(v))}</p>`).join("")}</details>` : "";
   const notes = F ? (Array.isArray(F.notes) ? F.notes : []) : file ? (Array.isArray(file.notes) ? file.notes : file.notes ? [file.notes] : []) : [];
-  const more = split.length > 120 || notes.length ? `<details class="sdet"><summary>The split and the notes in full</summary>${split.length > 120 ? `<p class="sk"><b>Split.</b> ${esc(split)}</p>` : ""}${notes.length ? `<ul>${notes.map(n => `<li>${esc(noFileRefs(n))}</li>`).join("")}</ul>` : ""}</details>` : "";
-  const path = F && F.path.length ? `<h4>Decision path</h4><ol class="sk">${F.path.map(p => `<li>${esc(noFileRefs(p.text))}</li>`).join("")}</ol>` : "";
-  return `<div class="srcp"><h4>Data</h4>${dsH}<p class="sk ssplit">${esc(splitShort)}</p>
-    <h4>How the numbers are made</h4><ul class="sk shl">${[...how, marks].map(x => `<li>${x}</li>`).join("")}</ul>${sizes}
-    ${path}${more}
-    <p class="credit">${esc(creditText())}</p></div>`;
+  return window.ChipInSources ? window.ChipInSources.movedHTML([
+    ["How the numbers are made", `<ul>${[...how, marks].map(x => `<li>${x}</li>`).join("")}</ul>`],
+    ["How sizes are estimated", sizeRows.map(([k, v]) => `<p><b>${k}.</b> ${esc(noFileRefs(v))}</p>`).join("")],
+    ["The run's notes in full", notes.length ? `<ul>${notes.map(n => `<li>${esc(noFileRefs(n))}</li>`).join("")}</ul>` : ""]
+  ]) : "";
 }
 function openSources(run) {
   closeDrawer(); closePop();
   const s = document.createElement("div"); s.className = "dscrim"; s.onclick = closeDrawer; document.body.appendChild(s);
   const d = document.createElement("aside"); d.className = "drawer"; d.setAttribute("role", "dialog"); d.setAttribute("aria-label", "Where this comes from");
-  d.innerHTML = `<div class="dh"><h3>Where this comes from</h3><button aria-label="Close">${I("x", "s16")}</button></div><div class="db">${sourcesHTML(run)}</div>`;
+  d.innerHTML = `<div class="dh"><h3>Where this comes from</h3><button aria-label="Close">${I("x", "s16")}</button></div><div class="db">${sourcesHTML(run, true)}</div>`;
   d.querySelector(".dh button").onclick = closeDrawer;
   document.body.appendChild(d); drawerEl = d; d.querySelector(".dh button").focus();
 }
 function renderSourcesTab(run, force) {
   if (!force) return;
-  $("#body").innerHTML = `<div class="vis srcpage">${tabHead(run, "Where this comes from", "")}${sourcesHTML(run)}</div>`;
+  $("#body").innerHTML = `<div class="vis srcpage">${sourcesHTML(run)}</div>`;
 }
 
 /* ---------------- 11. CONFIGURE ---------------- */

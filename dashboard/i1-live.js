@@ -1104,6 +1104,7 @@
     ];
   }
   function sourcesHTML(M) {
+    if (window.ChipInSources) return window.ChipInSources.liveHTML(M); /* SOURCES HOOK: the data the run's record names, as a list (../i1-sources.js) */
     var ev = M.x.evidence, evRows = "";
     if (ev) Object.keys(ev).forEach(function (k) { if (["seq", "ts", "run_id", "type"].indexOf(k) < 0 && typeof ev[k] === "string") evRows += '<div class="src"><div class="sn">' + esc(cap(k.replace(/_/g, " "))) + '</div><div class="sk lv-md">' + md(clip(ev[k], 3000)) + "</div></div>"; });
     var notes = (M.r.notes || []).map(function (n) { return "<li>" + esc(n) + "</li>"; }).join("");

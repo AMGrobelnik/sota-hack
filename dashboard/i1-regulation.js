@@ -185,5 +185,6 @@
     el.innerHTML = '<section class="rg" aria-label="Regulation">' + innerHTML(B) + "</section>";
     el.querySelectorAll(".rg-e").forEach(function (x, i) { if (open[i]) x.open = true; });
   }
-  window.ChipInRegulation = { tick: tick };
+  // sources(): every entry with its cited sources, for the Sources tab (../i1-sources.js)
+  window.ChipInRegulation = { tick: tick, sources: function () { return BATTERY.concat(CHIP); } };
 })();
