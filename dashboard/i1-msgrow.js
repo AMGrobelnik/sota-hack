@@ -107,7 +107,7 @@
     if (s && s.text) {
       text = bare(H.sumText(S, n), w, s);
       if (isModel(s)) mark = '<span class="cm-mr-ai" title="Summary written by a model">' + ico("spark") + '<span class="cm-vh">Model summary</span></span>';
-      else if (tool) cls = " cm-mr-rule";
+      else if (tool) { cls = " cm-mr-rule"; if (r.name === "Bash" && kind === "tool") text = stripCd(text); }
       else if (kind !== "msg" && kind !== "error") { /* your own message, a file, a chosen chip: the line is the event itself */ }
       else if (s.source === "fallback") tag = '<span class="cm-mr-tag" title="The model gave no answer for this message, so this is its own first line">first line</span>';
       else tag = '<span class="cm-mr-tag" title="A short message, shown in its own words; no model summary was needed">as written</span>';
