@@ -16,6 +16,7 @@ Site: <https://chipin.space>
 | `backend/`  | runs the agents, records runs, serves the UI |
 | `chiplab/`  | the chip lab: model in, verified chip out    |
 | `m3/`       | lab speed, install, proof and layout checks  |
+| `experiments/` | baseline comparisons on open data         |
 | `context/`  | the team's working notes                     |
 | `.github/`  | lab tests and the Tiny Tapeout build         |
 
