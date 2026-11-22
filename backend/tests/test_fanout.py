@@ -314,9 +314,15 @@ async def test_a_subagent_cannot_start_subagents_or_mark_stages(config: BackendC
         _script(
             './subagent start propose "$ ../../subagent list"',
             './subagent start propose "$ ./progress stage propose started"',
+            "./subagent start compile '$ cd ../.. && ./progress metric gates 5 gates --chip lab-x "
+            "&& ./progress artifact brief.md; ./progress stage compile started; echo exit=$?'",
             "./subagent wait --all",
         ),
     )
+    lab = _of(events, "metric", chip="lab-x")
+    assert [(e.get("agent"), e["value"]) for e in lab] == [("a3", 5)], "a call from its cwd is still its own"
+    assert "exit=2" in _of(events, "subagent.finished", id="a3")[0]["result"]
+    assert not _of(events, "stage"), "a subagent in the orchestrator's folder cannot mark its stages"
     finished = {e["id"]: e for e in _of(events, "subagent.finished")}
     assert finished["a1"]["state"] == "failed" and "exit status 1" in finished["a1"]["error"]
     assert "only the orchestrator" in finished["a1"]["result"]

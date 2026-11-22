@@ -41,7 +41,7 @@ from loguru import logger
 from chipin_backend.agents.types import AgentResult, AgentSpec, utc_now
 from chipin_backend.api.config import ApiAgent, FanoutConfig
 from chipin_backend.api.events import STAGES, EventLog
-from chipin_backend.api.progress import ProgressTailer, _interpreter, write_helper
+from chipin_backend.api.progress import PROGRESS_FILE, ProgressTailer, _interpreter, write_helper
 from chipin_backend.api.translate import Translator, clip
 from chipin_backend.compute.factory import runner_for
 from chipin_backend.config import BackendConfig, Effort, RunMode
@@ -626,7 +626,13 @@ class Fanout:
     # ---- setup ----
 
     def install(self) -> None:
-        """Write ``./subagent`` into the orchestrator's folder and an empty state file."""
+        """Write ``./subagent`` into the orchestrator's folder, its ``./progress`` anew, and the state file.
+
+        The orchestrator's ``./progress`` passes a subagent's call to the
+        subagent's own helper: a lab tool a subagent runs from the
+        orchestrator's folder finds that helper in its working folder.
+        """
+        write_helper(self.run.workspace, self.run.path / PROGRESS_FILE, orchestrator=True)
         write_subagent_helper(
             self.run.workspace, self.run.path, wait_s=self.plan.wait_timeout_s, agents=tuple(self.backends)
         )

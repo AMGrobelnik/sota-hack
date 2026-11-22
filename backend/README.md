@@ -28,9 +28,10 @@ Built and proven by a real run on a Mac:
 - Fan-out stage batches: one real Lite run (a Claude orchestrator, three
   Claude subagents per batch, chip lab on) ran all five batches with the
   three subagents of each running at once, merged each batch and ended
-  with a verified chip. Subagents on small OpenRouter models started and
-  ran in parallel too, but `openai/gpt-oss-20b` got stuck on the tools
-  (see "Fan-out").
+  with a verified chip. Two more runs put the subagents on OpenRouter for
+  the propose and compile batches: on `deepseek/deepseek-v4-flash-0731`
+  they ran in parallel and produced the chosen chip; on
+  `openai/gpt-oss-20b` they ran in parallel but got stuck on the tools.
 
 Built and tested, dry run only:
 
@@ -341,7 +342,11 @@ instructions (`api/subagent.md`, plus the chip-lab paragraph when the lab
 is on) and its brief in `brief.md`; its last message is saved there as
 `subagent-result.md`. Its raw events and progress lines are under
 `subagents/<id>/` in the run folder. A subagent has no `./subagent` and
-the helper refuses to run inside one.
+the helper refuses to run inside one. A subagent may still work from the
+orchestrator's folder, where the lab tools find the orchestrator's
+`./progress`; with fan-out on, that helper passes any call made from a
+subagent's environment to the subagent's own helper, so the lines carry
+the subagent's id and it cannot mark the orchestrator's stages.
 
 The instructions. With fan-out on, the orchestrator's standing
 instructions get `api/orchestrator.md`: it is the orchestrator; spec and

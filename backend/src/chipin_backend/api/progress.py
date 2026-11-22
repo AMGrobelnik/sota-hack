@@ -135,12 +135,30 @@ if cmd in ("stage", "chosen"):
     sys.exit(2)
 """
 _DISPATCH = 'line = {"ts": datetime.now(timezone.utc).isoformat(), "type": cmd}\n'
+#: Added to a fan-out orchestrator's helper: a subagent that calls it (a lab tool run from the
+#: orchestrator's folder finds it in its working folder) is passed to the subagent's own helper,
+#: so its lines carry its id and it cannot mark the orchestrator's stages.
+_REDIRECT = """\
+import os
+_sub = os.environ.get("CHIPIN_SUBAGENT_ID", "")
+if _sub:
+    _own = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agents", _sub, "progress")
+    if _sub[:1] == "a" and _sub[1:].isdigit() and os.path.isfile(_own):
+        os.execv(_own, [_own] + sys.argv[1:])
+    sys.stderr.write("progress: a subagent reports through its own ./progress\\n")
+    sys.exit(2)
+"""
+_ARGS = "a = sys.argv[1:]\n"
 
 
-def write_helper(workspace: Path, progress_file: Path, *, subagent: bool = False) -> Path:
+def write_helper(
+    workspace: Path, progress_file: Path, *, subagent: bool = False, orchestrator: bool = False
+) -> Path:
     """Write the executable ``progress`` helper into ``workspace``; returns its path.
 
     ``subagent``: the helper refuses ``stage`` and ``chosen`` (exit 2).
+    ``orchestrator`` (fan-out on): a call from a subagent's environment goes to
+    that subagent's own helper.
     """
     source = _HELPER.format(
         out=str(progress_file),
@@ -151,6 +169,8 @@ def write_helper(workspace: Path, progress_file: Path, *, subagent: bool = False
     )
     if subagent:
         source = source.replace(_DISPATCH, _SUBAGENT_REFUSAL + _DISPATCH, 1)
+    if orchestrator:
+        source = source.replace(_ARGS, _REDIRECT + _ARGS, 1)
     helper = workspace / HELPER_NAME
     helper.write_text(f"#!{_interpreter()}\n{source}", encoding="utf-8")
     helper.chmod(helper.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
