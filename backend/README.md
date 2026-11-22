@@ -6,8 +6,8 @@ branch; this folder holds the backend only.
 
 The code is adapted from AI Inventor, an earlier product by one of the team
 (Apache-2.0, see `LICENSE` and `NOTICE`). Only its agent-running layer was
-taken. The ChipIn tools come later: proposing designs, fine-tuning many
-small models at once on a GPU, compiling to logic gates and checking the chip.
+taken; the ChipIn parts (the chip-lab skill, the training Python, fan-out
+and run evidence) were written here.
 
 ## Status
 
@@ -63,14 +63,20 @@ Every part has tests: `pytest` runs them all with no network and no keys;
 From `backend/`:
 
 ```bash
-uv sync --extra dev                 # add --extra openhands for the OpenRouter agent
-source .venv/bin/activate
-cp .env.example .env                # then fill in the values you need
-python -m chipin_backend run --backend stub --prompt "hello"     # no model
-python -m chipin_backend run --config config/example.yaml \
-    --prompt-file examples/seizure_eeg_prompt.md                   # real agent
-pytest && ruff check . && ruff format --check .
+uv sync --extra dev        # add --extra openhands for the openrouter agent
+cp .env.example .env       # then fill in the values you need
+uv run chipin-backend run --backend stub --prompt "hello"     # no model
+uv run chipin-backend run --config config/example.yaml \
+    --prompt-file examples/seizure_eeg_prompt.md              # real agent
+uv run pytest && uv run ruff check . && uv run ruff format --check .
 ```
+
+The other examples here write `chipin-backend` for short: run them from
+`backend/` as `uv run chipin-backend ...`, or activate `.venv` first. The
+openrouter agent needs `uv sync --extra dev --extra openhands` (plain
+`--extra openhands` drops the test tools) and `tmux` on `PATH`.
+`.env.example` lists the common names; add `CHIPIN_TRAIN_PYTHON`,
+`TINKER_API_KEY` or `CALLOSUM_API_KEY` yourself if you use them.
 
 `uv.lock` pins every dependency. For `claude_cli`, install the `claude` CLI
 (version 2.1.322 or newer) and log in once with `claude`.
@@ -98,12 +104,15 @@ What one `run` does:
 Other commands:
 
 ```bash
-python -m chipin_backend ask --model cheap "One EEG feature for seizures?"
-python -m chipin_backend run --no-summary --backend stub --prompt "hi"
-python -m chipin_backend run --mode on_demand --tier gpu_basic --prompt "hi"
-python -m chipin_backend config                    # the resolved config
+chipin-backend ask --model cheap "One EEG feature for seizures?"  # paid
+chipin-backend run --no-summary --backend stub --prompt "hi"
+chipin-backend run --mode on_demand --tier gpu_basic --prompt "hi"
+chipin-backend config                              # the resolved config
 python -m chipin_backend.compute.runpod check      # pods and prices, read-only
 ```
+
+`ask` needs `OPENROUTER_API_KEY`; `on_demand` and the RunPod check need
+`RUNPOD_API_KEY` (see "RunPod" for what is paid).
 
 `ask` exits 1 when the model returned no text because it hit `--max-tokens`.
 
@@ -122,7 +131,7 @@ chipin-backend serve --agent openrouter   # POST /api/runs accepts "provider" an
 
 | Provider | Key variable | Default model |
 | --- | --- | --- |
-| `openrouter` | `OPENROUTER_API_KEY` | as before |
+| `openrouter` | `OPENROUTER_API_KEY` | `agents.openrouter.model` |
 | `tinker` | `TINKER_API_KEY` | `thinkingmachines/Inkling-2-Mini` |
 | `callosum` | `CALLOSUM_API_KEY` | none |
 
@@ -277,8 +286,8 @@ calls, seconds and cost per level. `--no-model` makes no calls.
 agent run on this Mac and follow it live.
 
 ```bash
-python -m chipin_backend serve --agent stub --site <site folder>
-python -m chipin_backend serve           # the Claude agent, port 8797
+chipin-backend serve --agent stub --site <site folder>
+chipin-backend serve                     # the Claude agent, port 8797
 ```
 
 - It binds 127.0.0.1 only, on port 8797 (`--port` or
@@ -318,9 +327,11 @@ python -m chipin_backend serve           # the Claude agent, port 8797
   agent that cannot run is a 400 with that reason; no run is started.
 - A follow-up uses the run's own agent when its request named one, else the
   `--agent` given to `serve`, else the run's recorded agent; a
-  follow-up that cannot start leaves a finished run finished, with its own error event.
-- `--stub-step <seconds>` slows the stub's steps (default 0.4 s, about
-  10 s a run) so a demo can be followed, messaged and stopped.
+  follow-up that cannot start leaves a finished run finished, with its
+  own error event.
+- `--stub-step <seconds>` slows the stub's steps (default 0.4 s: a few
+  seconds a run, about 20 s with fan-out) so a demo can be followed,
+  messaged and stopped.
 
 ### Demo: a real run from the dashboard
 
@@ -332,7 +343,7 @@ uv sync --extra dev
 # optional, the chip lab and training (paths, not secrets; see "Chip lab")
 export CHIPIN_CHIPLAB_BIN=<lab>/.venv/bin CHIPLAB_CONFIG=<lab config.json>
 export CHIPLAB_USER_DIR=<lab tool folder> CHIPIN_TRAIN_PYTHON=<lab>/.venv/bin/python
-.venv/bin/chipin-backend serve --site <site checkout> --env-file <keys file>
+uv run chipin-backend serve --site <site checkout> --env-file <keys file>
 ```
 
 1. It prints `http://127.0.0.1:8797/#token=<token>` (`--port` changes
@@ -341,9 +352,10 @@ export CHIPLAB_USER_DIR=<lab tool folder> CHIPIN_TRAIN_PYTHON=<lab>/.venv/bin/py
    The page keeps the token in this browser, removes it from the address
    bar, and the sidebar reads "Connected to local backend". With the token
    lost, paste the printed link under Configure, Backend, Token, then Test.
-2. Type a brief and press Chip in. Walk the five steps (device, who and
-   where, targets, constraints, data: Simulate means synthetic data), pick
-   Lite on the "Your spec" card and press Run.
+2. Type a brief and press Chip in. Answer the questions (who and where,
+   the targets, battery and cost, and the data, where Synthetic data means
+   simulated recordings), pick Lite under Run size on the "Your spec" card
+   and press Run.
 3. The run opens at `#/live/<run id>/overview`: stages, the agent's log,
    designs on the chart as their records arrive (hollow while the size is
    the agent's estimate, solid once the lab measured it), tiles and pass or
@@ -351,8 +363,9 @@ export CHIPLAB_USER_DIR=<lab tool folder> CHIPIN_TRAIN_PYTHON=<lab>/.venv/bin/py
    and elapsed time. "Chip", "Chat" and "Sources" are among the other
    views. A reload resumes the run from its first event.
 
-The published page (`https://chipin.space/dashboard/...?api=http://127.0.0.1:<port>`)
-is not the demo path. Chrome refuses its calls to a loopback address
+The published page
+(`https://chipin.space/dashboard/...?api=http://127.0.0.1:<port>`) is not
+the demo path. Chrome refuses its calls to a loopback address
 ("Permission was denied for this request to access the loopback address
 space") until the user allows local network access for the site; Safari
 blocks them as mixed content (an https page asking for http). The server
@@ -403,15 +416,15 @@ working folder. With fan-out on, the backend may close a merged stage the
 agent left open (see "Fan-out"); that `done` carries
 `"closed_by": "backend"`. Accuracy-like metrics (accuracy, sensitivity,
 specificity, pass rates) are asked for as a fraction between 0 and 1 with
-no unit; runs recorded before this rule are left as they are. `run.finished` carries the agent's last message as
-`summary` and, when OpenRouter wrote one, the three-bullet run summary as
-`bullets`. `./progress metric <key> <number> [unit] --chip <design_id>`
+no unit; runs recorded before this rule are left as they are.
+`run.finished` carries the agent's last message as `summary` and, when
+OpenRouter wrote one, the three-bullet run summary as `bullets`. `./progress metric <key> <number> [unit] --chip <design_id>`
 (the flag after the number or the unit) adds `chip` to the metric event,
 naming the design the number measures; without it the event is as before.
 A lab `score-events` figure also carries `source` (see "Chip lab").
 `./progress chosen <design_id>` writes a `chosen` event with `chip`, the
-run's chosen chip; a later one replaces an earlier one. Presets map to agent effort: `lite`, `pro`, `max`, `ultra`;
-with fan-out on they also set the subagents per stage batch (see "Fan-out").
+run's chosen chip; a later one replaces an earlier one. Presets map to
+agent effort: `lite`, `pro`, `max`, `ultra`; with fan-out on they also set the subagents per stage batch (see "Fan-out").
 A run cut short ends `stopped`, its summary saying whether the user
 stopped it or the server was shut down.
 
@@ -583,6 +596,7 @@ subagents, or put the subagents on the other harness
 
 ```bash
 chipin-backend run --preset lite --fanout --prompt "..."     # 3 per stage batch
+chipin-backend run --preset lite --fanout --backend stub --prompt "..."  # no model
 chipin-backend run --preset lite --fanout --subagent-agent openrouter \
     --subagent-model openai/gpt-oss-20b --subagent-max-usd 0.2 --prompt "..."
 ```
@@ -615,8 +629,8 @@ writes the batch's `stage.merged` event; it is refused while a subagent of
 that stage is still running, for a stage with no batch, for an id outside
 the batch and for a stage already merged (`--kept none` when nothing is
 worth keeping). Subagents of a stage started after its merge (a retry
-batch) are merged on their own, with a second `stage.merged`. Like `./progress`, the helper only writes a request line
-(`subagents.jsonl`) and reads `subagents.json`; the backend starts each
+batch) are merged on their own, with a second `stage.merged`. Like
+`./progress`, the helper only writes a request line (`subagents.jsonl`) and reads `subagents.json`; the backend starts each
 subagent through the same runner and agent backends as the run's own
 agent, with the same environment allowlist and chip-lab settings, keys
 never written into a folder. A subagent works in `workspace/agents/<id>/`
@@ -858,8 +872,8 @@ exit status 2 with the reason (then nothing is recorded):
 - `variant_of` (optional) names another design's `id` when this record
   is the same model compiled another way (another lab route or option).
   Both records stay; the page can group variants as one model. It must
-  differ from `id` and from `previous_id`. The tailer checks each record again, emits
-  a `design` event (`design`: the record, `revision`: 1 for the first
+  differ from `id` and from `previous_id`. The tailer checks each record
+  again, emits a `design` event (`design`: the record, `revision`: 1 for the first
   report of that design), and keeps the latest per design in
   `runs/<run_id>/designs.json`.
 - `GET /api/runs/{id}/designs` returns
@@ -1087,7 +1101,8 @@ with its alarm smoothing), scoring detections at the event level
 (`score-events`), verify (`simulate`, `prove-equivalence`,
 `rtl-simulate`, `verification-level`) and the chip part of report
 (`layout`, `timing-power`, `tt-package`, `bitstream`, `estimate-cost`,
-and always `chip-report` on the one chosen chip before report is done). It marks the compile and verify stages itself, or passes
+and always `chip-report` on the one chosen chip before report is done).
+It marks the compile and verify stages itself, or passes
 `"progress_stages": true`.
 
 ### The chip-lab skill
@@ -1202,7 +1217,13 @@ logged and never fails the run.
   keys: `no_source`, `value_found_unclear`, `source_found`, `excluded`,
   and a `limits` string. What the check establishes, word for word:
 
-  > A "no source" number means nothing the tools measured in this run has this value: treat it as unsupported until shown otherwise. "Source found" means a machine-produced source in this run holds this value in this unit. It does not establish which design or stage the sentence gives the value to, which of several quantities sharing that unit it means, nor relations between numbers, nor negations, nor the direction of a margin. The check reads only the run folder.
+  > A "no source" number means nothing the tools measured in this run has
+  > this value: treat it as unsupported until shown otherwise. "Source
+  > found" means a machine-produced source in this run holds this value in
+  > this unit. It does not establish which design or stage the sentence
+  > gives the value to, which of several quantities sharing that unit it
+  > means, nor relations between numbers, nor negations, nor the direction
+  > of a margin. The check reads only the run folder.
 
   Sources are `metric` events, the stored weight count of each model
   file, and the numeric fields of files the chip lab wrote. The value
@@ -1260,7 +1281,8 @@ backend/
     log.py                   loguru: stderr plus logs/backend.log
     runs.py                  run folders: run.json, events.jsonl, workspace/
     orchestrate.py           run_agent(spec, config): one run end to end
-    cli.py                   chipin-backend run / ask / serve / config / evidence / export / summarise / skill
+    cli.py                   the chipin-backend commands: run, ask, serve,
+                             config, evidence, export, summarise, skill
     evidence.py              run evidence: number check, weights, timings
     export.py                a recorded run as one scrubbed static file
     chiplab.py               the optional chip lab: agent PATH, settings, skill
