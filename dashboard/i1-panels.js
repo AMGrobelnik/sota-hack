@@ -800,18 +800,30 @@
     return cs && cs.src ? new URL("data/af-baseline.json", cs.src).href : null;
   })();
   var baselineData; // undefined = not fetched, null = unavailable
+  // escapes text and turns each phrase named in links ([{ text, url }]) into a link, once per string, in one pass
+  function linkPhrases(text, links) {
+    var t = esc(text), L = (Array.isArray(links) ? links : []).filter(function (l) { return l && l.text && l.url; });
+    if (!L.length) return t;
+    var seen = {}, re = new RegExp(L.map(function (l) { return esc(l.text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }).sort(function (a, b) { return b.length - a.length; }).join("|"), "gi");
+    return t.replace(re, function (m) {
+      var k = m.toLowerCase(), l = L.filter(function (x) { return esc(x.text).toLowerCase() === k; })[0];
+      if (!l || seen[k]) return m;
+      seen[k] = true;
+      return '<a href="' + esc(l.url) + '" target="_blank" rel="noopener">' + m + "</a>";
+    });
+  }
   function baselineHtml(b) {
     if (!b || !Array.isArray(b.rows)) return "";
     var mk = function (m) { return m === "published" ? '<span class="mk no">published</span>' : MK_MEA; };
     return '<div class="cpn-fact cpn-af"><div class="t">' + esc(b.heading) + "</div>" +
-      '<p class="s">' + esc(b.sub) + "</p>" +
+      '<p class="s">' + linkPhrases(b.sub, b.links) + "</p>" +
       b.rows.map(function (r) {
         return '<div class="cpn-afrow"><div class="t">' + esc(r.title) +
           (r.verdict ? ' <span class="mk no">' + esc(r.verdict) + "</span>" : "") + "</div>" +
           (r.lines || []).map(function (l) { return '<p class="x">' + mk(l.mark) + " " + esc(l.text) + "</p>"; }).join("") +
           (r.caveat ? '<p class="x">' + esc(r.caveat) + "</p>" : "") + "</div>";
       }).join("") +
-      (b.footer ? '<p class="s">' + esc(b.footer) + "</p>" : "") + "</div>";
+      (b.footer ? '<p class="s">' + linkPhrases(b.footer, b.links) + "</p>" : "") + "</div>";
   }
   function openMeasured(facts) {
     facts = Array.isArray(facts) ? facts : [];
@@ -821,6 +833,7 @@
           (f.text ? '<p class="x">' + esc(f.text) + "</p>" : "") +
           (f.scope ? '<p class="s">' + esc(f.scope) + "</p>" : "") +
           (f.source_name ? '<p class="s">' + (f.source_url ? '<a href="' + esc(f.source_url) + '" target="_blank" rel="noopener">' + esc(f.source_name) + "</a>" : esc(f.source_name)) + "</p>" : "") +
+          (f.file_name ? '<p class="s">' + (f.file_url ? '<a href="' + esc(f.file_url) + '" target="_blank" rel="noopener">' + esc(f.file_name) + "</a>" : esc(f.file_name)) + "</p>" : "") +
           "</div>";
       }).join("")
       : '<p class="cpn-empty">No measured facts were handed to this drawer.</p>';

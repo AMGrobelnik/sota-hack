@@ -202,7 +202,7 @@ body.col .main{left:52px}
 .src:last-child{border:0}
 .src .sn{font-size:14px;font-weight:600;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 .src .sw2{font-size:12.5px;color:var(--i600);margin-top:3px}
-.src .sw2 a{color:var(--blue7)}
+.src .sw2 a,.src .sn a,.src .sk a{color:var(--blue7)}
 .src .sk{font-size:12.5px;color:var(--i700);margin-top:6px;line-height:1.5}
 .src ul{margin:6px 0 0;padding-left:18px;font-size:12.5px;color:var(--i700);line-height:1.55}
 .srcp>ul{margin:6px 0 0;padding-left:18px;font-size:12.5px;color:var(--i700);line-height:1.55}
@@ -925,12 +925,19 @@ const fmtVal = (key, v) => v == null || Number.isNaN(v) ? "not measured" : MET[k
 const fmtTarget = t => `${t.op === "<=" ? "at most" : "at least"} ${MET[t.metric].kind === "frac" ? +(t.value * 100).toFixed(2) + "%" : +(t.value * FA.h).toFixed(3) + " " + faWord()}`;
 const tName = k => MET[k].short || MET[k].name;
 
+// links for sources: every source name opens its page in a new tab; nothing is linked unless the data names the address
+const LIC_URL = { "CC BY 4.0": "https://creativecommons.org/licenses/by/4.0/", "Open Data Commons Attribution License v1.0": "https://opendatacommons.org/licenses/by/1-0/" };
+const extLink = (url, text) => `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(text)}</a>`;
+const linkOr = (url, text) => url ? extLink(url, text) : esc(text);
+const licHTML = (lic, url) => linkOr(url || LIC_URL[lic], lic);
+const linkUrls = text => esc(text).replace(/https:\/\/[^\s<>"]*[^\s<>".,;)]/g, u => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
+const GH_BLOB = "https://github.com/AMGrobelnik/sota-hack/blob/";
 // datasets named on screen; links and licences as given in the team's notes
 const DS = {
-  helsinki: { name: "Helsinki neonatal EEG", licence: "CC BY 4.0", url: "https://zenodo.org/records/4940267", credit: "Neonatal EEG recordings with seizures annotated independently by three experts, from Helsinki University Hospital, on Zenodo.", subjects: "79 term babies" },
-  cork: { name: "Cork neonatal EEG, background grades", licence: "CC BY 4.0", url: "https://zenodo.org/record/7477575", credit: "EEG of 53 babies with hypoxic-ischaemic encephalopathy, 169 hours, each hour graded for background severity by two experts, on Zenodo.", subjects: "53 babies" },
+  helsinki: { name: "Helsinki neonatal EEG", licence: "CC BY 4.0", licence_url: LIC_URL["CC BY 4.0"], url: "https://zenodo.org/records/4940267", credit: "Neonatal EEG recordings with seizures annotated independently by three experts, from Helsinki University Hospital, on Zenodo.", subjects: "79 term babies" },
+  cork: { name: "Cork neonatal EEG, background grades", licence: "CC BY 4.0", licence_url: LIC_URL["CC BY 4.0"], url: "https://zenodo.org/record/7477575", credit: "EEG of 53 babies with hypoxic-ischaemic encephalopathy, 169 hours, each hour graded for background severity by two experts, on Zenodo.", subjects: "53 babies" },
   pics: { name: "Preterm Infant Cardio-Respiratory Signals (PhysioNet)", licence: "Open; licence not checked here", url: "https://physionet.org/content/picsdb/", credit: "ECG and respiration from 10 preterm babies with expert bradycardia annotations. The planned physiology source for the radar and thermal signals; not used in this simulated run.", subjects: "10 preterm babies" },
-  cinc17: { name: "PhysioNet/Computing in Cardiology Challenge 2017", licence: "See the PhysioNet page", url: "https://physionet.org/content/challenge-2017/", credit: "Single-lead ECG recordings labelled normal, atrial fibrillation, other rhythm or noisy.", subjects: "5,788 recordings used" }
+  cinc17: { name: "PhysioNet/Computing in Cardiology Challenge 2017", licence: "See the PhysioNet page", licence_url: "https://physionet.org/content/challenge-2017/", url: "https://physionet.org/content/challenge-2017/", credit: "Single-lead ECG recordings labelled normal, atrial fibrillation, other rhythm or noisy.", subjects: "5,788 recordings used" }
 };
 
 // the three demo cases; the simulated ones carry the parameters of the SIMULATION MODEL
@@ -1745,19 +1752,19 @@ const DSF = {
   helsinki: {
     short: "Helsinki neonatal EEG", name: "Helsinki neonatal EEG", sig: "eeg", group: "newborns", grades: false,
     pop: "79 term babies from one hospital's neonatal unit", ch: "EEG; the measured results here use 1 channel (C3-C4), 2, 4 and 18 (the double banana montage)",
-    labels: "Seizures, annotated independently by three experts", lic: "CC BY 4.0", url: "https://doi.org/10.5281/zenodo.4940267", link: "Zenodo 10.5281/zenodo.4940267",
+    labels: "Seizures, annotated independently by three experts", lic: "CC BY 4.0", lic_url: LIC_URL["CC BY 4.0"], url: "https://doi.org/10.5281/zenodo.4940267", link: "Zenodo 10.5281/zenodo.4940267",
     note: "The measured results on this page use all 79 babies, 24 of them held out for testing."
   },
   cork: {
     short: "Cork neonatal EEG", name: "Cork neonatal EEG", sig: "eeg", group: "newborns", grades: true,
     pop: "53 babies with hypoxic-ischaemic encephalopathy (HIE), 169 hours", ch: "EEG; the channel count is not in our notes",
-    labels: "Each hour graded for background severity by two experts", lic: "CC BY 4.0", url: "https://zenodo.org/record/7477575", link: "Zenodo 7477575",
+    labels: "Each hour graded for background severity by two experts", lic: "CC BY 4.0", lic_url: LIC_URL["CC BY 4.0"], url: "https://zenodo.org/record/7477575", link: "Zenodo 7477575",
     note: "Not in this page's measured results yet."
   },
   cinc17: {
     short: "PhysioNet/CinC 2017 ECG", name: "PhysioNet/Computing in Cardiology Challenge 2017", sig: "ecg", group: "", grades: false,
     pop: "5,788 recordings in the team's split; 800 held out for testing, 96 of them with AF", ch: "ECG, single lead",
-    labels: "Normal, atrial fibrillation, other rhythm or noisy", lic: "See the PhysioNet page", url: "https://physionet.org/content/challenge-2017/", link: "physionet.org/content/challenge-2017"
+    labels: "Normal, atrial fibrillation, other rhythm or noisy", lic: "See the PhysioNet page", lic_url: "https://physionet.org/content/challenge-2017/", url: "https://physionet.org/content/challenge-2017/", link: "physionet.org/content/challenge-2017"
   }
 };
 const STEPS = [
@@ -1981,8 +1988,8 @@ function modeNote(s) {
 }
 function dsCardHTML(s, k) {
   const d = DSF[k], f = fitNotes(s, k);
-  return `<article class="gds" aria-label="${esc(d.name)}"><h3>${esc(d.name)}</h3><dl>
-    <dt>Population</dt><dd>${esc(d.pop)}</dd><dt>Channels</dt><dd>${esc(d.ch)}</dd><dt>Labels</dt><dd>${esc(d.labels)}</dd><dt>Licence</dt><dd>${esc(d.lic)}</dd>
+  return `<article class="gds" aria-label="${esc(d.name)}"><h3>${linkOr(d.url, d.name)}</h3><dl>
+    <dt>Population</dt><dd>${esc(d.pop)}</dd><dt>Channels</dt><dd>${esc(d.ch)}</dd><dt>Labels</dt><dd>${esc(d.labels)}</dd><dt>Licence</dt><dd>${licHTML(d.lic, d.lic_url)}</dd>
     <dt>Link</dt><dd><a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.link)}</a></dd></dl>${d.note ? `<p class="gdn">${esc(d.note)}</p>` : ""}
     ${f.warn.map(w => `<p class="gfit">${esc(w)}</p>`).join("")}${f.soft ? `<p class="gdn">${esc(f.soft)}</p>` : ""}</article>`;
 }
@@ -2618,7 +2625,7 @@ function useAF(j) {
   if (ch.verified && Number.isFinite(ch.verified.windows)) AF_DESIGN.verified = { vectors: ch.verified.windows, identical: ch.verified.identical, mismatches: ch.verified.windows - ch.verified.identical, level: "every test window, circuit against its model" };
   Object.assign(AF_BASE, { sensitivity_pooled: pick(B, "sensitivity"), specificity: pick(B, "specificity"), sensitivity_window: num(B.sensitivity_window), specificity_window: num(B.specificity_window) });
   const dset = j.dataset || {};
-  if (typeof dset.licence === "string" && dset.licence) { DSF.cinc17.lic = dset.licence; DS.cinc17.licence = dset.licence; } // the file names the licence
+  if (typeof dset.licence === "string" && dset.licence) { DSF.cinc17.lic = dset.licence; DS.cinc17.licence = dset.licence; DSF.cinc17.lic_url = dset.licence_url || undefined; DS.cinc17.licence_url = dset.licence_url || undefined; } // the file names the licence
   if (Number.isFinite(dset.test_recordings)) Object.assign(AF_DESIGN.counts, { patients: dset.test_recordings, events_total: num(dset.test_positive), negatives_total: Number.isFinite(dset.test_positive) ? dset.test_recordings - dset.test_positive : null });
   const sr = j.search_rate || {};
   if (Number.isFinite(sr.batched_per_min)) AF_SPEED.batched = sr.batched_per_min;
@@ -3173,7 +3180,7 @@ function sourcesHTML(run) {
   const c = caseOf(run), file = run.case === "neonatal-eeg" && MEASURED.eeg, F = afFile(run) && MEASURED.af;
   const afDs = F && F.dataset ? [Object.assign({}, F.dataset, { subjects: [Number.isFinite(F.dataset.recordings) && `${fmt(F.dataset.recordings)} recordings`, Number.isFinite(F.dataset.test_recordings) && `${fmt(F.dataset.test_recordings)} held out for testing${Number.isFinite(F.dataset.test_positive) ? `, ${fmt(F.dataset.test_positive)} of them with AF` : ""}`].filter(Boolean).join("; ") })] : null;
   const dsl = afDs || (file && Array.isArray(file.datasets) ? file.datasets : (run.case === "custom" ? [] : CASES[run.case].datasets.map(k => DS[k])));
-  const dsH = dsl.length ? dsl.map(x => `<div class="src"><div class="sn">${esc(x.name)}<span class="mk no">${esc(x.licence || "")}</span></div><div class="sw2">${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.url.replace(/^https:\/\//, ""))}</a>` : ""}${x.subjects ? ` · ${esc(typeof x.subjects === "number" ? `${x.subjects} ${caseOf(run).whoP}` : x.subjects)}` : ""}</div><p class="sk">${esc(x.credit || "")}</p></div>`).join("") : `<p class="sk">No dataset: this run is simulated from the fields of your brief.</p>`;
+  const dsH = dsl.length ? dsl.map(x => `<div class="src"><div class="sn">${linkOr(x.url, x.name)}<span class="mk no">${licHTML(x.licence || "", x.licence_url)}</span></div><div class="sw2">${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.url.replace(/^https:\/\//, ""))}</a>` : ""}${x.subjects ? ` · ${esc(typeof x.subjects === "number" ? `${x.subjects} ${caseOf(run).whoP}` : x.subjects)}` : ""}</div><p class="sk">${linkUrls(x.credit || "")}${x.credit_url ? ` ${extLink(x.credit_url, x.credit_url.replace(/^https:\/\//, ""))}` : ""}</p></div>`).join("") : `<p class="sk">No dataset: this run is simulated from the fields of your brief.</p>`;
   const se = F && F.size_estimate || {};
   const how = F ? `<p class="sk">${esc(F.basis || "")}</p><p class="sk">Sizes: only synthesised designs carry a measured gate count. Every other size is ${estSpan("estimated", sizeTip())} from the design's configuration. ${[se.rule && `Rule: ${se.rule}`, se.calibration && `Calibration: ${se.calibration}`, se.error && `Known error: ${se.error}`].filter(Boolean).map(esc).join(" ")}</p>
       <p class="sk">The decision path, and where each fact comes from:</p><ol class="sk">${F.path.map(p => `<li>${esc(p.text)}${p.source ? ` <span style="color:#4a5062">(${esc(p.source)})</span>` : ""}</li>`).join("")}</ol>${Array.isArray(F.notes) && F.notes.length ? `<ul>${F.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}`
@@ -3406,7 +3413,7 @@ function afFacts(a) {
     { title: "Search speed", text: `About ${fmt(Math.floor(sr.batched_per_min))} candidates a minute trained in one batch of ${sr.batch}, against about ${sr.single_per_min} a minute one at a time.`, scope: `The AF run's candidate search${sr.device ? `, on ${sr.device}` : ""}.` }
   ];
   if (a && a.funnel) out.push({ title: `${fmt(a.funnel.trained)} candidates trained, ${fmt(a.funnel.under_cap)} under the size cap`, text: `${a.funnel.synthesised} synthesised, ${a.funnel.verified} verified bit for bit.`, scope: "The AF run's funnel." });
-  return out;
+  return out.map(f => ({ ...f, file_name: "figures: dashboard/data/af-candidates.json (gh-pages)", file_url: `${GH_BLOB}gh-pages/dashboard/data/af-candidates.json` }));
 }
 function eegFacts(j) {
   if (!j || !Array.isArray(j.designs)) return [];
@@ -3418,7 +3425,7 @@ function eegFacts(j) {
   if (best) out.push({ title: `Neonatal EEG: at best ${best.counts.events_caught} of ${best.counts.events_total} held-out seizures caught`, text: `Design ${best.id}: ${fmt(best.gates)} gates, ${best.channels} channel${best.channels === 1 ? "" : "s"}, ${best.metrics.false_alarms_per_hour} false alarms per hour, all held-out babies pooled.`, scope: j.split || "", ...src });
   if (best) out.push({ title: `Neonatal EEG: best worst-baby sensitivity ${pc1(worst)}`, text: worst === 0 ? "Every design misses every seizure in at least one held-out baby." : `The best design on the worst held-out baby.`, scope: "Held-out babies with enough seizures to judge, by the results file's rule.", ...src });
   if (ver.length) out.push({ title: `Neonatal EEG: ${ver.length} designs checked bit for bit`, text: `${proved.length} of them were also formally proved equal to an independent model of the design.`, scope: "Designs the results file marks as verified." });
-  return out;
+  return out.map(f => ({ ...f, file_name: "figures: dashboard/data/neonatal-eeg.json (gh-pages)", file_url: `${GH_BLOB}gh-pages/dashboard/data/neonatal-eeg.json` }));
 }
 
 // ----- subagent batches -----
