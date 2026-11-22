@@ -135,8 +135,10 @@
     ".rv-side{display:flex;flex-direction:column;gap:14px;min-width:0}",
     ".rv-pan{padding:12px 14px}.rv-pan h2{font-size:13.5px;font-weight:650;margin:0 0 6px}",
     ".rv-pan .sub{font-size:12px;color:var(--i600);margin:0 0 8px;line-height:1.45}",
-    ".rv-chip{font-family:var(--mono);font-size:11.5px;color:var(--i800)}",
-    "#rvTiles .rv-chip{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+    ".rv-chip{font-family:Inter,system-ui,sans-serif;font-size:14px;font-weight:600;color:var(--i900)}",
+    "#rvTiles .rv-chip{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;line-height:1.3}",
+    ".rv-cid{display:block;font-family:var(--mono);font-size:10.5px;font-weight:400;color:var(--i550,#7a8194);letter-spacing:0;white-space:nowrap}",
+    "#rvH1 .rv-cid{display:inline-block;font-size:11px;vertical-align:middle;margin-left:4px}",
     ".rv-sab .row{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--hair);font-size:12px;color:var(--i700)}",
     ".rv-sab .row:first-of-type{border-top:0}.rv-sab .row b{font-weight:600;min-width:72px}",
     ".rv-sab .dots{display:flex;gap:4px;flex-wrap:wrap}",
@@ -785,11 +787,24 @@
       p.ver = !!(d.verified && typeof d.verified === "object");
       return p;
     });
+    // a run that wrote no design records (older backends): the chips the lab measured, from their metric events
+    var fromLab = false;
+    if (!list.length) {
+      list = Object.keys(f.chips).filter(function (id) { return num(f.chips[id].gates) > 0; }).map(function (id) {
+        var p = { id: id, label: "", gates: f.chips[id].gates, est: null, m: {}, basis: "", d: null, lab: true };
+        for (var k in f.chips[id]) if (num(f.chips[id][k]) != null && /accuracy|sensitivity|specificity|fa_per_h/.test(k) && !/bit_?exact|mismatch/.test(k)) p.m[k] = f.chips[id][k];
+        return p;
+      });
+      fromLab = list.length > 0;
+    }
     var chosen = null; list.forEach(function (p) { if (p.id === st.chosen) chosen = p; });
-    if (st.chosen && !chosen) chosen = { id: st.chosen, m: {}, gates: null, est: null };
+    if (st.chosen && !chosen) { var cm = f.chips[st.chosen] || {}; chosen = { id: st.chosen, m: {}, gates: num(cm.gates) > 0 ? cm.gates : null, est: null }; }
     var spec = f.spec;
-    return { n: n, st: st, f: f, t: t, pts: list, chosen: chosen, ended: !!st.finished, spec: spec, T: F.targetsOf(spec) };
+    return { n: n, st: st, f: f, t: t, pts: list, fromLab: fromLab, chosen: chosen, ended: !!st.finished, spec: spec, T: F.targetsOf(spec) };
   }
+  // a chip named in words, with its id small after it (../i1-fold.js chipName)
+  var chipOpts = function () { return { files: V && V.rec ? V.rec.files : null }; };
+  var nameOf = function (M, id) { return F.chipName(M.f, id, chipOpts()).name; };
   var NOT_Y = { gates: 1, ge: 1, transistors: 1, area_um2: 1, depth: 1, tt_tiles: 1, luts_ice40: 1, luts_xc7: 1, round: 1, candidates: 1, vectors_checked: 1, mismatches: 1, cost_eur: 1, verification_level: 1, timing_slack_ns: 1 };
   var PREF_Y = ["sensitivity", "test_accuracy", "accuracy", "specificity", "fa_per_hour", "synthetic_sensitivity_pct", "train_accuracy"];
   var LABEL = { sensitivity: "Sensitivity", specificity: "Specificity", fa_per_hour: "False alarms per hour", test_accuracy: "Test accuracy", train_accuracy: "Train accuracy", accuracy: "Accuracy", power_uw_at_rate: "Power (µW)" };
@@ -843,28 +858,28 @@
     var sel = V.sel && M.f.designs[V.sel] ? V.sel : null;
     once("tab", [V.view, M.n, sel || "", V.rec.final ? 1 : 0].join("|"), function () {
       var note = V.rec.line && V.rec.line.note ? '<p class="rv-note" role="note">' + esc(V.rec.line.note) + "</p>" : "";
-      el.innerHTML = note + F.chipHTML({ f: M.f, spec: M.spec, T: M.T, id: M.st.chosen || (M.pts.length ? M.pts[M.pts.length - 1].id : null), chosenId: M.st.chosen, running: !M.ended });
+      el.innerHTML = note + F.chipHTML({ f: M.f, spec: M.spec, T: M.T, id: M.st.chosen || (M.pts.length ? M.pts[M.pts.length - 1].id : null), chosenId: M.st.chosen, running: !M.ended, files: V.rec.files });
     });
     // DESIGNS HOOK: the designs tried so far, drawn small above the chip's table (../i1-designs.js)
     if (V.view === "chip" && window.ChipInDesigns) window.ChipInDesigns.paintRun($("#rvDz"), { key: V.rec.key, n: M.n, f: M.f, chosen: M.st.chosen, ended: M.ended, T: M.T, spec: M.spec, files: V.rec.files, arts: M.st.artifacts.map(function (i) { return V.rec.events[i]; }) });
   }
   function paintOverview(M) {
     var rec = V.rec, f = rec.facts || {}, st = M.st, ck = V.clock;
-    once("head", [st.chosen, M.ended, st.finished && st.finished.status, M.pts.length, M.n > 0, ck.live, heldText(M)].join("|"), function () {
+    once("head", [st.chosen, M.chosen && nameOf(M, M.chosen.id), M.ended, st.finished && st.finished.status, M.pts.length, M.n > 0, ck.live, heldText(M)].join("|"), function () {
       var k0 = ['<span class="mk mea">recorded</span>', "<span>" + esc(dateTxt(f.started_at)) + "</span>"];
       if (f.preset) k0.push("<span>Run size: " + esc(String(f.preset).charAt(0).toUpperCase() + String(f.preset).slice(1)) + "</span>");
       if (f.agent || f.model) k0.push("<span>Model: " + esc(usedModel(f)) + "</span>");
       if (rec.running || ck.live) k0[0] = '<span class="mk sim">still running</span>';
       $("#rvK0").innerHTML = k0.join("");
       var h1;
-      if (M.chosen) h1 = "Chosen chip " + esc(M.chosen.id) + (sizeOf(M.chosen) != null ? ", " + (M.chosen.gates == null ? "about " : "") + fmtN(sizeOf(M.chosen)) + " gates" + (M.chosen.gates == null ? " (estimated)" : "") : "") + ".";
+      if (M.chosen) h1 = "Chosen chip: " + esc(nameOf(M, M.chosen.id)) + (sizeOf(M.chosen) != null ? ", " + (M.chosen.gates == null ? "about " : "") + fmtN(sizeOf(M.chosen)) + " gates" + (M.chosen.gates == null ? " (estimated)" : "") : "") + '. <span class="rv-cid" title="Technical id of this chip">' + esc(M.chosen.id) + "</span>";
       else if (st.finished) h1 = st.finished.status === "succeeded" ? "The run finished without naming a chosen chip." : "The run ended: " + esc(st.finished.status) + ".";
       else if (M.pts.length) h1 = "Searching: " + fmtN(M.pts.length) + " design" + (M.pts.length === 1 ? "" : "s") + " so far, no chip chosen yet.";
       else h1 = M.n ? "No design yet. The run is working through its brief." : "Before the first event.";
       $("#rvH1").innerHTML = h1;
       var ht = heldText(M), he = $("#rvHeld"); he.textContent = heldShort(M) || ht; setTip(he, heldShort(M) ? ht : ""); he.hidden = !ht;
       // the brief is the run's own text: one short line here, all of it on hover
-      var br = f.prompt || f.title || "", bs = $("#rvBrief"); bs.textContent = clip(br, 110); setTip(bs, br.length > 110 ? clip(br, 1200) : "");
+      var br = plain(f.prompt || f.title || "").replace(/(^|[:;.]\s*)-\s+/g, "$1").replace(/\s+/g, " ").trim(), bs = $("#rvBrief"); bs.textContent = clip(br, 110); setTip(bs, br.length > 110 ? clip(br, 1200) : "");
       // the site's index line: the dataset credit and a note added after the run
       var ln = rec.line || {}, dt = ln.data && ln.data.name ? ln.data : null, de = $("#rvData"), ne = $("#rvNote");
       de.hidden = !dt; de.innerHTML = dt ? "Data: " + (dt.url ? '<a href="' + esc(dt.url) + '" target="_blank" rel="noopener">' + esc(dt.name) + "</a>" : esc(dt.name)) + (dt.licence ? ", " + esc(dt.licence) : "") + (dt.credit ? ". " + esc(dt.credit) : "") : "";
@@ -882,14 +897,14 @@
     });
     var co = F.cost(M.f), csm = co && num(co.summaries_usd) > 0 ? co.summaries_usd : 0, costTxt = co && num(co.usd) != null ? "$" + (co.usd + csm).toFixed(2) : "–";
     var live = !!rec.running;
-    once("tiles", [M.pts.length, st.chosen, M.chosen && sizeOf(M.chosen), st.messages, st.toolN, st.artifacts.length, costTxt, live, heldText(M)].join("|"), function () {
+    once("tiles", [M.pts.length, st.chosen, M.chosen && nameOf(M, M.chosen.id), M.chosen && sizeOf(M.chosen), st.messages, st.toolN, st.artifacts.length, costTxt, live, heldText(M)].join("|"), function () {
       var ch = M.chosen, yk = pickY(M), mark = F.dataMark(M.spec, M.pts.map(function (p) { return p.d || {}; }));
       var basis = ch && ch.basis ? " on " + (ch.basis === "test" ? "the test set" : ch.basis) : "";
       // a held-out target the chosen chip misses is named on its tile, with the Fail the other views use
       var hm = heldMiss(M), missTxt = hm ? hm.miss.map(function (t) { return '<span class="rv-miss">' + esc(F.metaOf(t.metric).n) + " held-out " + esc(F.fmtV(t.metric, hm.h.pooled[t.metric], M.spec)) + ", target " + esc(F.fmtT(t, M.spec)) + ' <span class="pf no">Fail</span></span>'; }).join("") : "";
       var tiles = [
-        ["designs", "Designs so far", M.pts.length ? fmtN(M.pts.length) : "–", M.pts.filter(function (p) { return p.gates != null; }).length + " compiled to gates"],
-        ["chosen", "Chosen chip", ch ? '<span class="rv-chip" title="' + esc(ch.id) + '">' + esc(ch.id) + "</span>" : "–", ch ? (sizeOf(ch) != null ? (ch.gates == null ? "about " : "") + fmtN(sizeOf(ch)) + " gates" + (ch.gates == null ? ", estimated" : "") : "size not reported") + (yk && ch.m[yk] != null ? ", " + label(yk).toLowerCase() + " " + fmtM(yk, ch.m[yk], M.pts) + basis : "") + missTxt : "not chosen yet"],
+        M.fromLab ? ["designs", "Chips measured", fmtN(M.pts.length), "by the lab; the run wrote no design records"] : ["designs", "Designs so far", M.pts.length ? fmtN(M.pts.length) : "–", M.pts.filter(function (p) { return p.gates != null; }).length + " compiled to gates"],
+        ["chosen", "Chosen chip", ch ? '<span class="rv-chip" title="' + esc(nameOf(M, ch.id) + " (id " + ch.id + ")") + '">' + esc(nameOf(M, ch.id)) + '</span><span class="rv-cid">' + esc(ch.id) + "</span>" : "–", ch ? (sizeOf(ch) != null ? (ch.gates == null ? "about " : "") + fmtN(sizeOf(ch)) + " gates" + (ch.gates == null ? ", estimated" : "") : "size not reported") + (yk && ch.m[yk] != null ? ", " + label(yk).toLowerCase() + " " + fmtM(yk, ch.m[yk], M.pts) + basis : "") + missTxt : "not chosen yet"],
         ["tools", "Tool calls", fmtN(st.toolN), fmtN(st.messages) + " messages, " + fmtN(st.artifacts.length) + " files"],
         ["cost", "Cost", costTxt, co ? fmtN((co.tokens_in || 0) + (co.tokens_out || 0)) + " tokens" : "reported at the end", csm ? "Agent " + co.usd.toFixed(2) + ", summaries " + csm.toFixed(2) : ""]
       ];
@@ -900,9 +915,12 @@
       $("#rvTiles").dataset.designs = String(M.pts.length); $("#rvTiles").dataset.chosen = st.chosen || ""; $("#rvTiles").dataset.cost = co && num(co.usd) != null ? co.usd.toFixed(2) : "";
     });
     paintChart(M);
-    once("sab", JSON.stringify([M.f.subs, M.f.merged, M.ended]), function () { $("#rvSab").innerHTML = F.subsHTML(M.f, M.spec, V.subOpen || (V.subOpen = {}), { empty: "This run used no subagents" + (M.ended ? "." : " so far.") }); });
+    once("sab", JSON.stringify([M.f.subs, M.f.merged, M.ended]), function () { $("#rvSab").innerHTML = F.subsHTML(M.f, M.spec, V.subOpen || (V.subOpen = {}), { empty: "This run used no subagents" + (M.ended ? "." : " so far."), files: rec.files }); });
     var fu = F.funnel(M.f, M.T);
-    once("fun", JSON.stringify(fu) + live, function () {
+    once("fun", JSON.stringify(fu) + live + M.fromLab, function () {
+      // a run with no design records has nothing for the funnel to count: say so instead of a row of zeros
+      $("#rvFun").hidden = !!M.fromLab;
+      if (M.fromLab) { $("#rvFunn").textContent = "This run wrote no design records, so there is no funnel; the chips above are the ones the lab measured."; setTip($("#rvFunn"), ""); return; }
       var S = [["proposed", "Proposed"], ["scored", "Scored"], ["compiled", "Compiled to gates"], ["verified", "Verified against the model"], ["clear", "Clear your targets"], ["chosen", "Chosen"]];
       if (!M.T.length) S = S.filter(function (x) { return x[0] !== "clear"; });
       $("#rvFun").innerHTML = S.map(function (x, i) { return '<div class="fs' + (i === S.length - 1 ? " last" : "") + (!fu[x[0]] ? " mute" : "") + '" data-f="' + x[0] + '"><div class="fn">' + fmtN(fu[x[0]]) + '</div><div class="fl">' + x[1] + "</div></div>"; }).join("");
@@ -998,7 +1016,7 @@
       if (ch) { g.beginPath(); g.arc(x, y, 9, 0, Math.PI * 2); g.strokeStyle = "#141a2e"; g.lineWidth = 2; g.stroke(); }
     });
     cv.dataset.n = String(shown.length); cv.dataset.y = yk || ""; cv.dataset.frac = frac ? "1" : ""; cv.dataset.ys = ys.join(","); // for tests
-    cv.setAttribute("aria-label", shown.length + " designs with a size" + (M.chosen ? ", chosen chip " + M.chosen.id : ""));
+    cv.setAttribute("aria-label", shown.length + " designs with a size" + (M.chosen ? ", chosen chip " + nameOf(M, M.chosen.id) : ""));
     var noY = shown.length - withY.length;
     var nEst = shown.filter(function (p) { return p.gates == null; }).length;
     cv.dataset.est = String(nEst);

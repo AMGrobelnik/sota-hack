@@ -364,7 +364,9 @@
     S.dsig = sig;
     if (!it) { d.innerHTML = `<p class="dz-none">${esc(M.empty || "No design yet.")}</p>`; return; }
     const pill = it.chosen ? `<span class="pf ok">${esc(it.pill || "Chosen")}</span>` : it.c === "s-drop" ? `<span class="pf no">${esc(it.why || "Dropped")}</span>` : it.c === "s-best" ? `<span class="pf no">${esc(it.why || "Misses the bar")}</span>` : `<span class="pf na">${esc(it.why || it.stText || "")}</span>`;
-    d.innerHTML = `<div class="dz-dh"><span class="dz-id">${esc(it.id)}</span>${pill}</div>${it.label ? `<p class="dz-lab">${esc(it.label)}</p>` : ""}` +
+    // a design is named in words (its label, read by ../i1-fold.js humanLabel); the technical id stays small under it
+    const nm = it.label ? ((window.ChipInFold && window.ChipInFold.humanLabel) ? window.ChipInFold.humanLabel(it.label) : it.label) : "";
+    d.innerHTML = `<div class="dz-dh">${nm ? `<span class="dz-nm" style="font-weight:600;font-size:13px;color:var(--i900)">${esc(nm)}</span>` : `<span class="dz-id">${esc(it.id)}</span>`}${pill}</div>${nm ? `<p class="dz-lab"><span class="dz-id" style="font-size:10.5px;color:var(--i550,#7a8194)" title="Technical id">${esc(it.id)}</span></p>` : ""}` +
       `<div style="color:var(--c)" class="${it.c}">${bigDrawing(it)}</div>` +
       it.facts.map(r => `<div class="irow"><span>${esc(r[0])}</span><b>${r[1]}</b></div>`).join("") +
       `<p class="dz-wh">Weights</p>${weightsHTML(it)}`;

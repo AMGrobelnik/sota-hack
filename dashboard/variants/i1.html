@@ -2637,6 +2637,8 @@ function sizeTip() {
   return ["Estimated from the design's configuration; this design was not synthesised.", s.rule && `Rule: ${s.rule}`, s.calibration && `Calibration: ${s.calibration}`, s.error && `Known error: ${s.error}`].filter(Boolean).join(" ");
 }
 const cfgText = d => `L${d.cfg.L}, ${d.cfg.bits}-bit, H${d.cfg.H}, ${d.cfg.weights} weights, ${d.cfg.feature} feature`;
+// the same configuration named in words for a heading (the id stays small beside it)
+const cfgWords = d => d && d.cfg && d.cfg.H != null ? `${d.cfg.L} inputs, ${d.cfg.H} hidden units, ${d.cfg.bits}-bit ${d.cfg.weights} weights` : "Design";
 const afScopeWord = s => s === "record" ? "per recording" : "per window";
 const sameTargets = (a, b) => JSON.stringify(a.map(t => [t.metric, t.op, t.value])) === JSON.stringify(b.map(t => [t.metric, t.op, t.value]));
 const baseClears = run => run.targets.length > 0 && run.targets.every(t => meets(t, t.metric === "sensitivity" ? AF_BASE.sensitivity_pooled : t.metric === "specificity" ? AF_BASE.specificity : null) === true);
@@ -2872,7 +2874,7 @@ function renderChipTab(run, force) {
   if (!force) { if (E.view && d && E.view.st.gates !== d.gates) { E.view.update(d); const k = $("#chipK"); if (k) k.innerHTML = chipCard(run, v, d); } return; }
   const A = afFile(run) && d, sz = A ? afSize(v, d) : null, dep = A ? (d === MEASURED.af.chosenD && v.ph >= 4 ? AF_DESIGN.depth : d.gm != null ? d.depth : null) : d && d.depth;
   const gtxt = A && !sz.m ? `about ${fmt(sz.g)} gates, estimated` : `${fmt(A ? sz.g : d ? d.gates : 0)} gates`;
-  $("#body").innerHTML = `<div class="vis">${tabHead(run, d ? `Design ${esc(d.id)}: ${gtxt}` : "The chip", d ? `${A ? esc(cfgText(d)) : esc(budgetLabel(run, d.channels))}, ${dep != null ? `logic depth ${dep}` : "not synthesised"}. Drag to turn it.` : "The chip appears once the first designs are checked.")}
+  $("#body").innerHTML = `<div class="vis">${tabHead(run, d ? `${esc(cfgWords(d))}: ${gtxt} <span class="rv-cid" style="display:inline-block;vertical-align:middle" title="Technical id">${esc(d.id)}</span>` : "The chip", d ? `${A ? esc(cfgText(d)) : esc(budgetLabel(run, d.channels))}, ${dep != null ? `logic depth ${dep}` : "not synthesised"}. Drag to turn it.` : "The chip appears once the first designs are checked.")}
     <div class="stage s3"><div class="g3" id="g3"></div><div class="ccard cmodel" id="chipK" style="left:14px;top:14px">${chipCard(run, v, d)}</div></div>
     <p class="vf"${TA(`A drawing: the die's pattern grows with the gate count, but the layout is illustrative, not a place-and-route result. ${run.case === "af" ? "" : `Power on the Overview's battery view is estimated, scaled from other designs, not measured for this one. ${window.ChipInModels ? window.ChipInModels.describeEstimate("chip_power") : "scaled from a layout run of other designs, not measured"}${mFile(run) ? " The results file has no power figure for these designs; layout and timing tools were not run on them." : ""}`}`)}>Illustrative drawing, not a real layout.${run.case === "af" ? "" : " Power: estimated."}</p></div>`;
   mount3D($("#g3"), "chip-" + (c.kind3d || "electrode"), L => buildChip(L, c.kind3d || "electrode"), view => view.update(d), () => `<svg class="v" viewBox="0 0 200 120"><rect x="60" y="20" width="80" height="80" rx="6" fill="#1a2338"/><text x="100" y="64" fill="#fff" font-size="12" text-anchor="middle">${d ? fmt(d.gates) + " gates" : ""}</text></svg>`);

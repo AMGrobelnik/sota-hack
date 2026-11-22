@@ -14,6 +14,10 @@
  *   ChipInFold.heldOut(f, id, fin) the held-out figures for chip id, or null
  *   ChipInFold.subsHTML(f, spec, open), chipHTML(m): the shared panels
  *   ChipInFold.variantHTML(d)      the "Variant of <id>" line for a record with variant_of, else ""
+ *   ChipInFold.chipName(f, id, o)  { name, id, from }: a chip named in words (record label, else its
+ *                                  ir.json in o.files, else its size), never by the bare id
+ *   ChipInFold.chipNameHTML(f, id, o) that name with the id small after it
+ *   ChipInFold.plainWords(f, s, o) an agent's sentence with chip and subagent ids and shorthand in words
  *   ChipInFold.targetsOf, fmtV, fmtT, meets, passAll, metaOf, dataMark, metricText, sizeOf
  *   ChipInFold.humanKeys(s)        a sentence with any raw metric key in it read as that key's label,
  *                                  a ratio named by its metric as a percentage and long floats rounded
@@ -165,6 +169,8 @@
     }
     if (b === "formal_proved") return { label: "Formal proof", value: v ? "proved equal" : "not proved" };
     if (OTHER[b]) return { label: OTHER[b][0], value: numText(v, OTHER[b][1]) };
+    // any other ratio by name (train_accuracy, int_test_accuracy) reads as a percentage, whatever unit word came with it
+    if (RATIO.test(String(b)) && ratio(b, v) <= 1.0001) return { label: cap(String(k).replace(/_/g, " ")), value: (ratio(b, v) * 100).toFixed(1) + "%" };
     var u = unit === "/h" ? "per hour" : unit === "um2" ? "µm²" : unit || "";
     return { label: cap(String(k).replace(/_/g, " ")), value: numText(v, u) };
   }
@@ -283,6 +289,10 @@
           if (same < 0) f.order[took] = d.id; else f.order.splice(took, 1);
         }
         f.designs[d.id] = d;
+        // every id a record has carried keeps its label (a renamed or recompiled record drops the old one from
+        // f.designs), so a reason that names the agent's working id still reads as that chip's name
+        var lb = f.labels || (f.labels = {});
+        if (typeof d.label === "string" && d.label) { lb[d.id] = d.label; if (prev && prev !== d.id && !lb[prev]) lb[prev] = d.label; }
         return { id: d.id, isNew: same < 0 && took < 0, renamed: renamed, d: d };
       }
       case "metric": {
@@ -312,7 +322,7 @@
       case "subagent.started": {
         var key = ev.agent || ev.id || ("sub" + ev.seq);
         if (!f.subs[key]) f.subOrder.push(key);
-        f.subs[key] = { key: key, stage: ev.stage || "", strategy: ev.strategy || ev.name || "", model: ev.model || "", state: "running", latest: null, result: "" };
+        f.subs[key] = { key: key, stage: ev.stage || "", strategy: ev.strategy || ev.name || "", name: typeof ev.name === "string" ? ev.name : "", model: ev.model || "", state: "running", latest: null, result: "" };
         break;
       }
       case "subagent.finished": {
@@ -385,6 +395,93 @@
     return { id: id, pooled: pooled, rows: rows, counts: counts, from: from || src, sameRecord: from === "record" };
   }
 
+  /* ---------- a chip named in words ---------- */
+  // A chip id is a hash (e51a3da485f2) or the agent's working name (p2-lin-05): never the name a
+  // person reads. chipName gives words: the design record's label read in plain language, else what
+  // the chip's ir.json computes (when the run's files are at hand), else its measured size.
+  var and = function (a) { return a.length < 2 ? a[0] || "" : a.slice(0, -1).join(", ") + " and " + a[a.length - 1]; };
+  var FEAT = [[/\bll\d*\b/i, "line length"], [/\b(?:bd\d*|band\d+)\b/i, "band energy"], [/\bzc\d*\b/i, "zero crossings"], [/\bsd\d*\b/i, "amplitude"]];
+  function humanLabel(s) {
+    s = String(s == null ? "" : s).replace(/^[A-Z]\d+\s+/, "").trim();
+    if (!s) return "";
+    var alt = /alkaid/i.test(s) ? ", alternative synthesis" : "";
+    if (/[<>=]/.test(s) && s.length <= 40) { // a written-out rule (3*bd1+1*zc1 >= 208), its features in words
+      var r = s.replace(/\s*\(?\balkaid\b\)?/gi, "").replace(/\s*>=\s*/g, " ≥ ").replace(/\s*<=\s*/g, " ≤ ").replace(/\s*([<>])\s*/g, " $1 ").replace(/\s*\+\s*/g, " + ").replace(/\s*\*\s*/g, "×");
+      FEAT.forEach(function (p) { r = r.replace(new RegExp(p[0].source, "gi"), p[1]); });
+      return "Rule " + r.trim() + alt;
+    }
+    if (/[*<>=]|\bt\d{2,}\b/.test(s)) { // a longer rule: which features it compares
+      var fs = []; FEAT.forEach(function (p) { if (p[0].test(s) && fs.indexOf(p[1]) < 0) fs.push(p[1]); });
+      return "Threshold rule" + (fs.length ? " on " + and(fs) : "") + alt;
+    }
+    s = s.replace(/\s*\(?\balkaid\b\)?/gi, "").replace(/\bint\s+MLP\b/gi, "small integer network").replace(/\bMLP\b/g, "small network").replace(/\bint\b/gi, "integer")
+      .replace(/\b(\d+)h\b/g, "$1 hidden units").replace(/\b(\d+)f\b/g, function (m, n) { return n + (n === "1" ? " feature" : " features"); }).replace(/\b(\d+)ch\b/g, "$1 channels")
+      .replace(/(\d+)-bit w\b/g, "$1-bit weights").replace(/\bhard-neg\b/gi, "hard-negative").replace(/\bLOPO\b/g, "leave-one-patient-out");
+    FEAT.forEach(function (p) { s = s.replace(new RegExp(p[0].source, "gi"), p[1]); });
+    return cap(s.replace(/\s+/g, " ").replace(/\s+,/g, ",").replace(/,\s*$/, "").trim()) + alt;
+  }
+  // what a chipir/1 file computes, in a few words
+  function irName(text) {
+    var j = null; try { j = JSON.parse(text); } catch (e) { return ""; }
+    if (!j || !Array.isArray(j.nodes)) return "";
+    var ops = j.nodes.map(function (n) { return n && String(n.op || ""); }), inp = Array.isArray(j.inputs) && j.inputs[0] || {};
+    var layers = j.nodes.filter(function (n) { var W = n && n.op === "matvec" && Array.isArray(n.W) ? n.W : []; return [].concat.apply([], W).length > 1; }).length;
+    var kind = ops.some(function (o) { return /tree|lut/i.test(o); }) ? "Decision trees" : layers === 1 ? "Linear classifier" : layers > 1 ? "Small network, " + layers + " layers" : ops.indexOf("cmp") >= 0 ? "Threshold rule" : "";
+    if (!kind) return "";
+    return kind + (num(inp.lanes) ? " on " + inp.lanes + " input" + (inp.lanes === 1 ? "" : "s") + (num(inp.bits) ? " of " + inp.bits + " bits" : "") : "");
+  }
+  // { name, id, from: "label" | "ir" | "size" | "" }; opts.files: the run's files [{ path, text }]
+  function chipName(f, id, opts) {
+    if (!id) return { name: "", id: "", from: "" };
+    var rid = id, rec = f.designs[id], nm = humanLabel(rec && rec.label || (f.labels || {})[id]);
+    if (nm) return { name: nm, id: rid, from: "label" };
+    var files = opts && Array.isArray(opts.files) ? opts.files : [], ir = files.filter(function (x) { return x && typeof x.path === "string" && x.path.slice(-("/chips/" + rid + "/ir.json").length) === "/chips/" + rid + "/ir.json" && x.text; })[0];
+    nm = ir ? irName(ir.text) : "";
+    if (nm) return { name: nm, id: rid, from: "ir" };
+    var g = rec && num(rec.gates) > 0 ? rec.gates : num((f.chips[rid] || {}).gates) > 0 ? f.chips[rid].gates : null;
+    return { name: g != null ? "Chip of " + fmt(g) + " gates" : "Unnamed chip", id: rid, from: g != null ? "size" : "" };
+  }
+  // the name, with the technical id small after it (and on hover)
+  function chipNameHTML(f, id, opts) {
+    var c = chipName(f, id, opts);
+    return c.id ? '<span class="cf-nm">' + esc(c.name) + '</span> <span class="cf-id" title="Technical id of this chip">' + esc(c.id) + "</span>" : "";
+  }
+  // a sentence the agent wrote, with chip ids, subagent ids and its shorthand read in words
+  function shortStrategy(a) {
+    var s = String(a && a.strategy || "").replace(/^Strategy\s*[A-Z]?\d*\s*[:-]?\s*/i, "").replace(/…$/, "");
+    var cut = s.search(/\s*[(:;]|\s+-\s/); if (cut > 3) s = s.slice(0, cut);
+    return s.trim() || String(a && (a.name || a.key) || "");
+  }
+  // a subagent named by what it tried, in words, short
+  function stratName(f, a, opts) { return cap(clip(plainWords(f, shortStrategy(a), opts), 56)); }
+  // chip ids in a sentence read as the chips' names
+  function idWords(f, s, opts) {
+    s = String(s == null ? "" : s);
+    var ids = {}; Object.keys(f.designs).concat(Object.keys(f.labels || {}), Object.keys(f.chips)).forEach(function (k) { if (k && k.length >= 4) ids[k] = 1; });
+    var list = Object.keys(ids).sort(function (a, b) { return b.length - a.length; }).map(function (k) { return k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); });
+    if (list.length) s = s.replace(new RegExp("(^|[^\\w-])(" + list.join("|") + ")(?![\\w-])", "g"), function (m, pre, k) { return pre + chipName(f, k, opts).name.replace(/^./, function (c) { return c.toLowerCase(); }); });
+    return s;
+  }
+  function plainWords(f, s, opts) {
+    s = idWords(f, String(s == null ? "" : s).replace(/\*\*([^*]+)\*\*/g, "$1").replace(/`([^`]+)`/g, "$1"), opts);
+    s = s.replace(/\ba(\d{1,2})\b(?:-alk)?(?:'s)?/g, function (m, n) { var a = f.subs["a" + n]; var w = clip(idWords(f, shortStrategy(a), opts), 40); return a ? "“" + (/^[A-Z][a-z]/.test(w) ? w.charAt(0).toLowerCase() + w.slice(1) : w) + "”" : m; });
+    return humanKeys(s.replace(/\bval\s+sens\b/gi, "validation sensitivity").replace(/\bval\b/gi, "validation").replace(/\bsens\b/gi, "sensitivity").replace(/\bspec\b(?!\.md)/gi, "specificity")
+      .replace(/\bFA\/h\b/gi, "false alarms per hour").replace(/\bum2\b/g, "µm²").replace(/\bGBT\b/g, "gradient boosting").replace(/\blogreg\b/gi, "logistic regression").replace(/\bintnn neuron\b/gi, "integer neuron").replace(/\bintnn\b/gi, "integer network"));
+  }
+  // a merge reason as short reasons: one per clause the agent wrote
+  function reasons(f, why, opts) {
+    // split at a semicolon or a sentence end outside brackets
+    var t = plainWords(f, why, opts), out = [], cur = "", depth = 0;
+    for (var i = 0; i < t.length; i++) {
+      var c = t[i];
+      if (c === "(") depth++; else if (c === ")") depth = Math.max(0, depth - 1);
+      if (!depth && (c === ";" || c === "." && /\s[A-Z“]/.test(t.substr(i + 1, 2))) && /\s/.test(t[i + 1] || "")) { out.push(cur); cur = ""; continue; }
+      cur += c;
+    }
+    out.push(cur);
+    return out.map(function (x) { return x.replace(/\.$/, "").trim(); }).filter(Boolean).map(cap);
+  }
+
   /* ---------- shared panels ---------- */
   var BAR_CSS = "";
   // one quiet line for a design record that is another compile of an earlier design (variant_of)
@@ -453,7 +550,7 @@
     var ag = order.map(function (k) { return agent[k]; }).sort(function (a, b) { return rank(a) - rank(b); });
     var row = function (r) { return '<div class="irow"><span>' + esc(r[0]) + "</span><b>" + r[1] + "</b></div>"; };
     var mark = dataMark(m.spec, rec ? [rec] : []);
-    return '<div class="vh"><p class="cf-k">Chip ' + esc(id) + (id === m.chosenId ? ", chosen" : "") + " " + mark + "</p>" + variantHTML(rec) + '<h2>The chip</h2><p class="vs"' + tipA("Two kinds of figure: what the chip lab measured on the circuit, and what the agent computed on the patients.") + '>Lab-measured circuit figures, then agent-computed accuracy.</p></div>' +
+    return '<div class="vh"><p class="cf-k">' + (id === m.chosenId ? "Chosen chip:" : "Chip:") + " " + chipNameHTML(f, id, { files: m.files }) + " " + mark + "</p>" + variantHTML(rec) + '<h2>The chip</h2><p class="vs"' + tipA("Two kinds of figure: what the chip lab measured on the circuit, and what the agent computed on the patients.") + '>Lab-measured circuit figures, then agent-computed accuracy.</p></div>' +
       '<section class="stage cf-sec" data-sec="lab"><h3 class="cf-h3">Measured by the chip lab</h3>' + (lab.length || checks.length ? '<div class="cf-kv">' + lab.map(function (r) { return row([r[0], r[1]]); }).join("") + "</div>" : '<p class="cf-sub">The lab has not reported figures for this chip yet.</p>') +
       (checks.length ? '<h4 class="cf-h4">Vectors checked against the model</h4><div class="cf-kv">' + checks.map(function (c) { return row([c[0], esc(c[1])]); }).join("") + "</div>" + (checks.length > 1 ? '<p class="cf-sub"' + tipA("Each kind of check runs its own set of input vectors, so the counts differ.") + ">Each check uses its own vectors.</p>" : "") : "") + "</section>" +
       '<section class="stage cf-sec" data-sec="agent"><h3 class="cf-h3">Reported by the agent</h3>' + (ag.length ? '<div class="cf-kv">' + ag.map(function (r) {
@@ -465,7 +562,8 @@
   // Subagent batches: one line per stage that opens to its entries. open: { stage: true }
   function subsHTML(f, spec, open, opts) {
     opts = opts || {};
-    if (!f.subOrder.length) return opts.empty ? '<section class="pan cf-subs" aria-label="Subagent batches"><h2>Subagent batches</h2><p class="cf-sub">' + esc(opts.empty) + "</p></section>" : "";
+    if (!f.subOrder.length) return opts.empty ? '<section class="pan cf-subs" aria-label="Subagent batches"><div class="cf-subh"><h2>Subagent batches</h2></div><p class="cf-sub">' + esc(opts.empty) + "</p></section>" : "";
+    var no = { files: opts.files }, who = function (k) { return f.subs[k] ? stratName(f, f.subs[k], no) : k; };
     var kept = {}; f.mergedOrder.forEach(function (s) { (f.merged[s].kept || []).forEach(function (k) { kept[k] = 1; }); });
     var stages = []; f.subOrder.forEach(function (k) { var s = f.subs[k].stage || "other"; if (stages.indexOf(s) < 0) stages.push(s); });
     stages.sort(function (a, b) { var i = STAGES.indexOf(a), j = STAGES.indexOf(b); return (i < 0 ? 99 : i) - (j < 0 ? 99 : j); });
@@ -473,12 +571,14 @@
     var mark = dataMark(spec, designs(f));
     return '<section class="pan cf-subs" aria-label="Subagent batches"><div class="cf-subh"><h2>Subagent batches</h2><span class="cf-sub">' + fin + " of " + f.subOrder.length + " finished</span>" + mark + "</div>" + stages.map(function (s) {
       var list = f.subOrder.filter(function (k) { return (f.subs[k].stage || "other") === s; }).map(function (k) { return f.subs[k]; }), mg = f.merged[s];
-      var dots = list.map(function (a) { return '<i class="' + (kept[a.key] ? "kept " : "") + (a.state === "running" ? "" : a.state) + '" title="' + esc(a.key + ": " + (a.state === "running" ? "running" : a.state) + (kept[a.key] ? ", kept" : "")) + '"></i>'; }).join("");
-      var kept0 = mg ? "Kept " + (mg.kept.length ? mg.kept.join(", ") : "none") : "", line = mg ? kept0 + (mg.why ? ": " + clip(mg.why, 90) : "") : list.some(function (a) { return a.state === "running"; }) ? "running" : "waiting for the merge";
+      var dots = list.map(function (a) { return '<i class="' + (kept[a.key] ? "kept " : "") + (a.state === "running" ? "" : a.state) + '" title="' + esc(who(a.key) + ": " + (a.state === "running" ? "running" : a.state) + (kept[a.key] ? ", kept" : "")) + '"></i>'; }).join("");
+      // the merge read as short reasons in words: what was kept, then why, each clause with its own numbers
+      var why = mg && mg.why ? reasons(f, mg.why, no) : [], keptN = mg ? mg.kept.map(who) : [];
+      var kept0 = mg ? (keptN.length ? "Kept " + keptN.join(" · ") : "Kept none") : "", line = mg ? kept0 + (why.length ? ": " + why[0].charAt(0).toLowerCase() + why[0].slice(1) : "") : list.some(function (a) { return a.state === "running"; }) ? "running" : "waiting for the merge";
       return '<details class="cf-sb" data-batch="' + esc(s) + '"' + (open && open[s] ? " open" : "") + "><summary><b>" + esc(STAGE_N[s] || cap(s)) + '</b><span class="cf-dots" aria-label="' + esc(pl(list.length, "subagent")) + '">' + dots + '</span><span class="cf-line"><span class="cf-short">' + esc(line) + '</span><span class="cf-kept">' + esc(mg ? kept0 : line) + "</span></span></summary>" +
-        '<div class="cf-sbb">' + (mg && mg.why ? '<p class="cf-why">' + esc(mg.why) + "</p>" : "") + list.map(function (a) {
-          var lt = a.latest ? metricText(a.latest.key, a.latest.value, a.latest.unit, spec, a.latest.source) : null;
-          return '<div class="cf-se"><span class="cf-sid">' + esc(a.key) + '</span><span class="cf-st">' + esc(a.strategy.replace(/^Strategy\s*[:-]?\s*/i, "") || a.key) + "</span>" + (lt ? '<span class="cf-sm">' + esc(lt.label) + ": " + esc(lt.value) + "</span>" : "") + "</div>";
+        '<div class="cf-sbb">' + (why.length ? '<ul class="cf-why" aria-label="Why">' + why.map(function (r) { return "<li>" + esc(r) + "</li>"; }).join("") + "</ul>" : "") + list.map(function (a) {
+          var lt = a.latest ? metricText(a.latest.key, a.latest.value, a.latest.unit, spec, a.latest.source) : null, full = plainWords(f, String(a.strategy || "").replace(/^Strategy\s*[A-Z]?\d*\s*[:-]?\s*/i, ""), no);
+          return '<div class="cf-se' + (kept[a.key] ? " kept" : "") + '"><span class="cf-st"' + tipA(full) + ' title="Subagent ' + esc(a.key) + '">' + esc(stratName(f, a, no)) + (kept[a.key] ? ' <span class="cf-kb">kept</span>' : a.state === "failed" ? ' <span class="cf-kb no">failed</span>' : "") + "</span>" + (lt ? '<span class="cf-sm">' + esc(lt.label) + ": " + esc(lt.value) + "</span>" : "") + "</div>";
         }).join("") + "</div></details>";
     }).join("") + "</section>";
   }
@@ -504,10 +604,12 @@
     ".cf-line{color:var(--i700);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}.cf-sb[open] .cf-short,.cf-sb:not([open]) .cf-kept{display:none}",
     ".cf-dots{display:flex;gap:4px;flex-wrap:wrap}.cf-dots i{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--blue6,#3d6df0);box-sizing:border-box}",
     ".cf-dots i.done{background:var(--blue6,#3d6df0)}.cf-dots i.failed{background:#ef4444;border-color:#ef4444}.cf-dots i.kept{box-shadow:0 0 0 2px #fff,0 0 0 3.5px var(--i900)}",
-    ".cf-sbb{padding:0 0 8px 102px;display:flex;flex-direction:column;gap:4px}",
-    ".cf-why{margin:0 0 4px;font-size:12px;color:var(--i700);line-height:1.5;overflow-wrap:anywhere}",
-    ".cf-se{display:grid;grid-template-columns:34px minmax(0,1fr);gap:2px 10px;font-size:12px;line-height:1.45;color:var(--i800)}.cf-sid{font-family:var(--mono);font-size:11px;color:var(--i600)}",
-    ".cf-st{overflow-wrap:anywhere}.cf-sm{grid-column:2;color:var(--i600);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}",
+    ".cf-sbb{padding:0 0 10px 14px;display:flex;flex-direction:column;gap:6px}",
+    ".cf-why{margin:0 0 4px;padding:8px 10px 8px 24px;font-size:12.5px;color:var(--i800);line-height:1.5;overflow-wrap:anywhere;background:rgb(59 130 246/.06);border-left:3px solid var(--blue6,#3d6df0);border-radius:0 6px 6px 0}.cf-why li+li{margin-top:3px}",
+    ".cf-se{display:flex;flex-direction:column;gap:1px;font-size:12px;line-height:1.45;color:var(--i800);padding-left:10px;border-left:2px solid var(--hair)}.cf-se.kept{border-left-color:var(--i900)}",
+    ".cf-st{overflow-wrap:anywhere;font-weight:550}.cf-sm{color:var(--i600);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}",
+    ".cf-kb{display:inline-block;font-size:10.5px;font-weight:600;padding:0 6px;border-radius:9px;background:var(--i900);color:#fff;vertical-align:1px}.cf-kb.no{background:#fee2e2;color:#b91c1c}",
+    ".cf-nm{font-weight:600;color:var(--i900)}.cf-id{font-family:var(--mono);font-size:10.5px;color:var(--i550,#7a8194);font-weight:400}",
     "@media (max-width:767px){.cf-sb summary{grid-template-columns:auto minmax(0,1fr)}.cf-line{grid-column:1/-1;white-space:normal}.cf-sbb{padding-left:0}.cf-kv .irow{flex-wrap:wrap}}"
   ].join("\n");
   document.head.appendChild(css);
@@ -515,6 +617,7 @@
   window.ChipInFold = {
     version: 1, scrub: scrub, scrubEvent: scrubEvent, create: create, fold: fold, designs: designs, cost: cost, funnel: funnel, heldOut: heldOut,
     subsHTML: subsHTML, wireSubs: wireSubs, chipHTML: chipHTML, variantHTML: variantHTML,
+    chipName: chipName, chipNameHTML: chipNameHTML, humanLabel: humanLabel, plainWords: plainWords,
     targetsOf: targetsOf, fmtV: fmtV, fmtT: fmtT, meets: meets, passAll: passAll, metaOf: metaOf, MET: MET, FAU: FAU, faUnit: faUnit,
     dataMark: dataMark, metricText: metricText, humanKeys: humanKeys, screenOnly: screenOnly, levelText: levelText, fileKind: fileKind, fileView: fileView, keyInfo: keyInfo, sizeOf: sizeOf, ratio: ratio, normDesign: normDesign
   };
