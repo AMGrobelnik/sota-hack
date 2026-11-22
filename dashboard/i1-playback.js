@@ -939,6 +939,7 @@
       $("#rvTiles").style.position = "relative";
       $("#rvTiles").dataset.designs = String(M.pts.length); $("#rvTiles").dataset.chosen = st.chosen || ""; $("#rvTiles").dataset.cost = co && num(co.usd) != null ? co.usd.toFixed(2) : "";
     });
+    try { if (window.ChipInHoverStrip) window.ChipInHoverStrip.strip($("#rvTiles"), { f: M.f, spec: M.spec, T: M.T, chosenId: st.chosen, ended: M.ended, n: M.n, final: rec.final }); } catch (e) { console.error(e); } // STRIP HOOK: the examples' summary strip on a finished run (../i1-hoverstrip.js)
     paintChart(M);
     once("sab", JSON.stringify([M.f.subs, M.f.merged, M.ended]), function () { $("#rvSab").innerHTML = F.subsHTML(M.f, M.spec, V.subOpen || (V.subOpen = {}), { empty: "This run used no subagents" + (M.ended ? "." : " so far."), files: rec.files }); });
     var fu = F.funnel(M.f, M.T);
@@ -1042,6 +1043,7 @@
       if (est) { g.strokeStyle = "#6366f1"; g.lineWidth = 1.5; g.stroke(); } else { g.fillStyle = yk && p.m[yk] == null ? "#c3c8d4" : "#6366f1"; g.fill(); }
       if (ch) { g.beginPath(); g.arc(x, y, 9, 0, Math.PI * 2); g.strokeStyle = "#141a2e"; g.lineWidth = 2; g.stroke(); }
     });
+    try { if (window.ChipInHoverStrip) window.ChipInHoverStrip.chart(cv, shown.map(function (p) { return { id: p.id, x: X(sizeOf(p)), y: yk && p.m[yk] != null ? Y(p.m[yk] * sc) : yk ? y1 - 2 : (y0 + y1) / 2 }; }), function () { return V && V.last; }, V.rec.files); } catch (e) { console.error(e); } // HOVER HOOK: a dot's details on hover or tap (../i1-hoverstrip.js)
     cv.dataset.n = String(shown.length); cv.dataset.y = yk || ""; cv.dataset.frac = frac ? "1" : ""; cv.dataset.ys = ys.join(","); // for tests
     cv.setAttribute("aria-label", shown.length + " designs with a size" + (M.chosen ? ", chosen chip " + nameOf(M, M.chosen.id) : ""));
     var noY = shown.length - withY.length;
