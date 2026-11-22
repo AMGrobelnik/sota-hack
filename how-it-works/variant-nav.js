@@ -1,8 +1,8 @@
 /* Previous/next switching inside one set of ten how-it-works variants: w1..w10 (round 1), x1..x10 (round 2) or y1..y10 (round 3), chosen by the letter in the file name. */
 (function () {
   var N = 10;
-  /* numbers that exist in each set; round 3 skips variants that were not built */
-  var BUILT = { w: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], y: [3, 4, 6, 7, 9, 10] };
+  /* numbers that exist in each set */
+  var BUILT = { w: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], y: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] };
   var m = location.pathname.match(/\/([wxy])(\d+)(?:\.html)?$/);
   var set = m ? m[1] : '';
   var cur = m ? parseInt(m[2], 10) : 0;
