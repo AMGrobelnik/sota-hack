@@ -84,3 +84,26 @@ def test_negative_control_wrong_rtl_is_refuted(tmp_path):
     (tmp_path / "d.v").write_text(td); (tmp_path / "a.v").write_text(ta)
     same = prove_same_function(tmp_path / "d.v", tmp_path / "a.v", di["top"], ai["top"], tmp_path / "same", 300)
     assert same["proved"] is False, same
+
+
+def test_alkaid_runs_after_torch_is_loaded():
+    """macOS CI (5b15d6c): alkaid's CMVM aborted a process that had imported torch (two OpenMP runtimes). alkaid now
+    runs in a worker process; a fresh interpreter that imports torch first must still emit, and stay alive."""
+    import subprocess
+    import sys
+    pytest.importorskip("torch")
+    code = ("import json, sys, torch\n"
+            "from chiplab.emit.optimized import emit_optimized\n"
+            "torch.ones(4).sum()\n"
+            "ir = json.loads(sys.argv[1])\n"
+            "t, i = emit_optimized(ir, 'alkaid')\n"
+            "assert i['optimizer']['name'] == 'alkaid' and 'chipin_alk_' in t\n"
+            "print('ok')\n")
+    p = subprocess.run([sys.executable, "-c", code, json.dumps(TINY)], capture_output=True, text=True, timeout=600)
+    assert p.returncode == 0 and p.stdout.strip().endswith("ok"), (p.returncode, p.stderr[-800:])
+
+
+def test_worker_matches_in_process(monkeypatch):
+    via_worker = emit_optimized(TINY, "alkaid")
+    monkeypatch.setenv("CHIPLAB_ALKAID_INPROCESS", "1")
+    assert json.loads(json.dumps(emit_optimized(TINY, "alkaid"))) == json.loads(json.dumps(via_worker))

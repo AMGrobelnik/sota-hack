@@ -10,10 +10,18 @@ that node, recorded in port_info["optimizer"]["nodes"].
 
 Licence: alkaid is LGPL-3.0 and used as a pip dependency. Designs emitted this way embed alkaid's small Verilog
 helper modules (shift_adder, ternary_adder, ...), copied from the installed package at generation time.
+
+Process isolation: alkaid's native CMVM solver and PyTorch each bring an OpenMP runtime, and on macOS a process that
+loads both can abort. So alkaid never runs in the caller's process: emit_optimized runs it in a fresh worker
+(`python -m chiplab.emit.alkaid_worker`), like the XGBoost converter. CHIPLAB_ALKAID_INPROCESS=1 runs it in-process.
 """
 from __future__ import annotations
 
+import json
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -26,10 +34,11 @@ PREFIX = "chipin_alk_"
 
 
 def available() -> bool:
+    """alkaid is installed (checked without importing it: its native code stays out of this process)."""
+    import importlib.util
     try:
-        import alkaid  # noqa: F401
-        return True
-    except Exception:
+        return importlib.util.find_spec("alkaid") is not None
+    except (ImportError, ValueError):
         return False
 
 
@@ -133,14 +142,27 @@ def _make_impl(top: str, report: list, modules: list):
     return impl
 
 
-def emit_optimized(ir: dict, optimizer: str = "alkaid", top: str | None = None) -> tuple[str, dict]:
-    """Verilog with the same top/ports as emit(ir), constant matvecs implemented by `optimizer` (only 'alkaid')."""
+def emit_optimized(ir: dict, optimizer: str = "alkaid", top: str | None = None, timeout: int = 900) -> tuple[str, dict]:
+    """Verilog with the same top/ports as emit(ir), constant matvecs implemented by `optimizer` (only 'alkaid').
+    alkaid runs in a separate worker process (see the module docstring)."""
     if optimizer in (None, "", "none", "default"):
         return emit(ir, top)
     if optimizer != "alkaid":
         raise ValueError("optimizer must be 'alkaid' (or none)")
     if not available():
         raise RuntimeError("alkaid is not installed: uv sync --extra ingest")
+    if os.environ.get("CHIPLAB_ALKAID_INPROCESS") == "1":
+        return emit_optimized_local(ir, optimizer, top)
+    p = subprocess.run([sys.executable, "-m", "chiplab.emit.alkaid_worker"], input=json.dumps({"ir": ir, "top": top}),
+                       capture_output=True, text=True, timeout=timeout)
+    if p.returncode != 0:
+        raise RuntimeError(f"alkaid worker failed (rc {p.returncode}): {(p.stderr or p.stdout)[-600:]}")
+    out = json.loads(p.stdout)
+    return out["text"], out["info"]
+
+
+def emit_optimized_local(ir: dict, optimizer: str = "alkaid", top: str | None = None) -> tuple[str, dict]:
+    """emit_optimized in this process (the worker's body). Don't call it where PyTorch may be loaded."""
     top = top or top_name(ir)
     report, modules = [], []
     text, info = emit(ir, top, node_impl=_make_impl(top, report, modules))
