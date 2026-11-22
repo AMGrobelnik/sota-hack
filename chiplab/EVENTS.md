@@ -25,6 +25,31 @@ Envelope on every event: `{type, run_id, session_id, seq, t, round?}`. `t` is se
 The AI scientist's own events (run_started, check_heldout, ...) can share the same file and envelope; the lab never
 writes clinical numbers into events.
 
+## ChipIn dashboard (`./progress`)
+When the working folder holds ChipIn's `./progress` helper, every tool also reports through it (metric, status and
+artifact lines; the lab runs the helper, so the backend validates every line). The dashboard keeps one value per
+metric key and has no chip id, so the lab never lets two chips share the panel:
+
+- **Exploring (every call):** only `gates` (the chip just synthesised), `candidates` (distinct chips under
+  `./chips/`) and the run's cumulative `vectors_checked` / `mismatches` (each distinct check counted once). Every
+  other figure of a chip goes to `./chips/<design_id>/metrics.json` and to a status line
+  (`ChipIn measured chip <id>: ...`).
+- **Reporting (`chip-report`, or `report_metrics: true` on any call):** the full figure set of that one chip in one
+  burst: `gates, depth, transistors, luts_ice40, luts_xc7, area_um2, ge, tt_tiles, cost_eur, verification_level,
+  timing_slack_ns, fmax_mhz, energy_pj, leakage_uw, power_uw_at_rate` (whichever exist; synthesis, sky130 mapping and
+  cost are filled in first when missing, layout and LUT counts only if they were already run). After a report,
+  `gates` of other chips stays in status lines until the next report, so the panel shows one chip.
+- Run counters live in `./chips/.chiplab-progress.json`. A tool called from inside another tool (timing-power runs
+  layout) reports once.
+
+`./chips/<design_id>/metrics.json`: `{design_id, metrics: {key: {value, unit, from (tool), at}}}`; units are
+`chiplab.progress.METRIC_KEYS` (depth in `levels`). Full contract: docs/CHIPIN_INTEGRATION.md.
+
+**Chip id on metrics (optional, off until the backend enables it).** With `CHIPIN_PROGRESS_CHIP=1` in the
+environment, every chip figure is sent as `./progress metric <key> <number> <unit> --chip <design_id>` (run counters
+`candidates`, `vectors_checked`, `mismatches` never carry a chip). Today's helper rejects a fourth argument, so
+without the variable the lines are exactly `./progress metric <key> <number> <unit>`.
+
 ## Artefacts per design: `CHIPLAB_HOME/designs/<design_id>/`
 | file | format |
 |---|---|

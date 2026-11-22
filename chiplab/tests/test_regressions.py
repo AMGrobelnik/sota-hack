@@ -123,3 +123,32 @@ def test_prove_sequential_compositional():
     d = lab.compile_ir(ir=TINY)["design_id"]
     r = lab.prove_sequential(design_id=d, timeout=300)
     assert r["status"] == "ok" and r["proved"] is True and r["blackboxed"], r
+
+
+# M3 e2e run (20261122-001507-0ef5bb): depth unit, default clock, agent environment
+def test_depth_unit_is_levels():
+    from chiplab.progress import METRIC_KEYS
+    assert METRIC_KEYS["depth"] == "levels"
+
+
+def test_default_clock_closes_for_classifiers():
+    from chiplab.tools import TOOLS
+    from chiplab.tools_hw import DEFAULT_CLOCK_NS
+    assert DEFAULT_CLOCK_NS == {"sky130A": 50.0, "ihp-sg13g2": 50.0, "gf180mcuD": 100.0}
+    fn = TOOLS["timing_power"]["fn"].__wrapped__
+    assert normalize_args(fn, {"design_id": "d"})["clock_period_ns"] == 50
+    assert normalize_args(fn, {"design_id": "d", "pdk": "gf180"})["clock_period_ns"] == 100
+    from chiplab.docs import EXAMPLES
+    assert "clock_period_ns" not in EXAMPLES["timing_power"] and "clock_period_ns" not in EXAMPLES["layout"]
+
+
+def test_agent_env_keeps_the_backends_chiplab_vars():
+    from chiplab.doctor import agent_env
+    base = {"HOME": "/h", "PATH": "/usr/bin", "CHIPLAB_CONFIG": "/opt/lab/config.json", "CHIPLAB_USER_DIR": "/opt/lab",
+            "CHIPLAB_HOME": "/x", "DOCKER_HOST": "unix:///d.sock", "PDK_ROOT": "/p", "ANTHROPIC_API_KEY": "k",
+            "CHIPIN_CHIPLAB_BIN": "/opt/lab/bin"}
+    env = agent_env(base)
+    assert env["CHIPLAB_CONFIG"] == "/opt/lab/config.json" and env["CHIPLAB_USER_DIR"] == "/opt/lab"
+    assert env["PATH"].split(os.pathsep)[0] == "/opt/lab/bin"
+    for gone in ("CHIPLAB_HOME", "DOCKER_HOST", "PDK_ROOT", "ANTHROPIC_API_KEY", "CHIPIN_CHIPLAB_BIN"):
+        assert gone not in env

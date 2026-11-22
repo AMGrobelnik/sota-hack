@@ -36,8 +36,8 @@ EXAMPLES = {
     "verification_level": {"design_id": SPIKE},
     "chip_report": {"design_id": SPIKE},
     "bitstream": {"design_id": SPIKE},
-    "layout": {"design_id": TINY, "pdk": "sky130", "clock_period_ns": 20},
-    "timing_power": {"design_id": TINY, "pdk": "sky130", "clock_period_ns": 20},
+    "layout": {"design_id": TINY, "pdk": "sky130"},
+    "timing_power": {"design_id": TINY, "pdk": "sky130", "decision_rate_hz": 1},
     "tt_package": {"design_id": TINY, "harden": False},
     "tt_readiness": {"design_id": TINY, "run_tests": True},
     "tt_export": {"design_id": TINY, "mode": "standalone"},
@@ -115,6 +115,7 @@ GitHub's cloud: commit the folder from `tt-package` and run the `tt-gds` workflo
 
 def agent_md() -> str:
     from chiplab.api import TOOLS
+    from chiplab.tools_hw import CHIP_REPORT_SENTENCE
     out = ["# chipin.space chip lab: interface for AI scientists", "",
            "The lab turns a trained model into a verified, measured, manufacturable chip. You (the AI scientist) bring the "
            "data, the training and the clinical judgement; the lab compiles, synthesises, verifies, measures and "
@@ -130,6 +131,12 @@ def agent_md() -> str:
            "file); `chiplab doctor` shows what it picked. Start workers with `chiplab workers`. Results are "
            "cached by content, so duplicate designs return instantly (`cached: true`).",
            "- Every tool also accepts `run_id`, `session_id`, `round` (events, see EVENTS.md) and `force` (skip the cache).",
+           "- In a ChipIn run (a `./progress` helper in the working folder) every tool reports to the dashboard by "
+           "itself; see EVENTS.md, \"ChipIn dashboard\". While you explore, the dashboard shows only `gates` of the "
+           "latest chip and the run's counters, never a mix of chips. " + CHIP_REPORT_SENTENCE + " `report_metrics: true` "
+           "on any call does the same for that call's design.",
+           "- Timing: `layout` / `timing-power` default to a 50 ns clock (20 MHz; 100 ns on gf180), which closes for "
+           "chips of a few thousand gates; every answer also gives `fmax_mhz`, the fastest clock the chip meets.",
            "- Status and exit code are honest: `ok` = 0 (the tool did its job and every check it ran passed), `error` = 1 "
            "(it could not do its job; see `error`), `fail` = 2 (it ran, and the design failed a check, e.g. "
            "`bit_exact: false`), `timeout` = 3. A queued job is `ok` with `state: queued`.",
@@ -196,6 +203,31 @@ Envelope on every event: `{type, run_id, session_id, seq, t, round?}`. `t` is se
 
 The AI scientist's own events (run_started, check_heldout, ...) can share the same file and envelope; the lab never
 writes clinical numbers into events.
+
+## ChipIn dashboard (`./progress`)
+When the working folder holds ChipIn's `./progress` helper, every tool also reports through it (metric, status and
+artifact lines; the lab runs the helper, so the backend validates every line). The dashboard keeps one value per
+metric key and has no chip id, so the lab never lets two chips share the panel:
+
+- **Exploring (every call):** only `gates` (the chip just synthesised), `candidates` (distinct chips under
+  `./chips/`) and the run's cumulative `vectors_checked` / `mismatches` (each distinct check counted once). Every
+  other figure of a chip goes to `./chips/<design_id>/metrics.json` and to a status line
+  (`ChipIn measured chip <id>: ...`).
+- **Reporting (`chip-report`, or `report_metrics: true` on any call):** the full figure set of that one chip in one
+  burst: `gates, depth, transistors, luts_ice40, luts_xc7, area_um2, ge, tt_tiles, cost_eur, verification_level,
+  timing_slack_ns, fmax_mhz, energy_pj, leakage_uw, power_uw_at_rate` (whichever exist; synthesis, sky130 mapping and
+  cost are filled in first when missing, layout and LUT counts only if they were already run). After a report,
+  `gates` of other chips stays in status lines until the next report, so the panel shows one chip.
+- Run counters live in `./chips/.chiplab-progress.json`. A tool called from inside another tool (timing-power runs
+  layout) reports once.
+
+`./chips/<design_id>/metrics.json`: `{design_id, metrics: {key: {value, unit, from (tool), at}}}`; units are
+`chiplab.progress.METRIC_KEYS` (depth in `levels`). Full contract: docs/CHIPIN_INTEGRATION.md.
+
+**Chip id on metrics (optional, off until the backend enables it).** With `CHIPIN_PROGRESS_CHIP=1` in the
+environment, every chip figure is sent as `./progress metric <key> <number> <unit> --chip <design_id>` (run counters
+`candidates`, `vectors_checked`, `mismatches` never carry a chip). Today's helper rejects a fourth argument, so
+without the variable the lines are exactly `./progress metric <key> <number> <unit>`.
 
 ## Artefacts per design: `CHIPLAB_HOME/designs/<design_id>/`
 | file | format |

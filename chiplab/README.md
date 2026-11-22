@@ -87,7 +87,7 @@ scripts/install.sh                 # flags: --skip-docker, --skip-pdk, --skip-tt
 | Level 1 | `simulate` | circuit = integer model (= your expected outputs) on every vector given |
 | Level 2 | `prove-equivalence` | circuit = model for every possible input |
 | Level 3 | `compile-stream`, `rtl-simulate` | streaming wrapper simulated in Icarus via cocotb, plus lint |
-| Layout, timing, power | `layout`, `timing-power` | LibreLane: area, slack, power, GDS, KLayout image |
+| Layout, timing, power | `layout`, `timing-power` | LibreLane: area, slack, fmax, power, GDS, KLayout image |
 | FPGA | `bitstream` | iCE40UP5K bitstream, LUTs, maximum clock |
 | Tiny Tapeout | `tt-package` | ready project folder (local or cloud build, gate-level test = level 4) |
 | Paperwork | `chip-report`, `estimate-cost`, `compare-hw-baseline`, `gate-activity` | report, routes and prices, published chips, switching data |
@@ -204,8 +204,10 @@ small design; their numbers go in the chip report when run.
   a few thousand gates; the tool reports which proof it got and the level stays honest.
 - **Published chips are context, not a scoreboard,** unless task, dataset, protocol and unit all match. The
   registry carries these fields and the report says "context only" otherwise.
-- **GF180 and IHP layouts work** (validated on the M3 Max and here). GF180 is slower, so its default clock for
-  timing is 40 ns, against 20 ns on sky130 and IHP.
+- **GF180 and IHP layouts work** (validated on the M3 Max and here). Without `clock_period_ns`, timing uses a 50 ns
+  clock (20 MHz) on sky130 and IHP and 100 ns on the slower GF180: that closes for chips of a few thousand gates
+  (the M3 run's classifiers needed about 21 ns) and is far faster than a sensor's decision rate. Every timing answer
+  also gives `fmax_mhz`, the fastest clock the chip meets.
 - **alkaid-optimised RTL** embeds alkaid's helper modules (LGPL-3.0), copied in at generation time; the default
   emitter stays the lab's own. Gate counts and area can disagree for alkaid designs (fewer gates, sometimes similar area),
   so look at both.

@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import contextvars
 import os
 import stat
 import time
@@ -18,6 +19,7 @@ import numpy as np
 from chiplab import config, log
 
 TOOLS: dict[str, dict] = {}
+_DEPTH = contextvars.ContextVar("chiplab_tool_depth", default=0)   # >0 inside another tool: report nothing
 
 
 class ToolError(RuntimeError):
@@ -28,7 +30,9 @@ CONTEXT_ARGS = {"run_id": "str — dashboard run to emit events into (optional)"
                 "session_id": "str — calling agent session (optional; used for quotas and the leaderboard)",
                 "round": "int — design round, copied onto dashboard events (optional)",
                 "progress": "str — auto|off|<path>: report through a ChipIn ./progress helper (auto-detected in the cwd)",
-                "progress_stages": "bool — also mark the ChipIn stage started/done around this call (default false)"}
+                "progress_stages": "bool — also mark the ChipIn stage started/done around this call (default false)",
+                "report_metrics": "bool — after this call, send the ChipIn dashboard the full figure set of this call's "
+                                  "design, as chip_report does (default false)"}
 
 
 STATUS_RC = {"ok": 0, "error": 1, "fail": 2, "timeout": 3}
@@ -55,12 +59,12 @@ def outcome(res: dict) -> str:
 
 def normalize_args(fn, kw: dict) -> dict:
     """Bind to the signature with defaults filled in and integral floats as ints, so equivalent calls share one
-    cache entry (e.g. layout(clock_period_ns=20) and timing_power() with its default 20.0)."""
+    cache entry (e.g. layout(clock_period_ns=50) and timing_power() with its sky130 default 50.0)."""
     b = inspect.signature(fn).bind(**kw)
     b.apply_defaults()
     if "clock_period_ns" in b.arguments and b.arguments["clock_period_ns"] is None and "pdk" in b.arguments:
         from chiplab.tools_hw import DEFAULT_CLOCK_NS, _PDK_ALIAS   # resolve the per-PDK default before hashing
-        b.arguments["clock_period_ns"] = DEFAULT_CLOCK_NS.get(_PDK_ALIAS.get(b.arguments["pdk"], b.arguments["pdk"]), 20.0)
+        b.arguments["clock_period_ns"] = DEFAULT_CLOCK_NS.get(_PDK_ALIAS.get(b.arguments["pdk"], b.arguments["pdk"]), 50.0)
 
     def canon(v):
         if isinstance(v, float) and v.is_integer():
@@ -85,12 +89,21 @@ def tool(summary: str, params: dict, lane: str = "cpu", cacheable: bool = False)
 
         @wraps(fn)
         def wrapper(**kw):
+            depth = _DEPTH.get()
+            tok = _DEPTH.set(depth + 1)
+            try:
+                return _call(depth, kw)
+            finally:
+                _DEPTH.reset(tok)
+
+        def _call(depth, kw):
             from chiplab import cache, events, progress
             own = inspect.signature(fn).parameters
             ctx = {k: (kw[k] if k in own else kw.pop(k)) for k in list(kw) if k in CONTEXT_ARGS}
             force = bool(kw.pop("force", False))
             t0, c0 = time.time(), time.process_time()
-            ph = progress.helper(ctx.get("progress"))
+            # only the outermost tool call reports to ChipIn (timing_power runs layout inside: one report, not two)
+            ph = progress.helper(ctx.get("progress")) if depth == 0 else None
             pst = bool(ctx.get("progress_stages"))
             progress.before(name, {**kw, **ctx}, ph, pst)
             try:
@@ -120,7 +133,7 @@ def tool(summary: str, params: dict, lane: str = "cpu", cacheable: bool = False)
                 events.for_tool(name, {**kw, **ctx}, res)
             except Exception:  # events must never break a tool
                 pass
-            progress.after(name, {**kw, **ctx}, res, ph, pst)
+            progress.after(name, {**kw, **ctx}, res, ph, pst, report=bool(ctx.get("report_metrics")) or name == "chip_report")
             return res
         TOOLS[name] = {"fn": wrapper, "summary": summary, "params": {**params}, "lane": lane, "cacheable": cacheable}
         return wrapper

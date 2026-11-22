@@ -106,9 +106,20 @@ AGENT_ENV_ALLOWED = {"HOME", "PATH", "PWD", "SHELL", "TERM", "TMPDIR", "TZ", "US
                      "DISABLE_AUTOUPDATER", "IS_SANDBOX", "OPENROUTER_API_KEY", "HF_TOKEN"}
 
 
+#: The lab's own variables the backend passes to agents unchanged when set (chipin_backend.chiplab.CHIPLAB_PASSED_NAMES).
+AGENT_ENV_CHIPLAB_PASSED = ("CHIPLAB_CONFIG", "CHIPLAB_USER_DIR")
+#: Folder holding the chiplab command; the backend puts it first on the agent's PATH (chipin_backend.chiplab).
+CHIPLAB_BIN_ENV = "CHIPIN_CHIPLAB_BIN"
+
+
 def agent_env(base: dict | None = None) -> dict:
+    """The environment ChipIn gives an agent: its allowlist, plus the lab's passed variables and bin folder."""
     src = dict(os.environ if base is None else base)
     env = {k: v for k, v in src.items() if k in AGENT_ENV_ALLOWED or k.startswith("LC_")}
+    env.update({k: src[k] for k in AGENT_ENV_CHIPLAB_PASSED if src.get(k)})
+    bin_dir = (src.get(CHIPLAB_BIN_ENV) or "").strip()
+    if bin_dir:
+        env["PATH"] = os.pathsep.join(x for x in (str(Path(bin_dir).expanduser()), env.get("PATH", "")) if x)
     env.update({"CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1", "DISABLE_AUTOUPDATER": "1"})
     return env
 
@@ -125,8 +136,13 @@ def run_agent_env() -> dict:
         r = _json.loads(p.stdout)
     except ValueError:
         r = {"status": "error", "ok": False, "checks": [], "error": (p.stderr or p.stdout)[-600:]}
-    r["agent_env"] = {"names_passed": sorted(env), "chiplab_on_path": launcher,
-                      "note": "CHIPLAB_*, DOCKER_HOST and PDK_ROOT are stripped; everything must come from the config file"}
+    kept = [k for k in AGENT_ENV_CHIPLAB_PASSED if k in env]
+    r["agent_env"] = {"names_passed": sorted(env), "chiplab_on_path": launcher, "chiplab_vars_kept": kept,
+                      "chiplab_bin": os.environ.get(CHIPLAB_BIN_ENV) or None,
+                      "note": ("Same rule as ChipIn's backend: CHIPLAB_CONFIG and CHIPLAB_USER_DIR are kept when set "
+                               f"(kept here: {', '.join(kept) or 'none set'}) and CHIPIN_CHIPLAB_BIN goes first on PATH; "
+                               "every other CHIPLAB_* variable, DOCKER_HOST and PDK_ROOT is stripped, so those settings "
+                               "must come from the config file")}
     if not launcher:
         r["ok"] = False
         r.setdefault("missing_required", []).append("launcher:chiplab")

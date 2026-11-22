@@ -244,9 +244,14 @@ def gate_activity(design_id: str, vectors: dict | None = None, n: int = 2000, vc
             "note": "net ids are Yosys netlist bit ids (see netlist JSON); toggle rates use the vectors' order as time"}
 
 
+#: The instruction ChipIn agents get about chip-report (docs/CHIPIN_INTEGRATION.md section 6; same text in chiplab.md).
+CHIP_REPORT_SENTENCE = ('Before you mark report done, call `chiplab chip-report --json \'{"design_id": "<the chip you chose>", "decision_rate_hz": <decisions per second>}\'` on the one chip you chose: the chip figures the user sees (area, power, energy, cost, verification) come from that call.')
+
+
 @tool("One-page chip report (markdown text): ports, hardware numbers with their basis, verification level and "
       "evidence, manufacturing routes and cost, published hardware for context, artefact paths. With "
-      "decision_rate_hz (or a rate given to layout earlier) it shows power at that decision rate.",
+      "decision_rate_hz (or a rate given to layout earlier) it shows power at that decision rate. Also returns "
+      "`figures`: the chip's full figure set, which a ChipIn run's dashboard shows. " + CHIP_REPORT_SENTENCE,
       {"design_id": "str", "name": "str — a readable name (optional)",
        "decision_rate_hz": "float — decisions per second the device needs (optional)"}, lane="inline")
 def chip_report(design_id: str, name: str | None = None, decision_rate_hz: float | None = None) -> dict:
@@ -264,6 +269,7 @@ def chip_report(design_id: str, name: str | None = None, decision_rate_hz: float
         lad = {"verification_level": 0, "evidence": [f"ladder not available: {e}"]}
     lad.setdefault("label", {0: "not verified", 1: "bit-exact simulation", 2: "formal proof", 3: "streaming RTL simulation",
                              4: "gate-level test after layout", 5: "running on hardware"}.get(lad.get("verification_level", 0), ""))
+    fig = chip_figures(design_id, decision_rate_hz)          # fills cheap gaps (synthesis, sky130 mapping, cost) first
     cost = rd("cost.json") or estimate_cost.__wrapped__(design_id=design_id)
     base = compare_hw_baseline.__wrapped__(design_id=design_id)["baselines"]
     pdks = {p: rd(f"pdk_{p}.json") for p in ("sky130", "gf180", "ihp") if rd(f"pdk_{p}.json")}
@@ -287,13 +293,94 @@ def chip_report(design_id: str, name: str | None = None, decision_rate_hz: float
                     ops=sorted({n["op"] for n in ir["nodes"]}), synth=rd("synth.json"), luts=luts, pdks=pdks, layouts=layouts,
                     fpga=rd("bitstream.json"), cost=cost, baselines=base, artefacts=arte, rate_rows=rate_rows)
     (d / "report.md").write_text(md)
-    out = {"design_id": design_id, "report_md": md, "digest": hashlib.sha256(md.encode()).hexdigest()[:12]}
+    out = {"design_id": design_id, "report_md": md, "digest": hashlib.sha256(md.encode()).hexdigest()[:12],
+           "figures": fig["figures"], "figures_basis": fig["basis"]}
     if rate_rows:
         out["power_at_rate"] = rate_rows
     return {**out,
             "files": [str(d / "report.md")], "verilog_url": f"/files/{design_id}/design.v",
             "netlist_json_url": f"/files/{design_id}/synth/net.json",
             "layout_png_url": next((f"/files/{design_id}/{p.relative_to(d)}" for p in d.rglob("*.png")), None)}
+
+
+#: The figure set of one chip, in the order the ChipIn dashboard receives it (chiplab.progress.METRIC_KEYS units).
+FIGURE_KEYS = ("gates", "depth", "transistors", "luts_ice40", "luts_xc7", "area_um2", "ge", "tt_tiles", "cost_eur",
+               "verification_level", "timing_slack_ns", "fmax_mhz", "energy_pj", "leakage_uw", "power_uw_at_rate")
+
+
+def chip_figures(design_id: str, decision_rate_hz: float | None = None, fill: bool = True) -> dict:
+    """Every figure of ONE chip, from its own results, so a dashboard never mixes two circuits. With fill, the cheap
+    missing ones are made first (synthesis, sky130 cell mapping, cost: seconds); layout, LUT counts and bitstreams
+    are used only if they were already run. Returns {"figures": {key: number}, "basis": {key: text}}."""
+    import math
+    d = _design_dir(design_id)
+    rd = lambda f: json.loads((d / f).read_text()) if (d / f).exists() else {}
+    if fill:
+        try:
+            _ensure_synth(design_id)
+        except Exception:
+            pass
+        if not (d / "pdk_sky130.json").exists():
+            try:
+                from chiplab.hw.pdk import liberty
+                liberty("sky130")
+                map_to_process.__wrapped__(design_id=design_id, pdk="sky130")
+            except Exception:
+                pass
+        try:
+            estimate_cost.__wrapped__(design_id=design_id)        # pure arithmetic on the files above: always fresh
+        except Exception:
+            pass
+    f, b = {}, {}
+
+    def put(k, v, basis):
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+            return
+        f[k] = round(v, 6) if isinstance(v, float) else v
+        b[k] = basis
+    syn = rd("synth.json")
+    put("gates", syn.get("gates"), "synthesized (Yosys, simple 2-input gates)")
+    put("depth", syn.get("depth"), "synthesized (logic levels on the longest path)")
+    put("transistors", syn.get("transistors_est"), "estimate (Yosys CMOS cost model)")
+    ice, xc7, bit = rd("luts_ice40.json"), rd("luts_xc7.json"), rd("bitstream.json")
+    put("luts_ice40", ice.get("luts") if ice else (bit.get("metrics") or bit).get("luts"), "synthesized (iCE40UP5K LUT4)")
+    put("luts_xc7", xc7.get("luts"), "synthesized (AMD 7-series LUT6)")
+    sky = rd("pdk_sky130.json")
+    put("area_um2", sky.get("area_um2"), "synthesized onto sky130 cells (before layout)")
+    put("ge", sky.get("gate_equivalents"), "synthesized (sky130 area / one NAND2 cell)")
+    put("tt_tiles", sky.get("tt_tiles_est"), "estimate (sky130 area at 60% utilisation)")
+    tt = next((r for r in rd("cost.json").get("routes", []) if r.get("route") == "tt_sky130"), None)
+    if tt:
+        put("cost_eur", tt.get("cost"), f"price list checked {tt.get('checked')} (Tiny Tapeout sky130)")
+        put("tt_tiles", tt.get("tiles"), "the tiles the Tiny Tapeout price is for")
+    try:
+        from chiplab.verify.ladder import stamp
+        put("verification_level", stamp(d).get("verification_level"), "verification ladder (0 to 5), from this chip's own checks")
+    except Exception:
+        pass
+    lay, lp = None, None
+    for p in ("sky130A", "ihp-sg13g2", "gf180mcuD"):
+        if (d / f"layout_{p}.json").exists():
+            lay, lp = rd(f"layout_{p}.json"), p
+            break
+    if lay and not lay.get("error"):
+        clk = lay.get("clock_period_ns")
+        if lp == "sky130A":
+            put("area_um2", lay.get("area_um2"), "sky130 after place and route (LibreLane)")
+        put("timing_slack_ns", lay.get("timing_ws_ns"), f"{lp} layout, static timing at a {clk} ns clock")
+        cp = lay.get("critical_path_ns")
+        if isinstance(cp, (int, float)) and cp > 0:
+            put("fmax_mhz", round(1000.0 / cp, 2), f"{lp} layout: 1000 / critical path ({cp} ns)")
+        put("energy_pj", lay.get("energy_per_decision_pj"), f"{lp} layout, vectorless energy per decision")
+        put("leakage_uw", lay.get("leakage_uw"), f"{lp} layout (standby power)")
+        rate = decision_rate_hz if decision_rate_hz is not None else lay.get("decision_rate_hz")
+        put("power_uw_at_rate", rate_power(lay.get("energy_per_decision_pj"), lay.get("leakage_uw"), rate),
+            f"energy per decision x {rate} decisions/s + leakage")
+    if "fmax_mhz" not in f and bit:
+        fm = (bit.get("metrics") or bit).get("fmax_mhz")
+        put("fmax_mhz", min(fm.values()) if isinstance(fm, dict) and fm else fm, "iCE40 place and route (nextpnr)")
+    return {"design_id": design_id, "figures": {k: f[k] for k in FIGURE_KEYS if k in f},
+            "basis": {k: b[k] for k in FIGURE_KEYS if k in b}}
 
 
 # ------------------------------------------------------------------------------------------------ agent-written RTL
@@ -349,7 +436,9 @@ def submit_verilog(verilog: str, top: str, port_spec: dict, reference_ir: dict |
 
 # ------------------------------------------------------------------------------------------------ layout, FPGA, TT
 
-DEFAULT_CLOCK_NS = {"sky130A": 20.0, "ihp-sg13g2": 20.0, "gf180mcuD": 40.0}  # GF180 is slower: 40 ns default
+#: Clock used for timing when the caller gives none: 20 MHz (10 MHz on the slower GF180), which closes for chips of a
+#: few thousand gates and is far faster than any sensor needs (decisions per second, not per microsecond).
+DEFAULT_CLOCK_NS = {"sky130A": 50.0, "ihp-sg13g2": 50.0, "gf180mcuD": 100.0}
 _PDK_ALIAS = {"sky130": "sky130A", "sky130A": "sky130A", "gf180": "gf180mcuD", "gf180mcuD": "gf180mcuD",
               "ihp": "ihp-sg13g2", "ihp-sg13g2": "ihp-sg13g2"}
 
@@ -387,7 +476,7 @@ def _layout(design_id: str, pdk: str, clock_period_ns: float | None, core_util: 
     from pathlib import Path
     d = _design_dir(design_id)
     p = _PDK_ALIAS[pdk]
-    clock_period_ns = clock_period_ns or DEFAULT_CLOCK_NS.get(p, 20.0)
+    clock_period_ns = clock_period_ns or DEFAULT_CLOCK_NS.get(p, 50.0)
     r = _librelane_run(design_id, p, clock_period_ns, core_util, activity_vcd, timeout)
     pw = r.get("power_w")
     leak = round(r["leakage_w"] * 1e6, 6) if r.get("leakage_w") is not None else None
@@ -396,6 +485,9 @@ def _layout(design_id: str, pdk: str, clock_period_ns: float | None, core_util: 
            "core_mm2": round(r["area_um2"] / 1e6, 6) if r.get("area_um2") else None,
            "die_mm2": round(r["die_area_um2"] / 1e6, 6) if r.get("die_area_um2") else None,
            "timing_ws_ns": r.get("timing_ws_ns"), "critical_path_ns": r.get("critical_path_ns"),
+           "fmax_mhz": round(1000.0 / r["critical_path_ns"], 2) if (r.get("critical_path_ns") or 0) > 0 else None,
+           "fmax_basis": "1000 / critical path after layout (the fastest clock this chip runs at)",
+           "timing_met": (r["timing_ws_ns"] >= 0) if r.get("timing_ws_ns") is not None else None,
            "power_uw": round(pw * 1e6, 3) if pw is not None else None,
            "power_uw_at_clock": round(pw * 1e6, 3) if pw is not None else None,
            "power_at_clock_basis": (f"LibreLane {r.get('power_basis') or 'vectorless'} power with the logic evaluated every "
@@ -427,7 +519,7 @@ def _layout(design_id: str, pdk: str, clock_period_ns: float | None, core_util: 
       "power (vectorless, or from an activity VCD), GDS and the KLayout image. Power is given at the clock "
       "(power_uw_at_clock) and, with decision_rate_hz, at the rate the sensor actually needs decisions "
       "(power_uw_at_rate = energy per decision x rate + leakage). Changing the rate never re-runs LibreLane.",
-      {"design_id": "str", "pdk": "str — sky130|gf180|ihp (sky130)", "clock_period_ns": "float — clock for timing (default 20 ns; 40 ns on gf180)",
+      {"design_id": "str", "pdk": "str — sky130|gf180|ihp (sky130)", "clock_period_ns": "float — clock for timing (default 50 ns = 20 MHz; 100 ns on gf180)",
        "core_util": "int — target utilisation % (40)", "activity_vcd": "str — VCD of real activity for power (optional)",
        "timeout": "int seconds (3600)", "decision_rate_hz": "float — decisions per second the device needs (optional)"},
       lane="docker", cacheable=True)
@@ -438,7 +530,7 @@ def layout(design_id: str, pdk: str = "sky130", clock_period_ns: float | None = 
 
 @tool("Timing and power of the laid-out chip (same LibreLane run as layout; cached, so calling both costs one run). "
       "With decision_rate_hz it adds power_uw_at_rate: energy per decision x decisions per second + leakage.",
-      {"design_id": "str", "pdk": "str — sky130|gf180|ihp (sky130)", "clock_period_ns": "float (default 20 ns; 40 ns on gf180)",
+      {"design_id": "str", "pdk": "str — sky130|gf180|ihp (sky130)", "clock_period_ns": "float (default 50 ns = 20 MHz; 100 ns on gf180)",
        "activity_vcd": "str — optional VCD for activity-based power",
        "decision_rate_hz": "float — decisions per second the device needs (optional)"}, lane="docker", cacheable=True)
 def timing_power(design_id: str, pdk: str = "sky130", clock_period_ns: float | None = None, activity_vcd: str | None = None,

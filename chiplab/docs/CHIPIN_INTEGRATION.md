@@ -8,6 +8,8 @@ The short version:
   `./progress` helper in that folder.
 - When a lab tool runs in that folder, the lab calls `./progress` itself: status lines, measured numbers, and
   the chip files it made.
+- The dashboard shows one chip's figures at a time: while the agent explores, only the headline `gates` and run
+  counters change; `chip-report` on the chosen chip sends that chip's full set (section 2).
 - The agent keeps owning the stages.
 
 ## 1. How the bridge works
@@ -38,29 +40,68 @@ The short version:
 
 Numbers only, snake_case keys, each with a unit. The table is exported as `chiplab.progress.METRIC_KEYS`.
 
-| Key | Unit | Reported by | Basis |
-|---|---|---|---|
-| `gates` | gates | synthesize | synthesized (Yosys, simple 2-input gates) |
-| `depth` | gates | synthesize | synthesized (longest path) |
-| `transistors` | transistors | synthesize | estimate (Yosys CMOS cost model) |
-| `luts_ice40` | LUT4 | count-luts (ice40), bitstream | synthesized (iCE40UP5K) |
-| `luts_xc7` | LUT6 | count-luts (xc7) | synthesized (AMD 7-series 6-input LUTs) |
-| `area_um2` | um2 | map-to-process; layout | synthesized onto the process's cells (map-to-process), or after place and route (layout) |
-| `ge` | GE | map-to-process | synthesized (area divided by one NAND2 cell) |
-| `tt_tiles` | tiles | map-to-process, tt-package | estimate (sky130 area at 60% utilisation), or the tiles tt-package picked |
-| `cost_eur` | EUR | estimate-cost | price list, checked 21 Nov 2026 (Tiny Tapeout route) |
-| `vectors_checked` | vectors | simulate, rtl-simulate | measured (bit-exact comparison) |
-| `mismatches` | vectors | simulate, rtl-simulate | measured (0 means bit-exact) |
-| `verification_level` | level | prove-equivalence, rtl-simulate, verification-level | 0 to 4, see AGENT.md |
-| `timing_slack_ns` | ns | layout, timing-power | layout (static timing at the chosen clock) |
-| `fmax_mhz` | MHz | bitstream | FPGA place and route (nextpnr) |
-| `energy_pj` | pJ | layout, timing-power | layout, vectorless power (energy per decision at the clock rate) |
-| `leakage_uw` | uW | layout, timing-power | layout (standby power) |
-| `power_uw_at_rate` | uW | layout, timing-power, chip-report (with `decision_rate_hz`) | energy_pj × rate × 1e-6 + leakage_uw: the number for battery life |
-| `candidates` | designs | estimate-batch and the batch tools | count |
-| `best_gates` | gates | estimate-batch | estimate (fast pre-synthesis estimate); real synthesis reports `gates` |
+### One chip on the panel
 
-Batch tools report only `candidates` and `best_gates`, not one metric per design.
+The dashboard keeps one value per key (the last one wins) and has no chip id. If every tool sent every number, the
+panel would mix chips: in the M3 run (20261122-001507-0ef5bb) the final `gates` came from one classifier and the
+area, slack and power from the front-end. So the lab sends two kinds of metrics:
+
+- **While exploring (every call):** only the run keys below: `gates` of the chip just synthesised (keeps the
+  headline live), `candidates` (distinct chips under `./chips/`) and the run's cumulative `vectors_checked` and
+  `mismatches` (the same check repeated counts once). Every other number goes to
+  `./chips/<design_id>/metrics.json` and to a status line such as
+  `ChipIn measured chip 94090842ebae-alk: 11,804 um2, slack +29.15 ns, fmax 48.0 MHz, ...`.
+- **Without a report** the run still ends consistent: fewer numbers on the panel (`gates` of the latest chip and
+  the run counters), never two chips mixed. That is what the M3 run gives today, since it never called
+  `chip-report`.
+- **When reporting a chip:** `chip-report`, or `"report_metrics": true` on any tool call, sends that chip's full
+  figure set in one burst, `gates` included. Missing cheap figures are made first (synthesis, sky130 cell mapping,
+  cost: seconds). Layout, LUT counts and the bitstream are used only if the agent already ran them. After a
+  report, `gates` from other chips stays in status lines until the next report, so the panel always shows one chip.
+
+A report can't remove keys an earlier report sent. If chip B is reported after chip A, and A had a layout but B
+doesn't, the timing and power keys still show A until B is laid out. Run `timing-power` on B before reporting it.
+
+| Key | Unit | Sent | Measured by | Basis |
+|---|---|---|---|---|
+| `gates` | gates | exploring + report | synthesize | synthesized (Yosys, simple 2-input gates) |
+| `candidates` | designs | exploring | any tool that puts a chip under `./chips/` | count of distinct chips this run |
+| `vectors_checked` | vectors | exploring | simulate, rtl-simulate, submit-verilog | measured, cumulative over the run |
+| `mismatches` | vectors | exploring | simulate, rtl-simulate, submit-verilog | measured, cumulative (0 means every check was bit-exact) |
+| `depth` | levels | report | synthesize | synthesized (logic levels on the longest path) |
+| `transistors` | transistors | report | synthesize | estimate (Yosys CMOS cost model) |
+| `luts_ice40` | LUT4 | report | count-luts (ice40), bitstream | synthesized (iCE40UP5K) |
+| `luts_xc7` | LUT6 | report | count-luts (xc7) | synthesized (AMD 7-series 6-input LUTs) |
+| `area_um2` | um2 | report | map-to-process; layout | sky130 after place and route if laid out, else synthesized onto sky130 cells |
+| `ge` | GE | report | map-to-process | synthesized (area divided by one NAND2 cell) |
+| `tt_tiles` | tiles | report | map-to-process, estimate-cost, tt-package | the tiles the Tiny Tapeout price is for |
+| `cost_eur` | EUR | report | estimate-cost | price list, checked 21 Nov 2026 (Tiny Tapeout route) |
+| `verification_level` | level | report | the chip's own checks | 0 to 5, see AGENT.md |
+| `timing_slack_ns` | ns | report | layout, timing-power | layout (static timing at the chosen clock; default 50 ns) |
+| `fmax_mhz` | MHz | report | layout, timing-power; bitstream | 1000 / critical path after layout; else iCE40 place and route |
+| `energy_pj` | pJ | report | layout, timing-power | layout, vectorless (energy per decision) |
+| `leakage_uw` | uW | report | layout, timing-power | layout (standby power) |
+| `power_uw_at_rate` | uW | report | layout, timing-power, chip-report (with `decision_rate_hz`) | energy_pj × rate × 1e-6 + leakage_uw: the number for battery life |
+
+`./chips/<design_id>/metrics.json` holds every figure measured for that chip:
+`{design_id, metrics: {key: {value, unit, from, at}}}`. It is reported once as a `file` artifact when it is created.
+The run counters are in `./chips/.chiplab-progress.json`.
+
+A tool that runs another tool inside it (`timing-power` runs `layout`) reports once.
+
+### Chip id on metrics (optional, off until the backend enables it)
+
+Proposed contract for the backend: `./progress metric <key> <number> [unit] --chip <design_id>` becomes an event
+with a `chip` field. The lab adds `--chip <design_id>` to every chip figure only when `CHIPIN_PROGRESS_CHIP=1` is
+in its environment. The run counters (`candidates`, `vectors_checked`, `mismatches`) never carry a chip. Today's
+helper rejects a fourth metric argument and the tailer keeps only key, value and unit, so the lab sends exactly
+today's lines without the variable. To turn it on:
+1. the helper accepts `--chip`;
+2. the tailer keeps `chip`;
+3. the backend puts `CHIPIN_PROGRESS_CHIP=1` into the agent's environment. It isn't on the allowlist, so it has to
+   be set explicitly, e.g. in `AGENT_ENV_FORCED` or `chiplab_env()`.
+
+`tests/test_progress_one_chip.py` tests both paths.
 
 ## 3. Stage mapping
 
@@ -69,7 +110,7 @@ compile and verify stages, and part of report.
 
 | Stage | Lab tools |
 |---|---|
-| propose | estimate-batch (rank candidates by estimated gates) |
+| propose | estimate-batch (rank candidates by estimated gates; status line only) |
 | compile | ingest-model, compile-ir, synthesize, count-luts, map-to-process |
 | verify | simulate, prove-equivalence, prove-sequential, rtl-simulate, verification-level |
 | report | chip-report, layout, timing-power, tt-package, bitstream, estimate-cost |
@@ -81,8 +122,10 @@ marks the stage once around a group of calls.
 ## 4. Environment: why it works inside the agent's sandbox
 
 The backend starts the agent with an allowlisted environment (`agents/env.py`): `HOME`, `PATH`, `VIRTUAL_ENV`,
-`PYTHONPATH`, `TMPDIR`, `LANG` and similar. It strips everything else, including `CHIPLAB_*`, `DOCKER_HOST` and
-`PDK_ROOT`. The lab therefore never depends on those variables:
+`PYTHONPATH`, `TMPDIR`, `LANG` and similar. Of the lab's variables it passes only `CHIPLAB_CONFIG` and
+`CHIPLAB_USER_DIR` (for an install outside the default paths), and it puts `CHIPIN_CHIPLAB_BIN` first on `PATH`
+(`chipin_backend/chiplab.py`). Everything else is stripped, including `CHIPLAB_HOME`, `DOCKER_HOST` and `PDK_ROOT`.
+The lab therefore never depends on those:
 
 - **Config file.** `scripts/install.sh` writes `~/.config/chiplab/config.json`, with absolute paths to the
   OSS CAD Suite tools, the PDKs, the Tiny Tapeout tools, the LibreLane image and the Docker socket. The lab
@@ -91,8 +134,10 @@ The backend starts the agent with an allowlisted environment (`agents/env.py`): 
   Docker Desktop and Rancher sockets.
 - **Launcher.** `install.sh` puts a `chiplab` launcher in `~/.local/bin`, so the agent can call `chiplab` by
   name.
-- **Check it.** `chiplab doctor --agent-env` re-runs every check under the same allowlist, with every other
-  variable removed. It must report READY on the machine that runs the agents.
+- **Check it.** `chiplab doctor --agent-env` re-runs every check under the same rule: the allowlist, plus
+  `CHIPLAB_CONFIG` / `CHIPLAB_USER_DIR` when set and `CHIPIN_CHIPLAB_BIN` on `PATH`, with every other variable
+  removed. Its `agent_env.chiplab_vars_kept` says which lab variables it kept. It must report READY on the machine
+  that runs the agents.
 
 ## 5. Where the chip files go
 
@@ -128,6 +173,7 @@ The lab's own working copy stays in its home folder (`runs/designs/<design_id>/`
 >   `rtl-simulate`, and `verification-level`.
 > - **report**: `chip-report`, `layout` / `timing-power` (pass `decision_rate_hz` = how often the chip decides,
 >   for the battery-relevant power), `tt-package`, `bitstream`, `estimate-cost`.
+> Before you mark report done, call `chiplab chip-report --json '{"design_id": "<the chip you chose>", "decision_rate_hz": <decisions per second>}'` on the one chip you chose: the chip figures the user sees (area, power, energy, cost, verification) come from that call.
 >
 > Run these from your working folder. The lab reports its own metrics, status lines and chip files through
 > `./progress`, so do not repeat those numbers. Do mark the stages yourself:
@@ -144,3 +190,9 @@ it skips if that branch can't be fetched:
 3. It feeds the resulting `progress.jsonl` through the real `ProgressTailer` and `EventLog`.
 4. It checks that every line became an event, metrics use the keys above, files landed under
    `workspace/chips/`, and stage events appear only where `progress_stages` was set.
+
+`tests/test_progress_one_chip.py` replays the M3 run's call sequence (A, B, C, each also `-alk`, and the front-end
+F; compile, synthesize, count-luts, map-to-process, simulate, prove-equivalence, verification-level, timing-power)
+through a stand-in `./progress` with the same command-line contract. It checks that the final panel holds one chip's
+figures, before and after a `chip-report`. LibreLane is replaced by the critical paths and power the M3 run
+measured, so the test needs no Docker.

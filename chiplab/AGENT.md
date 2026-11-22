@@ -25,6 +25,8 @@ GitHub's cloud: commit the folder from `tt-package` and run the `tt-gds` workflo
 - Python: `import chiplab.api as lab; lab.<tool_name>(**args)` returns the same dict.
 - Async (several agents at once): `submit-job {tool, args, session_id}` returns a `job_id`; poll `job-status` / `job-result`. Lanes are sized to the machine: cpu = cores - 1, gpu = 1, docker = Docker memory / 12 GB (1-4); override with CHIPLAB_CPU_WORKERS / CHIPLAB_GPU_WORKERS / CHIPLAB_DOCKER_WORKERS (or "lanes" in the config file); `chiplab doctor` shows what it picked. Start workers with `chiplab workers`. Results are cached by content, so duplicate designs return instantly (`cached: true`).
 - Every tool also accepts `run_id`, `session_id`, `round` (events, see EVENTS.md) and `force` (skip the cache).
+- In a ChipIn run (a `./progress` helper in the working folder) every tool reports to the dashboard by itself; see EVENTS.md, "ChipIn dashboard". While you explore, the dashboard shows only `gates` of the latest chip and the run's counters, never a mix of chips. Before you mark report done, call `chiplab chip-report --json '{"design_id": "<the chip you chose>", "decision_rate_hz": <decisions per second>}'` on the one chip you chose: the chip figures the user sees (area, power, energy, cost, verification) come from that call. `report_metrics: true` on any call does the same for that call's design.
+- Timing: `layout` / `timing-power` default to a 50 ns clock (20 MHz; 100 ns on gf180), which closes for chips of a few thousand gates; every answer also gives `fmax_mhz`, the fastest clock the chip meets.
 - Status and exit code are honest: `ok` = 0 (the tool did its job and every check it ran passed), `error` = 1 (it could not do its job; see `error`), `fail` = 2 (it ran, and the design failed a check, e.g. `bit_exact: false`), `timeout` = 3. A queued job is `ok` with `state: queued`.
 - Proof sizes: `prove-equivalence` (gates = RTL) takes about a second at a few thousand gates; with `golden: true` it also proves the RTL against an independent golden model of the IR in one miter (spike, 2.3k gates: about 7 s). `prove-sequential` is compositional (the core is a black box, proven by prove-equivalence), so it proves the clocked wrapper in seconds at any model size; `whole: true` proves the flattened design and is only practical for a few hundred gates.
 - Safety: `submit-verilog` runs lint/synthesis only inside the sandbox container unless you pass `allow_host: true`; `ingest-model` with `format: torchlogix` loads a pickle and needs `trusted: true` (and `CHIPLAB_ALLOW_PICKLE=1` when called through the optional network server). XGBoost models are converted in a separate process.
@@ -791,7 +793,7 @@ chiplab gate-activity --json '{"design_id": "765fa47586bd", "n": 2000, "vcd": tr
 
 ### `chip-report`
 
-One-page chip report (markdown text): ports, hardware numbers with their basis, verification level and evidence, manufacturing routes and cost, published hardware for context, artefact paths. With decision_rate_hz (or a rate given to layout earlier) it shows power at that decision rate.
+One-page chip report (markdown text): ports, hardware numbers with their basis, verification level and evidence, manufacturing routes and cost, published hardware for context, artefact paths. With decision_rate_hz (or a rate given to layout earlier) it shows power at that decision rate. Also returns `figures`: the chip's full figure set, which a ChipIn run's dashboard shows. Before you mark report done, call `chiplab chip-report --json '{"design_id": "<the chip you chose>", "decision_rate_hz": <decisions per second>}'` on the one chip you chose: the chip figures the user sees (area, power, energy, cost, verification) come from that call.
 
 - Python: `lab.chip_report(design_id: str, name: str | None = None, decision_rate_hz: float | None = None) -> dict`
 - Lane: inline; cached: False
@@ -928,7 +930,7 @@ Place and route the chip with LibreLane (Docker): real cell area, die area, timi
 - Lane: docker; cached: True
   - `design_id`: str
   - `pdk`: str — sky130|gf180|ihp (sky130)
-  - `clock_period_ns`: float — clock for timing (default 20 ns; 40 ns on gf180)
+  - `clock_period_ns`: float — clock for timing (default 50 ns = 20 MHz; 100 ns on gf180)
   - `core_util`: int — target utilisation % (40)
   - `activity_vcd`: str — VCD of real activity for power (optional)
   - `timeout`: int seconds (3600)
@@ -990,7 +992,7 @@ Place and route the chip with LibreLane (Docker): real cell area, die area, timi
 
 Example:
 ```bash
-chiplab layout --json '{"design_id": "ed8e52cb7a11", "pdk": "sky130", "clock_period_ns": 20}'
+chiplab layout --json '{"design_id": "ed8e52cb7a11", "pdk": "sky130"}'
 ```
 
 ### `timing-power`
@@ -1001,7 +1003,7 @@ Timing and power of the laid-out chip (same LibreLane run as layout; cached, so 
 - Lane: docker; cached: True
   - `design_id`: str
   - `pdk`: str — sky130|gf180|ihp (sky130)
-  - `clock_period_ns`: float (default 20 ns; 40 ns on gf180)
+  - `clock_period_ns`: float (default 50 ns = 20 MHz; 100 ns on gf180)
   - `activity_vcd`: str — optional VCD for activity-based power
   - `decision_rate_hz`: float — decisions per second the device needs (optional)
 
@@ -1053,7 +1055,7 @@ Timing and power of the laid-out chip (same LibreLane run as layout; cached, so 
 
 Example:
 ```bash
-chiplab timing-power --json '{"design_id": "ed8e52cb7a11", "pdk": "sky130", "clock_period_ns": 20}'
+chiplab timing-power --json '{"design_id": "ed8e52cb7a11", "pdk": "sky130", "decision_rate_hz": 1}'
 ```
 
 ### `bitstream`
