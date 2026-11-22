@@ -8,6 +8,9 @@ no tool can put more than ``max_result_bytes`` into the model's context.
 
 Numbers carry a ``basis``: ``measured``, ``estimate`` or ``measured on
 simulated data``, following the page's own marking (how-it-works, section 7).
+Times carry ``playback_s``: seconds on the dashboard's playback clock (active
+time, silences over 30 minutes skipped; see ``api/playback.py``), the number
+``ui_set_playback`` takes.
 """
 
 from __future__ import annotations
@@ -19,6 +22,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from chipin_backend.api.events import STAGES
+from chipin_backend.api.history import with_summaries
+from chipin_backend.api.playback import PlaybackClock
+from chipin_backend.api.summaries import LEVELS, SUMMARIES_FILE, SUMMARY, read_jsonl
 from chipin_backend.runs import is_safe_run_id
 
 FACTS_PATH = Path(__file__).with_name("helper_facts.md")
@@ -35,7 +42,9 @@ _ESTIMATE_KEY = re.compile(r"area|power|cost|timing|slack|_est\b|_est_|estimate|
 _SCORE_KEY = re.compile(
     r"sensitiv|specific|fa_per|false_alarm|accura|_acc\b|^acc|caught|auc|f1|patients_pass|kappa|agree", re.I
 )
-_STAGES = ("spec", "reference", "propose", "finetune", "compile", "verify", "report")
+_STAGES = STAGES
+#: Levels shown first by ``get_summaries`` when nothing is asked for.
+_TOP_LEVELS = ("run", "stage")
 
 
 class ToolError(ValueError):
@@ -121,6 +130,13 @@ class RunFolder:
 
     def spec(self) -> dict[str, Any]:
         return self._json("workspace/spec.json")
+
+    def replayed_summaries(self) -> list[dict[str, Any]]:
+        """``summaries.jsonl``: lines written after the run (live ones are events already)."""
+        target = self.path / SUMMARIES_FILE
+        if target.is_symlink() or not target.resolve().is_relative_to(self.path):
+            return []
+        return [s for s in read_jsonl(target) if isinstance(s, dict)]
 
 
 class RunStore:
@@ -282,6 +298,59 @@ def _gate_count(design: dict[str, Any]) -> float | None:
     return gates.get("value") if isinstance(gates, dict) else None
 
 
+def summary_lines(events: list[dict[str, Any]], clock: PlaybackClock) -> list[dict[str, Any]]:
+    """The run's summary lines as the dashboard shows them: the latest per id, with its playback time.
+
+    ``events`` already carries the replayed lines (:func:`with_summaries`); a
+    replayed line sits where ``at`` puts it, a live one at its own ``seq``.
+    """
+    latest: dict[str, dict[str, Any]] = {}
+    for e in events:
+        if e.get("type") != SUMMARY or not isinstance(e.get("id"), str) or e.get("level") not in LEVELS:
+            continue
+        at = e.get("at") if isinstance(e.get("at"), int) else e.get("seq")
+        row = {
+            "id": e["id"],
+            "level": e["level"],
+            "final": bool(e.get("final")),
+            "text": e.get("text"),
+            "stage": e.get("stage"),
+            "agent": e.get("agent"),
+            "parent": e.get("parent"),
+            "children": len(e["covers"]) if isinstance(e.get("covers"), list) else None,
+            "source": e.get("source"),
+            "seq": at,
+            "playback_s": clock.at_seq(at) if isinstance(at, int) else clock.at(e),
+        }
+        latest.pop(e["id"], None)  # a later line with the same id replaces the earlier one
+        latest[e["id"]] = {k: v for k, v in row.items() if v is not None}
+    return list(latest.values())
+
+
+def _top_order(line: dict[str, Any]) -> tuple[int, int, int]:
+    stage_at = {name: i for i, name in enumerate(STAGES)}
+    if line["level"] == "run":
+        return (0, 0, int(line.get("seq") or 0))
+    name = str(line.get("stage") or str(line["id"]).removeprefix("stage:"))
+    return (1, stage_at.get(name, 99), int(line.get("seq") or 0))
+
+
+def _focus_id(focus: str, lines: list[dict[str, Any]]) -> str:
+    """``focus`` as a summary id: an id as given, or a bare stage name for its stage line."""
+    ids = {line["id"] for line in lines}
+    focus = focus.strip()
+    if focus in ids:
+        return focus
+    if f"stage:{focus}" in ids:
+        return f"stage:{focus}"
+    if f"agent:{focus}" in ids:
+        return f"agent:{focus}"
+    raise ToolError(
+        f"no summary {focus!r}; give an id from get_summaries (run, stage:<name>, batch:<stage>:<k>, "
+        "agent:<id> or g<n>) or a stage name"
+    )
+
+
 # ---------------------------------------------------------------- tools
 
 
@@ -318,6 +387,7 @@ class HelperTools:
         rec = run.record()
         events = self._events(run)
         designs = designs_of(run, events)
+        clock = PlaybackClock.from_events(self._playback_events(run))
         finished = [e for e in events if e.get("type") == "run.finished"]
         costs = [e for e in events if e.get("type") == "cost" and "subagents_usd" in e] or [
             e for e in events if e.get("type") == "cost" and not e.get("agent")
@@ -336,6 +406,8 @@ class HelperTools:
             "stages": {r["stage"]: r.get("state") for r in stages_of(events)},
             "cost_usd": (costs[-1].get("usd") if costs else (rec.get("cost") or {}).get("usd")),
             "events": len(events),
+            "playback_total_s": clock.total_s,
+            "idle_gaps_skipped": len(clock.gaps),
         }
 
     def get_spec(self, run_id: str) -> dict[str, Any]:
@@ -351,7 +423,14 @@ class HelperTools:
 
     def get_stages(self, run_id: str) -> dict[str, Any]:
         run = self.store.get(run_id)
-        return {"stages": stages_of(self._events(run))}
+        events = self._events(run)
+        clock = PlaybackClock.from_events(self._playback_events(run))
+        rows = stages_of(events)
+        for row in rows:
+            for key in ("started", "ended"):
+                if row.get(key):
+                    row[f"{key}_playback_s"] = clock.at_ts(row[key])
+        return {"stages": rows, "playback_total_s": clock.total_s}
 
     def get_designs(self, run_id: str) -> dict[str, Any]:
         run = self.store.get(run_id)
@@ -400,6 +479,7 @@ class HelperTools:
         run = self.store.get(run_id)
         events = self._events(run)
         simulated = _simulated(run, run.designs_file())
+        clock = PlaybackClock.from_events(self._playback_events(run))
         rows = []
         for e in events:
             if e.get("type") != "metric":
@@ -416,12 +496,67 @@ class HelperTools:
                     "unit": e.get("unit"),
                     "chip": e.get("chip"),
                     "basis": metric_basis(str(e.get("key")), simulated),
+                    "playback_s": clock.at(e),
                 }
             )
         return {"rows": rows[: self.limits.max_rows], "total": len(rows)}
 
-    def get_summaries(self, run_id: str) -> dict[str, Any]:
+    def _playback_events(self, run: RunFolder) -> list[dict[str, Any]]:
+        """The events the dashboard plays: the log plus summaries written after the run."""
+        return with_summaries(self._events(run), run.replayed_summaries())
+
+    def playback_clock(self, run_id: str) -> PlaybackClock:
+        """The dashboard's playback clock for one run."""
+        return PlaybackClock.from_events(self._playback_events(self.store.get(run_id)))
+
+    def get_summaries(
+        self, run_id: str, focus: str | None = None, level: str | None = None, stage: str | None = None
+    ) -> dict[str, Any]:
         run = self.store.get(run_id)
+        events = self._playback_events(run)
+        clock = PlaybackClock.from_events(events)
+        lines = summary_lines(events, clock)
+        if not lines:
+            return self._legacy_summaries(run)
+        if level is not None and level not in LEVELS:
+            raise ToolError(f"level must be one of {', '.join(LEVELS)}")
+        if stage is not None and stage not in STAGES:
+            raise ToolError(f"stage must be one of {', '.join(STAGES)}")
+        out: dict[str, Any] = {"levels": {lvl: sum(1 for x in lines if x["level"] == lvl) for lvl in LEVELS}}
+        if focus:
+            fid = _focus_id(str(focus), lines)
+            out["focus"] = next(x for x in lines if x["id"] == fid)
+            picked = [x for x in lines if x.get("parent") == fid]
+        elif level or stage:
+            picked = [
+                x
+                for x in lines
+                if (level is None or x["level"] == level)
+                and (stage is None or stage in (x.get("stage"), str(x["id"]).removeprefix("stage:")))
+            ]
+        else:
+            picked = sorted((x for x in lines if x["level"] in _TOP_LEVELS), key=_top_order)
+            out["drill"] = "focus=stage:<name>, batch:<stage>:<k>, agent:<id> or g<n> opens a line"
+        if focus or level or stage:
+            picked.sort(key=lambda x: (int(x.get("seq") or 0), LEVELS.index(x["level"])))
+        out["lines"], out["more"] = self._fit_lines(out, picked)
+        if not out["more"]:
+            del out["more"]
+        return out
+
+    def _fit_lines(
+        self, head: dict[str, Any], lines: list[dict[str, Any]]
+    ) -> tuple[list[dict[str, Any]], int]:
+        """As many whole lines as fit the result cap (with room for the ``more`` count)."""
+        kept: list[dict[str, Any]] = []
+        for line in lines:
+            if _json_len({**head, "lines": [*kept, line], "more": len(lines)}) > self.limits.max_result_bytes:
+                break
+            kept.append(line)
+        return kept, len(lines) - len(kept)
+
+    def _legacy_summaries(self, run: RunFolder) -> dict[str, Any]:
+        """Runs with no summary events: the final summary, bullets and evidence fields."""
         rec = run.record()
         events = self._events(run)
         finished = [e for e in events if e.get("type") == "run.finished"]
@@ -435,6 +570,8 @@ class HelperTools:
         }
         if not any(out.values()):
             out["note"] = "no summaries recorded for this run"
+        else:
+            out["note"] = "this run has no levels of summaries; these are its final fields"
         return out
 
     def get_report(self, run_id: str, offset: int = 0) -> dict[str, Any]:
@@ -487,8 +624,15 @@ class HelperTools:
             if score:
                 hits.append((score, e, text))
         hits.sort(key=lambda h: (-h[0], h[1].get("seq", 0)))
+        clock = PlaybackClock.from_events(self._playback_events(run))
         rows = [
-            {"seq": e.get("seq"), "type": e.get("type"), "ts": e.get("ts"), "text": _snippet(text, terms)}
+            {
+                "seq": e.get("seq"),
+                "type": e.get("type"),
+                "ts": e.get("ts"),
+                "playback_s": clock.at(e),
+                "text": _snippet(text, terms),
+            }
             for _, e, text in hits[: _bound(limit, 1, self.limits.max_search_hits)]
         ]
         return {"hits": rows, "total_hits": len(hits)}
@@ -601,8 +745,19 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     ),
     function_tool(
         "get_summaries",
-        "The run's final summary, bullets and evidence summaries.",
-        {"run_id": _RUN},
+        "The run's levels of summaries (run, stage, batch, agent, group, item), each line with its "
+        "level, final or interim, and playback_s. No other argument: the run and stage lines. "
+        "focus=<id from a line> (or a stage name) opens that line's children; level and stage filter. "
+        "A run with no summary lines gives its final summary, bullets and evidence instead.",
+        {
+            "run_id": _RUN,
+            "focus": {
+                "type": "string",
+                "description": "run, stage:<name>, batch:<stage>:<k>, agent:<id>, g<n>",
+            },
+            "level": {"type": "string", "enum": list(LEVELS)},
+            "stage": {"type": "string", "enum": list(STAGES)},
+        },
         ["run_id"],
     ),
     function_tool(
@@ -755,7 +910,7 @@ def clip_result(value: Any, limits: ToolLimits) -> Any:
     if _json_len(value) <= cap:
         return value
     if isinstance(value, dict):
-        for key in ("runs", "rows", "files", "hits", "designs", "per_patient"):
+        for key in ("runs", "rows", "files", "hits", "designs", "per_patient", "lines"):
             rows = value.get(key)
             if isinstance(rows, list) and rows:
                 kept = rows[: limits.max_rows]
@@ -799,4 +954,5 @@ __all__ = [
     "product_sections",
     "run_tool",
     "stages_of",
+    "summary_lines",
 ]

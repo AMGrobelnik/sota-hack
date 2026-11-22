@@ -50,6 +50,7 @@ from chipin_backend.api.events import public_text
 from chipin_backend.api.helper import add_helper_routes, helper_ready
 from chipin_backend.api.history import MAX_PAGE, history_page, run_facts, with_summaries
 from chipin_backend.api.manager import ApiAgent, ApiRunner, RequestError, RunManager
+from chipin_backend.api.session_token import new_token
 from chipin_backend.api.summaries import SUMMARIES_FILE, read_jsonl
 from chipin_backend.api.transcribe import CONTEXT_HEADER, add_transcribe_route, transcribe_ready
 from chipin_backend.config import BackendConfig
@@ -415,11 +416,6 @@ async def serve(app: web.Application, port: int) -> web.AppRunner:
     site = web.TCPSite(runner, HOST, port)
     await site.start()
     return runner
-
-
-def new_token() -> str:
-    """A fresh session token."""
-    return secrets.token_urlsafe(24)
 
 
 __all__ = [

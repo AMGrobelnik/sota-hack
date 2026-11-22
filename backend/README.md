@@ -262,8 +262,11 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 - It binds 127.0.0.1 only, on port 8797 (`--port` or
   `src/chipin_backend/api/api.yaml` change it).
 - It prints one link, `http://127.0.0.1:8797/#token=<token>`. The token is
-  new at every start and is never written to disk. A page sends it in the
-  `X-ChipIn-Token` header; the event stream may pass it as `?token=`.
+  kept across restarts, so an open page can resume its run: it is saved in
+  `.session-token` inside the runs folder (owner-only, never committed, never
+  logged) and reused at the next start. `--new-token` rotates it. A page
+  sends it in the `X-ChipIn-Token` header; the event stream may pass it as
+  `?token=`.
 - Browsers may call it from the origins in `allowed_origins` in
   `src/chipin_backend/api/api.yaml`: by default `https://chipin.space` and
   `http://127.0.0.1`, `http://localhost` and `http://[::1]` on any port

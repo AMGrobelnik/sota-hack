@@ -182,9 +182,10 @@ ACTION_SCHEMAS: list[dict[str, Any]] = [
     ),
     function_tool(
         "ui_set_playback",
-        "Move the run's playback clock to this many seconds after the run started.",
-        {"seconds": {"type": "number"}, "run_id": _RUN},
-        ["seconds"],
+        "Move the run's playback clock to a moment: 'seconds' on the page's clock (active time, "
+        "silences over 30 minutes skipped; the playback_s the read tools give), or 'seq', an event's seq.",
+        {"seconds": {"type": "number"}, "seq": {"type": "integer"}, "run_id": _RUN},
+        [],
     ),
     function_tool(
         "ui_open_file",
@@ -260,7 +261,10 @@ class UiActions:
                 item = getattr(self, "_" + name.removeprefix("ui_"))(**args)
                 item = {"type": "action", "id": self._next_id("a"), **item}
                 self._follow(item)
-                return item, {"ok": True, "done_on_page": item["kind"], "route": item.get("route")}
+                result = {"ok": True, "done_on_page": item["kind"], "route": item.get("route")}
+                if "seconds" in item:
+                    result["playback_s"] = item["seconds"]
+                return item, result
             if name in PROPOSAL_NAMES:
                 item = getattr(self, "_" + name)(**args)
                 item = {"type": "proposal", "id": self._next_id("p"), "executed": False, **item}
@@ -313,10 +317,19 @@ class UiActions:
         tab = self.view.tab if self.view.run_id == rid and self.view.tab else "overview"
         return {"kind": "select_design", "run_id": rid, "design_id": design_id, "route": f"#/run/{rid}/{tab}"}
 
-    def _set_playback(self, seconds: float, run_id: str | None = None) -> dict[str, Any]:
+    def _set_playback(
+        self, seconds: float | None = None, run_id: str | None = None, seq: int | None = None
+    ) -> dict[str, Any]:
         rid = self._run_id(run_id)
+        if seq is not None:
+            if not isinstance(seq, int) or isinstance(seq, bool) or seq < 1:
+                raise ToolError("seq must be an event seq, 1 or more")
+            at = self.tools.playback_clock(rid).at_seq(seq)
+            if at is None:
+                raise ToolError(f"run {rid} has no timed events to place seq {seq} on")
+            return {"kind": "set_playback", "run_id": rid, "seconds": round(at, 2), "seq": seq}
         if not isinstance(seconds, int | float) or isinstance(seconds, bool) or seconds < 0:
-            raise ToolError("seconds must be a number of seconds, 0 or more")
+            raise ToolError("seconds must be a number of seconds, 0 or more (or give seq)")
         return {"kind": "set_playback", "run_id": rid, "seconds": round(float(seconds), 2)}
 
     def _open_file(self, path: str, run_id: str | None = None) -> dict[str, Any]:

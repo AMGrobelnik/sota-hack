@@ -10,7 +10,8 @@ from pathlib import Path
 from loguru import logger
 
 from chipin_backend.api.config import ApiConfig, load_api_config
-from chipin_backend.api.server import HOST, create_app, new_token, serve
+from chipin_backend.api.server import HOST, create_app, serve
+from chipin_backend.api.session_token import load_or_create_token
 from chipin_backend.config import BackendConfig
 
 
@@ -39,6 +40,11 @@ def add_serve_parser(
         "--stub-step", type=float, default=None, help="seconds between the stub agent's steps (default 0.4)"
     )
     serve_p.add_argument(
+        "--new-token",
+        action="store_true",
+        help="issue a new session token (by default the saved one is reused, so open pages keep working)",
+    )
+    serve_p.add_argument(
         "--runner", choices=["local"], default="local", help="local: this Mac (the backend's flex mode)"
     )
 
@@ -56,7 +62,7 @@ def run_serve(args: argparse.Namespace, config: BackendConfig) -> int:
 
 async def _serve(config: BackendConfig, api: ApiConfig, args: argparse.Namespace) -> int:
     port = args.port if args.port is not None else api.port
-    token = new_token()
+    token = load_or_create_token(config.resolved_runs_dir(), rotate=args.new_token)
     app = create_app(config, api, token=token, agent=args.agent, runner=args.runner, frontend=args.frontend)
     try:
         runner = await serve(app, port)
