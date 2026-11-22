@@ -72,14 +72,17 @@
   place();
   window.addEventListener("load", place);
 
-  /* capture phase: variants that step sections with the arrow keys must not swallow these */
+  /* Left and Right switch variants, Escape goes back to the gallery, whatever has focus and whatever the page does with keys
+     (pages step their stops with Up, Down, Page Up, Page Down and Space). Window, capture phase: runs before any page handler.
+     Ignored only while typing in a field or with a modifier key held. */
   window.addEventListener('keydown', function (e) {
-    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.isComposing) return;
     var t = e.target;
     if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Escape') return;
     e.preventDefault();
     e.stopImmediatePropagation();
-    go(e.key === 'ArrowRight' ? 1 : -1);
+    if (e.key === 'Escape') location.href = '../';
+    else go(e.key === 'ArrowRight' ? 1 : -1);
   }, true);
 })();
