@@ -374,6 +374,7 @@ browsers are not.
 | `POST /api/transcribe`         | one spoken phrase to text    |
 | `POST /api/helper/messages`    | Chippy: one question, stream |
 | `POST /api/helper/suggestions` | example prompts for a view   |
+| `POST /api/questions`          | intake follow-up questions   |
 | `run.started`                  | prompt, agent, runner        |
 | `stage`                        | `name`, `state`, `reason`    |
 | `stage.merged`                 | fan-out: a batch's merge     |
@@ -862,6 +863,60 @@ exit status 2 with the reason (then nothing is recorded):
 - The instructions ask for a record for every scored candidate, sent again
   when it is compiled (measured gates) and when it is verified, and the
   chosen one marked with `./progress chosen <id>`.
+
+## Follow-up questions for the intake
+
+The dashboard's intake asks fixed questions (device, who and where,
+targets, constraints, data). With a backend connected it then asks
+`POST /api/questions` for at most three more, so the agent has what it
+needs to run on its own (`api/questions.py`, settings under `questions`
+in `api.yaml`).
+
+```json
+{"brief": "A wristband that spots seizures at night",
+ "answers": {"device": "Wristband", "place": "home"}, "run_size": "lite"}
+```
+
+The answer is `{"id", "questions", "source", "reason", "cost_usd"}`.
+Each question has `id`, `question` (one sentence), `why` (one line),
+`kind` (`choice` or `text`), `options` for a choice, and `default`.
+
+- The token header is required, like every other route.
+- The server adds a digest of past runs from its own runs folder: each
+  run's title and chosen chip, newest first, at most `max_past_runs`
+  lines and `digest_max_chars` characters, scrubbed
+  (`chipin_backend/scrub.py`) and with secrets redacted. Nothing else
+  of a past run is sent.
+- The model is the one the level summaries use (`llm/summaries.yaml`,
+  key `OPENROUTER_API_KEY`). Its reply must be one JSON object. Every
+  question is checked and cut to length; a malformed one, or one that
+  asks again what a fixed step asked, is dropped.
+- With `--agent stub` the questions are canned, their defaults read
+  from the brief, and no model is called (`source` is `stub`).
+- No key, the route off, the daily cap (`daily_usd`) spent, a failed
+  model or no answer within `timeout_s` (11 s; the page gives up at
+  12 s) all give an empty list, with `reason` saying why. The page then
+  skips the step, so a run is never blocked.
+- Each call writes one line to `questions.jsonl` in the runs folder:
+  id, source, count, cost and model, never the brief.
+
+The answers travel with the run: `POST /api/runs` takes
+
+```json
+{"follow_up": {"id": "<the questions id>", "answers": [
+  {"id": "alert_delay", "question": "How soon must the alert follow?",
+   "answer": "Within 10 seconds"}]}}
+```
+
+- At most three answers; a bad `follow_up` is a 400 naming it.
+- With a spec they go into `spec.json` (`follow_up`) and the spec block
+  of the agent's first message (subagents get the same block). Without
+  one they go into `brief.md` and the first message.
+- The run record (`api.json`, `GET /api/runs/{id}`) keeps `follow_up`.
+- The call's spend is recorded like the summaries': the run that sends
+  the `id` gets `questions_usd` in its `cost` event (counted in
+  `run_total_usd`) and in `run.json`, added to `llm_cost_usd`. An id
+  counts once.
 
 ## Chippy, the helper agent
 
