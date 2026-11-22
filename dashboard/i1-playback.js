@@ -43,11 +43,12 @@
   var VIEW_MS = 100;
   var STAGES = ["spec", "reference", "propose", "finetune", "compile", "verify", "report"];
   var STAGE_N = { spec: "Spec", reference: "Reference", propose: "Propose", finetune: "Fine-tune", compile: "Compile", verify: "Verify", report: "Report" };
-  var VIEWS = [["overview", "Overview"], ["log", "Log"], ["files", "Files"]];
+  var VIEWS = [["overview", "Overview"], ["patients", "Where it fails"], ["chip", "Chip"], ["log", "Log"], ["files", "Files"]];
+  var F = window.ChipInFold; // ../i1-fold.js: the figures, the same reducer as the live view
   var K_CONN = "chipin-i1-backend";
   var RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
   var $ = function (s, r) { return (r || document).querySelector(s); };
-  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
+  var esc = function (s) { return (window.ChipInFold ? window.ChipInFold.scrub(String(s == null ? "" : s)) : String(s == null ? "" : s)).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
   var fmtN = function (n) { return Math.round(n).toLocaleString("en-GB"); };
   var clamp = function (x, a, b) { return Math.max(a, Math.min(b, x)); };
   var num = function (v) { return typeof v === "number" && isFinite(v) ? v : null; };
@@ -555,7 +556,7 @@
   /* ---------- a recorded run: events, active time, snapshots ---------- */
   var RUNS = {}; // key "site:<id>" | "mac:<id>" -> rec
   function prepare(rec, events) {
-    rec.events = events.filter(function (e) { return e && tsMs(e.ts) != null; }).sort(function (a, b) { return (a.seq || 0) - (b.seq || 0); });
+    rec.events = events.filter(function (e) { return e && tsMs(e.ts) != null; }).map(function (e) { return F.scrubEvent(e); }).sort(function (a, b) { return (a.seq || 0) - (b.seq || 0); });
     var gaps = [], skipped = 0, prev = null, w0 = rec.events.length ? tsMs(rec.events[0].ts) : 0;
     rec.events.forEach(function (e) {
       var w = tsMs(e.ts);
@@ -587,7 +588,7 @@
   }
   function addEvents(rec, more) {
     var known = {}; rec.events.forEach(function (e) { known[e.seq] = 1; });
-    var fresh = more.filter(function (e) { return e && !known[e.seq] && tsMs(e.ts) != null; });
+    var fresh = more.filter(function (e) { return e && !known[e.seq] && tsMs(e.ts) != null; }).map(function (e) { return F.scrubEvent(e); });
     if (!fresh.length) return false;
     var prev = rec.wLast;
     fresh.sort(function (a, b) { return a.seq - b.seq; }).forEach(function (e) {
@@ -611,17 +612,13 @@
   /* the state after the first n events; pure fold, the same rules the scrub check recomputes */
   function newState() {
     var stages = {}; STAGES.forEach(function (s) { stages[s] = { state: "pending", reason: "" }; });
-    return { n: 0, stages: stages, status: "", items: [], messages: 0, tools: {}, toolN: 0, designs: {}, order: [], chips: {}, chipOrder: [], run: {}, chosen: null,
-      artifacts: [], cost: null, costSum: 0, subs: {}, subOrder: [], merged: {}, mergedOrder: [], errors: 0, finished: null, evidence: null };
+    return { n: 0, stages: stages, status: "", items: [], messages: 0, tools: {}, toolN: 0, chosen: null, f: F.create(),
+      artifacts: [], errors: 0, finished: null, evidence: null };
   }
-  // runs recorded before the backend sent ratios as fractions mix 0 to 1 and 0 to 100: a ratio metric (by
-  // name) above 1.5 is a percentage. Every other metric is left as it came.
-  var RATIO = /^(?:[a-z0-9]+_)*(?:accuracy|sensitivity|specificity|precision|recall|f1)(?:_(?:test|train|val|heldout|held_out))?$/;
-  function ratio(k, v) { return RATIO.test(String(k)) && typeof v === "number" && v > 1.5 ? v / 100 : v; }
   function cloneState(s) { return JSON.parse(JSON.stringify(s)); }
-  function chipOf(st, id) { if (!st.chips[id]) { st.chips[id] = {}; st.chipOrder.push(id); } return st.chips[id]; }
   function apply(st, ev, i) {
     st.n = i + 1;
+    F.fold(st.f, ev);
     switch (ev.type) {
       case "stage": {
         var s = ev.stage || ev.name; if (!st.stages[s]) st.stages[s] = { state: "pending", reason: "" };
@@ -632,25 +629,9 @@
       case "message": st.messages++; st.items.push(i); break;
       case "tool": if (!st.tools[ev.call_id]) { st.tools[ev.call_id] = { i: i, state: ev.state }; st.toolN++; st.items.push(i); } else st.tools[ev.call_id].state = ev.state; break;
       case "error": st.errors++; st.items.push(i); break;
-      case "design": {
-        var d = ev.design || ev.record; if (!d || typeof d.id !== "string") break;
-        if (d.metrics) { var dm = {}; for (var mk in d.metrics) dm[mk] = ratio(mk, d.metrics[mk]); d = Object.assign({}, d, { metrics: dm }); }
-        if (d.prev_id && d.prev_id !== d.id && st.designs[d.prev_id]) { delete st.designs[d.prev_id]; st.order = st.order.filter(function (x) { return x !== d.prev_id; }); }
-        if (!st.designs[d.id]) st.order.push(d.id);
-        st.designs[d.id] = d; break;
-      }
-      case "metric": {
-        var mv = ratio(ev.key, ev.value);
-        if (typeof ev.chip === "string" && ev.chip) chipOf(st, ev.chip)[ev.key] = mv;
-        else st.run[ev.key] = mv;
-        break;
-      }
       case "chosen": if (typeof ev.chip === "string" && ev.chip) { st.chosen = ev.chip; st.items.push(i); } break;
       case "artifact": st.artifacts.push(i); if (ev.kind === "report") st.items.push(i); break;
-      case "cost": st.cost = { usd: ev.usd, tin: ev.tokens_in, tout: ev.tokens_out }; st.costSum += num(ev.usd) || 0; break;
-      case "subagent.started": { var k = ev.agent || ev.id || "s" + ev.seq; if (!st.subs[k]) st.subOrder.push(k); st.subs[k] = { stage: ev.stage, name: ev.name || ev.strategy || k, state: "running" }; st.items.push(i); break; }
-      case "subagent.finished": { var a = st.subs[ev.agent || ev.id]; if (a) a.state = ev.state === "failed" || ev.status === "failed" ? "failed" : "done"; break; }
-      case "stage.merged": if (!st.merged[ev.stage]) st.mergedOrder.push(ev.stage); st.merged[ev.stage] = { kept: Array.isArray(ev.kept) ? ev.kept : [], why: ev.why || ev.reason || "" }; st.items.push(i); break;
+      case "subagent.started": case "stage.merged": st.items.push(i); break;
       case "evidence": st.evidence = i; break;
       case "run.finished": st.finished = { status: ev.status, i: i }; st.items.push(i); break;
       default: break;
@@ -746,7 +727,8 @@
     main.innerHTML = '<div class="top"><nav class="tabs" aria-label="Run views">' + VIEWS.map(function (v) {
       return '<a class="tab' + (v[0] === view ? " on" : "") + '" href="#/rec/' + rec.src + "/" + encodeURIComponent(rec.id) + "/" + v[0] + '">' + v[1] + "</a>";
     }).join("") + '</nav><span class="grow" style="flex:1"></span><div class="tright">' + pastLink("run") + '<span class="mk topbadge"></span></div></div>' +
-      '<div class="body" id="rvBody">' + (view === "overview" ? overviewHTML() : view === "log" ? '' : '<div class="rv-files"><h2>Files</h2><p>Files the run had written by the time on the bar.</p><div id="rvFiles"></div></div>') + "</div>";
+      '<div class="lv-lost" id="rvLost" role="alert" hidden></div>' +
+      '<div class="body" id="rvBody">' + (view === "overview" ? overviewHTML() : view === "log" ? "" : view === "files" ? '<div class="rv-files"><h2>Files</h2><p>Files the run had written by the time on the bar.</p><div id="rvFiles"></div></div>' : '<div class="vis" id="rvTab"></div>') + "</div>";
     var ctl = {
       clock: V.clock, marks: rec.marks, gaps: rec.gaps, kind: "recorded",
       refreshTotal: function () { if (rec.running || V.clock.live) { V.clock.total = activeTotal(rec); } },
@@ -757,17 +739,19 @@
     if (view === "overview") wireOverview();
     mountMessages(view);
     if (view === "files") $("#rvFiles").addEventListener("click", function (e) { var b = e.target.closest("[data-path]"); if (b) openFile(b.dataset.path); });
+    if (view === "patients" || view === "chip") $("#rvTab").addEventListener("click", function (e) { var b = e.target.closest("[data-pick]"); if (b) { V.sel = b.dataset.pick; V.sig.tab = ""; kick(); } });
+    loadFinal(rec);
     kick();
   }
 
   function overviewHTML() {
-    return '<div class="rv"><header class="ovh"><div class="tx"><p class="k0" id="rvK0"></p><h1 id="rvH1"></h1><p class="rv-brief" id="rvBrief"></p></div></header>' +
+    return '<div class="rv"><header class="ovh"><div class="tx"><p class="k0" id="rvK0"></p><h1 id="rvH1"></h1><p class="k1 lv-held" id="rvHeld" hidden></p><p class="rv-brief" id="rvBrief"></p></div></header>' +
       '<div class="status" id="rvStatus" role="status"></div>' +
       '<ol class="rv-st" id="rvStages" aria-label="Stages"></ol>' +
       '<div class="tiles" id="rvTiles"></div>' +
       '<section class="rv-grid"><div class="pan chartp"><div class="chh"><h2 id="rvChH">Designs: chip size against</h2><select class="ys" id="rvY" aria-label="Metric on the chart"></select><span class="grow"></span></div>' +
       '<div class="rv-cw"><canvas id="rvChart" role="img" aria-label="Designs found so far"></canvas></div><div class="legend" id="rvLegend"></div></div>' +
-      '<div class="rv-side"><section class="pan rv-pan" id="rvLast"></section><section class="pan rv-pan rv-sab" id="rvSab"></section></div></section>' +
+      '<div class="rv-side"><section class="pan rv-pan" id="rvLast"></section><div id="rvSab"></div></div></section>' +
       '<div class="fun" id="rvFun"></div><p class="funn" id="rvFunn"></p></div>';
   }
   // the message view: the Log tab is the whole view, the Overview's side panel its newest lines
@@ -787,33 +771,41 @@
   }
   function wireOverview() {
     $("#rvY").onchange = function (e) { V.y = e.target.value; V.sig.chart = ""; kick(); };
+    if (!V.subOpen) V.subOpen = {};
+    F.wireSubs($("#rvSab"), V.subOpen);
+  }
+  // the final record, when the run wrote one: held-out per-patient rows may be there
+  function loadFinal(rec) {
+    if (rec.finalTried) return;
+    rec.finalTried = true;
+    var took = function (t) { try { var j = JSON.parse(t); if (j && typeof j === "object") { rec.final = F.scrubEvent(j); if (V && V.rec === rec) { V.sig = {}; kick(); } } } catch (e) { /* not JSON */ } };
+    if (rec.src === "site") { var f = (rec.files || []).find(function (x) { return x.path === "workspace/final_record.json"; }); if (f && f.text) took(f.text); return; }
+    var c = conn(); if (!c) return;
+    fetch(c.base + "/api/runs/" + encodeURIComponent(rec.id) + "/file?path=" + encodeURIComponent("workspace/final_record.json"), { headers: { "X-ChipIn-Token": c.token }, cache: "no-store" })
+      .then(function (r) { return r.ok ? r.text() : null; }).then(function (t) { if (t) took(t); }, function () { /* none */ });
   }
   addEventListener("resize", function () { if (V) { V.sig.chart = ""; kick(); } });
 
   // what the page shows at time t, from the state after every event up to t
   function model(rec, t) {
-    var n = countAt(rec, t), st = stateAt(rec, n);
-    var pts = {}, add = function (id) { return pts[id] || (pts[id] = { id: id, m: {} }); };
-    st.order.forEach(function (id) {
-      var d = st.designs[id], p = add(id);
-      p.label = d.label || ""; p.gates = num(d.gates) || null; p.est = num(d.gates_est) || null;
-      var dm = d.metrics || {}; for (var k in dm) if (num(dm[k]) != null) p.m[k] = dm[k];
-      if (d.verified && num(d.verified.mismatches) === 0) p.ver = true;
+    var n = countAt(rec, t), st = stateAt(rec, n), f = st.f;
+    // the designs are the design records only, as the live view and designs.json count them
+    var list = F.designs(f).map(function (d) {
+      var p = { id: d.id, label: d.label || "", gates: num(d.gates) > 0 ? d.gates : null, est: num(d.gates_est) > 0 ? d.gates_est : null, m: {}, basis: d.basis || "", d: d };
+      for (var k in d.metrics) if (num(d.metrics[k]) != null) p.m[k] = d.metrics[k];
+      p.ver = !!(d.verified && typeof d.verified === "object");
+      return p;
     });
-    st.chipOrder.forEach(function (id) {
-      var c = st.chips[id], p = add(id);
-      if (num(c.gates) != null) p.gates = c.gates;
-      for (var k in c) if (k !== "gates" && num(c[k]) != null) p.m[k] = c[k];
-      if (num(c.mismatches) === 0 || c.verification_level != null) p.ver = true;
-    });
-    var list = Object.keys(pts).map(function (k) { return pts[k]; });
-    var chosen = st.chosen ? pts[st.chosen] || { id: st.chosen, m: {} } : null;
-    return { n: n, st: st, t: t, pts: list, chosen: chosen, ended: !!st.finished };
+    var chosen = null; list.forEach(function (p) { if (p.id === st.chosen) chosen = p; });
+    if (st.chosen && !chosen) chosen = { id: st.chosen, m: {}, gates: null, est: null };
+    var spec = f.spec;
+    return { n: n, st: st, f: f, t: t, pts: list, chosen: chosen, ended: !!st.finished, spec: spec, T: F.targetsOf(spec) };
   }
   var NOT_Y = { gates: 1, ge: 1, transistors: 1, area_um2: 1, depth: 1, tt_tiles: 1, luts_ice40: 1, luts_xc7: 1, round: 1, candidates: 1, vectors_checked: 1, mismatches: 1, cost_eur: 1, verification_level: 1, timing_slack_ns: 1 };
   var PREF_Y = ["sensitivity", "test_accuracy", "accuracy", "specificity", "fa_per_hour", "synthetic_sensitivity_pct", "train_accuracy"];
   var LABEL = { sensitivity: "Sensitivity", specificity: "Specificity", fa_per_hour: "False alarms per hour", test_accuracy: "Test accuracy", train_accuracy: "Train accuracy", accuracy: "Accuracy", power_uw_at_rate: "Power (µW)" };
   var label = function (k) { return LABEL[k] || (k.charAt(0).toUpperCase() + k.slice(1)).replace(/_/g, " "); };
+  var RATIO = /^(?:[a-z0-9]+_)*(?:accuracy|sensitivity|specificity|precision|recall|f1)(?:_(?:test|train|val|heldout|held_out))?$/;
   var isFrac = function (k, pts) { return (RATIO.test(k) || /accuracy|sensitivity|specificity|agreement/.test(k)) && pts.every(function (p) { return p.m[k] == null || p.m[k] <= 1.0001; }); };
   function fmtM(k, v, pts) { if (v == null) return "not reported"; if (isFrac(k, pts || [])) return (v * 100).toFixed(1) + "%"; return Math.abs(v) >= 100 ? fmtN(v) : String(+(+v).toFixed(3)); }
   function niceTicks(a, b, keep) {
@@ -839,23 +831,44 @@
     var M = model(V.rec, t);
     V.last = M;
     feedMessages(M);
+    paintLost();
     if (V.view === "overview") paintOverview(M);
+    else if (V.view === "patients" || V.view === "chip") paintTab(M);
     else paintFiles(M);
   }
   function once(key, sig, fn) { if (V.sig[key] !== sig) { V.sig[key] = sig; fn(); } }
+  // a run on this computer: the connection follows the live view's health probe
+  function paintLost() {
+    var el = $("#rvLost"); if (!el) return;
+    var L = window.ChipInLive, c = V.rec.src === "mac" && L && L.i1 && L.i1.connection ? L.i1.connection() : null, gone = !!(c && c.lost);
+    el.hidden = !gone;
+    var t = gone ? "Connection to the backend on this computer was lost. The run's recorded events stay on the page; files need the backend. Retrying..." : "";
+    if (el.textContent !== t) el.textContent = t;
+  }
+  setInterval(function () { if (V && V.rec) paintLost(); }, 1000); // a paused bar draws nothing, so the note has its own beat
+  // Where it fails and Chip: the live view's panels, from the same fold
+  function paintTab(M) {
+    var el = $("#rvTab"); if (!el) return;
+    var sel = V.sel && M.f.designs[V.sel] ? V.sel : null;
+    once("tab", [V.view, M.n, sel || "", V.rec.final ? 1 : 0].join("|"), function () {
+      el.innerHTML = V.view === "chip" ? F.chipHTML({ f: M.f, spec: M.spec, T: M.T, id: M.st.chosen || (M.pts.length ? M.pts[M.pts.length - 1].id : null), chosenId: M.st.chosen, running: !M.ended })
+        : F.patientsHTML({ f: M.f, spec: M.spec, T: M.T, chosenId: M.st.chosen, selId: sel, final: V.rec.final, running: !M.ended });
+    });
+  }
   function paintOverview(M) {
     var rec = V.rec, f = rec.facts || {}, st = M.st, ck = V.clock;
-    once("head", [st.chosen, M.ended, st.finished && st.finished.status, M.pts.length, M.n > 0, ck.live].join("|"), function () {
+    once("head", [st.chosen, M.ended, st.finished && st.finished.status, M.pts.length, M.n > 0, ck.live, heldText(M)].join("|"), function () {
       var k0 = ['<span class="mk mea">recorded</span>', "<span>" + esc(dateTxt(f.started_at)) + "</span>"];
       if (f.preset) k0.push("<span>" + esc(String(f.preset).charAt(0).toUpperCase() + String(f.preset).slice(1)) + (f.agent ? " · " + esc(f.agent === "claude" ? "Claude" : f.agent) : "") + "</span>");
       if (rec.running || ck.live) k0[0] = '<span class="mk sim">still running</span>';
       $("#rvK0").innerHTML = k0.join("");
       var h1;
-      if (M.chosen) h1 = "Chosen chip " + esc(M.chosen.id) + (sizeOf(M.chosen) != null ? ", " + fmtN(sizeOf(M.chosen)) + " gates" : "") + ".";
+      if (M.chosen) h1 = "Chosen chip " + esc(M.chosen.id) + (sizeOf(M.chosen) != null ? ", " + (M.chosen.gates == null ? "about " : "") + fmtN(sizeOf(M.chosen)) + " gates" + (M.chosen.gates == null ? " (estimated)" : "") : "") + ".";
       else if (st.finished) h1 = st.finished.status === "succeeded" ? "The run finished without naming a chosen chip." : "The run ended: " + esc(st.finished.status) + ".";
       else if (M.pts.length) h1 = "Searching: " + fmtN(M.pts.length) + " design" + (M.pts.length === 1 ? "" : "s") + " so far, no chip chosen yet.";
       else h1 = M.n ? "No design yet. The run is working through its brief." : "Before the first event.";
       $("#rvH1").innerHTML = h1;
+      var ht = heldText(M), he = $("#rvHeld"); he.textContent = ht; he.hidden = !ht;
       $("#rvBrief").textContent = clip(f.prompt || f.title || "", 420);
     });
     once("status", st.status + "|" + M.n, function () { var s = $("#rvStatus"); s.textContent = st.status ? st.status : ""; s.className = "status" + (st.finished ? " done" : ""); s.dataset.n = String(M.n); });
@@ -868,43 +881,41 @@
       var ol = $("#rvStages"), cur = $("[aria-current]", ol);
       if (cur && ol.scrollWidth > ol.clientWidth) ol.scrollLeft = cur.offsetLeft - (ol.clientWidth - cur.offsetWidth) / 2;
     });
-    var costTxt = st.costSum ? "$" + st.costSum.toFixed(2) : "–";
+    var co = F.cost(M.f), costTxt = co && num(co.usd) != null ? "$" + co.usd.toFixed(2) : "–";
     var live = !!rec.running;
-    once("tiles", [M.pts.length, st.chosen, M.chosen && sizeOf(M.chosen), st.messages, st.toolN, st.artifacts.length, costTxt, st.subOrder.length, live].join("|"), function () {
-      var ch = M.chosen, yk = pickY(M);
+    once("tiles", [M.pts.length, st.chosen, M.chosen && sizeOf(M.chosen), st.messages, st.toolN, st.artifacts.length, costTxt, live].join("|"), function () {
+      var ch = M.chosen, yk = pickY(M), mark = F.dataMark(M.spec, M.pts.map(function (p) { return p.d || {}; }));
+      var basis = ch && ch.basis ? " on " + (ch.basis === "test" ? "the test set" : ch.basis) : "";
       var tiles = [
         ["designs", "Designs so far", M.pts.length ? fmtN(M.pts.length) : "–", M.pts.filter(function (p) { return p.gates != null; }).length + " compiled to gates"],
-        ["chosen", "Chosen chip", ch ? '<span class="rv-chip" title="' + esc(ch.id) + '">' + esc(ch.id) + "</span>" : "–", ch ? (sizeOf(ch) != null ? fmtN(sizeOf(ch)) + " gates" : "size not reported") + (yk && ch.m[yk] != null ? ", " + label(yk).toLowerCase() + " " + fmtM(yk, ch.m[yk], M.pts) : "") : "not chosen yet"],
+        ["chosen", "Chosen chip", ch ? '<span class="rv-chip" title="' + esc(ch.id) + '">' + esc(ch.id) + "</span>" : "–", ch ? (sizeOf(ch) != null ? (ch.gates == null ? "about " : "") + fmtN(sizeOf(ch)) + " gates" + (ch.gates == null ? ", estimated" : "") : "size not reported") + (yk && ch.m[yk] != null ? ", " + label(yk).toLowerCase() + " " + fmtM(yk, ch.m[yk], M.pts) + basis : "") : "not chosen yet"],
         ["tools", "Tool calls", fmtN(st.toolN), fmtN(st.messages) + " messages, " + fmtN(st.artifacts.length) + " files"],
-        ["cost", "Agent cost", costTxt, st.cost ? fmtN((st.cost.tin || 0) + (st.cost.tout || 0)) + " tokens" : "reported at the end"]
+        ["cost", "Agent cost", costTxt, co ? fmtN((co.tokens_in || 0) + (co.tokens_out || 0)) + " tokens" : "reported at the end"]
       ];
       $("#rvTiles").innerHTML = tiles.map(function (x) {
         return '<div class="tile' + (x[2] === "–" ? " empty" : "") + '" data-k="' + x[0] + '"><div class="tl">' + x[1] + '</div><div class="tv">' + x[2] + '</div><div class="ts">' + x[3] + "</div></div>";
-      }).join("") + (live ? '<span class="mk sim" style="position:absolute;right:12px;top:-9px">live</span>' : '<span class="mk mea" style="position:absolute;right:12px;top:-9px">recorded</span>');
+      }).join("") + '<span style="position:absolute;right:12px;top:-9px;display:flex;gap:6px">' + mark + (live ? '<span class="mk sim">live</span>' : '<span class="mk mea">recorded</span>') + "</span>";
       $("#rvTiles").style.position = "relative";
-      $("#rvTiles").dataset.designs = String(M.pts.length); $("#rvTiles").dataset.chosen = st.chosen || "";
+      $("#rvTiles").dataset.designs = String(M.pts.length); $("#rvTiles").dataset.chosen = st.chosen || ""; $("#rvTiles").dataset.cost = co && num(co.usd) != null ? co.usd.toFixed(2) : "";
     });
     paintChart(M);
-    once("sab", JSON.stringify([st.subs, st.merged]), function () { $("#rvSab").innerHTML = sabHTML(st); });
-    once("fun", [M.pts.length, M.chosen && M.chosen.id, M.pts.filter(function (p) { return p.ver; }).length, M.pts.filter(function (p) { return p.gates != null; }).length, live].join("|"), function () {
-      var compiled = M.pts.filter(function (p) { return p.gates != null; }).length, ver = M.pts.filter(function (p) { return p.ver; }).length;
-      var S = [["Designs proposed", M.pts.length], ["Compiled to gates", compiled], ["Verified against the model", ver], ["Chosen", st.chosen ? 1 : 0]];
-      $("#rvFun").innerHTML = S.map(function (s, i) { return '<div class="fs' + (i === S.length - 1 ? " last" : "") + (!s[1] ? " mute" : "") + '" data-f="' + i + '"><div class="fn">' + fmtN(s[1]) + '</div><div class="fl">' + s[0] + "</div></div>"; }).join("");
-      $("#rvFunn").textContent = live ? "Counted from this run's events so far, up to the time on the bar; the run is still going." : "Counted from this run's recorded events up to the time on the bar.";
+    once("sab", JSON.stringify([M.f.subs, M.f.merged, M.ended]), function () { $("#rvSab").innerHTML = F.subsHTML(M.f, M.spec, V.subOpen || (V.subOpen = {}), { empty: "This run used no subagents" + (M.ended ? "." : " so far.") }); });
+    var fu = F.funnel(M.f, M.T);
+    once("fun", JSON.stringify(fu) + live, function () {
+      var S = [["proposed", "Proposed"], ["scored", "Scored"], ["compiled", "Compiled to gates"], ["verified", "Verified against the model"], ["clear", "Clear your targets"], ["chosen", "Chosen"]];
+      if (!M.T.length) S = S.filter(function (x) { return x[0] !== "clear"; });
+      $("#rvFun").innerHTML = S.map(function (x, i) { return '<div class="fs' + (i === S.length - 1 ? " last" : "") + (!fu[x[0]] ? " mute" : "") + '" data-f="' + x[0] + '"><div class="fn">' + fmtN(fu[x[0]]) + '</div><div class="fl">' + x[1] + "</div></div>"; }).join("");
+      $("#rvFunn").textContent = (live ? "Counted from the design records this run reported so far, up to the time on the bar; the run is still going." : "Counted from the design records this run reported, up to the time on the bar.") + (M.T.length ? " Clear your targets is judged against the run's spec." : "");
     });
   }
-  function sabHTML(st) {
-    if (!st.subOrder.length) return '<h2>Subagent batches</h2><p class="rv-empty">This run used no subagents' + (V && V.last && V.last.ended ? "." : " so far.") + "</p>";
-    var by = {}, order = [];
-    st.subOrder.forEach(function (k) { var a = st.subs[k], s = a.stage || "other"; if (!by[s]) { by[s] = []; order.push(s); } by[s].push(k); });
-    var kept = {}; st.mergedOrder.forEach(function (s) { (st.merged[s].kept || []).forEach(function (k) { kept[k] = 1; }); });
-    var fin = st.subOrder.filter(function (k) { return st.subs[k].state !== "running"; }).length;
-    return '<h2>Subagent batches</h2><p class="sub">' + fin + " of " + st.subOrder.length + " finished. Hollow: running. Filled: done. Red: failed. Ringed: kept at the merge.</p>" + order.map(function (s) {
-      var m = st.merged[s];
-      return '<div class="row" data-batch="' + esc(s) + '"><b>' + esc(STAGE_N[s] || s) + '</b><span class="dots">' + by[s].map(function (k) {
-        var a = st.subs[k]; return '<i class="' + (kept[k] ? "kept " : "") + (a.state === "running" ? "" : a.state) + '" title="' + esc(clip(a.name, 120) + ": " + a.state + (kept[k] ? ", kept" : "")) + '"></i>';
-      }).join("") + "</span></div>" + (m ? '<p class="why">Kept ' + esc(m.kept.join(", ") || "none") + (m.why ? ": " + esc(clip(m.why, 160)) : "") + "</p>" : "");
-    }).join("");
+  // the held-out misses of the chosen chip, worded as the live view words them
+  function heldText(M) {
+    var c = M.chosen; if (!c || !c.d || c.d.basis === "test") return "";
+    var h = F.heldOut(M.f, c.id, V.rec.final); if (!h) return "";
+    var miss = M.T.filter(function (t) { return h.pooled[t.metric] != null && F.meets(t, h.pooled[t.metric]) === false; });
+    if (!miss.length) return "";
+    var names = miss.map(function (t) { return F.metaOf(t.metric).n.toLowerCase(); }), and = function (a) { return a.length < 2 ? a[0] : a.slice(0, -1).join(", ") + " and " + a[a.length - 1]; };
+    return "On the held-out patients it misses your " + and(names) + " target" + (miss.length === 1 ? "" : "s") + ": " + and(miss.map(function (t) { return F.fmtV(t.metric, h.pooled[t.metric], M.spec) + " against " + F.fmtT(t, M.spec); })) + ".";
   }
   function pickY(M) {
     var seen = {};
@@ -962,7 +973,9 @@
     cv.dataset.n = String(shown.length); cv.dataset.y = yk || ""; cv.dataset.frac = frac ? "1" : ""; cv.dataset.ys = ys.join(","); // for tests
     cv.setAttribute("aria-label", shown.length + " designs with a size" + (M.chosen ? ", chosen chip " + M.chosen.id : ""));
     var noY = shown.length - withY.length;
-    $("#rvLegend").innerHTML = '<span><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="4" fill="#6366f1"/></svg>Size measured</span><span><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="3.5" fill="none" stroke="#6366f1" stroke-width="1.5"/></svg>Size estimated</span><span><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="5" fill="none" stroke="#141a2e" stroke-width="2"/></svg>Chosen chip</span>' + (noY && yk ? '<span><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="4" fill="#c3c8d4"/></svg>' + noY + " without " + esc(label(yk).toLowerCase()) + ", on the floor</span>" : "");
+    var nEst = shown.filter(function (p) { return p.gates == null; }).length;
+    cv.dataset.est = String(nEst);
+    $("#rvLegend").innerHTML = '<span><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="4" fill="#6366f1"/></svg>Size measured by the chip lab</span>' + (nEst ? '<span data-est><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="3.5" fill="none" stroke="#6366f1" stroke-width="1.5"/></svg>Size estimated (' + nEst + ")</span>" : "") + '<span><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="5" fill="none" stroke="#141a2e" stroke-width="2"/></svg>Chosen chip</span>' + (noY && yk ? '<span><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="4" fill="#c3c8d4"/></svg>' + noY + " without " + esc(label(yk).toLowerCase()) + ", on the floor</span>" : "");
   }
   function paintFiles(M) {
     var el = $("#rvFiles"); if (!el) return;
@@ -1003,7 +1016,8 @@
     return {
       key: V.rec.key, t: Math.round(V.clock.now() * 1000) / 1000, total: V.clock.total, speed: V.clock.speed, playing: V.clock.playing, live: V.clock.live && V.clock.atLive,
       events: M.n, stages: stages, status: st.status, designs: M.pts.length, chosen: st.chosen, messages: st.messages, tools: st.toolN, artifacts: st.artifacts.length,
-      subagents: st.subOrder.length, subagentsDone: st.subOrder.filter(function (k) { return st.subs[k].state !== "running"; }).length, merged: st.mergedOrder.slice(), finished: st.finished ? st.finished.status : null
+      subagents: M.f.subOrder.length, subagentsDone: M.f.subOrder.filter(function (k) { return M.f.subs[k].state !== "running"; }).length, merged: M.f.mergedOrder.slice(), finished: st.finished ? st.finished.status : null,
+      cost: F.cost(M.f), estimated: M.pts.filter(function (p) { return p.gates == null && p.est != null; }).map(function (p) { return p.id; })
     };
   }
 

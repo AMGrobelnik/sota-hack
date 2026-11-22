@@ -327,6 +327,7 @@
         var ev;
         try { ev = JSON.parse(msg.data); } catch (e) { return; }
         if (!ev || typeof ev.seq !== "number" || ev.seq <= state.lastSeq) return; // never twice
+        if (window.ChipInFold) window.ChipInFold.scrubEvent(ev); /* FOLD HOOK: no absolute home path reaches the page (../i1-fold.js) */
         state.lastSeq = ev.seq;
         if (state.finished && ev.type !== "run.finished") {
           // A follow-up: the run went back to running after its run.finished.

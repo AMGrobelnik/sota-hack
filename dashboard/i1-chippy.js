@@ -40,7 +40,7 @@
   var RUN_RE = /\b\d{8}-\d{6}-[0-9a-f]{6}\b/;
   var TABS = { overview: "Overview", patients: "Where it fails", signal: "Signal", chip: "Chip", chat: "Chat", sources: "Sources" };
   var STEPS = { "1": "The device", "2": "Who and where", "3": "Targets", "4": "Constraints", "5": "Data", spec: "Your spec" };
-  var el = function (tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+  var el = function (tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = window.ChipInFold ? window.ChipInFold.scrub(String(text)) : text; return n; };
   var ssGet = function (k) { try { return JSON.parse(sessionStorage.getItem(k) || "null"); } catch (e) { return null; } };
   var ssSet = function (k, v) { try { if (v == null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage off: kept in memory only */ } };
   var lsGet = function (k) { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch (e) { return null; } };

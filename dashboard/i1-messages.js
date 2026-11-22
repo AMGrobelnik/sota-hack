@@ -30,7 +30,7 @@
   var LADDER = [["stage", "Stages", "stages"], ["batch", "Batches", "batches"], ["agent", "Subagents", "subagents"], ["group", "Groups", "groups"], ["item", "Steps", "steps"]];
   var LAB_KEYS = [["gates", "gates"], ["luts_ice40", "LUTs"], ["luts", "LUTs"], ["area_um2", "um2"], ["mismatches", "mismatches"], ["vectors_checked", "vectors"], ["verification_level", "level"], ["depth", "depth"], ["transistors", "transistors"], ["timing_slack_ns", "ns slack"], ["power_uw_at_rate", "uW"], ["cost_eur", "EUR"]];
 
-  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
+  var esc = function (s) { return (window.ChipInFold ? window.ChipInFold.scrub(String(s == null ? "" : s)) : String(s == null ? "" : s)).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
   var clip = function (s, n) { s = String(s == null ? "" : s); return s.length > n ? s.slice(0, n - 1) + "\u2026" : s; };
   var firstLine = function (s) { var l = String(s == null ? "" : s).split(/\r?\n/).map(function (x) { return x.trim(); }).filter(Boolean)[0] || ""; return clip(l.replace(/^#+\s*/, ""), 240); };
   var tsMs = function (ts) { var t = Date.parse(ts || ""); return isNaN(t) ? null : t; };
@@ -400,7 +400,7 @@
     // the run summary, pinned
     var rs = T.N.run.sum, sumHTML;
     if (rs) sumHTML = '<p class="cm-sl">' + (rs.final ? "Run summary" : "Run summary so far") + srcMark(rs) + '</p><p class="cm-st' + (ui.more ? " cm-all" : "") + '">' + esc(rs.text) + "</p>" + (rs.text.length > 160 ? '<button type="button" class="cm-more" data-act="more" aria-expanded="' + ui.more + '">' + (ui.more ? "Show less" : "Show all") + "</button>" : "");
-    else if (S.prompt) sumHTML = '<p class="cm-sl">Run summary</p><p class="cm-st cm-pend" title="The run summary comes after the first stage closes; this is the brief\'s first line">' + pendDot() + esc(firstLine(S.prompt)) + "</p>";
+    else if (S.prompt) sumHTML = '<p class="cm-sl">Run summary pending</p><p class="cm-st cm-pend" title="The run summary comes after the first stage closes; this is the brief\'s first line">' + pendDot() + esc(firstLine(S.prompt)) + "</p>";
     else sumHTML = "";
     if (S.limit) sumHTML += '<p class="cm-lim">Summaries stopped at a limit (' + esc(S.limit.reason || "limit") + "); later rows show their own first line.</p>";
     setHTML(M, "sum", M.root.querySelector(".cm-sum"), sumHTML);
