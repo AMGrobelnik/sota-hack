@@ -8,17 +8,7 @@ from pathlib import Path
 
 from chiplab.config import oss_bin
 from chiplab.hw.yosys import SIMPLE_GATES, run
-
-
-def _kill_group(p: subprocess.Popen) -> None:
-    """Kill a process started with start_new_session=True together with every child it spawned."""
-    import os
-    import signal
-    try:
-        os.killpg(p.pid, signal.SIGKILL)
-    except (ProcessLookupError, PermissionError):
-        pass
-    p.communicate()
+from chiplab.hw.yosys import kill_group as _kill_group  # noqa: F401  (rtlsim imports it from here)
 
 
 def synth_seq_netlist(rtl_files: list[Path], top: str, workdir: Path, timeout: int = 900, blackbox: list[str] | None = None) -> Path:
