@@ -303,10 +303,7 @@ def test_view_actions_are_well_formed(tools: HelperTools) -> None:
     assert result["ok"]
     selected = ui.handle("ui_select_design", {"design_id": "1b05ecf2359a"})[0]
     assert selected["design_id"] == "1b05ecf2359a" and selected["route"] == f"#/run/{RUN_A}/chip"
-    assert (
-        ui.handle("ui_open_run", {"run_id": RUN_B, "tab": "where it fails"})[0]["route"]
-        == f"#/run/{RUN_B}/patients"
-    )
+    assert ui.handle("ui_open_run", {"run_id": RUN_B, "tab": "the chip"})[0]["route"] == f"#/run/{RUN_B}/chip"
     assert ui.handle("ui_set_playback", {"seconds": 42})[0]["seconds"] == 42.0
     assert ui.handle("ui_open_file", {"path": "workspace/report.md"})[0]["path"] == "workspace/report.md"
     assert ui.handle("ui_new_spec", {"brief": "An AF patch"})[0] == {
@@ -320,10 +317,20 @@ def test_view_actions_are_well_formed(tools: HelperTools) -> None:
     assert ui.handle("ui_go_to", {"route": "#/new/3"})[0]["route"] == "#/new/3"
 
 
+@pytest.mark.parametrize("tab", ["patients", "signal", "Where it fails", "billing"])
+def test_removed_or_unknown_tab_resolves_to_overview(tools: HelperTools, tab: str) -> None:
+    slug = tab.lower().replace(" ", "")
+    ui = UiActions(tools, parse_view({"route": f"#/run/{RUN_A}/chip"}))
+    assert ui.handle("ui_switch_tab", {"tab": tab})[0]["route"] == f"#/run/{RUN_A}/overview"
+    assert ui.handle("ui_go_to", {"route": f"#/run/{RUN_A}/{slug}"})[0]["route"] == (
+        f"#/run/{RUN_A}/overview"
+    )
+    assert parse_view({"route": f"#/run/{RUN_A}/{slug}"}).tab == "overview"
+
+
 @pytest.mark.parametrize(
     ("name", "args"),
     [
-        ("ui_switch_tab", {"tab": "billing"}),
         ("ui_select_design", {"design_id": "zzz"}),
         ("ui_open_file", {"path": "events.jsonl"}),
         ("ui_open_file", {"path": "../x"}),
@@ -380,8 +387,7 @@ def test_suggestions_follow_the_view_and_the_run_state(tools: HelperTools, runs:
     assert RUN_A in finished[0]["prompt"]
     picked = ids({"route": f"#/run/{RUN_A}/overview", "design_id": "c5a5f861d110"})
     assert picked[:2] == ["design", "design-chip"]
-    fails = suggestions(tools, parse_view({"route": f"#/run/{RUN_A}/patients"}))
-    assert fails[0]["id"] == "fails" and "1b05ecf2359a" in fails[0]["prompt"]
+    assert "fails" not in ids({"route": f"#/run/{RUN_A}/chat"})
     live = runs / "20261122-090000-aaaaaa"
     live.mkdir()
     (live / "api.json").write_text(json.dumps({"id": live.name, "status": "running", "prompt": "x"}))
@@ -389,22 +395,22 @@ def test_suggestions_follow_the_view_and_the_run_state(tools: HelperTools, runs:
     assert ids({"route": f"#/run/{live.name}/overview"})[:2] == ["now", "so-far"]
     assert ids({"route": "#/configure"})[0] == "presets"
     assert all(
-        len(ids(v)) <= 4 for v in ({"route": "#/"}, {"route": f"#/run/{RUN_A}/patients", "design_id": "x"})
+        len(ids(v)) <= 4 for v in ({"route": "#/"}, {"route": f"#/run/{RUN_A}/chat", "design_id": "x"})
     )
 
 
 def test_view_context_is_parsed_and_bounded() -> None:
     view = parse_view(
         {
-            "route": f"#/run/{RUN_A}/patients",
+            "route": f"#/run/{RUN_A}/chat",
             "design_id": "1b05ecf2359a",
             "playback_s": 12.345,
             "spec_draft": {"brief": "x" * 10_000},
         }
     )
-    assert (view.page, view.run_id, view.tab, view.playback_s) == ("run", RUN_A, "patients", 12.35)
+    assert (view.page, view.run_id, view.tab, view.playback_s) == ("run", RUN_A, "chat", 12.35)
     assert "truncated" in view.spec_draft  # type: ignore[operator]
-    assert view.for_prompt()["tab_label"] == "Where it fails"
+    assert view.for_prompt()["tab_label"] == "Chat"
     assert parse_view("nonsense") == ViewContext()
     assert parse_view({"route": "#/new/2"}).flow_step == "2"
 
