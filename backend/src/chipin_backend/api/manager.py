@@ -61,6 +61,13 @@ RUNNER_MODES: dict[str, RunMode] = {"local": "flex"}
 LOCAL_MACHINES = frozenset({"", "local", "flex", "mac", "this-mac"})
 #: ``machine`` values that mean a rented pod, which this server never starts.
 REMOTE_MACHINES = frozenset({"on_demand", "on-demand", "ondemand", "runpod", "cloud", "gpu"})
+#: How a user's message reaches the Claude agent: without the last line the
+#: resumed session answers the message and ends its turn, ending the run.
+USER_MESSAGE_PROMPT = (
+    "A message from the user arrived while you work:\n\n{text}\n\n"
+    "Answer it in one or two sentences and adjust the plan if it asks you to. Then carry on "
+    "with the remaining stages, reporting each with ./progress, until report.md is written."
+)
 
 
 class RequestError(ValueError):
@@ -102,6 +109,7 @@ class ApiRun:
     task: asyncio.Task[None] | None = None
     inner: asyncio.Task[AgentResult] | None = None
     stopping: bool = False
+    stop_reason: str = "stopped by the user"
 
     @property
     def id(self) -> str:
@@ -301,7 +309,7 @@ class RunManager:
         except asyncio.CancelledError:
             if not item.stopping:
                 raise
-            status, summary = "stopped", "stopped by the user"
+            status, summary = "stopped", item.stop_reason
         except Exception as exc:
             logger.exception("run {} failed in the runner", item.id)
             summary = f"{type(exc).__name__}: {exc}"
@@ -342,18 +350,19 @@ class RunManager:
         if inject is None:
             raise RequestError("this runner cannot pass messages to the agent", status=501)
         try:
-            await inject(text)
+            await inject(USER_MESSAGE_PROMPT.format(text=text.strip()) if self.agent == "claude" else text)
         except NotImplementedError as exc:
             raise RequestError(str(exc), status=501) from None
         except RuntimeError as exc:
             raise RequestError(f"the agent cannot take a message right now: {exc}", status=409) from None
         item.log.append("message", role="user", author="you", text=text)
 
-    async def stop(self, run_id: str) -> ApiRun:
+    async def stop(self, run_id: str, reason: str = "stopped by the user") -> ApiRun:
         """Ask a running agent to stop; a finished run is left as it is."""
         item = self.get(run_id)
         if item.task is not None and not item.task.done() and not item.stopping:
             item.stopping = True
+            item.stop_reason = reason
             item.log.append("status", text="ChipIn is stopping")
             if item.inner is not None:
                 item.inner.cancel()
@@ -363,7 +372,7 @@ class RunManager:
         """Stop every running agent and wait for its ``run.finished``."""
         live = self.running()
         for item in live:
-            await self.stop(item.id)
+            await self.stop(item.id, "stopped because the server on this Mac was shut down")
         if live:
             await asyncio.gather(*(i.task for i in live if i.task), return_exceptions=True)
         for item in self.runs.values():
@@ -432,7 +441,7 @@ def _brief(prompt: str, answers: dict[str, Any], files: list[dict[str, Any]]) ->
             "contents were NOT uploaded.\n",
         ]
         for f in files:
-            header = f" header: {clip(str(f['header']), 300)}" if f.get("header") else ""
+            header = f" header: {clip(str(f['header']), 1000)}" if f.get("header") else ""
             parts.append(f"- {f.get('name')} ({f.get('size', '?')} bytes){header}")
         parts.append("")
     return "\n".join(parts)

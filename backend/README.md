@@ -171,11 +171,18 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 - Browsers may call it from `https://chipin.space` and from
   `http://127.0.0.1` or `http://localhost` on any port; any other origin is
   refused. `--frontend <folder>` serves a static site at `/`, so a page
-  opened through the link needs no other setup.
+  opened through the link needs no other setup; open a dashboard as
+  `http://127.0.0.1:8797/dashboard/variants/g1.html#token=<token>`.
+- A page on `https://chipin.space` reaches this server with
+  `?api=http://127.0.0.1:8797` plus the token. Chrome asks first with a
+  Private Network Access preflight; the server answers it with
+  `Access-Control-Allow-Private-Network: true`.
 - `--agent claude` (the default) runs the `claude_cli` backend on the
   Mac's own Claude login; `--agent stub` runs a scripted agent with no model
   calls. Every run goes through `orchestrate.run_agent`, so it gets a
   `runs/<run_id>/` folder, a full `run.json` and the OpenRouter summary.
+- `--stub-step <seconds>` slows the stub's steps (default 0.4 s, about
+  10 s a run) so a demo can be followed, messaged and stopped.
 
 | Route or event                 | What it is                   |
 | ------------------------------ | ---------------------------- |
@@ -187,6 +194,9 @@ python -m chipin_backend serve           # the Claude agent, port 8797
 | `POST /api/runs/{id}/messages` | `text` to the agent          |
 | `POST /api/runs/{id}/stop`     | stop the run                 |
 | `GET /api/runs/{id}/evidence`  | run evidence, once finished  |
+| `GET /api/runs/{id}/files`     | `path`, `size` per file      |
+| `GET /api/runs/{id}/file`      | `?path=`: one file as text   |
+| `POST /api/transcribe`         | one spoken phrase to text    |
 | `run.started`                  | prompt, agent, runner        |
 | `stage`                        | `name`, `state`, `reason`    |
 | `status`                       | one "ChipIn is ..." line     |
@@ -205,6 +215,17 @@ carries a short reason. The agent reports them with `./progress` in its
 working folder. `run.finished` carries the agent's last message as
 `summary` and, when OpenRouter wrote one, the three-bullet run summary as
 `bullets`. Presets map to agent effort: `lite`, `pro`, `max`, `ultra`.
+A run cut short ends `stopped`, its summary saying whether the user
+stopped it or the server was shut down.
+
+The files routes cover the agent's working folder only. Paths are
+run-folder paths such as `workspace/report.md`, the same as an `artifact`
+event's `path`; the `progress` helper and hidden files are not listed, a
+path outside `workspace/` is refused (400), and a file over
+`file_max_bytes` (512 KB) is cut, marked with `X-ChipIn-Truncated: true`.
+The brief's `files` entries carry `name`, `size` and an optional `header`
+line (up to 1,000 characters), and `answers` is any JSON object; the
+dashboards put their assumptions there as `answers.assumptions`.
 
 What is real today: the Claude agent runs on this Mac, works through the
 brief, writes files and a report, reports stages, messages, tools and cost,
@@ -291,33 +312,42 @@ dashboard run the backend computes it once and emits one `evidence` event
 with the three summaries, just before `run.finished`; a failure there is
 logged and never fails the run.
 
-- **Number tracing.** Every number in `workspace/report.md` is traced to a
-  machine source in the same folder: a `metric` event, or a numeric field
-  of a file the chip lab wrote (JSON under `chips/` or a saved lab answer,
-  and the lab's text reports under `chips/`). Matching allows thousands
-  separators, percent against fraction, rounding to the digits shown and
-  unit prefixes. Dates, times, numbering, versions, file names, ids, code
-  blocks and numbers quoted from the prompt are excluded. A small integer
-  (10 or less) counts only when its words share a term with the source key.
-  It does not claim an untraced number is wrong, only that no machine
-  source holds it. It does not prove a traced number is used correctly:
-  a value can match by coincidence, which the output flags when the words
-  share nothing with the key. Metric events can also come from the agent's
-  own `./progress metric` calls, and lab answers echo the agent's inputs.
-- **Weight bytes per decision.** For the chip the run selected (the one
-  the report names most; otherwise the first laid-out chip whose model has
-  weights): the bytes of weights software must read for one decision
-  (parameter count times stored width, from `chips/<id>/ir.json`), and the
-  memory cells and flip-flops in the chip's netlist (`net.json`, else
-  `gates.v`). No memory cells means 0 weight bytes fetched: the weights
-  are constants in the logic. A memory is reported with its bits, never 0.
-  It claims nothing about energy or speed.
+- **Number tracing.** Every number in `workspace/report.md` lands in one
+  of three classes, never added together: *traced (value and meaning
+  agree)*, *value found, meaning not confirmed* (for a human to check)
+  and *untraced*; plus *excluded* (dates, times, numbering, versions, file
+  names, ids, code blocks, numbers quoted from the prompt). Sources are
+  `metric` events, the stored weight count of each model file, and the
+  numeric fields of files the chip lab wrote. The value must round to the
+  digits shown (unit prefixes allowed). The meaning agrees when the unit
+  or noun next to the number matches the source through a small synonym
+  table (gates/cells, ns/slack/period, uW/power, um2/area, levels/depth,
+  parameters/params, ...), or, with no such noun, when the number's words
+  share a whole non-generic word with the source key's last segment. A
+  percent matches only a percentage or a 0-to-1 ratio. A noun that agrees
+  with no source leaves the number untraced. Structural fields (line
+  counts, sizes, tool durations, seeds, indices) count only when the claim
+  names them. An untraced number is not called wrong; a traced one is not
+  proved used correctly. Metric events can also come from the agent's own
+  `./progress metric` calls, and lab answers echo the agent's inputs.
+- **Weight bytes per decision.** For one chip, named in the output with
+  the reason it was picked (the one the report names most; otherwise the
+  first laid-out design with weights): the bytes of weights software must
+  read for one decision, by one rule for every design (each stored array
+  in the smallest machine integer type, float32 for decimals; and,
+  separately, packed at the fewest bits), the stored value count and the
+  declared parameter count where they differ, and the memory cells and
+  flip-flops in the chip's netlist (`net.json`, else `gates.v`). No memory
+  cells means 0 weight bytes fetched: the weights are constants in the
+  logic. A memory is reported with its bits, never 0. It claims nothing
+  about energy or speed.
 - **Stage timings.** Wall time per stage from the `stage` events, each
-  stage's share of the run, the largest share and its bound (the run
-  cannot speed up more than 1 / that share by shrinking the other stages),
-  items per second where the events count items, and per-tool-call wall
-  times. It is the wall time of one run on one machine; it calls nothing
-  parallel or serial beyond reporting whether tool calls overlapped.
+  stage's share, counts of what it processed, and for the largest stage
+  both bounds: if every other stage cost nothing, the run is at most
+  1/share faster; if this stage cost nothing, at most 1/(1-share) faster.
+  No per-second rates: stage time includes the agent's thinking. It also
+  reports per-tool-call wall times and the longest call, for one run on
+  one machine.
 
 ## Layout
 

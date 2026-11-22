@@ -29,6 +29,9 @@ def add_serve_parser(
         help="stub: scripted, no model calls",
     )
     serve_p.add_argument(
+        "--stub-step", type=float, default=None, help="seconds between the stub agent's steps (default 0.4)"
+    )
+    serve_p.add_argument(
         "--runner", choices=["local"], default="local", help="local: this Mac (the backend's flex mode)"
     )
 
@@ -39,6 +42,8 @@ def run_serve(args: argparse.Namespace, config: BackendConfig) -> int:
         logger.error("--frontend {} is not a folder", args.frontend)
         return 2
     api = load_api_config()
+    if args.stub_step is not None:
+        api = api.model_copy(update={"stub_step_s": max(0.0, args.stub_step)})
     return asyncio.run(_serve(config, api, args))
 
 
