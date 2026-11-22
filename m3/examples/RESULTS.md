@@ -69,4 +69,31 @@ Pulse oximeter: 6 SpO2 readings over 30 s -> desaturation yes/no. Simulated: 6 S
 - In the shared job worker an xgboost_json ingest next to a torchlogix ingest crashed the CPU lane (two OpenMP runtimes in one process on macOS). The runner therefore runs ingest-model as parallel CLI processes; every later stage runs on the job lanes.
 - `tt-package` without harden reports `user_config_ok: false` on this Mac (cairo library not found by the Tiny Tapeout tools); the tile count is still printed.
 
+## Re-run on lab bd90915
+
+How measured: the whole gallery once as one batch, the same `run_gallery.py` and the same ten models and vectors, on the merged lab at commit `bd90915 test+docs: integration test against the real ChipIn backend` (it contains the owner's fix commit `b77cc76`, whose gf180 default clock is 40 ns, and `f0c296c`). Machine: Apple M3 Max, 16 cores, 128 GB, shared with other agents; Docker (colima, 8 CPUs, 16 GiB) shared. Run count: 1, 331.8 s wall for all stages, finished 2026-11-21 21:54 GMT. That wall time is not comparable with the first run's 151.0 s: the machine was busier, and about the first 100 s overlapped with an accidental duplicate run of the same gallery that I stopped. Compared with run 1 by `m3/examples/compare_rerun.py`; run-1 results are kept in `m3/examples/_first_run/`.
+
+| Example | Exact | Lv | Gates | TT | cairo | Same |
+| --- | --- | --- | --- | --- | --- | --- |
+| breathing pause | 256/256 yes | 3 | 3152 | 2x2 | ok | yes |
+| EEG burst | 256/256 yes | 3 | 4224 | 2x2 | ok | yes |
+| fall | 256/256 yes | 3 | 1470 | 1x2 | ok | yes |
+| fever trend | 256/256 yes | 3 | 494 | 1x1 | ok | yes |
+| heart-rate alarm | 256/256 yes | 3 | 1232 | 1x2 | ok | yes |
+| HR AND SpO2 | 256/256 yes | 3 | 2489 | 2x2 | ok | yes |
+| fast OR slow HR | 256/256 yes | 3 | 1475 | 1x2 | ok | yes |
+| irregular beat | 256/256 yes | 3 | 298 | 1x1 | ok | yes |
+| multi-sensor 2-of-3 | 256/256 yes | 3 | 961 | 1x1 | ok | yes |
+| SpO2 drop | 256/256 yes | 3 | 356 | 1x1 | ok | yes |
+
+Exact: test windows identical / total, with 100,000 random vectors and formal equivalence also passing. Lv: verification level, 3 for every example as in run 1. Same: gate count, gate equivalents, LUTs, Tiny Tapeout tiles, verification level and chip outputs all equal to run 1. Cairo: `tt-package` now reports `user_config_ok: true` and the Tiny Tapeout RTL test passed.
+
+Were the two problems found before fixed by the lab's commits?
+
+- tt-package and the cairo library on macOS: fixed. The lab now points the Tiny Tapeout tools at Homebrew's library folder (`DYLD_FALLBACK_LIBRARY_PATH` in `chiplab/chiplab/hw/tinytapeout.py`); all ten examples report `user_config_ok: true` where run 1 reported false.
+- Direct ingest of xgboost_json models: not fixed. `ingest-model` with format xgboost_json still fails with the same `TypeError: 'NoneType' object cannot be interpreted as an integer` for the SpO2 drop and fever trend examples and for the SpO2 head of the multi-sensor chip, so the runner still falls back to the lab's own TreeLUT conversion (`chipir.json`), as in run 1.
+
+Is `proposed/xgboost-json-reload.patch` still needed? The fix is needed and the old patch no longer applies: the loading code moved from `tools_hw.py` to `ingest/xgb_worker.py` (the OpenMP isolation). `proposed/xgboost-json-reload-v2.patch` is the same two-line change against the new place. Checked by applying it to the lab files locally (reverted, not committed) and running `ingest-model` format xgboost_json on the SpO2 drop and fever trend models: both ingest directly, and the SpO2 drop gives design `dd7bc3a91d5f`, the same chip as the fallback path produced in run 1. The old patch can be dropped.
+
+
 Rebuild: `chiplab/.venv/bin/python m3/examples/gen_gallery.py`, start `chiplab workers`, then `chiplab/.venv/bin/python m3/examples/run_gallery.py` and `python3 m3/examples/make_results.py`.
