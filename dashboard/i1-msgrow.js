@@ -96,10 +96,10 @@
   function openOf(S, id) { var ui = S.ui; if (!ui.rows) ui.rows = {}; return ui.rows[id] != null ? ui.rows[id] : !!ui.allOpen; }
   // a Bash call's own command as one line: its leading "cd PATH &&" (or ";") hops are dropped, the rest is the point
   var CD_LEAD = /^\s*cd\s+(?:"[^"]*"|'[^']*'|[^\s;&|"']+)\s*(?:&&|;)\s*/;
-  function stripCd(cmd) {
-    var x = String(cmd), m;
-    while ((m = CD_LEAD.exec(x))) x = x.slice(m[0].length);
-    return x.trim() ? x : String(cmd);
+  function stripCd(cmd) { // the recorder writes the call as "Ran <command>", so that lead word stays
+    var x = String(cmd), ran = /^Ran\s+/.exec(x), pre = ran ? ran[0] : "", b = x.slice(pre.length), m;
+    while ((m = CD_LEAD.exec(b))) b = b.slice(m[0].length);
+    return b.trim() ? pre + b : x;
   }
   function rowHTML(M, H, n, open) {
     var S = M.S, r = n.raw, kind = r.kind, K = KIND[kind] || KIND.msg, s = n.sum, w = who(S, r), esc = H.esc;
